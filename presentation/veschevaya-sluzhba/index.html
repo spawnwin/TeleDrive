@@ -7,6 +7,9 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;0,700;1,500&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <noscript>
+    <style>.slide{position:relative!important;opacity:1!important;visibility:visible!important;transform:none!important;display:block!important;height:auto!important;padding:2rem!important}.slides{overflow:auto!important}.deck{height:auto!important;margin:0!important}</style>
+  </noscript>
   <style>
     :root {
       --forest: #1a3328;
@@ -580,10 +583,8 @@
 
     .sources li { margin-bottom: 0.35rem; }
 
-    .fade-up > * {
-      opacity: 0;
-      transform: translateY(12px);
-      animation: fadeUp 0.55s ease forwards;
+    .slide.active .fade-up > * {
+      animation: fadeUp 0.55s ease both;
     }
 
     .slide.active .fade-up > *:nth-child(1) { animation-delay: 0.05s; }
@@ -594,7 +595,13 @@
     .slide.active .fade-up > *:nth-child(6) { animation-delay: 0.4s; }
 
     @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(12px); }
       to { opacity: 1; transform: translateY(0); }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .slide.active .fade-up > * { animation: none; }
+      .hero-visual img, .media img { animation: none; }
     }
 
     .tag {
