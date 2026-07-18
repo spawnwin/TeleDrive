@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Сохранность материальных средств и табачное довольствие — ВС РФ</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg-deep: #12160f;
+      --olive: #5f7348;
+      --olive-bright: #8fa86a;
+      --gold: #c9a85c;
+      --sand: #e6dcc4;
+      --text: #f3efe4;
+      --muted: #b7b09a;
+      --line: rgba(201, 168, 92, 0.28);
+      --danger: #c46b4a;
+      --info: #6f9e8a;
+      --shadow: 0 18px 48px rgba(0, 0, 0, 0.4);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      height: 100%;
+      background: var(--bg-deep);
+      color: var(--text);
+      font-family: "Manrope", sans-serif;
+    }
+
+    body {
+      min-height: 100vh;
+      overflow-x: hidden;
+      background:
+        radial-gradient(ellipse 70% 45% at 8% 0%, rgba(95, 115, 72, 0.28), transparent 55%),
+        radial-gradient(ellipse 55% 40% at 92% 100%, rgba(201, 168, 92, 0.14), transparent 50%),
+        linear-gradient(180deg, #151a12 0%, #10140e 100%);
+    }
+
+    body::after {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      opacity: 0.035;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cpath d='M0 60h120M60 0v120' stroke='%23c9a85c' stroke-width='0.5'/%3E%3C/svg%3E");
+      z-index: 0;
+    }
+
+    .slide {
+      position: relative;
+      z-index: 1;
+      width: min(1440px, 100%);
+      min-height: 100vh;
+      margin: 0 auto;
+      padding: clamp(1rem, 2.2vw, 1.8rem) clamp(1rem, 2.8vw, 2.4rem) 1.2rem;
+      display: flex;
+      flex-direction: column;
+      gap: clamp(0.75rem, 1.4vw, 1.1rem);
+      animation: rise 0.55s ease both;
+    }
+
+    .head {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 1rem;
+      align-items: end;
+      border-bottom: 1px solid var(--line);
+      padding-bottom: 0.75rem;
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.55rem;
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--gold);
+      margin-bottom: 0.35rem;
+    }
+
+    .eyebrow::before {
+      content: "";
+      width: 1.6rem;
+      height: 1px;
+      background: var(--gold);
+    }
+
+    h1 {
+      font-family: "Cormorant Garamond", serif;
+      font-size: clamp(1.85rem, 3.4vw, 2.85rem);
+      font-weight: 700;
+      line-height: 1.05;
+      color: var(--sand);
+      max-width: 22ch;
+    }
+
+    .head-aside {
+      text-align: right;
+      color: var(--muted);
+      font-size: 0.82rem;
+      line-height: 1.45;
+      max-width: 22rem;
+    }
+
+    .head-aside strong {
+      display: block;
+      color: var(--olive-bright);
+      font-size: 0.95rem;
+      margin-bottom: 0.2rem;
+    }
+
+    .body {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 1.05fr 0.95fr;
+      gap: clamp(0.8rem, 1.5vw, 1.2rem);
+      min-height: 0;
+    }
+
+    .panel {
+      background:
+        linear-gradient(160deg, rgba(36, 48, 31, 0.94), rgba(27, 34, 22, 0.97)),
+        radial-gradient(circle at top right, rgba(201, 168, 92, 0.08), transparent 42%);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: clamp(0.9rem, 1.4vw, 1.2rem);
+      box-shadow: var(--shadow);
+      display: flex;
+      flex-direction: column;
+      gap: 0.7rem;
+      animation: rise 0.6s ease both;
+    }
+
+    .panel:nth-child(2) { animation-delay: 0.07s; }
+
+    .panel h2 {
+      font-family: "Cormorant Garamond", serif;
+      font-size: clamp(1.35rem, 2vw, 1.7rem);
+      color: var(--gold);
+      line-height: 1.1;
+    }
+
+    .panel .lead {
+      color: var(--muted);
+      font-size: 0.88rem;
+      line-height: 1.45;
+    }
+
+    .points {
+      display: grid;
+      gap: 0.45rem;
+    }
+
+    .point {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 0.65rem;
+      padding: 0.55rem 0.7rem;
+      border-radius: 12px;
+      background: rgba(18, 22, 15, 0.45);
+      border: 1px solid rgba(143, 168, 106, 0.16);
+    }
+
+    .point .n {
+      font-family: "Cormorant Garamond", serif;
+      font-size: 1.25rem;
+      color: var(--olive-bright);
+      line-height: 1;
+      padding-top: 0.1rem;
+    }
+
+    .point strong {
+      display: block;
+      color: var(--sand);
+      font-size: 0.9rem;
+      margin-bottom: 0.15rem;
+    }
+
+    .point span {
+      color: var(--muted);
+      font-size: 0.8rem;
+      line-height: 1.4;
+    }
+
+    .norm-box {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 0.5rem;
+    }
+
+    .norm {
+      padding: 0.7rem 0.75rem;
+      border-radius: 12px;
+      background: rgba(18, 22, 15, 0.5);
+      border: 1px solid rgba(201, 168, 92, 0.2);
+    }
+
+    .norm b {
+      display: block;
+      font-family: "Cormorant Garamond", serif;
+      font-size: 1.55rem;
+      color: var(--olive-bright);
+      line-height: 1;
+      margin-bottom: 0.25rem;
+    }
+
+    .norm span {
+      color: var(--muted);
+      font-size: 0.78rem;
+      line-height: 1.35;
+    }
+
+    .norm.alt {
+      border-color: rgba(111, 158, 138, 0.35);
+    }
+
+    .norm.alt b { color: #9ed0bb; }
+
+    .who {
+      padding: 0.65rem 0.8rem;
+      border-left: 3px solid var(--gold);
+      background: rgba(201, 168, 92, 0.08);
+      border-radius: 0 12px 12px 0;
+      color: var(--sand);
+      font-size: 0.82rem;
+      line-height: 1.4;
+    }
+
+    .who em {
+      color: var(--muted);
+      font-style: normal;
+    }
+
+    .footnote {
+      color: var(--muted);
+      font-size: 0.76rem;
+      line-height: 1.4;
+    }
+
+    .docs {
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: clamp(0.75rem, 1.2vw, 1rem);
+      background: rgba(18, 22, 15, 0.55);
+      animation: rise 0.7s ease 0.1s both;
+    }
+
+    .docs-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 1rem;
+      margin-bottom: 0.55rem;
+    }
+
+    .docs-head h3 {
+      font-family: "Cormorant Garamond", serif;
+      font-size: 1.25rem;
+      color: var(--gold);
+    }
+
+    .docs-head span {
+      color: var(--muted);
+      font-size: 0.75rem;
+    }
+
+    .doc-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 0.5rem;
+    }
+
+    a.doc {
+      display: block;
+      text-decoration: none;
+      padding: 0.6rem 0.7rem;
+      border-radius: 12px;
+      background: rgba(36, 48, 31, 0.7);
+      border: 1px solid rgba(143, 168, 106, 0.18);
+      transition: border-color 0.2s, background 0.2s, transform 0.15s;
+    }
+
+    a.doc:hover {
+      border-color: rgba(201, 168, 92, 0.45);
+      background: rgba(95, 115, 72, 0.28);
+      transform: translateY(-1px);
+    }
+
+    a.doc .code {
+      display: block;
+      font-family: "Cormorant Garamond", serif;
+      font-size: 1rem;
+      color: var(--gold);
+      margin-bottom: 0.15rem;
+    }
+
+    a.doc .title {
+      display: block;
+      color: var(--sand);
+      font-size: 0.78rem;
+      font-weight: 600;
+      line-height: 1.3;
+      margin-bottom: 0.2rem;
+    }
+
+    a.doc .meta {
+      display: block;
+      color: var(--muted);
+      font-size: 0.72rem;
+      line-height: 1.35;
+    }
+
+    .tag {
+      display: inline-block;
+      margin-top: 0.25rem;
+      padding: 0.12rem 0.4rem;
+      border-radius: 999px;
+      font-size: 0.65rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    .tag.on {
+      background: rgba(111, 158, 138, 0.2);
+      color: #9ed0bb;
+      border: 1px solid rgba(111, 158, 138, 0.35);
+    }
+
+    .tag.off {
+      background: rgba(196, 107, 74, 0.18);
+      color: #e0a48d;
+      border: 1px solid rgba(196, 107, 74, 0.35);
+    }
+
+    .print-hint {
+      text-align: center;
+      color: rgba(183, 176, 154, 0.55);
+      font-size: 0.7rem;
+    }
+
+    @keyframes rise {
+      from { opacity: 0; transform: translateY(12px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    @media (max-width: 980px) {
+      body { overflow: auto; }
+      .slide { min-height: auto; padding-bottom: 1.5rem; }
+      .head, .body, .norm-box, .doc-grid {
+        grid-template-columns: 1fr;
+      }
+      .head-aside { text-align: left; }
+      h1 { max-width: none; }
+    }
+
+    @media print {
+      body { background: #fff; color: #111; }
+      body::after { display: none; }
+      .slide { width: 100%; min-height: auto; padding: 0.5cm; }
+      .panel, .docs, .point, .norm, a.doc {
+        box-shadow: none;
+        break-inside: avoid;
+      }
+      a.doc { color: inherit; }
+      .print-hint { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <article class="slide">
+    <header class="head">
+      <div>
+        <div class="eyebrow">Вооружённые Силы Российской Федерации</div>
+        <h1>Сохранность материальных средств и табачное довольствие</h1>
+      </div>
+      <div class="head-aside">
+        <strong>Справочный слайд для доведения до личного состава</strong>
+        Нормы и обязанности по открытым редакциям нормативных актов. Перед применением сверяйте полные тексты в актуальной редакции.
+      </div>
+    </header>
+
+    <div class="body">
+      <section class="panel">
+        <h2>Сохранность материальных средств</h2>
+        <p class="lead">Каждый военнослужащий обязан беречь военное имущество; командиры отвечают за учёт, хранение и предотвращение утрат, недостач, порчи и хищений.</p>
+
+        <div class="points">
+          <div class="point">
+            <div class="n">01</div>
+            <div>
+              <strong>Общая обязанность военнослужащего</strong>
+              <span>Содержать в готовности вооружение и технику, беречь военное имущество — ст. 16 Устава внутренней службы ВС РФ (Указ Президента РФ от 10.11.2007 № 1495).</span>
+            </div>
+          </div>
+          <div class="point">
+            <div class="n">02</div>
+            <div>
+              <strong>Ответственность командира</strong>
+              <span>Командир отвечает за состояние и сохранность вооружения, ВВТ и иного военного имущества; обязан организовать учёт, хранение, выдачу и предотвращать утраты — ст. 75, 82 УВС ВС РФ.</span>
+            </div>
+          </div>
+          <div class="point">
+            <div class="n">03</div>
+            <div>
+              <strong>Материальная ответственность</strong>
+              <span>За ущерб имуществу воинской части по вине военнослужащего — Федеральный закон от 12.07.1999 № 161-ФЗ (ограниченная / полная ответственность, административное расследование, возмещение).</span>
+            </div>
+          </div>
+          <div class="point">
+            <div class="n">04</div>
+            <div>
+              <strong>Учёт и списание</strong>
+              <span>Порядок учёта — Руководство, утв. приказом МО РФ от 15.04.2013 № 300дсп; списание — приказ МО РФ от 28.03.2013 № 222дсп. В части — книги учёта, инвентаризации, акты, приказы командира.</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Норма выдачи табачной продукции</h2>
+        <p class="lead">Дополнительная выдача к продовольственной норме — по желанию военнослужащего (альтернатива сахар / карамель / сгущённое молоко).</p>
+
+        <div class="who">
+          <strong>Кому доводится:</strong> военнослужащие по призыву; курсанты и слушатели без офицерских званий — до заключения контракта.
+          <em> Нормы № 1–4 (общевойсковой, летный, морской, подводный пайки).</em>
+        </div>
+
+        <div class="norm-box">
+          <div class="norm">
+            <b>10</b>
+            <span>сигарет с фильтром<br/>на 1 человека в сутки</span>
+          </div>
+          <div class="norm">
+            <b>3</b>
+            <span>коробки спичек<br/>на 1 человека в месяц</span>
+          </div>
+          <div class="norm alt">
+            <b>700 г</b>
+            <span>сахара в месяц<br/>вместо табака</span>
+          </div>
+          <div class="norm alt">
+            <b>600 г</b>
+            <span>карамели или сгущённого молока<br/>в месяц (альтернатива)</span>
+          </div>
+        </div>
+
+        <p class="footnote">
+          Основание: примечание к нормам продовольственного обеспечения — Постановление Правительства РФ от 29.12.2007 № 946 (ред. от 07.11.2025). Выдача — <strong>по желанию</strong> из перечисленных вариантов. Порядок доведения в части устанавливает командир (продовольственная служба) с фиксацией выбора военнослужащего.
+        </p>
+        <p class="footnote">
+          Ранее: ПП РФ от 03.11.1994 № 1219 и приказ МО РФ от 02.02.1995 № 51; инструкция к приказу МО РФ от 22.07.2000 № 400 (прил. № 32) — документы утратили силу / заменены ПП № 946.
+        </p>
+      </section>
+    </div>
+
+    <section class="docs">
+      <div class="docs-head">
+        <h3>Нормативные документы и ссылки</h3>
+        <span>Клик по карточке открывает текст документа</span>
+      </div>
+      <div class="doc-grid">
+        <a class="doc" href="https://www.consultant.ru/document/cons_doc_LAW_72806/" target="_blank" rel="noopener">
+          <span class="code">Указ № 1495</span>
+          <span class="title">Устав внутренней службы ВС РФ</span>
+          <span class="meta">Обязанности по сохранности имущества, ст. 16, 29, 75, 82</span>
+          <span class="tag on">действует</span>
+        </a>
+        <a class="doc" href="https://base.garant.ru/180688/" target="_blank" rel="noopener">
+          <span class="code">161-ФЗ</span>
+          <span class="title">О материальной ответственности военнослужащих</span>
+          <span class="meta">Условия, размеры и порядок возмещения ущерба</span>
+          <span class="tag on">действует</span>
+        </a>
+        <a class="doc" href="http://pravo.gov.ru/proxy/ips/?docbody=&nd=102119237" target="_blank" rel="noopener">
+          <span class="code">ПП № 946</span>
+          <span class="title">Продовольственное обеспечение в мирное время</span>
+          <span class="meta">Норма табака / альтернатив в примечаниях к пайкам</span>
+          <span class="tag on">действует</span>
+        </a>
+        <a class="doc" href="https://www.consultant.ru/document/cons_doc_LAW_74070/43cd98582c4bd411fb3b1961dae662c3e0f3d194/" target="_blank" rel="noopener">
+          <span class="code">Норма № 1</span>
+          <span class="title">Общевойсковой паёк — примечание о выдаче</span>
+          <span class="meta">10 сигарет/сутки · 3 коробки спичек/мес. · либо сахар/карамель/сгущёнка</span>
+          <span class="tag on">текст нормы</span>
+        </a>
+        <a class="doc" href="https://base.garant.ru/103290/" target="_blank" rel="noopener">
+          <span class="code">ПП № 1219</span>
+          <span class="title">О выдаче табачного довольствия (1994)</span>
+          <span class="meta">Исторический акт; утратил силу с принятием ПП № 946</span>
+          <span class="tag off">утратил силу</span>
+        </a>
+        <a class="doc" href="https://base.garant.ru/182613/7661232856ba68dc46f62e66276a4ba6/" target="_blank" rel="noopener">
+          <span class="code">МО № 400</span>
+          <span class="title">Прил. № 32 — инструкция о выдаче сигарет</span>
+          <span class="meta">Приказ МО РФ от 22.07.2000 № 400 — утратил силу</span>
+          <span class="tag off">утратил силу</span>
+        </a>
+      </div>
+    </section>
+
+    <p class="print-hint">Один слайд · для показа на экране или печати · F11 — полный экран</p>
+  </article>
+</body>
+</html>
