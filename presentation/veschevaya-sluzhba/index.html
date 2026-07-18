@@ -1,0 +1,1403 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Вещевая служба Вооружённых Сил Российской Федерации</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;0,700;1,500&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --forest: #1a3328;
+      --forest-deep: #0f2119;
+      --sage: #5c735f;
+      --moss: #3d5a45;
+      --brass: #b08d57;
+      --brass-soft: #d4bc8a;
+      --stone: #e7ebe4;
+      --stone-2: #d5ddd4;
+      --ink: #17231c;
+      --muted: #5a6b5e;
+      --paper: #f3f5f1;
+      --line: rgba(26, 51, 40, 0.14);
+      --white: #fbfcf9;
+      --danger: #8b3a2f;
+      --ok: #2f6b4f;
+      --shadow: 0 18px 50px rgba(15, 33, 25, 0.18);
+      --radius: 4px;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      height: 100%;
+      overflow: hidden;
+      font-family: "Manrope", sans-serif;
+      color: var(--ink);
+      background: var(--forest-deep);
+    }
+
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      background:
+        radial-gradient(ellipse 80% 60% at 10% 20%, rgba(176, 141, 87, 0.12), transparent 55%),
+        radial-gradient(ellipse 70% 50% at 90% 80%, rgba(92, 115, 95, 0.18), transparent 50%),
+        linear-gradient(145deg, #13261d 0%, #1a3328 45%, #243d30 100%);
+      z-index: 0;
+    }
+
+    .deck {
+      position: relative;
+      z-index: 1;
+      width: min(1280px, 96vw);
+      height: min(720px, 92vh);
+      margin: calc((100vh - min(720px, 92vh)) / 2) auto;
+      background: var(--paper);
+      border: 1px solid rgba(212, 188, 138, 0.35);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      padding: 0.7rem 1.25rem;
+      background: linear-gradient(90deg, var(--forest-deep), var(--forest));
+      color: var(--stone);
+      border-bottom: 2px solid var(--brass);
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      min-width: 0;
+    }
+
+    .emblem {
+      width: 34px;
+      height: 34px;
+      border: 1.5px solid var(--brass);
+      display: grid;
+      place-items: center;
+      font-family: "Cormorant Garamond", serif;
+      font-weight: 700;
+      color: var(--brass-soft);
+      letter-spacing: 0.04em;
+      flex-shrink: 0;
+    }
+
+    .brand-text strong {
+      display: block;
+      font-size: 0.78rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--brass-soft);
+    }
+
+    .brand-text span {
+      display: block;
+      font-size: 0.72rem;
+      opacity: 0.78;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 46vw;
+    }
+
+    .progress-wrap {
+      flex: 1;
+      max-width: 280px;
+      height: 4px;
+      background: rgba(255,255,255,0.12);
+      border-radius: 99px;
+      overflow: hidden;
+    }
+
+    .progress {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, var(--brass), var(--brass-soft));
+      transition: width 0.35s ease;
+    }
+
+    .counter {
+      font-variant-numeric: tabular-nums;
+      font-size: 0.78rem;
+      color: var(--brass-soft);
+      min-width: 4.5rem;
+      text-align: right;
+    }
+
+    .slides {
+      position: relative;
+      overflow: hidden;
+      background:
+        linear-gradient(180deg, rgba(243,245,241,0.96), rgba(231,235,228,0.98)),
+        repeating-linear-gradient(
+          -45deg,
+          transparent,
+          transparent 12px,
+          rgba(26, 51, 40, 0.015) 12px,
+          rgba(26, 51, 40, 0.015) 13px
+        );
+    }
+
+    .slide {
+      position: absolute;
+      inset: 0;
+      padding: 1.6rem 2rem 1.2rem;
+      opacity: 0;
+      visibility: hidden;
+      transform: translateX(28px);
+      transition: opacity 0.4s ease, transform 0.45s ease, visibility 0.4s;
+      overflow: auto;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .slide.active {
+      opacity: 1;
+      visibility: visible;
+      transform: translateX(0);
+      z-index: 2;
+    }
+
+    .slide.leaving {
+      opacity: 0;
+      transform: translateX(-18px);
+    }
+
+    .eyebrow {
+      font-size: 0.72rem;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--brass);
+      font-weight: 700;
+      margin-bottom: 0.45rem;
+    }
+
+    h1, h2, h3 {
+      font-family: "Cormorant Garamond", serif;
+      font-weight: 600;
+      line-height: 1.12;
+      color: var(--forest-deep);
+    }
+
+    h1 { font-size: clamp(2.4rem, 4.5vw, 3.6rem); max-width: 16ch; }
+    h2 { font-size: clamp(1.7rem, 3vw, 2.35rem); margin-bottom: 0.85rem; }
+    h3 { font-size: 1.2rem; margin-bottom: 0.4rem; }
+
+    p, li { font-size: 0.95rem; line-height: 1.55; color: var(--muted); }
+    strong { color: var(--ink); font-weight: 700; }
+
+    .lead {
+      font-size: 1.05rem;
+      max-width: 52ch;
+      color: var(--ink);
+      margin-top: 0.85rem;
+    }
+
+    .hero {
+      display: grid;
+      grid-template-columns: 1.05fr 0.95fr;
+      gap: 1.5rem;
+      height: 100%;
+      align-items: stretch;
+    }
+
+    .hero-copy {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      padding-right: 0.5rem;
+    }
+
+    .hero-visual {
+      position: relative;
+      min-height: 0;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      background: var(--forest);
+    }
+
+    .hero-visual img,
+    .media img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+      transform: scale(1.02);
+      animation: kenburns 14s ease-in-out infinite alternate;
+    }
+
+    @keyframes kenburns {
+      from { transform: scale(1.02) translate(0, 0); }
+      to { transform: scale(1.08) translate(-1.5%, -1%); }
+    }
+
+    .hero-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.55rem;
+      margin-top: 1.4rem;
+    }
+
+    .chip {
+      border: 1px solid rgba(176, 141, 87, 0.45);
+      color: var(--forest);
+      background: rgba(176, 141, 87, 0.08);
+      padding: 0.35rem 0.7rem;
+      font-size: 0.72rem;
+      letter-spacing: 0.04em;
+      font-weight: 600;
+    }
+
+    .cta-hint {
+      margin-top: auto;
+      padding-top: 1.5rem;
+      font-size: 0.78rem;
+      color: var(--sage);
+      letter-spacing: 0.04em;
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+      flex: 1;
+      min-height: 0;
+    }
+
+    .grid-3 {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 0.85rem;
+      flex: 1;
+    }
+
+    .grid-4 {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 0.75rem;
+    }
+
+    .panel {
+      background: rgba(255,255,255,0.55);
+      border: 1px solid var(--line);
+      padding: 1rem 1.05rem;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .panel::before {
+      content: "";
+      position: absolute;
+      left: 0; top: 0; bottom: 0;
+      width: 3px;
+      background: linear-gradient(180deg, var(--brass), var(--moss));
+    }
+
+    .panel h3 { margin-bottom: 0.35rem; }
+    .panel p, .panel li { font-size: 0.88rem; }
+
+    .panel.dark {
+      background: linear-gradient(160deg, var(--forest), var(--moss));
+      color: var(--stone);
+      border-color: transparent;
+    }
+
+    .panel.dark h3,
+    .panel.dark strong { color: var(--brass-soft); }
+    .panel.dark p, .panel.dark li { color: rgba(231, 235, 228, 0.86); }
+
+    .media {
+      border: 1px solid var(--line);
+      overflow: hidden;
+      min-height: 180px;
+      background: var(--stone-2);
+    }
+
+    .media.tall { min-height: 100%; }
+
+    ul.clean {
+      list-style: none;
+      display: grid;
+      gap: 0.45rem;
+      margin-top: 0.55rem;
+    }
+
+    ul.clean li {
+      position: relative;
+      padding-left: 1.1rem;
+    }
+
+    ul.clean li::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 0.55em;
+      width: 0.45rem;
+      height: 0.45rem;
+      background: var(--brass);
+    }
+
+    .table-wrap {
+      overflow: auto;
+      border: 1px solid var(--line);
+      background: rgba(255,255,255,0.65);
+      flex: 1;
+      min-height: 0;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.82rem;
+    }
+
+    th, td {
+      padding: 0.55rem 0.7rem;
+      text-align: left;
+      border-bottom: 1px solid var(--line);
+      vertical-align: top;
+    }
+
+    th {
+      background: var(--forest);
+      color: var(--brass-soft);
+      font-weight: 600;
+      position: sticky;
+      top: 0;
+      z-index: 1;
+      letter-spacing: 0.03em;
+    }
+
+    tr:nth-child(even) td { background: rgba(213, 221, 212, 0.35); }
+    td strong { font-size: 0.82rem; }
+
+    .note {
+      margin-top: 0.7rem;
+      padding: 0.65rem 0.8rem;
+      border-left: 3px solid var(--brass);
+      background: rgba(176, 141, 87, 0.08);
+      font-size: 0.8rem;
+      color: var(--ink);
+    }
+
+    .note.warn {
+      border-left-color: var(--danger);
+      background: rgba(139, 58, 47, 0.08);
+    }
+
+    .timeline {
+      display: grid;
+      gap: 0.65rem;
+      margin-top: 0.4rem;
+    }
+
+    .tl-item {
+      display: grid;
+      grid-template-columns: 7.5rem 1fr;
+      gap: 0.85rem;
+      align-items: start;
+    }
+
+    .tl-year {
+      font-family: "Cormorant Garamond", serif;
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: var(--brass);
+      line-height: 1.2;
+    }
+
+    .stat-row {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 0.7rem;
+      margin: 0.7rem 0 1rem;
+    }
+
+    .stat {
+      background: var(--forest);
+      color: var(--stone);
+      padding: 0.85rem 0.9rem;
+      border-top: 2px solid var(--brass);
+    }
+
+    .stat b {
+      display: block;
+      font-family: "Cormorant Garamond", serif;
+      font-size: 1.7rem;
+      color: var(--brass-soft);
+      line-height: 1;
+      margin-bottom: 0.35rem;
+    }
+
+    .stat span {
+      font-size: 0.74rem;
+      line-height: 1.35;
+      opacity: 0.9;
+    }
+
+    .toc {
+      columns: 2;
+      column-gap: 2rem;
+      margin-top: 0.5rem;
+    }
+
+    .toc a {
+      display: flex;
+      gap: 0.65rem;
+      text-decoration: none;
+      color: var(--ink);
+      padding: 0.35rem 0;
+      border-bottom: 1px dashed var(--line);
+      break-inside: avoid;
+      font-size: 0.9rem;
+      transition: color 0.2s ease;
+    }
+
+    .toc a:hover { color: var(--moss); }
+    .toc .n {
+      color: var(--brass);
+      font-weight: 700;
+      min-width: 1.4rem;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .footerbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      padding: 0.65rem 1.25rem;
+      background: var(--stone-2);
+      border-top: 1px solid var(--line);
+    }
+
+    .nav-btns { display: flex; gap: 0.5rem; }
+
+    button {
+      font-family: inherit;
+      border: 1px solid var(--forest);
+      background: var(--forest);
+      color: var(--stone);
+      padding: 0.55rem 1rem;
+      font-size: 0.8rem;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      cursor: pointer;
+      transition: transform 0.15s ease, background 0.2s ease, color 0.2s ease;
+    }
+
+    button.ghost {
+      background: transparent;
+      color: var(--forest);
+    }
+
+    button:hover { transform: translateY(-1px); background: var(--moss); color: var(--white); }
+    button.ghost:hover { background: var(--forest); color: var(--white); }
+    button:disabled { opacity: 0.35; cursor: not-allowed; transform: none; }
+
+    .keys {
+      font-size: 0.72rem;
+      color: var(--sage);
+    }
+
+    .keys kbd {
+      display: inline-block;
+      border: 1px solid rgba(26,51,40,0.25);
+      background: var(--paper);
+      padding: 0.1rem 0.35rem;
+      font-family: inherit;
+      font-size: 0.7rem;
+      margin: 0 0.1rem;
+    }
+
+    .split-media {
+      display: grid;
+      grid-template-columns: 1.1fr 0.9fr;
+      gap: 1rem;
+      flex: 1;
+      min-height: 0;
+    }
+
+    .layer-list {
+      display: grid;
+      gap: 0.55rem;
+      margin-top: 0.4rem;
+    }
+
+    .layer {
+      display: grid;
+      grid-template-columns: 2.2rem 1fr;
+      gap: 0.7rem;
+      align-items: start;
+      padding: 0.55rem 0.65rem;
+      background: rgba(255,255,255,0.55);
+      border: 1px solid var(--line);
+    }
+
+    .layer i {
+      width: 2.2rem;
+      height: 2.2rem;
+      display: grid;
+      place-items: center;
+      background: var(--forest);
+      color: var(--brass-soft);
+      font-style: normal;
+      font-weight: 700;
+      font-family: "Cormorant Garamond", serif;
+      font-size: 1.1rem;
+    }
+
+    .layer b { display: block; color: var(--ink); font-size: 0.9rem; }
+    .layer span { font-size: 0.8rem; color: var(--muted); }
+
+    .pill-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.4rem;
+      margin-top: 0.6rem;
+    }
+
+    .pill {
+      font-size: 0.72rem;
+      padding: 0.28rem 0.55rem;
+      background: rgba(61, 90, 69, 0.1);
+      color: var(--forest);
+      border: 1px solid rgba(61, 90, 69, 0.2);
+      font-weight: 600;
+    }
+
+    .sources li { margin-bottom: 0.35rem; }
+
+    .fade-up > * {
+      opacity: 0;
+      transform: translateY(12px);
+      animation: fadeUp 0.55s ease forwards;
+    }
+
+    .slide.active .fade-up > *:nth-child(1) { animation-delay: 0.05s; }
+    .slide.active .fade-up > *:nth-child(2) { animation-delay: 0.12s; }
+    .slide.active .fade-up > *:nth-child(3) { animation-delay: 0.19s; }
+    .slide.active .fade-up > *:nth-child(4) { animation-delay: 0.26s; }
+    .slide.active .fade-up > *:nth-child(5) { animation-delay: 0.33s; }
+    .slide.active .fade-up > *:nth-child(6) { animation-delay: 0.4s; }
+
+    @keyframes fadeUp {
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .tag {
+      display: inline-block;
+      font-size: 0.68rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--brass);
+      border: 1px solid rgba(176,141,87,0.4);
+      padding: 0.15rem 0.4rem;
+      margin-bottom: 0.35rem;
+    }
+
+    @media (max-width: 900px) {
+      .deck {
+        width: 100vw;
+        height: 100vh;
+        margin: 0;
+        border: none;
+      }
+      .hero, .grid-2, .grid-3, .grid-4, .split-media, .stat-row {
+        grid-template-columns: 1fr;
+      }
+      .toc { columns: 1; }
+      .tl-item { grid-template-columns: 1fr; gap: 0.2rem; }
+      .slide { padding: 1.1rem 1rem 1rem; }
+      h1 { font-size: 2.1rem; max-width: none; }
+      .brand-text span { max-width: 28vw; }
+      .keys { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="deck" id="deck">
+    <header class="topbar">
+      <div class="brand">
+        <div class="emblem">ВС</div>
+        <div class="brand-text">
+          <strong>Вещевая служба</strong>
+          <span>Вооружённые Силы Российской Федерации</span>
+        </div>
+      </div>
+      <div class="progress-wrap" aria-hidden="true"><div class="progress" id="progress"></div></div>
+      <div class="counter" id="counter">01 / 24</div>
+    </header>
+
+    <main class="slides" id="slides">
+
+      <!-- 1 -->
+      <section class="slide active" data-title="Титул">
+        <div class="hero">
+          <div class="hero-copy fade-up">
+            <div class="eyebrow">Материальное обеспечение · Тыл ВС РФ</div>
+            <h1>Вещевая служба Вооружённых Сил Российской Федерации</h1>
+            <p class="lead">Полный обзор системы вещевого обеспечения: законодательство, структура, нормы снабжения, сроки носки, размерные сетки, ВКПО, компенсации и банно-прачечное обслуживание.</p>
+            <div class="hero-meta">
+              <span class="chip">76-ФЗ · ст. 14</span>
+              <span class="chip">ПП РФ № 390</span>
+              <span class="chip">Приказ МО № 500</span>
+              <span class="chip">Приказ МО № 300</span>
+            </div>
+            <p class="cta-hint">Навигация: стрелки клавиатуры · пробел · кнопки внизу</p>
+          </div>
+          <div class="hero-visual">
+            <img src="assets/hero-kit.jpg" alt="Комплект полевого обмундирования" />
+          </div>
+        </div>
+      </section>
+
+      <!-- 2 -->
+      <section class="slide" data-title="Содержание">
+        <div class="eyebrow">Навигация по материалу</div>
+        <h2>Содержание презентации</h2>
+        <div class="toc fade-up" id="toc"></div>
+      </section>
+
+      <!-- 3 -->
+      <section class="slide" data-title="Что такое вещевая служба">
+        <div class="eyebrow">Определение</div>
+        <h2>Что такое вещевое обеспечение</h2>
+        <div class="split-media fade-up">
+          <div>
+            <p class="lead" style="margin-top:0">Вещевое обеспечение — вид материального обеспечения ВС РФ: определение потребности, снабжение, хранение, носка, ремонт, утилизация имущества и банно-прачечное обслуживание личного состава.</p>
+            <div class="grid-2" style="margin-top:1rem">
+              <div class="panel">
+                <h3>Цель</h3>
+                <p>Создать условия для боевой и специальной подготовки: обеспечить военнослужащего одеждой, обувью, бельём, снаряжением и знаками различия.</p>
+              </div>
+              <div class="panel">
+                <h3>Место в системе</h3>
+                <p>Составная часть тылового обеспечения. Работает напрямую с личным составом — от примерки до замены и стирки.</p>
+              </div>
+            </div>
+            <div class="note">Ключевая особенность: служба закрывает бытовые и эксплуатационные потребности бойца, а не только «складскую» логистику.</div>
+          </div>
+          <div class="media tall">
+            <img src="assets/warehouse.jpg" alt="Склад вещевого имущества" />
+          </div>
+        </div>
+      </section>
+
+      <!-- 4 -->
+      <section class="slide" data-title="Состав имущества">
+        <div class="eyebrow">Термины</div>
+        <h2>Состав имущества вещевой службы</h2>
+        <div class="grid-3 fade-up">
+          <div class="panel">
+            <span class="tag">Имущество</span>
+            <h3>Вещевое имущество</h3>
+            <ul class="clean">
+              <li>Военная форма одежды и знаки различия</li>
+              <li>Бельё, постельные принадлежности</li>
+              <li>Специальное и санитарно-хозяйственное имущество</li>
+              <li>Палатки, брезенты, мягкие контейнеры</li>
+              <li>Спортивное и альпинистское имущество</li>
+              <li>Ткани и расходные материалы</li>
+            </ul>
+          </div>
+          <div class="panel">
+            <span class="tag">Техника</span>
+            <h3>Технические средства</h3>
+            <ul class="clean">
+              <li>Средства стирки и химчистки</li>
+              <li>Оборудование ремонта одежды и обуви</li>
+              <li>Полевые бани и прачечные</li>
+              <li>Банно-прачечные дезинфекционные поезда</li>
+              <li>Передвижные комплексы бытового обслуживания</li>
+            </ul>
+          </div>
+          <div class="panel dark">
+            <span class="tag" style="color:var(--brass-soft);border-color:rgba(212,188,138,.45)">Категории</span>
+            <h3>Категории годности</h3>
+            <ul class="clean">
+              <li><strong>1-я</strong> — новое имущество</li>
+              <li><strong>2-я</strong> — бывшее в употреблении, срок не истёк / годное после ремонта</li>
+              <li><strong>3-я</strong> — негодное, подлежит списанию</li>
+            </ul>
+            <p style="margin-top:.7rem;font-size:.82rem">Учёт обеспеченности включает новое и бывшее в употреблении имущество с неистёкшим сроком носки.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- 5 -->
+      <section class="slide" data-title="Структура">
+        <div class="eyebrow">Организация</div>
+        <h2>Структура вещевой службы</h2>
+        <div class="stat-row fade-up">
+          <div class="stat"><b>ЦВУ</b><span>Центральное вещевое управление МО РФ</span></div>
+          <div class="stat"><b>Округ</b><span>Вещевые службы военных округов и флотов</span></div>
+          <div class="stat"><b>Часть</b><span>Склады, мастерские, бани, прачечные</span></div>
+          <div class="stat"><b>Рота</b><span>Комнаты быта, кладовые, сушилки</span></div>
+        </div>
+        <div class="grid-2">
+          <div class="panel">
+            <h3>Органы и объекты</h3>
+            <ul class="clean">
+              <li>Центральные, окружные и флотские вещевые базы и склады</li>
+              <li>Комбинаты ремонта, банно-прачечные комбинаты</li>
+              <li>762 ЦОКБ и производственные предприятия</li>
+              <li>Кафедры подготовки специалистов тыла</li>
+            </ul>
+          </div>
+          <div class="panel">
+            <h3>Основные задачи (мирное время)</h3>
+            <ul class="clean">
+              <li>Снабжение имуществом и техсредствами</li>
+              <li>Создание и хранение запасов</li>
+              <li>Банно-прачечное обслуживание</li>
+              <li>Ремонт и химчистка</li>
+              <li>Учёт, отчётность и контроль расхода</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <!-- 6 -->
+      <section class="slide" data-title="Законодательство">
+        <div class="eyebrow">Нормативная база</div>
+        <h2>Ключевое законодательство</h2>
+        <div class="timeline fade-up">
+          <div class="tl-item">
+            <div class="tl-year">76-ФЗ</div>
+            <div>
+              <strong>Федеральный закон «О статусе военнослужащих», ст. 14</strong>
+              <p>Гарантирует продовольственное и вещевое обеспечение; для ряда категорий контрактников — право на денежную компенсацию вместо предметов личного пользования.</p>
+            </div>
+          </div>
+          <div class="tl-item">
+            <div class="tl-year">ПП № 390</div>
+            <div>
+              <strong>Постановление Правительства РФ от 22.06.2006 № 390</strong>
+              <p>Нормы снабжения вещевым имуществом в мирное время и правила получения денежной компенсации. Активно обновлялось в 2025 году (ПП № 1059 и № 1116).</p>
+            </div>
+          </div>
+          <div class="tl-item">
+            <div class="tl-year">Приказ 500</div>
+            <div>
+              <strong>Приказ Министра обороны РФ от 14.08.2017 № 500</strong>
+              <p>Главный «рабочий» документ ВС РФ: порядок обеспечения, нормы содержания, спецнормы, запасы, банно-прачечное обслуживание. Ред. от 27.06.2024.</p>
+            </div>
+          </div>
+          <div class="tl-item">
+            <div class="tl-year">Приказ 300</div>
+            <div>
+              <strong>Приказ МО РФ о правилах ношения военной формы одежды</strong>
+              <p>Регламентирует внешний вид, комплекты парадной, повседневной и полевой формы, знаки различия и правила ношения.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 7 -->
+      <section class="slide" data-title="Приказ № 500">
+        <div class="eyebrow">Приказ МО РФ № 500</div>
+        <h2>Структура приказа № 500</h2>
+        <div class="grid-2 fade-up">
+          <div class="panel">
+            <h3>Приложения</h3>
+            <ul class="clean">
+              <li><strong>Прил. 1</strong> — Порядок обеспечения вещевым имуществом</li>
+              <li><strong>Прил. 2</strong> — Нормы переходящих и страховых запасов</li>
+              <li><strong>Прил. 3</strong> — Нормы содержания на одного военнослужащего</li>
+              <li><strong>Прил. 4</strong> — Спецнормы № 1–45 (от Арктики до прачечных)</li>
+              <li><strong>Прил. 5</strong> — Ведомственная охрана МО</li>
+              <li><strong>Прил. 6</strong> — Обеспечение на военных сборах</li>
+              <li><strong>Прил. 7</strong> — Имущество, остающееся призывнику при увольнении</li>
+            </ul>
+          </div>
+          <div class="panel dark">
+            <h3>Что фиксирует Порядок</h3>
+            <ul class="clean">
+              <li>Зачисление на вещевое обеспечение</li>
+              <li>Выдача, замена, учёт в карточке довольствия</li>
+              <li>Особенности для контрактников и призывников</li>
+              <li>Выдача ВКПО по категориям</li>
+              <li>Сдача инвентаря при переводе/увольнении</li>
+              <li>Порядок ремонта и списания</li>
+            </ul>
+            <div class="pill-list">
+              <span class="pill" style="background:rgba(212,188,138,.15);color:var(--brass-soft);border-color:rgba(212,188,138,.35)">Мирное время</span>
+              <span class="pill" style="background:rgba(212,188,138,.15);color:var(--brass-soft);border-color:rgba(212,188,138,.35)">ВС РФ</span>
+              <span class="pill" style="background:rgba(212,188,138,.15);color:var(--brass-soft);border-color:rgba(212,188,138,.35)">Ред. 27.06.2024</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 8 -->
+      <section class="slide" data-title="Виды имущества">
+        <div class="eyebrow">Классификация</div>
+        <h2>Личное пользование и инвентарь</h2>
+        <div class="grid-2 fade-up">
+          <div class="panel">
+            <h3>Имущество личного пользования</h3>
+            <p>Закрепляется за конкретным военнослужащим: форма, бельё, обувь и т. п.</p>
+            <ul class="clean">
+              <li><strong>Контрактники:</strong> с момента получения — их собственность</li>
+              <li><strong>Призывники:</strong> преимущественно учёт с возвратом; отдельные предметы переходят в собственность при увольнении (Прил. 7 к пр. № 500)</li>
+              <li>Выдача фиксируется в карточке вещевого довольствия</li>
+            </ul>
+          </div>
+          <div class="panel">
+            <h3>Инвентарное имущество</h3>
+            <p>Имущество подразделения: возвращается на склад.</p>
+            <ul class="clean">
+              <li>Палатки, плащ-накидки, постовая одежда</li>
+              <li>Спальные принадлежности</li>
+              <li>Спецснаряжение (холод, горы, море, дежурство)</li>
+              <li>Спортивное и альпинистское имущество</li>
+              <li>Замена спецпредметов — как правило, после сдачи изношенных</li>
+            </ul>
+          </div>
+        </div>
+        <div class="note" style="margin-top:1rem">Срок носки исчисляется со дня возникновения права на получение (контракт) / фактической выдачи в эксплуатацию; время хранения на складе в срок носки не засчитывается (по общим правилам Положения о вещевом обеспечении).</div>
+      </section>
+
+      <!-- 9 -->
+      <section class="slide" data-title="ВКПО">
+        <div class="eyebrow">Полевая форма</div>
+        <h2>ВКПО — всесезонный комплект полевого обмундирования</h2>
+        <div class="split-media fade-up">
+          <div>
+            <p>Многослойная система, позволяющая комбинировать элементы под климат и задачу. Выдаётся по категориям (офицеры/прапорщики; сержанты/солдаты) согласно Порядку из Прил. 1 к приказу № 500.</p>
+            <div class="layer-list">
+              <div class="layer"><i>1</i><div><b>Нательное бельё</b><span>Облегчённое / влагоотводящее / флисовое — база теплового комфорта</span></div></div>
+              <div class="layer"><i>2</i><div><b>Летний / демисезонный костюм</b><span>Основной рабочий слой повседневной полевой службы</span></div></div>
+              <div class="layer"><i>3</i><div><b>Утеплённый комплект</b><span>Куртка и брюки; срок зависит от климатической зоны</span></div></div>
+              <div class="layer"><i>4</i><div><b>Ветроводозащитный слой</b><span>Костюм ВВЗ — защита от осадков и ветра</span></div></div>
+              <div class="layer"><i>5</i><div><b>Обувь и головные уборы</b><span>Берцы, берцы для низких температур, фуражка / шапка-ушанка</span></div></div>
+            </div>
+          </div>
+          <div class="media tall">
+            <img src="assets/vkpo-layers.jpg" alt="Слои системы ВКПО" />
+          </div>
+        </div>
+      </section>
+
+      <!-- 10 -->
+      <section class="slide" data-title="Выдача ВКПО">
+        <div class="eyebrow">Практика выдачи</div>
+        <h2>Особенности выдачи ВКПО</h2>
+        <div class="grid-2 fade-up">
+          <div class="panel">
+            <h3>Контракт (испытательный срок)</h3>
+            <p>На период испытания старшинам, сержантам и солдатам выдаются сезонные предметы <strong>ВКПО 2-й категории</strong>, в том числе:</p>
+            <ul class="clean">
+              <li>Фуражка летняя / шапка-ушанка утеплённая</li>
+              <li>Куртка и брюки утеплённые</li>
+              <li>Костюм летний / демисезонный</li>
+              <li>Футболка, трусы / бельё нательное</li>
+              <li>Ботинки с высокими берцами для низких температур</li>
+              <li>ВВЗ — весной-летом; рукавицы и шарф — осенью-зимой</li>
+            </ul>
+            <p style="margin-top:.6rem;font-size:.85rem">Берцы и перчатки полушерстяные — как правило, 1-й категории.</p>
+          </div>
+          <div class="panel">
+            <h3>Призывники</h3>
+            <ul class="clean">
+              <li>По прибытии из сборных пунктов — ВКПО 2-й категории (с исключениями по летним предметам)</li>
+              <li>При отсутствии — допускается 1-я категория</li>
+              <li>При переводе в другую часть инвентарь и ВКПО сдаются на склад</li>
+              <li>Отдельные предметы (в т. ч. берцы для низких температур) могут сопровождаться записью в аттестате</li>
+            </ul>
+            <div class="note" style="margin-top:.8rem">При заключении контракта призывник переводится на нормы контрактников; срок ранее выданных одноимённых предметов <strong>продлевается</strong> и считается со дня призыва.</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 11 -->
+      <section class="slide" data-title="Сроки носки">
+        <div class="eyebrow">Нормы · ориентиры</div>
+        <h2>Сроки носки: типовые ориентиры</h2>
+        <p style="margin-bottom:.6rem">Конкретный набор зависит от категории, рода войск и климата. Ниже — практические ориентиры по приказу № 500 / разъясняющим материалам и классическим нормам снабжения.</p>
+        <div class="table-wrap fade-up">
+          <table>
+            <thead>
+              <tr>
+                <th>Предмет</th>
+                <th>Количество</th>
+                <th>Срок носки</th>
+                <th>Примечание</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td><strong>Футболка</strong></td><td>до 2–3 шт.</td><td>1–2 года</td><td>Зависит от нормы и категории</td></tr>
+              <tr><td><strong>Носки / портянки летние</strong></td><td>до 3–6 пар</td><td>1 год</td><td>Высокий расходный предмет</td></tr>
+              <tr><td><strong>Носки шерстяные</strong></td><td>1–2 пары</td><td>1 год</td><td>Зимний комплект</td></tr>
+              <tr><td><strong>Ботинки с высокими берцами</strong></td><td>1 пара</td><td>2–3 года</td><td>У солдат/сержантов чаще короче, чем у офицеров</td></tr>
+              <tr><td><strong>Полуботинки / полусапоги</strong></td><td>1 пара</td><td>1–3 года</td><td>По норме категории</td></tr>
+              <tr><td><strong>Ремень поясной / брючный</strong></td><td>по 1 шт.</td><td>3–5 лет</td><td>Инвентарный срок длительный</td></tr>
+              <tr><td><strong>Костюм утеплённый</strong></td><td>1 комплект</td><td>базовый срок ± климат</td><td>Холод: −1 год; жара: +1 год</td></tr>
+              <tr><td><strong>Плащ-накидка / баул</strong></td><td>1 шт.</td><td>до 10 лет</td><td>Часто инвентарь / долгий срок</td></tr>
+              <tr><td><strong>Шапка зимняя (особ. холод)</strong></td><td>1 шт.</td><td>4 года</td><td>Норма № 1 спец. имущества, оф./пр.</td></tr>
+              <tr><td><strong>Балаклава</strong></td><td>1 шт.</td><td>5 лет</td><td>Норма № 1 (особо холодный климат)</td></tr>
+              <tr><td><strong>Рукавицы утеплённые</strong></td><td>1 пара</td><td>5 лет</td><td>Норма № 1</td></tr>
+              <tr><td><strong>Бельё влагоотводящее (контракт)</strong></td><td>2 компл.</td><td>1 год</td><td>Сержанты/солдаты по контракту</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="note warn">Срок нового предмета начинается со следующего дня после окончания срока ранее выданного одноимённого — «месяцы носки» не сгорают при обмене.</div>
+      </section>
+
+      <!-- 12 -->
+      <section class="slide" data-title="Климат">
+        <div class="eyebrow">Климатические коэффициенты</div>
+        <h2>Климат и корректировка сроков</h2>
+        <div class="grid-3 fade-up">
+          <div class="panel dark">
+            <h3>Особо холодный / холодный</h3>
+            <p>Срок носки утеплённого костюма <strong>уменьшается на 1 год</strong>. Действуют спецнормы (Норма № 1): зимняя шапка, балаклава, рукавицы, баул и др.</p>
+            <div class="pill-list">
+              <span class="pill" style="background:rgba(212,188,138,.15);color:var(--brass-soft);border-color:rgba(212,188,138,.35)">Снежный покров → полевая форма</span>
+            </div>
+          </div>
+          <div class="panel">
+            <h3>Умеренный</h3>
+            <p>Базовые сроки носки, указанные в нормах снабжения, применяются без климатической корректировки утеплённого комплекта.</p>
+          </div>
+          <div class="panel">
+            <h3>Жаркий климат</h3>
+            <p>Срок утеплённого костюма <strong>увеличивается на 1 год</strong>. По ряду норм выдаётся облегчённый комплект: панама/фуражка, летний костюм, футболка, носки, ремень, облегчённые берцы.</p>
+          </div>
+        </div>
+        <div class="grid-2" style="margin-top:1rem">
+          <div class="panel">
+            <h3>Высокогорье</h3>
+            <p>При командировании в районы ≥ 1500 м и в зоны со средней температурой холодного периода ниже −10 °C — шапка полушерстяная, утеплённый костюм, утеплённые берцы.</p>
+          </div>
+          <div class="panel">
+            <h3>Арктика / Антарктика</h3>
+            <p>В срок носки отдельных предметов засчитывается время фактического нахождения в экспедициях.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- 13 -->
+      <section class="slide" data-title="Размеры одежды">
+        <div class="eyebrow">Антропометрия</div>
+        <h2>Размерная сетка одежды ВКПО</h2>
+        <p style="margin-bottom:.55rem">Маркировка вида <strong>50/4</strong> = размер 50 (обхват груди) + рост 4. Подбор — по наибольшему из измерений.</p>
+        <div class="table-wrap fade-up">
+          <table>
+            <thead>
+              <tr>
+                <th>Размер</th>
+                <th>Обхват груди, см</th>
+                <th>Обхват талии, см</th>
+                <th>Обхват бёдер, см</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td><strong>44</strong></td><td>88 (86–90)</td><td>78 (76–80)</td><td>90 (89–91)</td></tr>
+              <tr><td><strong>46</strong></td><td>92 (90–94)</td><td>82 (80–84)</td><td>92 (91–94)</td></tr>
+              <tr><td><strong>48</strong></td><td>96 (94–98)</td><td>86 (84–88)</td><td>98 (94–100)</td></tr>
+              <tr><td><strong>50</strong></td><td>100 (98–102)</td><td>90 (88–92)</td><td>102 (100–104)</td></tr>
+              <tr><td><strong>52</strong></td><td>104 (102–106)</td><td>94 (92–96)</td><td>106 (104–108)</td></tr>
+              <tr><td><strong>54</strong></td><td>108 (106–110)</td><td>98 (96–100)</td><td>110 (108–112)</td></tr>
+              <tr><td><strong>56</strong></td><td>112 (110–114)</td><td>104 (100–106)</td><td>115 (112–117)</td></tr>
+              <tr><td><strong>58</strong></td><td>116 (114–118)</td><td>110 (106–112)</td><td>120 (117–122)</td></tr>
+              <tr><td><strong>60</strong></td><td>120 (118–122)</td><td>116 (112–118)</td><td>125 (122–127)</td></tr>
+              <tr><td><strong>62</strong></td><td>124 (122–126)</td><td>122 (118–124)</td><td>130 (127–132)</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="note">Грудь измеряют на лёгком вдохе по самым выступающим точкам. Если грудь — 52, а талия/бёдра — 50, берут комплект <strong>52</strong>.</div>
+      </section>
+
+      <!-- 14 -->
+      <section class="slide" data-title="Ростовки">
+        <div class="eyebrow">Рост и обувь</div>
+        <h2>Ростовки и размер обуви</h2>
+        <div class="split-media fade-up">
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>Рост</th><th>Точный, см</th><th>Интервал, см</th><th>Сдвоенный</th></tr>
+              </thead>
+              <tbody>
+                <tr><td><strong>1</strong></td><td>158</td><td>155,1–161,0</td><td rowspan="2">1–2</td></tr>
+                <tr><td><strong>2</strong></td><td>164</td><td>161,1–167,1</td></tr>
+                <tr><td><strong>3</strong></td><td>170</td><td>167,1–173,0</td><td rowspan="2">3–4</td></tr>
+                <tr><td><strong>4</strong></td><td>176</td><td>173,1–179,0</td></tr>
+                <tr><td><strong>5</strong></td><td>182</td><td>179,1–185,0</td><td rowspan="2">5–6</td></tr>
+                <tr><td><strong>6</strong></td><td>188</td><td>185,1–191,0</td></tr>
+                <tr><td><strong>7</strong></td><td>194</td><td>191,1–197,0</td><td rowspan="2">7–8</td></tr>
+                <tr><td><strong>8</strong></td><td>200</td><td>197,1–203,0</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div>
+            <div class="media" style="height:200px;margin-bottom:.8rem">
+              <img src="assets/fitting.jpg" alt="Снятие мерок" />
+            </div>
+            <div class="panel">
+              <h3>Обувь</h3>
+              <ul class="clean">
+                <li><strong>Летние / демисезонные берцы</strong> — соответствуют обычному российскому размеру</li>
+                <li><strong>Зимние берцы</strong> — часто маломерят: берут на размер больше</li>
+                <li>Туфли и полусапоги ориентируют по размеру летних берцев</li>
+                <li>Пример: лето 44 → зима часто 45</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 15 -->
+      <section class="slide" data-title="Спецнормы">
+        <div class="eyebrow">Приложение № 4 к приказу № 500</div>
+        <h2>Специальные нормы снабжения</h2>
+        <div class="table-wrap fade-up">
+          <table>
+            <thead>
+              <tr><th>Норма</th><th>Кому / для чего</th><th>Характер</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><strong>№ 1</strong></td><td>Местности с особо холодным климатом</td><td>Инвентарь</td></tr>
+              <tr><td><strong>№ 2</strong></td><td>Боевое дежурство / пункты управления</td><td>Инвентарь</td></tr>
+              <tr><td><strong>№ 8</strong></td><td>Прыжки с парашютом</td><td>Инвентарь</td></tr>
+              <tr><td><strong>№ 9–11</strong></td><td>ВМФ, гидрография, аварийно-спасательные работы</td><td>Инвентарь</td></tr>
+              <tr><td><strong>№ 12</strong></td><td>Постовая одежда</td><td>Инвентарь</td></tr>
+              <tr><td><strong>№ 15–17</strong></td><td>Радиация, спецбоеприпасы, пожарные</td><td>Инвентарь</td></tr>
+              <tr><td><strong>№ 20</strong></td><td>Эксплуатация ВВТ (техническая одежда)</td><td>Инвентарь</td></tr>
+              <tr><td><strong>№ 21–25</strong></td><td>Медорганизации, санатории, родильные, станции крови</td><td>Сан.-хоз.</td></tr>
+              <tr><td><strong>№ 28</strong></td><td>Заграница / жаркий климат</td><td>Инвентарь</td></tr>
+              <tr><td><strong>№ 30</strong></td><td>Альпинистское имущество</td><td>Инвентарь</td></tr>
+              <tr><td><strong>№ 32</strong></td><td>Спортивное имущество</td><td>Инвентарь</td></tr>
+              <tr><td><strong>№ 34</strong></td><td>Силы специальных операций</td><td>Инвентарь</td></tr>
+              <tr><td><strong>№ 36–37</strong></td><td>Палатки, брезенты, мягкие контейнеры</td><td>Инвентарь</td></tr>
+              <tr><td><strong>№ 41–44</strong></td><td>Прачечное оборудование, ремонт, моющие</td><td>Расход / техника</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- 16 -->
+      <section class="slide" data-title="Форма одежды">
+        <div class="eyebrow">Правила ношения</div>
+        <h2>Виды военной формы одежды</h2>
+        <div class="split-media fade-up">
+          <div class="grid-2" style="grid-template-columns:1fr;gap:.75rem">
+            <div class="panel">
+              <h3>Парадная</h3>
+              <p>Торжественные мероприятия, парады, почётный караул. Отдельная норма № 33 — специальная церемониальная форма почётного караула.</p>
+            </div>
+            <div class="panel">
+              <h3>Повседневная</h3>
+              <p>Служба в пункте постоянной дислокации, штабы, строевые мероприятия вне поля. Комплекты различаются по сезонам и видам ВС.</p>
+            </div>
+            <div class="panel">
+              <h3>Полевая (ВКПО)</h3>
+              <p>Боевая подготовка, учения, выполнение задач в поле. Камуфлированная расцветка, многослойность, совместимость со снаряжением.</p>
+            </div>
+            <div class="panel dark">
+              <h3>Особый порядок</h3>
+              <p>ВМФ (тельняшка, бескозырка, фланелевка), ВДВ, лётный состав, творческие коллективы и оркестры — отдельные нормы и комплекты.</p>
+            </div>
+          </div>
+          <div class="media tall">
+            <img src="assets/parade-kit.jpg" alt="Элементы форменной одежды" />
+          </div>
+        </div>
+      </section>
+
+      <!-- 17 -->
+      <section class="slide" data-title="Банно-прачечное">
+        <div class="eyebrow">Бытовое обеспечение</div>
+        <h2>Банно-прачечное обслуживание</h2>
+        <div class="grid-3 fade-up">
+          <div class="panel">
+            <h3>Задачи</h3>
+            <ul class="clean">
+              <li>Помывка личного состава</li>
+              <li>Стирка нательного и постельного белья</li>
+              <li>Химическая чистка формы</li>
+              <li>Дезинфекция имущества</li>
+            </ul>
+          </div>
+          <div class="panel">
+            <h3>Силы и средства</h3>
+            <ul class="clean">
+              <li>Стационарные бани и прачечные</li>
+              <li>Полевые банно-прачечные пункты</li>
+              <li>БПДП (дезинфекционные поезда)</li>
+              <li>Нормы № 41–44 на оборудование и расходники</li>
+            </ul>
+          </div>
+          <div class="panel dark">
+            <h3>Расходные материалы</h3>
+            <p>Мыло, мочалки, туалетная бумага — отдельная категория расходных материалов вещевой службы. Нормы расхода моющих — Норма № 44.</p>
+          </div>
+        </div>
+        <div class="note" style="margin-top:1rem">На ротном уровне обязательны элементы хозяйства: комната бытового обслуживания, кладовые для хранения, сушилки для обуви и обмундирования.</div>
+      </section>
+
+      <!-- 18 -->
+      <section class="slide" data-title="Компенсации">
+        <div class="eyebrow">ПП РФ № 390</div>
+        <h2>Денежная компенсация вместо вещевого</h2>
+        <div class="grid-2 fade-up">
+          <div class="panel">
+            <h3>Кому доступно</h3>
+            <p>Отдельным категориям военнослужащих по контракту — вместо предметов вещевого имущества личного пользования, если это прямо предусмотрено Правилами к ПП № 390.</p>
+            <ul class="clean">
+              <li>Как правило — после истечения срока носки</li>
+              <li>При увольнении — за неполученные предметы (в установленных случаях)</li>
+              <li>Размеры утверждаются распоряжениями Правительства (в т. ч. таблицы по нормам)</li>
+            </ul>
+          </div>
+          <div class="panel">
+            <h3>Алгоритм на практике</h3>
+            <ul class="clean">
+              <li><strong>1.</strong> Рапорт на имя командира</li>
+              <li><strong>2.</strong> Справка вещевой службы (что не получено / сроки истекли)</li>
+              <li><strong>3.</strong> Резолюция командира</li>
+              <li><strong>4.</strong> Выплата финансовой службой</li>
+            </ul>
+            <div class="note warn" style="margin-top:.7rem">Не все категории и не все предметы подлежат замене деньгами. Сверяйтесь с актуальной редакцией ПП № 390.</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 19 -->
+      <section class="slide" data-title="Изменения 2025">
+        <div class="eyebrow">Актуально</div>
+        <h2>Изменения 2025 года</h2>
+        <div class="grid-2 fade-up">
+          <div class="panel dark">
+            <h3>ПП РФ № 1059 от 14.07.2025</h3>
+            <p>Внесены изменения в ПП № 390. Часть предметов по нормам снабжения — <strong>приостановка выдачи</strong> (ориентир — до 1 января 2030 г. по отдельным позициям).</p>
+          </div>
+          <div class="panel dark">
+            <h3>ПП РФ № 1116 от 28.07.2025</h3>
+            <p>Дополнительные правки к ПП № 390: приостановка выдачи ряда предметов (в т. ч. отдельных головных уборов по нормам) <strong>до 31 декабря 2030 г.</strong></p>
+          </div>
+        </div>
+        <div class="panel" style="margin-top:1rem">
+          <h3>Что это значит на практике</h3>
+          <ul class="clean">
+            <li>Нормы формально сохраняются, но выдача отдельных позиций может быть временно приостановлена</li>
+            <li>Возможны корректировки порядка компенсации по предметам, срок которых не истёк</li>
+            <li>Локальный порядок выдачи уточняется вещевой службой части по текущим нарядам и доведениям</li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- 20 -->
+      <section class="slide" data-title="Порядок получения">
+        <div class="eyebrow">Пошагово</div>
+        <h2>Как получить обеспечение</h2>
+        <div class="grid-4 fade-up" style="margin-top:.4rem">
+          <div class="panel"><h3>01 · Прибытие</h3><p>Примерка, снятие мерок, первичный комплект по норме. Запись в карточку вещевого довольствия.</p></div>
+          <div class="panel"><h3>02 · Носка</h3><p>Эксплуатация по назначению. Досрочный износ по службе — акт. Обмен по истечении срока.</p></div>
+          <div class="panel"><h3>03 · Инвентарь</h3><p>Полевое и специмущество — на подразделение. Возврат на склад обязателен.</p></div>
+          <div class="panel"><h3>04 · Компенсация</h3><p>При праве — рапорт → справка вещслужбы → выплата финслужбой.</p></div>
+        </div>
+        <div class="grid-2" style="margin-top:1rem">
+          <div class="panel">
+            <h3>Обязанность контрактника</h3>
+            <p>По истечении срока носки прибыть на вещевой склад (или в ателье) для получения положенного имущества / оформления индивидуального пошива и примерок.</p>
+          </div>
+          <div class="panel">
+            <h3>Без аттестата</h3>
+            <p>Прибывшему контрактнику без аттестата сначала выдают только инвентарь; зачисление на личное вещевое — после приказа командира и (при необходимости) адм. расследования.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- 21 -->
+      <section class="slide" data-title="Учёт и запасы">
+        <div class="eyebrow">Склад и планирование</div>
+        <h2>Учёт, запасы и категории</h2>
+        <div class="grid-3 fade-up">
+          <div class="panel">
+            <h3>Переходящие запасы</h3>
+            <p>Прил. 2 к приказу № 500 — нормы переходящих и страховых запасов вещевого имущества и моющих материалов в соединениях, частях и организациях.</p>
+          </div>
+          <div class="panel">
+            <h3>Нормы содержания</h3>
+            <p>Прил. 3 — сколько имущества должно содержаться на одного военнослужащего (и на штатную койку в медорганизациях).</p>
+          </div>
+          <div class="panel">
+            <h3>Обеспеченность</h3>
+            <p>В зачёт идёт новое + бывшее в употреблении с неистёкшим сроком + годный инвентарь даже после формального истечения срока.</p>
+          </div>
+        </div>
+        <div class="note" style="margin-top:1rem">Планирование потребности строится на списочной численности, ростовках, климате, спецнормах и графике истечения сроков носки по карточкам довольствия.</div>
+      </section>
+
+      <!-- 22 -->
+      <section class="slide" data-title="Ответственность">
+        <div class="eyebrow">Правовые последствия</div>
+        <h2>Ответственность и типовые ситуации</h2>
+        <div class="grid-2 fade-up">
+          <div class="panel">
+            <h3>Материальная ответственность</h3>
+            <ul class="clean">
+              <li>Умышленная порча или утрата — взыскание в установленном порядке</li>
+              <li>Инвентарь подлежит возврату; недостача фиксируется актом</li>
+              <li>Преждевременный износ по вине службы оформляется отдельно от виновной утраты</li>
+            </ul>
+          </div>
+          <div class="panel">
+            <h3>Типовые вопросы</h3>
+            <ul class="clean">
+              <li><strong>Не выдали вовремя?</strong> Рапорт командиру + проверка карточки</li>
+              <li><strong>Что положено?</strong> Норма по категории + климат + спецнорма должности</li>
+              <li><strong>Можно ли деньги?</strong> Только если категория прямо предусмотрена ПП № 390</li>
+              <li><strong>Перевод?</strong> Инвентарь и часть ВКПО сдаются; в аттестате — остатки</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <!-- 23 -->
+      <section class="slide" data-title="Памятка">
+        <div class="eyebrow">Краткий конспект</div>
+        <h2>Памятка военнослужащему</h2>
+        <div class="grid-3 fade-up">
+          <div class="panel dark">
+            <h3>Знать свою норму</h3>
+            <p>Категория службы, климатическая зона, спецнорма должности и актуальные приостановки выдачи 2025–2030.</p>
+          </div>
+          <div class="panel dark">
+            <h3>Следить за сроками</h3>
+            <p>Карточка вещевого довольствия — основной документ. Обмен не «обнуляет» оставшийся срок одноимённого предмета некорректно.</p>
+          </div>
+          <div class="panel dark">
+            <h3>Правильно подбирать размер</h3>
+            <p>Грудь / талия / бёдра / рост. Зимние берцы — часто на размер больше. Комплект берут по наибольшему измерению.</p>
+          </div>
+        </div>
+        <div class="stat-row" style="margin-top:1rem">
+          <div class="stat"><b>76-ФЗ</b><span>Право на обеспечение</span></div>
+          <div class="stat"><b>390</b><span>Нормы и компенсации</span></div>
+          <div class="stat"><b>500</b><span>Порядок в ВС РФ</span></div>
+          <div class="stat"><b>300</b><span>Правила ношения</span></div>
+        </div>
+      </section>
+
+      <!-- 24 -->
+      <section class="slide" data-title="Источники">
+        <div class="eyebrow">Документы</div>
+        <h2>Источники и правовая база</h2>
+        <div class="grid-2 fade-up">
+          <div class="panel">
+            <h3>Основные акты</h3>
+            <ul class="clean sources">
+              <li>ФЗ от 27.05.1998 № 76-ФЗ «О статусе военнослужащих», ст. 14</li>
+              <li>Положение о вещевом обеспечении военнослужащих (ПП РФ)</li>
+              <li>ПП РФ от 22.06.2006 № 390 (с изм. 2025 г.)</li>
+              <li>ПП РФ от 14.07.2025 № 1059; от 28.07.2025 № 1116</li>
+              <li>Приказ МО РФ от 14.08.2017 № 500 (ред. 27.06.2024)</li>
+              <li>Приказ МО РФ о правилах ношения военной формы одежды (№ 300)</li>
+            </ul>
+          </div>
+          <div class="panel">
+            <h3>Оговорка</h3>
+            <p>Презентация носит справочно-образовательный характер и обобщает открытые положения нормативных актов. Конкретная выдача определяется актуальной редакцией документов, локальными доведениями и карточкой вещевого довольствия воинской части.</p>
+            <div class="note" style="margin-top:.8rem">Для служебного применения сверяйте таблицы норм непосредственно с текстами ПП № 390 и приказа № 500 в действующей редакции.</div>
+            <p style="margin-top:1rem;font-family:'Cormorant Garamond',serif;font-size:1.35rem;color:var(--forest)">Вещевая служба ВС РФ — обеспечение готовности через быт, форму и снаряжение.</p>
+          </div>
+        </div>
+      </section>
+
+    </main>
+
+    <footer class="footerbar">
+      <div class="keys">Клавиши: <kbd>←</kbd><kbd>→</kbd> · <kbd>Space</kbd> · <kbd>Home</kbd>/<kbd>End</kbd> · полноэкран <kbd>F</kbd></div>
+      <div class="nav-btns">
+        <button class="ghost" id="prevBtn" type="button">Назад</button>
+        <button id="nextBtn" type="button">Далее</button>
+      </div>
+    </footer>
+  </div>
+
+  <script>
+    const slides = [...document.querySelectorAll(".slide")];
+    const progress = document.getElementById("progress");
+    const counter = document.getElementById("counter");
+    const prevBtn = document.getElementById("prevBtn");
+    const nextBtn = document.getElementById("nextBtn");
+    const toc = document.getElementById("toc");
+    let index = 0;
+
+    // Build TOC from slide titles
+    slides.forEach((slide, i) => {
+      if (i === 0) return;
+      const a = document.createElement("a");
+      a.href = "#";
+      a.innerHTML = `<span class="n">${String(i + 1).padStart(2, "0")}</span><span>${slide.dataset.title || "Раздел"}</span>`;
+      a.addEventListener("click", (e) => { e.preventDefault(); goTo(i); });
+      toc.appendChild(a);
+    });
+
+    function goTo(next) {
+      if (next < 0 || next >= slides.length || next === index) return;
+      const current = slides[index];
+      current.classList.remove("active");
+      current.classList.add("leaving");
+      setTimeout(() => current.classList.remove("leaving"), 400);
+      index = next;
+      slides[index].classList.add("active");
+      slides[index].scrollTop = 0;
+      updateUI();
+    }
+
+    function updateUI() {
+      const total = slides.length;
+      progress.style.width = ((index + 1) / total * 100) + "%";
+      counter.textContent = String(index + 1).padStart(2, "0") + " / " + String(total).padStart(2, "0");
+      prevBtn.disabled = index === 0;
+      nextBtn.disabled = index === total - 1;
+      nextBtn.textContent = index === total - 1 ? "Конец" : "Далее";
+    }
+
+    prevBtn.addEventListener("click", () => goTo(index - 1));
+    nextBtn.addEventListener("click", () => goTo(index + 1));
+
+    document.addEventListener("keydown", (e) => {
+      if (["ArrowRight", "PageDown", " "].includes(e.key)) { e.preventDefault(); goTo(index + 1); }
+      if (["ArrowLeft", "PageUp"].includes(e.key)) { e.preventDefault(); goTo(index - 1); }
+      if (e.key === "Home") { e.preventDefault(); goTo(0); }
+      if (e.key === "End") { e.preventDefault(); goTo(slides.length - 1); }
+      if (e.key.toLowerCase() === "f") {
+        if (!document.fullscreenElement) document.documentElement.requestFullscreen?.();
+        else document.exitFullscreen?.();
+      }
+    });
+
+    let touchX = null;
+    document.getElementById("deck").addEventListener("touchstart", (e) => {
+      touchX = e.changedTouches[0].screenX;
+    }, { passive: true });
+    document.getElementById("deck").addEventListener("touchend", (e) => {
+      if (touchX === null) return;
+      const dx = e.changedTouches[0].screenX - touchX;
+      if (Math.abs(dx) > 50) goTo(index + (dx < 0 ? 1 : -1));
+      touchX = null;
+    }, { passive: true });
+
+    updateUI();
+  </script>
+</body>
+</html>
