@@ -2,7 +2,17 @@
 
 Интерактивная HTML-презентация о системе вещевого обеспечения Вооружённых Сил Российской Федерации.
 
-## Как открыть
+## Открыть с iPhone / по ссылке
+
+**Постоянная ссылка (Safari на iPhone):**  
+https://htmlpreview.github.io/?https://github.com/spawnwin/TeleDrive/blob/cursor/veschevaya-sluzhba-presentation-7df0/presentation/veschevaya-sluzhba/index.standalone.html
+
+Файл `index.standalone.html` — та же презентация с встроенными картинками (откроется без скачивания ZIP).
+
+После включения GitHub Pages в настройках репозитория (Settings → Pages → Source: **GitHub Actions**) презентация также будет доступна как:
+`https://spawnwin.github.io/TeleDrive/`
+
+## Как открыть локально
 
 Откройте файл `index.html` в браузере (Chrome, Firefox, Edge, Safari).
 
