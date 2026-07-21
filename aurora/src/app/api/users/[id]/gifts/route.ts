@@ -64,7 +64,10 @@ export const GET = withJsonApi(async function GET(
     if (row.serialNumber != null && grouped[key].serials.length < 12) {
       grouped[key].serials.push(row.serialNumber)
     }
-    if (grouped[key].senders.length < 5) {
+    if (
+      grouped[key].senders.length < 5 &&
+      !grouped[key].senders.some((s) => s.id === row.sender.id)
+    ) {
       grouped[key].senders.push(row.sender)
     }
 

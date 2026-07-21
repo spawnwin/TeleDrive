@@ -46,6 +46,16 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogAction,
+  AlertDialogCancel,
+} from '@/components/ui/alert-dialog'
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -79,6 +89,7 @@ import {
 import { languages, type Lang } from '@/lib/i18n'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
+import { resolveMediaUrl } from '@/lib/media-url'
 import { useE2EE } from '@/hooks/use-e2ee'
 import { isPremiumActive, getUploadLimitMb, PREMIUM_THEMES } from '@/lib/coins'
 import { EmojiStatusPicker } from './emoji-status-picker'
@@ -354,6 +365,8 @@ export function SettingsDialog({ open, onOpenChange, onOpenPremium, onOpenCoins,
   const [cropSrc, setCropSrc] = useState<string | null>(null)
   const [showWallpaper, setShowWallpaper] = useState(false)
   const [showCreatorPremium, setShowCreatorPremium] = useState(false)
+  const [confirmRemovePhoto, setConfirmRemovePhoto] = useState(false)
+  const [removingPhoto, setRemovingPhoto] = useState(false)
   const [messageSoundName, setMessageSoundName] = useState('')
   const [callSoundName, setCallSoundName] = useState('')
   const [messagePresetId, setMessagePresetId] = useState('note')
@@ -921,19 +934,10 @@ export function SettingsDialog({ open, onOpenChange, onOpenPremium, onOpenCoins,
                     </button>
                     {avatarUrl && (
                       <button
-                        onClick={async () => {
-                          if (!window.confirm(t('profile.removePhotoConfirm'))) return
-                          try {
-                            const res = await fetch('/api/auth/avatar', { method: 'DELETE' })
-                            if (!res.ok) throw new Error()
-                            setAvatarUrl(null)
-                            if (currentUser) setCurrentUser({ ...currentUser, avatarUrl: null })
-                            toast.success(t('profile.photoRemoved'))
-                          } catch {
-                            toast.error(t('misc.error'))
-                          }
-                        }}
+                        type="button"
+                        onClick={() => setConfirmRemovePhoto(true)}
                         className="absolute bottom-0 left-0 flex h-8 w-8 items-center justify-center rounded-full bg-red-500 text-white shadow-md transition hover:bg-red-600"
+                        title={t('profile.removePhotoAction')}
                       >
                         <Trash2 className="h-4 w-4" />
                       </button>
@@ -946,6 +950,15 @@ export function SettingsDialog({ open, onOpenChange, onOpenPremium, onOpenCoins,
                   >
                     {uploadingAvatar ? t('avatarCrop.saving') : t('settings.changePhoto')}
                   </button>
+                  {avatarUrl && (
+                    <button
+                      type="button"
+                      onClick={() => setConfirmRemovePhoto(true)}
+                      className="text-xs text-red-500 hover:underline"
+                    >
+                      {t('profile.removePhotoAction')}
+                    </button>
+                  )}
                 </div>
 
                 <Label className="text-xs">{t('settings.displayName')}</Label>
@@ -1274,6 +1287,60 @@ export function SettingsDialog({ open, onOpenChange, onOpenPremium, onOpenCoins,
       onClose={closeCrop}
       onConfirm={uploadCroppedAvatar}
     />
+
+    <AlertDialog open={confirmRemovePhoto} onOpenChange={setConfirmRemovePhoto}>
+      <AlertDialogContent className="max-w-sm gap-0 overflow-hidden p-0 sm:max-w-md">
+        <div className="relative aspect-square w-full bg-muted">
+          {avatarUrl && (
+            <img
+              src={resolveMediaUrl(avatarUrl)}
+              alt=""
+              className="h-full w-full object-cover"
+            />
+          )}
+          <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/55 via-transparent to-transparent" />
+        </div>
+        <AlertDialogHeader className="space-y-2 px-5 pt-4 text-left">
+          <AlertDialogTitle className="flex items-center gap-2 text-base">
+            <Trash2 className="h-5 w-5 text-destructive" />
+            {t('profile.removePhotoTitle')}
+          </AlertDialogTitle>
+          <AlertDialogDescription className="text-sm leading-relaxed">
+            {t('profile.removePhotoDesc')}
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter className="flex-col gap-2 px-5 pb-5 pt-4 sm:flex-col">
+          <AlertDialogAction
+            disabled={removingPhoto}
+            className="w-full bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            onClick={async (e) => {
+              e.preventDefault()
+              setRemovingPhoto(true)
+              try {
+                const res = await fetch('/api/auth/avatar', { method: 'DELETE' })
+                if (!res.ok) throw new Error()
+                setAvatarUrl(null)
+                if (currentUser) setCurrentUser({ ...currentUser, avatarUrl: null })
+                setConfirmRemovePhoto(false)
+                toast.success(t('profile.photoRemoved'))
+              } catch {
+                toast.error(t('misc.error'))
+              } finally {
+                setRemovingPhoto(false)
+              }
+            }}
+          >
+            {removingPhoto ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <Trash2 className="mr-2 h-4 w-4" />
+            )}
+            {t('profile.removePhotoAction')}
+          </AlertDialogAction>
+          <AlertDialogCancel className="mt-0 w-full">{t('misc.cancel')}</AlertDialogCancel>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
 
     <ChatWallpaperDialog
       open={showWallpaper}

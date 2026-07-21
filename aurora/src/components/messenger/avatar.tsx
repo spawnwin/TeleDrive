@@ -8,13 +8,14 @@ interface AvatarProps {
   name: string
   color: string
   imageUrl?: string | null
-  size?: 'sm' | 'md' | 'lg' | 'xl' | '2xl'
+  size?: 'xs' | 'sm' | 'md' | 'lg' | 'xl' | '2xl'
   online?: boolean
   showStatus?: boolean
   className?: string
 }
 
 const sizeMap = {
+  xs: 'h-5 w-5 text-[8px]',
   sm: 'h-9 w-9 text-xs',
   // Telegram chat-list avatars are ~48–54px
   md: 'h-12 w-12 text-[15px]',
@@ -24,6 +25,7 @@ const sizeMap = {
 }
 
 const dotSize = {
+  xs: 'h-2 w-2',
   sm: 'h-2.5 w-2.5',
   md: 'h-3 w-3',
   lg: 'h-3.5 w-3.5',

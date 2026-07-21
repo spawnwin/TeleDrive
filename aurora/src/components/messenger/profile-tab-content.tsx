@@ -188,6 +188,26 @@ export function ProfileTabContent({
   const handleDeleteGalleryItem = async () => {
     const item = deleteTarget
     if (!item) return
+
+    if (item.source === 'avatar') {
+      setGalleryActionLoading(true)
+      try {
+        const res = await fetch('/api/auth/avatar', { method: 'DELETE' })
+        if (!res.ok) throw new Error(t('misc.error'))
+        setItems((prev) => prev.filter((it) => it.id !== item.id))
+        const me = useAppStore.getState().currentUser
+        if (me) useAppStore.getState().setCurrentUser({ ...me, avatarUrl: null })
+        toast.success(t('profile.photoRemoved'))
+        onMediaCountChange?.()
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : t('profile.galleryActionError'))
+      } finally {
+        setGalleryActionLoading(false)
+        setDeleteTarget(null)
+      }
+      return
+    }
+
     const realId = galleryItemId(item)
     if (!realId) {
       setDeleteTarget(null)
@@ -442,14 +462,16 @@ export function ProfileTabContent({
                       openShareToChat(buildMediaSharePayload(item))
                     }}
                     className={`absolute top-1 z-10 rounded-full bg-black/50 p-1.5 text-white transition hover:bg-black/70 pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100 ${
-                      isSelf && item.source === 'gallery' ? 'right-8' : 'right-1'
+                      isSelf && (item.source === 'gallery' || item.source === 'avatar')
+                        ? 'right-8'
+                        : 'right-1'
                     }`}
                     title={t('share.title')}
                   >
                     <Share2 className="h-3.5 w-3.5" />
                   </button>
                 )}
-                {isSelf && item.source === 'gallery' && (
+                {isSelf && (item.source === 'gallery' || item.source === 'avatar') && (
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <button
@@ -462,30 +484,43 @@ export function ProfileTabContent({
                       </button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
-                      <DropdownMenuItem onClick={() => handleTogglePin(item)} disabled={galleryActionLoading}>
-                        {item.isPinned ? (
-                          <PinOff className="h-4 w-4" />
-                        ) : (
-                          <Pin className="h-4 w-4" />
-                        )}
-                        {item.isPinned ? t('profile.galleryUnpin') : t('profile.galleryPin')}
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onClick={() => {
-                          setCaptionTarget(item)
-                          setCaptionDraft(item.content || '')
-                        }}
-                      >
-                        <Pencil className="h-4 w-4" />
-                        {t('profile.galleryEditCaption')}
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        variant="destructive"
-                        onClick={() => setDeleteTarget(item)}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                        {t('profile.galleryDelete')}
-                      </DropdownMenuItem>
+                      {item.source === 'gallery' && (
+                        <>
+                          <DropdownMenuItem onClick={() => handleTogglePin(item)} disabled={galleryActionLoading}>
+                            {item.isPinned ? (
+                              <PinOff className="h-4 w-4" />
+                            ) : (
+                              <Pin className="h-4 w-4" />
+                            )}
+                            {item.isPinned ? t('profile.galleryUnpin') : t('profile.galleryPin')}
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => {
+                              setCaptionTarget(item)
+                              setCaptionDraft(item.content || '')
+                            }}
+                          >
+                            <Pencil className="h-4 w-4" />
+                            {t('profile.galleryEditCaption')}
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            variant="destructive"
+                            onClick={() => setDeleteTarget(item)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                            {t('profile.galleryDelete')}
+                          </DropdownMenuItem>
+                        </>
+                      )}
+                      {item.source === 'avatar' && (
+                        <DropdownMenuItem
+                          variant="destructive"
+                          onClick={() => setDeleteTarget(item)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                          {t('profile.removeAvatarFromGallery')}
+                        </DropdownMenuItem>
+                      )}
                     </DropdownMenuContent>
                   </DropdownMenu>
                 )}
@@ -499,26 +534,44 @@ export function ProfileTabContent({
         <MediaLightbox url={lightboxUrl} onClose={() => setLightboxUrl(null)} />
 
         <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
-          <AlertDialogContent>
-            <AlertDialogHeader>
+          <AlertDialogContent className="max-w-sm gap-0 overflow-hidden p-0 sm:max-w-md">
+            {deleteTarget?.attachmentUrl && (
+              <div className="relative aspect-square w-full bg-muted">
+                <img
+                  src={resolveMediaUrl(deleteTarget.attachmentUrl)}
+                  alt=""
+                  className="h-full w-full object-cover"
+                />
+                <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent" />
+              </div>
+            )}
+            <AlertDialogHeader className="space-y-2 px-5 pt-4 text-left">
               <AlertDialogTitle className="flex items-center gap-2">
                 <Trash2 className="h-5 w-5 text-destructive" />
-                {t('profile.galleryDeleteConfirmTitle')}
+                {deleteTarget?.source === 'avatar'
+                  ? t('profile.removePhotoTitle')
+                  : t('profile.galleryDeleteConfirmTitle')}
               </AlertDialogTitle>
-              <AlertDialogDescription>{t('profile.galleryDeleteConfirmDesc')}</AlertDialogDescription>
+              <AlertDialogDescription>
+                {deleteTarget?.source === 'avatar'
+                  ? t('profile.removeAvatarFromGalleryDesc')
+                  : t('profile.galleryDeleteConfirmDesc')}
+              </AlertDialogDescription>
             </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>{t('misc.cancel')}</AlertDialogCancel>
+            <AlertDialogFooter className="flex-col gap-2 px-5 pb-5 pt-4 sm:flex-col">
               <AlertDialogAction
                 onClick={(e) => {
                   e.preventDefault()
                   void handleDeleteGalleryItem()
                 }}
                 disabled={galleryActionLoading}
-                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                className="w-full bg-destructive text-destructive-foreground hover:bg-destructive/90"
               >
-                {t('profile.galleryDelete')}
+                {deleteTarget?.source === 'avatar'
+                  ? t('profile.removePhotoAction')
+                  : t('profile.galleryDelete')}
               </AlertDialogAction>
+              <AlertDialogCancel className="mt-0 w-full">{t('misc.cancel')}</AlertDialogCancel>
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>

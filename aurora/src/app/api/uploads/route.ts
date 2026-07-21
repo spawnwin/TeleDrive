@@ -5,6 +5,7 @@ import { writeFile, mkdir } from 'fs/promises'
 import path from 'path'
 import { withJsonApi } from '@/lib/with-json-api'
 import { UPLOADS_DIR } from '@/lib/uploads-path'
+import { checkStorageQuota, trackFileUpload } from '@/lib/storage'
 import {
   isVideoFile,
   isVoiceFile,
@@ -64,7 +65,6 @@ export const POST = withJsonApi(async function POST(req: NextRequest) {
     return NextResponse.json({ error: `Файл слишком большой (макс. ${limitMb} МБ)` }, { status: 400 })
   }
 
-  const { checkStorageQuota, trackFileUpload } = await import('@/lib/storage')
   const quotaCheck = await checkStorageQuota(me.id, file.size)
   if (!quotaCheck.ok) {
     return NextResponse.json(

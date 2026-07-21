@@ -108,7 +108,7 @@ import { MediaLightbox } from './media-lightbox'
 import { isImageUrl, isVideoUrl, resolveMediaUrl } from '@/lib/media-url'
 import { isE2EEPayload } from '@/lib/e2ee-payload'
 import { callPreviewLabel, parseCallMetadata } from '@/lib/call-message'
-import { isVideoFile, CHAT_ATTACHMENT_ACCEPT } from '@/lib/media-type'
+import { isVideoFile, isImageFile, CHAT_ATTACHMENT_ACCEPT } from '@/lib/media-type'
 import {
   canRecordVoiceInBrowser,
   createVoiceMediaRecorder,
@@ -1304,12 +1304,7 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
     if (!activeChatId) return
     setUploading(true)
     try {
-      const formData = new FormData()
-      formData.append('file', file)
-      const res = await fetch('/api/uploads', { method: 'POST', body: formData })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || t('composer.errorUploadFailed'))
-
+      const data = await uploadFileWithRetry(file, t)
       const isImage = data.isImage
       const isVoice = data.isVoice
       const isVideo = data.isVideo || isVideoFile({ type: file.type, name: file.name })
@@ -1337,7 +1332,7 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
           topicId: activeTopicId,
         }),
       })
-      const msgData = await msgRes.json()
+      const msgData = await msgRes.json().catch(() => ({}))
       if (!msgRes.ok) throw new Error(msgData.error || t('composer.errorSendFailed'))
       const newMsg: ChatMessage = msgData.message
       setReplyTo(null)
@@ -1371,12 +1366,7 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
     if (!pendingFile || !activeChatId || !currentUser) return
     setUploading(true)
     try {
-      const formData = new FormData()
-      formData.append('file', pendingFile)
-      const res = await fetch('/api/uploads', { method: 'POST', body: formData })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || t('composer.errorUploadFailed'))
-
+      const data = await uploadFileWithRetry(pendingFile, t)
       const isImage = data.isImage
       const isVoice = data.isVoice
       const isVideo = data.isVideo || isVideoFile({ type: pendingFile.type, name: pendingFile.name })
@@ -1399,7 +1389,7 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
           topicId: activeTopicId,
         }),
       })
-      const msgData = await msgRes.json()
+      const msgData = await msgRes.json().catch(() => ({}))
       if (!msgRes.ok) throw new Error(msgData.error || t('composer.errorSendFailed'))
       const newMsg: ChatMessage = msgData.message
       setReplyTo(null)
@@ -1417,11 +1407,11 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
         durationSec: newMsg.durationSec,
       })
       socket.broadcastMessage(newMsg)
+      cancelPendingFile()
     } catch (err) {
       toast.error(err instanceof Error ? err.message : t('composer.errorUpload'))
     } finally {
       setUploading(false)
-      cancelPendingFile()
     }
   }
 
@@ -1477,11 +1467,7 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
 
       for (let i = 0; i < files.length; i++) {
         const file = files[i]
-        const formData = new FormData()
-        formData.append('file', file)
-        const res = await fetch('/api/uploads', { method: 'POST', body: formData })
-        const data = await res.json()
-        if (!res.ok) throw new Error(data.error || t('composer.errorUploadFailed'))
+        const data = await uploadFileWithRetry(file, t)
 
         const isImage = data.isImage
         const isVoice = data.isVoice
@@ -1502,7 +1488,7 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
             albumId,
           }),
         })
-        const msgData = await msgRes.json()
+        const msgData = await msgRes.json().catch(() => ({}))
         if (!msgRes.ok) throw new Error(msgData.error || t('composer.errorSendFailed'))
         const newMsg: ChatMessage = msgData.message
         setMessages((prev) => [...prev, newMsg])
@@ -1618,16 +1604,12 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
     if (!activeChatId || !currentUser) return
     setUploading(true)
     try {
-      const formData = new FormData()
       const videoType = blob.type || 'video/webm'
       const videoExt = videoType.includes('mp4') ? 'mp4' : 'webm'
       const file = new File([blob], `video-msg-${Date.now()}.${videoExt}`, {
         type: videoType,
       })
-      formData.append('file', file)
-      const res = await fetch('/api/uploads', { method: 'POST', body: formData })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || t('composer.errorUploadFailed'))
+      const data = await uploadFileWithRetry(file, t)
 
       // Send as a special "video" message type
       const msgRes = await fetch(`/api/chats/${activeChatId}/messages`, {
@@ -1644,7 +1626,7 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
           forceVideoMessage: true,
         }),
       })
-      const msgData = await msgRes.json()
+      const msgData = await msgRes.json().catch(() => ({}))
       if (!msgRes.ok) throw new Error(msgData.error || t('composer.errorSendFailed'))
       const newMsg: ChatMessage = msgData.message
       setReplyTo(null)
@@ -1669,11 +1651,7 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
     if (!activeChatId) return
     setUploading(true)
     try {
-      const formData = new FormData()
-      formData.append('file', file)
-      const res = await fetch('/api/uploads', { method: 'POST', body: formData })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || t('composer.errorUploadFailed'))
+      const data = await uploadFileWithRetry(file, t)
 
       const msgRes = await fetch(`/api/chats/${activeChatId}/messages`, {
         method: 'POST',
@@ -1689,7 +1667,7 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
           forceVoiceMessage: true,
         }),
       })
-      const msgData = await msgRes.json()
+      const msgData = await msgRes.json().catch(() => ({}))
       if (!msgRes.ok) throw new Error(msgData.error || t('composer.errorSendFailed'))
       const newMsg: ChatMessage = msgData.message
       setReplyTo(null)
@@ -2590,7 +2568,7 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
         <input
           ref={cameraInputRef}
           type="file"
-          accept="image/*,video/*"
+          accept={CHAT_ATTACHMENT_ACCEPT}
           capture="environment"
           onChange={handleFileSelect}
           className="hidden"
@@ -2600,7 +2578,7 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
           {pendingFile && pendingPreviewUrl && !isRecording && (
             <div className="flex items-center gap-2 rounded-2xl bg-muted/40 px-2 py-2">
               <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-lg border border-border bg-muted">
-                {pendingFile.type.startsWith('image/') ? (
+                {isImageFile(pendingFile) ? (
                   <img src={pendingPreviewUrl} alt="" className="h-full w-full object-cover" />
                 ) : (
                   <div className="flex h-full w-full items-center justify-center">
@@ -2609,7 +2587,7 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
                 )}
               </div>
               <div className="min-w-0 flex-1">
-                {pendingFile.type.startsWith('image/') ? (
+                {isImageFile(pendingFile) ? (
                   <p className="text-xs text-muted-foreground">
                     {(pendingFile.size / 1024 / 1024).toFixed(1)} МБ
                   </p>
@@ -3120,6 +3098,46 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
       )}
     </div>
   )
+}
+
+type UploadResponse = {
+  url: string
+  name: string
+  type: string
+  size: number
+  isImage?: boolean
+  isVoice?: boolean
+  isVideo?: boolean
+}
+
+/** Upload with retries — survives mid-deploy chunk errors and empty error bodies. */
+async function uploadFileWithRetry(
+  file: File,
+  t: (key: string) => string,
+  attempts = 3,
+): Promise<UploadResponse> {
+  let lastError: Error | null = null
+  for (let i = 0; i < attempts; i++) {
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+      const res = await fetch('/api/uploads', { method: 'POST', body: formData })
+      const data = (await res.json().catch(() => ({}))) as UploadResponse & { error?: string }
+      if (!res.ok) {
+        throw new Error(data.error || t('composer.errorUploadFailed'))
+      }
+      if (!data.url) {
+        throw new Error(t('composer.errorUploadFailed'))
+      }
+      return data
+    } catch (err) {
+      lastError = err instanceof Error ? err : new Error(t('composer.errorUpload'))
+      if (i < attempts - 1) {
+        await new Promise((r) => setTimeout(r, 400 * (i + 1)))
+      }
+    }
+  }
+  throw lastError || new Error(t('composer.errorUpload'))
 }
 
 /** Lightweight context-menu item used by the floating right-click / long-press menu. */

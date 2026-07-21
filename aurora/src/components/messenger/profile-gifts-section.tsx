@@ -7,6 +7,14 @@ import { Gift, X, Crown } from 'lucide-react'
 import { resolveMediaUrl, isVideoUrl } from '@/lib/media-url'
 import { useI18n } from '@/hooks/use-i18n'
 import { cn } from '@/lib/utils'
+import { Avatar } from './avatar'
+
+export interface GiftSender {
+  id: string
+  name: string
+  avatarColor: string
+  avatarUrl?: string | null
+}
 
 export interface ProfileGiftItem {
   gift: {
@@ -23,6 +31,7 @@ export interface ProfileGiftItem {
   }
   count: number
   serialLabels?: string[]
+  senders?: GiftSender[]
 }
 
 export interface ProfileCollectibleItem {
@@ -31,7 +40,7 @@ export interface ProfileCollectibleItem {
   serialLabel: string
   createdAt: string
   gift: ProfileGiftItem['gift']
-  sender?: { id: string; name: string; avatarColor: string; avatarUrl?: string | null }
+  sender?: GiftSender
 }
 
 interface ProfileGiftsSectionProps {
@@ -40,6 +49,26 @@ interface ProfileGiftsSectionProps {
   isSelf?: boolean
   loading?: boolean
   showRecentFeed?: boolean
+}
+
+function formatFromSenders(
+  senders: GiftSender[] | undefined,
+  t: (key: string) => string,
+): string | null {
+  if (!senders || senders.length === 0) return null
+  const names = senders.map((s) => s.name).filter(Boolean)
+  if (names.length === 0) return null
+  if (names.length === 1) {
+    return t('gifts.from').replace('{name}', names[0])
+  }
+  if (names.length === 2) {
+    return t('gifts.fromTwo')
+      .replace('{name1}', names[0])
+      .replace('{name2}', names[1])
+  }
+  return t('gifts.fromMany')
+    .replace('{name}', names[0])
+    .replace('{count}', String(names.length - 1))
 }
 
 export function ProfileGiftsSection({ gifts, collectibles = [], isSelf, loading, showRecentFeed }: ProfileGiftsSectionProps) {
@@ -96,6 +125,7 @@ export function ProfileGiftsSection({ gifts, collectibles = [], isSelf, loading,
         <div className="grid w-full min-w-0 max-w-full grid-cols-4 gap-2 [grid-template-columns:repeat(4,minmax(0,1fr))] sm:grid-cols-5 sm:[grid-template-columns:repeat(5,minmax(0,1fr))]">
           {gifts.map((g) => {
             const isTop = g.gift.isLimited || g.gift.isPremium
+            const fromLabel = formatFromSenders(g.senders, t)
             return (
               <button
                 key={g.gift.id}
@@ -108,8 +138,12 @@ export function ProfileGiftsSection({ gifts, collectibles = [], isSelf, loading,
                     : 'border-violet-500/15 bg-gradient-to-br from-violet-500/10 to-cyan-500/5 hover:border-violet-500/30 hover:from-violet-500/15 hover:to-cyan-500/10',
                   'transition active:scale-95',
                 )}
-                title={g.gift.title}
-                aria-label={t('gifts.viewGift').replace('{title}', g.gift.title)}
+                title={fromLabel ? `${g.gift.title} · ${fromLabel}` : g.gift.title}
+                aria-label={
+                  fromLabel
+                    ? `${t('gifts.viewGift').replace('{title}', g.gift.title)}. ${fromLabel}`
+                    : t('gifts.viewGift').replace('{title}', g.gift.title)
+                }
               >
                 {isTop && (
                   <span className="absolute -left-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-gradient-to-br from-amber-400 to-orange-500 shadow-md ring-2 ring-background">
@@ -132,6 +166,16 @@ export function ProfileGiftsSection({ gifts, collectibles = [], isSelf, loading,
                       `#001–#${String(g.gift.totalSupply || 999).padStart(3, '0')}`}
                   </span>
                 )}
+                {g.senders?.[0] && (
+                  <span className="absolute left-1 top-1 overflow-hidden rounded-full ring-2 ring-background">
+                    <Avatar
+                      name={g.senders[0].name}
+                      color={g.senders[0].avatarColor}
+                      imageUrl={g.senders[0].avatarUrl}
+                      size="xs"
+                    />
+                  </span>
+                )}
               </button>
             )
           })}
@@ -147,17 +191,26 @@ export function ProfileGiftsSection({ gifts, collectibles = [], isSelf, loading,
             {limitedShowcase.map((c) => (
               <div
                 key={c.id}
-                className="relative flex h-[72px] w-[72px] shrink-0 flex-col items-center justify-center rounded-xl border border-amber-400/40 bg-gradient-to-br from-amber-400/15 to-transparent"
-                title={`${c.gift.title} ${c.serialLabel}`}
+                className="relative flex h-[84px] w-[76px] shrink-0 flex-col items-center justify-center rounded-xl border border-amber-400/40 bg-gradient-to-br from-amber-400/15 to-transparent px-1"
+                title={
+                  c.sender
+                    ? `${c.gift.title} ${c.serialLabel} · ${t('gifts.from').replace('{name}', c.sender.name)}`
+                    : `${c.gift.title} ${c.serialLabel}`
+                }
               >
                 <img
                   src={resolveMediaUrl(c.gift.thumbnailUrl)}
                   alt=""
-                  className="h-10 w-10 object-contain"
+                  className="h-9 w-9 object-contain"
                 />
                 <span className="mt-0.5 text-[10px] font-bold tabular-nums text-amber-600">
                   {c.serialLabel}
                 </span>
+                {c.sender && (
+                  <span className="mt-0.5 w-full truncate text-center text-[9px] text-muted-foreground">
+                    {c.sender.name}
+                  </span>
+                )}
               </div>
             ))}
           </div>
@@ -193,6 +246,7 @@ function ProfileGiftPreview({
     showAnimation && animationUrl ? animationUrl : stickerUrl,
   )
   const isVideo = isVideoUrl(mediaUrl)
+  const fromLabel = formatFromSenders(gift?.senders, t)
 
   useEffect(() => {
     if (!gift) return
@@ -271,6 +325,29 @@ function ProfileGiftPreview({
               </button>
               <div className="pointer-events-auto text-center">
                 <p className="text-sm font-semibold text-white">{gift.gift.title}</p>
+                {fromLabel && (
+                  <div className="mt-2 flex flex-col items-center gap-2">
+                    <p className="text-sm font-medium text-violet-200">{fromLabel}</p>
+                    {gift.senders && gift.senders.length > 0 && (
+                      <div className="flex items-center -space-x-2">
+                        {gift.senders.slice(0, 5).map((s) => (
+                          <span
+                            key={s.id}
+                            className="rounded-full ring-2 ring-black/80"
+                            title={s.name}
+                          >
+                            <Avatar
+                              name={s.name}
+                              color={s.avatarColor}
+                              imageUrl={s.avatarUrl}
+                              size="sm"
+                            />
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
                 {gift.count > 1 && (
                   <p className="mt-1 text-xs text-violet-300">
                     {t('gifts.receivedCount').replace('{count}', String(gift.count))}
@@ -309,6 +386,7 @@ function CollectiblesRecentFeed() {
       serialLabel: string | null
       gift: { title: string; thumbnailUrl: string }
       recipient: { name: string; username: string }
+      sender?: { name: string }
     }>
   >([])
 
@@ -340,6 +418,9 @@ function CollectiblesRecentFeed() {
               <p className="truncate font-medium">{item.recipient.name}</p>
               <p className="truncate text-muted-foreground">
                 {item.gift.title} {item.serialLabel}
+                {item.sender?.name
+                  ? ` · ${t('gifts.from').replace('{name}', item.sender.name)}`
+                  : ''}
               </p>
             </div>
           </li>
