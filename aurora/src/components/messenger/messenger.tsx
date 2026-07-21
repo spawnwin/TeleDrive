@@ -98,7 +98,87 @@ export function Messenger() {
     setInviteToken(null)
     setActiveChat(null)
     setView('chats')
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('aurora:exit-to-chats'))
+    }
   }, [closeMobileSearch, setActiveChat, setProfileUserId, setView])
+
+  /** Close only the top overlay / mode — keep the open chat when possible. */
+  const goBackOneLevel = useCallback(() => {
+    if (inviteToken) {
+      setInviteToken(null)
+      return
+    }
+    if (profileUserId) {
+      setProfileUserId(null)
+      return
+    }
+    if (showNearby) {
+      setShowNearby(false)
+      return
+    }
+    if (showStreams) {
+      setShowStreams(false)
+      return
+    }
+    if (showP2PMarketplace) {
+      setShowP2PMarketplace(false)
+      return
+    }
+    if (showPremium) {
+      setShowPremium(false)
+      return
+    }
+    if (showCoins) {
+      setShowCoins(false)
+      return
+    }
+    if (showSettings) {
+      setShowSettings(false)
+      return
+    }
+    if (showInfo) {
+      setShowInfo(false)
+      return
+    }
+    if (showFriends) {
+      setShowFriends(false)
+      return
+    }
+    if (mobileSearchOpen) {
+      closeMobileSearch()
+      return
+    }
+    if (view === 'shorts') {
+      setView('chats')
+      return
+    }
+    if (activeChatId) {
+      setActiveChat(null)
+      setView('chats')
+      return
+    }
+    exitToChats()
+  }, [
+    inviteToken,
+    profileUserId,
+    showNearby,
+    showStreams,
+    showP2PMarketplace,
+    showPremium,
+    showCoins,
+    showSettings,
+    showInfo,
+    showFriends,
+    mobileSearchOpen,
+    view,
+    activeChatId,
+    closeMobileSearch,
+    setProfileUserId,
+    setActiveChat,
+    setView,
+    exitToChats,
+  ])
 
   useEffect(() => {
     const onOverlay = (event: Event) => {
@@ -520,7 +600,7 @@ export function Messenger() {
     hintOpacity: swipeHintOpacity,
   } = useSwipeToBack({
     enabled: swipeBackToChatsEnabled,
-    onBack: exitToChats,
+    onBack: goBackOneLevel,
     attachToWindow: true,
     threshold: 72,
   })
@@ -650,12 +730,15 @@ export function Messenger() {
             } min-h-0 min-w-0 flex-1 flex-col`}
           >
             <ChatView
-              onBack={exitToChats}
+              onBack={() => {
+                setActiveChat(null)
+                setView('chats')
+              }}
               onShowInfo={() => setShowInfo((v) => !v)}
             />
           </div>
           {isShortsMode && (
-            <ShortsFeed onBack={exitToChats} />
+            <ShortsFeed onBack={() => setView('chats')} />
           )}
         </main>
 

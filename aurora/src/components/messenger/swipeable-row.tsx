@@ -44,6 +44,8 @@ export function SwipeableRow({
   const x = useMotionValue(0)
   const [open, setOpen] = useState(false)
   const startX = useRef<number | null>(null)
+  const startY = useRef<number | null>(null)
+  const axisLock = useRef<'h' | 'v' | null>(null)
   const movedRef = useRef(false)
   // Уникальный токен экземпляра, чтобы строка игнорировала собственный
   // SWIPE_CLOSE_EVENT (иначе она открывается и тут же закрывает сама себя).
@@ -97,16 +99,34 @@ export function SwipeableRow({
     // («чат не открывается»). Свайп остаётся только для touch/pen.
     if (e.pointerType === 'mouse') return
     startX.current = e.clientX
+    startY.current = e.clientY
+    axisLock.current = null
     movedRef.current = false
     ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
   }, [])
 
   const onPointerMove = useCallback(
     (e: React.PointerEvent) => {
-      if (startX.current === null) return
-      const delta = e.clientX - startX.current
-      if (Math.abs(delta) > 4) movedRef.current = true
-      const clamped = Math.max(-maxDrag, Math.min(0, delta))
+      if (startX.current === null || startY.current === null) return
+      const dx = e.clientX - startX.current
+      const dy = e.clientY - startY.current
+      if (!axisLock.current) {
+        if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return
+        axisLock.current = Math.abs(dx) > Math.abs(dy) * 1.1 ? 'h' : 'v'
+        if (axisLock.current === 'v') {
+          try {
+            ;(e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId)
+          } catch {
+            // ignore
+          }
+          startX.current = null
+          startY.current = null
+          return
+        }
+      }
+      if (axisLock.current !== 'h') return
+      if (Math.abs(dx) > 4) movedRef.current = true
+      const clamped = Math.max(-maxDrag, Math.min(0, dx))
       x.set(clamped)
     },
     [maxDrag, x],
@@ -115,6 +135,8 @@ export function SwipeableRow({
   const onPointerUp = useCallback(() => {
     if (startX.current === null) return
     startX.current = null
+    startY.current = null
+    axisLock.current = null
 
     // Тап без движения — не трогаем x; всё решат onClick-обработчики
     // (оверлей закроет, контент строки откроет чат).

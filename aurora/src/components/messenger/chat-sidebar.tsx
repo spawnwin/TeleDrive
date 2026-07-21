@@ -324,27 +324,35 @@ export function ChatSidebar({
       setSearchingUsers(false)
       return
     }
+    const ac = new AbortController()
     const timer = setTimeout(async () => {
       setSearchingUsers(true)
       try {
-        const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`)
+        const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`, {
+          signal: ac.signal,
+        })
         const data = await readJsonResponse<{
           users?: SearchUserHit[]
           channels?: SearchPublicChatHit[]
           groups?: SearchPublicChatHit[]
         }>(res)
+        if (ac.signal.aborted) return
         setUserResults(data?.users || [])
         setChannelResults(data?.channels || [])
         setGroupResults(data?.groups || [])
-      } catch {
+      } catch (err) {
+        if (ac.signal.aborted || (err instanceof DOMException && err.name === 'AbortError')) return
         setUserResults([])
         setChannelResults([])
         setGroupResults([])
       } finally {
-        setSearchingUsers(false)
+        if (!ac.signal.aborted) setSearchingUsers(false)
       }
     }, 300)
-    return () => clearTimeout(timer)
+    return () => {
+      clearTimeout(timer)
+      ac.abort()
+    }
   }, [query])
 
   const openSearchUserChat = useCallback(async (userId: string) => {
@@ -1656,14 +1664,20 @@ function ChatListItemRow({
     const next = !chat.isArchived
     setChatArchived(chat.id, next)
     try {
-      await fetch(`/api/chats/${chat.id}/archive`, {
+      const res = await fetch(`/api/chats/${chat.id}/archive`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ archived: next }),
       })
+      if (!res.ok) {
+        setChatArchived(chat.id, !next)
+        toast.error(t('misc.error'))
+        return
+      }
       toast.success(next ? t('chat.archived') : t('chat.unarchived'))
     } catch {
       setChatArchived(chat.id, !next)
+      toast.error(t('misc.error'))
     }
   }
 

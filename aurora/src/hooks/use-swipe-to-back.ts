@@ -43,7 +43,7 @@ export function useSwipeToBack({
   onBack,
   threshold = 72,
   edgeWidth = null,
-  desktopMinWidth = 1024,
+  desktopMinWidth = 1280,
   attachToWindow = false,
 }: UseSwipeToBackOptions) {
   const [offset, setOffset] = useState(0)
@@ -80,7 +80,6 @@ export function useSwipeToBack({
       setOffset(goBack ? Math.min(width * 0.35, 140) : 0)
       window.setTimeout(() => {
         if (goBack) {
-          dispatchExitToChats()
           onBackRef.current()
         }
         resetVisual()

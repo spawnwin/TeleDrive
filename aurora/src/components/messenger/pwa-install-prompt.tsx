@@ -14,6 +14,7 @@ import {
 } from '@/hooks/use-push'
 
 const PUSH_BANNER_DISMISSED_KEY = 'aurora-push-banner-dismissed'
+const PWA_INSTALL_DISMISSED_KEY = 'aurora-pwa-install-dismissed'
 
 /**
  * Asks the user to grant notification permission. Web Push requires a user
@@ -84,6 +85,10 @@ export function PwaInstallPrompt() {
   useEffect(() => {
     if (typeof window === 'undefined') return
     if (isStandalonePwa()) return
+    if (localStorage.getItem(PWA_INSTALL_DISMISSED_KEY)) {
+      setDismissed(true)
+      return
+    }
 
     if (isIos()) {
       setIosHint(true)
@@ -98,6 +103,15 @@ export function PwaInstallPrompt() {
     return () => window.removeEventListener('beforeinstallprompt', handler)
   }, [])
 
+  const dismissInstall = () => {
+    setDismissed(true)
+    try {
+      localStorage.setItem(PWA_INSTALL_DISMISSED_KEY, '1')
+    } catch {
+      // ignore quota / private mode
+    }
+  }
+
   if (dismissed) return null
 
   if (iosHint && !isStandalonePwa()) {
@@ -108,7 +122,7 @@ export function PwaInstallPrompt() {
           <p className="text-sm font-medium">{t('pwa.iosTitle')}</p>
           <p className="text-xs text-muted-foreground">{t('pwa.iosHint')}</p>
         </div>
-        <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => setDismissed(true)}>
+        <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={dismissInstall}>
           <X className="h-4 w-4" />
         </Button>
       </div>
@@ -121,7 +135,7 @@ export function PwaInstallPrompt() {
     await deferred.prompt()
     const { outcome } = await deferred.userChoice
     if (outcome === 'accepted') setDeferred(null)
-    setDismissed(true)
+    dismissInstall()
   }
 
   return (
@@ -134,7 +148,7 @@ export function PwaInstallPrompt() {
       <Button size="sm" onClick={install} className="bg-[#3390ec] text-white hover:bg-[#2b82d9]">
         {t('pwa.install')}
       </Button>
-      <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => setDismissed(true)}>
+      <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={dismissInstall}>
         <X className="h-4 w-4" />
       </Button>
     </div>

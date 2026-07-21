@@ -9,8 +9,8 @@
  *    HTML but fall back to cache when offline
  */
 
-// v10: bump after messenger crash fix (hooks order) so iOS PWAs drop stale shell.
-const CACHE_VERSION = 'aurora-v10'
+// v11: layered swipe-back + tablet xl back button; drop stale PWA shell.
+const CACHE_VERSION = 'aurora-v11'
 const SHELL_CACHE = `${CACHE_VERSION}-shell`
 const ASSET_CACHE = `${CACHE_VERSION}-assets`
 

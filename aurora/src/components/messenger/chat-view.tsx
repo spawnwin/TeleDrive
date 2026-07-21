@@ -603,7 +603,7 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
   const SWIPE_BACK_THRESHOLD = 72
 
   const handleChatPointerDown = (e: PointerEvent<HTMLDivElement>) => {
-    if (swipeBackAnimating || typeof window === 'undefined' || window.innerWidth >= 1024) return
+    if (swipeBackAnimating || typeof window === 'undefined' || window.innerWidth >= 1280) return
     if (e.pointerType === 'mouse' && e.button !== 0) return
     const target = e.target as HTMLElement
     if (target.closest('button,a,input,textarea,[role="button"],[contenteditable="true"]')) return
@@ -652,7 +652,7 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
     }
     e.currentTarget.releasePointerCapture?.(e.pointerId)
 
-    const shouldGoBack = tracking.lastDx > SWIPE_BACK_THRESHOLD
+    const shouldGoBack = tracking.lastDx >= SWIPE_BACK_THRESHOLD
     setSwipeBackAnimating(true)
     // Either finish the exit slide or spring back — both via CSS transition,
     // then reset for the next chat (or the one we just left, briefly hidden).
@@ -1804,11 +1804,16 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
     const next = !activeChat?.isArchived
     setChatArchived(activeChatId, next)
     try {
-      await fetch(`/api/chats/${activeChatId}/archive`, {
+      const res = await fetch(`/api/chats/${activeChatId}/archive`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ archived: next }),
       })
+      if (!res.ok) {
+        setChatArchived(activeChatId, !next)
+        toast.error(t('misc.error'))
+        return
+      }
       toast.success(next ? t('chat.archived') : t('chat.unarchived'))
     } catch {
       setChatArchived(activeChatId, !next)
@@ -1917,7 +1922,7 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
 
   return (
     <div
-      className="relative flex h-full touch-pan-y flex-col bg-background lg:!translate-x-0"
+      className="relative flex h-full touch-pan-y flex-col bg-background xl:!translate-x-0"
       style={{
         transform: swipeBackOffset ? `translateX(${Math.min(56, swipeBackOffset * 0.35)}px)` : undefined,
         transition: swipeBackAnimating ? 'transform 0.22s ease-out' : undefined,
@@ -1929,7 +1934,7 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
     >
       {swipeBackOffset > 0 && (
         <div
-          className="pointer-events-none absolute inset-y-0 left-0 z-30 flex w-14 items-center justify-center bg-gradient-to-r from-[#3390ec]/25 to-transparent lg:hidden"
+          className="pointer-events-none absolute inset-y-0 left-0 z-30 flex w-14 items-center justify-center bg-gradient-to-r from-[#3390ec]/25 to-transparent xl:hidden"
           style={{ opacity: Math.min(1, swipeBackOffset / SWIPE_BACK_THRESHOLD) }}
           aria-hidden
         >
@@ -1942,7 +1947,7 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
           <Button
             variant="ghost"
             size="icon"
-            className="h-9 w-9 shrink-0 rounded-full lg:hidden"
+            className="h-9 w-9 shrink-0 rounded-full xl:hidden"
             onClick={onBack}
           >
             <ArrowLeft className="h-5 w-5" />

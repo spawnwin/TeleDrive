@@ -35,7 +35,7 @@ import { Separator } from '@/components/ui/separator'
 import { Sheet, SheetContent } from '@/components/ui/sheet'
 import { useAppStore } from '@/lib/store'
 import { useI18n } from '@/hooks/use-i18n'
-import { useIsMobile } from '@/hooks/use-mobile'
+import { useIsNarrowLayout } from '@/hooks/use-mobile'
 import { translate } from '@/lib/i18n'
 import { formatLastSeen } from '@/lib/format'
 import { isUserOnline } from '@/lib/friends-client'
@@ -117,7 +117,7 @@ export function UserProfileDialog({
   onOpenPremium,
 }: UserProfileDialogProps) {
   const { t, lang } = useI18n()
-  const isMobile = useIsMobile()
+  const isMobile = useIsNarrowLayout()
   const { onlineUserIds, presenceSynced, setActiveChat, openBrowser, openVideoPlayer, setProfileUserId, setCurrentUser, currentUser } = useAppStore()
   const [profile, setProfile] = useState<ProfileData | null>(null)
   const [loading, setLoading] = useState(false)
@@ -383,7 +383,10 @@ export function UserProfileDialog({
           {/* Padded block — no negative horizontal margins (they widen scrollWidth on mobile) */}
           <div className="box-border w-full max-w-full px-4">
             {/* Profile header — Telegram style */}
-            <div className="relative flex w-full min-w-0 flex-col items-center gap-3 bg-gradient-to-b from-[#3390ec]/12 via-background to-background pb-5 pt-2">
+            <div className={cn(
+              'relative flex w-full min-w-0 flex-col items-center gap-3 bg-gradient-to-b from-[#3390ec]/12 via-background to-background pt-2',
+              profile.bio ? 'pb-5' : 'pb-3',
+            )}>
               <button
                 type="button"
                 onClick={() => {
@@ -488,7 +491,7 @@ export function UserProfileDialog({
                     >
                       <Gift className="h-5 w-5 shrink-0 sm:h-6 sm:w-6" strokeWidth={1.75} />
                       <span className="block w-full truncate text-center text-[10px] font-medium leading-tight">
-                        {lang === 'ru' ? 'Подарок' : 'Gift'}
+                        {t('gifts.sendGift')}
                       </span>
                     </button>
                   </div>
