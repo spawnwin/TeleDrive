@@ -102,7 +102,7 @@ export function ChatSidebar({
 }: SidebarProps) {
   const { t, lang } = useI18n()
   const router = useRouter()
-  const { currentUser, chats, activeChatId, onlineUserIds, presenceSynced, view, setView, setProfileUserId, setChatPinned, chatFolders, activeFolderId, setActiveFolderId } = useAppStore()
+  const { currentUser, chats, activeChatId, onlineUserIds, presenceSynced, view, setView, setProfileUserId, setChatPinned, chatFolders, activeFolderId, setActiveFolderId, removeChat } = useAppStore()
   const [query, setQuery] = useState('')
   const [showNewChat, setShowNewChat] = useState(false)
   const searchInputRef = useRef<HTMLInputElement>(null)
@@ -111,6 +111,62 @@ export function ChatSidebar({
   const [showFriends, setShowFriends] = useState(false)
   const [friendsInitialTab, setFriendsInitialTab] = useState<'friends' | 'incoming' | 'outgoing'>('friends')
   const [pendingFriendRequests, setPendingFriendRequests] = useState(0)
+  const [selectionMode, setSelectionMode] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
+  const [bulkDeleting, setBulkDeleting] = useState(false)
+
+  const enterSelectionMode = useCallback((initialId?: string) => {
+    setSelectionMode(true)
+    setSelectedIds(initialId ? new Set([initialId]) : new Set())
+  }, [])
+
+  const exitSelection = useCallback(() => {
+    setSelectionMode(false)
+    setSelectedIds(new Set())
+    setBulkDeleteOpen(false)
+  }, [])
+
+  const toggleSelected = useCallback((chatId: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(chatId)) next.delete(chatId)
+      else next.add(chatId)
+      return next
+    })
+  }, [])
+
+  const confirmBulkDelete = useCallback(async () => {
+    if (selectedIds.size === 0) return
+    setBulkDeleting(true)
+    const ids = Array.from(selectedIds)
+    let ok = 0
+    let fail = 0
+    await Promise.all(
+      ids.map(async (id) => {
+        try {
+          const res = await fetch(`/api/chats/${id}`, {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ scope: 'me' }),
+          })
+          if (!res.ok) {
+            fail += 1
+            return
+          }
+          removeChat(id)
+          ok += 1
+        } catch {
+          fail += 1
+        }
+      }),
+    )
+    setBulkDeleting(false)
+    setBulkDeleteOpen(false)
+    exitSelection()
+    if (ok > 0) toast.success(t('chat.deleted'))
+    if (fail > 0) toast.error(t('chat.deleteError'))
+  }, [selectedIds, removeChat, exitSelection, t])
 
   const refreshPendingFriendRequests = useCallback(async () => {
     if (!currentUser) return
@@ -145,6 +201,10 @@ export function ChatSidebar({
     window.addEventListener('aurora:focus-search', onFocusSearch)
     return () => window.removeEventListener('aurora:focus-search', onFocusSearch)
   }, [])
+
+  useEffect(() => {
+    if (view === 'shorts' && selectionMode) exitSelection()
+  }, [view, selectionMode, exitSelection])
 
   const openFriendsDialog = (tab: 'friends' | 'incoming' | 'outgoing' = 'friends') => {
     setFriendsInitialTab(tab)
@@ -289,11 +349,44 @@ export function ChatSidebar({
     <div className="flex h-full flex-col bg-sidebar text-sidebar-foreground">
       {/* Header */}
       <div className="aurora-sidebar-safe-top flex items-center justify-between gap-2 border-b border-sidebar-border bg-sidebar px-4 pb-2.5">
+        {selectionMode ? (
+          <>
+            <button
+              type="button"
+              onClick={exitSelection}
+              className="text-sm font-medium text-primary"
+            >
+              {t('misc.cancel')}
+            </button>
+            <p className="text-sm font-semibold">
+              {t('msg.selectedCount').replace('{n}', String(selectedIds.size))}
+            </p>
+            <button
+              type="button"
+              disabled={selectedIds.size === 0 || bulkDeleting}
+              onClick={() => setBulkDeleteOpen(true)}
+              className="text-sm font-medium text-destructive disabled:opacity-40"
+            >
+              {t('misc.delete')}
+            </button>
+          </>
+        ) : (
+          <>
         <button
           onClick={() => currentUser && setProfileUserId(currentUser.id)}
           className="flex min-w-0 items-center gap-2 text-left transition hover:opacity-80 sm:gap-2.5"
         >
-          <img src="/logo.png" alt="Aurora" className="h-8 w-8 shrink-0 rounded-full sm:h-9 sm:w-9" />
+          {currentUser ? (
+            <Avatar
+              name={currentUser.name}
+              color={currentUser.avatarColor}
+              imageUrl={currentUser.avatarUrl}
+              size="sm"
+              className="[&>div]:h-8 [&>div]:w-8 [&>div]:text-xs sm:[&>div]:h-9 sm:[&>div]:w-9"
+            />
+          ) : (
+            <img src="/logo.png" alt="Aurora" className="h-8 w-8 shrink-0 rounded-full sm:h-9 sm:w-9" />
+          )}
           <div className="min-w-0">
             <h1 className="text-sm font-bold leading-tight sm:text-base">{t('app.name')}</h1>
             <p className="truncate text-[10px] uppercase tracking-wider text-muted-foreground">
@@ -323,8 +416,8 @@ export function ChatSidebar({
               <DropdownMenuItem onClick={onOpenCoins}>
                 <Coins className="mr-2 h-4 w-4" /> {t('coins.title')}
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={onOpenSettings}>
-                <Settings className="mr-2 h-4 w-4" /> {t('sidebar.settings')}
+              <DropdownMenuItem onClick={() => enterSelectionMode()}>
+                <Check className="mr-2 h-4 w-4" /> {t('msg.select')}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -358,13 +451,24 @@ export function ChatSidebar({
           <Button
             variant="ghost"
             size="icon"
-            className="h-9 w-9 rounded-lg"
+            className="hidden h-9 w-9 rounded-lg xl:inline-flex"
+            onClick={() => enterSelectionMode()}
+            title={t('msg.select')}
+          >
+            <Check className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="hidden h-9 w-9 rounded-lg xl:inline-flex"
             onClick={onOpenSettings}
             title={t('sidebar.settings')}
           >
             <Settings className="h-4 w-4" />
           </Button>
         </div>
+          </>
+        )}
       </div>
 
       {/* Mode toggle: Чаты / Шорты */}
@@ -564,6 +668,10 @@ export function ChatSidebar({
                             const idx = storyFeed.findIndex((u) => u.id === userId)
                             if (idx >= 0) setStoryViewerIndex(idx)
                           }}
+                          selectionMode={selectionMode}
+                          selected={selectedIds.has(chat.id)}
+                          onToggleSelect={() => toggleSelected(chat.id)}
+                          onEnterSelection={() => enterSelectionMode(chat.id)}
                         />
                       ))}
                       {unpinned.length > 0 && (
@@ -580,6 +688,10 @@ export function ChatSidebar({
                         const idx = storyFeed.findIndex((u) => u.id === userId)
                         if (idx >= 0) setStoryViewerIndex(idx)
                       }}
+                      selectionMode={selectionMode}
+                      selected={selectedIds.has(chat.id)}
+                      onToggleSelect={() => toggleSelected(chat.id)}
+                      onEnterSelection={() => enterSelectionMode(chat.id)}
                     />
                   ))}
                   {pinned.length > 0 && showArchived && pinned.map((chat) => (
@@ -591,6 +703,10 @@ export function ChatSidebar({
                         const idx = storyFeed.findIndex((u) => u.id === userId)
                         if (idx >= 0) setStoryViewerIndex(idx)
                       }}
+                      selectionMode={selectionMode}
+                      selected={selectedIds.has(chat.id)}
+                      onToggleSelect={() => toggleSelected(chat.id)}
+                      onEnterSelection={() => enterSelectionMode(chat.id)}
                     />
                   ))}
                 </>
@@ -734,6 +850,33 @@ export function ChatSidebar({
       />
 
       <EditFoldersDialog open={showEditFolders} onOpenChange={setShowEditFolders} />
+
+      <AlertDialog open={bulkDeleteOpen} onOpenChange={setBulkDeleteOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t('chat.deleteConfirmTitle')}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t('chat.deleteConfirmMe')}
+              {selectedIds.size > 1
+                ? ` (${t('msg.selectedCount').replace('{n}', String(selectedIds.size))})`
+                : ''}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={bulkDeleting}>{t('misc.cancel')}</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={bulkDeleting || selectedIds.size === 0}
+              onClick={(e) => {
+                e.preventDefault()
+                void confirmBulkDelete()
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {bulkDeleting ? t('chat.deleting') : t('chat.deleteConfirm')}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AddStoryDialog
         open={showAddStory}
@@ -1006,10 +1149,18 @@ function ChatListItemRow({
   chat,
   storyUser,
   onOpenStories,
+  selectionMode = false,
+  selected = false,
+  onToggleSelect,
+  onEnterSelection,
 }: {
   chat: ChatListItem
   storyUser?: StoryFeedUser
   onOpenStories?: (userId: string) => void
+  selectionMode?: boolean
+  selected?: boolean
+  onToggleSelect?: () => void
+  onEnterSelection?: () => void
 }) {
   const { t, lang } = useI18n()
   const {
@@ -1028,6 +1179,8 @@ function ChatListItemRow({
   } = useAppStore()
   const [deleteScope, setDeleteScope] = useState<'me' | 'everyone' | null>(null)
   const [deleting, setDeleting] = useState(false)
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const longPressTriggered = useRef(false)
   const isActive = activeChatId === chat.id
   const otherMember =
     chat.type === 'private'
@@ -1149,25 +1302,79 @@ function ChatListItemRow({
     <motion.div
       role="button"
       tabIndex={0}
-      whileTap={{ scale: 0.98 }}
+      whileTap={{ scale: selectionMode ? 1 : 0.98 }}
       onClick={() => {
+        if (longPressTriggered.current) {
+          longPressTriggered.current = false
+          return
+        }
+        if (selectionMode) {
+          if (chat.type === 'saved') return
+          onToggleSelect?.()
+          return
+        }
         setActiveChat(chat.id)
         markChatRead(chat.id)
+      }}
+      onPointerDown={() => {
+        if (selectionMode || chat.type === 'saved') return
+        longPressTriggered.current = false
+        longPressTimer.current = setTimeout(() => {
+          longPressTriggered.current = true
+          onEnterSelection?.()
+        }, 450)
+      }}
+      onPointerUp={() => {
+        if (longPressTimer.current) {
+          clearTimeout(longPressTimer.current)
+          longPressTimer.current = null
+        }
+      }}
+      onPointerLeave={() => {
+        if (longPressTimer.current) {
+          clearTimeout(longPressTimer.current)
+          longPressTimer.current = null
+        }
+      }}
+      onPointerCancel={() => {
+        if (longPressTimer.current) {
+          clearTimeout(longPressTimer.current)
+          longPressTimer.current = null
+        }
       }}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault()
+          if (selectionMode) {
+            if (chat.type !== 'saved') onToggleSelect?.()
+            return
+          }
           setActiveChat(chat.id)
           markChatRead(chat.id)
         }
       }}
       className={cn(
         'group relative flex w-full items-center gap-3 rounded-none px-4 py-2.5 text-left transition-colors',
-        isActive
-          ? 'bg-sidebar-accent'
-          : 'hover:bg-sidebar-accent/70',
+        selectionMode && selected
+          ? 'bg-primary/10'
+          : isActive
+            ? 'bg-sidebar-accent'
+            : 'hover:bg-sidebar-accent/70',
       )}
     >
+      {selectionMode && chat.type !== 'saved' && (
+        <span
+          className={cn(
+            'flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 transition-colors',
+            selected
+              ? 'border-primary bg-primary text-primary-foreground'
+              : 'border-muted-foreground/40 bg-transparent',
+          )}
+          aria-hidden
+        >
+          {selected && <Check className="h-3 w-3" strokeWidth={3} />}
+        </span>
+      )}
       <UnreadLeftMarker show={false} />
       <UnreadBadge
         count={chat.unread}
@@ -1300,8 +1507,8 @@ function ChatListItemRow({
   return (
     <>
       <SwipeableRow
-        key={`${chat.id}:${activeChatId}`}
-        actions={[
+        key={`${chat.id}:${activeChatId}:${selectionMode ? 'sel' : 'nav'}`}
+        actions={selectionMode ? [] : [
           {
             key: 'archive',
             label: chat.isArchived ? t('chat.unarchiveShort') : t('chat.archiveShort'),
@@ -1340,6 +1547,12 @@ function ChatListItemRow({
       <ContextMenu>
         <ContextMenuTrigger asChild>{rowContent}</ContextMenuTrigger>
         <ContextMenuContent className="w-56">
+          {chat.type !== 'saved' && (
+            <ContextMenuItem onClick={() => onEnterSelection?.()}>
+              <Check className="mr-2 h-4 w-4" />
+              {t('msg.select')}
+            </ContextMenuItem>
+          )}
           <ContextMenuItem onClick={togglePin}>
             {chat.isPinned ? (
               <>
