@@ -217,8 +217,8 @@ body[data-lightbox-open] [data-slot="sheet-content"] {
 .aurora-floating-banner {
   left: 0.75rem;
   right: 0.75rem;
-  /* Sit above the full-width Telegram-style tab bar */
-  bottom: calc(3.75rem + env(safe-area-inset-bottom));
+  /* Sit above the compact Telegram-style tab bar (~2.5rem + safe area) */
+  bottom: calc(2.75rem + env(safe-area-inset-bottom));
 }
 
 @media (max-width: 380px) {

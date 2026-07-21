@@ -1,6 +1,6 @@
 'use client'
 
-import { Clapperboard, MessageSquare, Users } from 'lucide-react'
+import { Clapperboard, MessageCircle, Users } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { UnreadBadge } from './unread-indicator'
 
@@ -24,7 +24,7 @@ export function MobileBottomNav({
   onContacts,
 }: MobileBottomNavProps) {
   const items = [
-    { id: 'chats' as const, icon: MessageSquare, onClick: onChats },
+    { id: 'chats' as const, icon: MessageCircle, onClick: onChats },
     { id: 'shorts' as const, icon: Clapperboard, onClick: onShorts },
     { id: 'contacts' as const, icon: Users, onClick: onContacts },
   ]
@@ -32,9 +32,10 @@ export function MobileBottomNav({
   return (
     <nav
       aria-label="Мобильная навигация"
-      className="safe-bottom fixed inset-x-0 bottom-0 z-50 border-t border-border bg-background xl:hidden"
+      className="safe-bottom fixed inset-x-0 bottom-0 z-50 border-t border-border/50 bg-background xl:hidden"
     >
-      <div className="mx-auto grid h-14 max-w-lg grid-cols-3">
+      {/* Compact Telegram/Max-style tab strip — ~40px content, then safe-area only */}
+      <div className="mx-auto grid h-10 max-w-lg grid-cols-3">
         {items.map(({ id, icon: Icon, onClick }) => {
           const active = activeTab === id
           return (
@@ -44,27 +45,28 @@ export function MobileBottomNav({
               onClick={onClick}
               aria-label={labels[id]}
               aria-current={active ? 'page' : undefined}
-              className="group relative flex min-w-0 touch-manipulation flex-col items-center justify-center gap-0.5 px-1 transition-opacity active:opacity-70"
+              className="relative flex min-w-0 touch-manipulation flex-col items-center justify-center gap-px px-1 pt-0.5 transition-opacity active:opacity-60"
             >
-              <span className="relative flex h-6 w-6 items-center justify-center">
+              <span className="relative flex h-5 w-5 items-center justify-center">
                 <Icon
-                  strokeWidth={active ? 2.25 : 1.75}
+                  strokeWidth={active ? 2.1 : 1.6}
+                  absoluteStrokeWidth
                   className={cn(
-                    'h-[22px] w-[22px] transition-colors duration-150',
-                    active ? 'text-primary' : 'text-muted-foreground',
+                    'h-5 w-5 transition-colors duration-150',
+                    active ? 'text-primary' : 'text-muted-foreground/80',
                   )}
                 />
                 {id === 'chats' && unreadCount > 0 && (
                   <UnreadBadge
                     count={unreadCount}
-                    className="absolute -right-3 -top-1.5 h-[16px] min-w-[16px] border-2 border-background px-0.5 text-[9px] shadow-none"
+                    className="absolute -right-2.5 -top-1 h-[14px] min-w-[14px] border border-background px-0.5 text-[8px] leading-none shadow-none"
                   />
                 )}
               </span>
               <span
                 className={cn(
-                  'max-w-full truncate text-[10px] leading-none tracking-tight transition-colors duration-150',
-                  active ? 'font-medium text-primary' : 'font-normal text-muted-foreground',
+                  'max-w-full truncate text-[9px] leading-none transition-colors duration-150',
+                  active ? 'font-semibold text-primary' : 'font-normal text-muted-foreground/80',
                 )}
               >
                 {labels[id]}

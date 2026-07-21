@@ -455,7 +455,7 @@ export function ChatSidebar({
           {/* Chat list — h-0 + flex-1 required for scroll inside flex column on desktop */}
           <div className="mt-1 flex h-0 min-h-0 flex-1 flex-col overflow-hidden">
             <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-0 [-webkit-overflow-scrolling:touch]">
-            <div className="pb-[calc(4rem+env(safe-area-inset-bottom))] xl:pb-4">
+            <div className="pb-[calc(2.75rem+env(safe-area-inset-bottom))] xl:pb-4">
               {query.trim() && (
                 <div className="mb-3">
                   <p className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
