@@ -12,15 +12,17 @@ export const GET = withJsonApi(async function GET(req: NextRequest) {
 
   const api = await getYandexMusicApi()
   const result = await api.searchTracks(q, 0)
-  const items = result?.tracks?.items ?? []
-
-  const tracks: YandexTrack[] = items.slice(0, 30).map((t: {
+  // ym-api returns `tracks.results` (legacy builds used `items`).
+  const raw = (result?.tracks as { results?: unknown[]; items?: unknown[] } | undefined) || {}
+  const items = (raw.results || raw.items || []) as {
     id: string | number
     title: string
     artists?: { name: string }[]
     durationMs?: number
     coverUri?: string
-  }) => ({
+  }[]
+
+  const tracks: YandexTrack[] = items.slice(0, 30).map((t) => ({
     id: String(t.id),
     title: t.title,
     artist: (t.artists || []).map((a) => a.name).join(', ') || '—',

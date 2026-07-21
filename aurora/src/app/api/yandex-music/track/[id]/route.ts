@@ -5,7 +5,7 @@ import path from 'path'
 import { getCurrentUser } from '@/lib/auth'
 import { withJsonApi } from '@/lib/with-json-api'
 import { UPLOADS_DIR } from '@/lib/uploads-path'
-import { getYandexMusicApi, coverUrl } from '@/lib/yandex-music'
+import { getYandexTrackStreamUrl, coverUrl } from '@/lib/yandex-music'
 
 // Fetch a Yandex Music track, save the mp3 + cover locally, and return the
 // local URLs + metadata so the client can create a wall `music` post.
@@ -17,18 +17,9 @@ export const GET = withJsonApi(async function GET(
   if (!me) return NextResponse.json({ error: 'Не авторизован' }, { status: 401 })
 
   const { id } = await params
-  const api = await getYandexMusicApi()
 
-  // Resolve a direct mp3 URL. Try 320 kbps first, then 192.
-  let directUrl: string | null = null
-  for (const bitrate of [320, 192, 128]) {
-    try {
-      directUrl = await api.getMp3DownloadUrl(id, bitrate)
-      if (directUrl) break
-    } catch (e) {
-      console.warn(`[yandex-music] getMp3DownloadUrl(${id}, ${bitrate}) failed`, String(e))
-    }
-  }
+  // Resolve a direct mp3 URL (full track when token is configured, else preview).
+  const directUrl = await getYandexTrackStreamUrl(id)
   if (!directUrl) {
     return NextResponse.json(
       { error: 'Не удалось получить ссылку на трек (возможно, нужен токен Яндекс Музыки)' },
