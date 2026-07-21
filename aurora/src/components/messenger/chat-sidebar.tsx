@@ -121,7 +121,16 @@ export function ChatSidebar({
     setShowNewChat(true)
   }, [])
   const searchInputRef = useRef<HTMLInputElement>(null)
+  const chatListScrollRef = useRef<HTMLDivElement>(null)
   const [showArchived, setShowArchived] = useState(false)
+  const [archivePull, setArchivePull] = useState(0)
+  const archivePullRef = useRef(0)
+  const archiveTouchRef = useRef<{
+    startY: number
+    startX: number
+    pulling: boolean
+    swipingBack: boolean
+  } | null>(null)
   const [showEditFolders, setShowEditFolders] = useState(false)
   const [showFriends, setShowFriends] = useState(false)
   const [friendsInitialTab, setFriendsInitialTab] = useState<'friends' | 'incoming' | 'outgoing'>('friends')
@@ -357,6 +366,81 @@ export function ChatSidebar({
   const unpinned = filtered.filter((c) => !c.isPinned)
 
   const archivedCount = chats.filter((c) => c.isArchived).length
+
+  const ARCHIVE_PULL_OPEN = 72
+  const ARCHIVE_SWIPE_BACK = 72
+
+  const onArchiveTouchStart = useCallback(
+    (e: React.TouchEvent) => {
+      if (query.trim() || selectionMode) return
+      const touch = e.touches[0]
+      if (!touch) return
+      const el = chatListScrollRef.current
+      const atTop = !el || el.scrollTop <= 0
+      archiveTouchRef.current = {
+        startY: touch.clientY,
+        startX: touch.clientX,
+        pulling: !showArchived && atTop && archivedCount > 0,
+        swipingBack: showArchived,
+      }
+      archivePullRef.current = 0
+      setArchivePull(0)
+    },
+    [archivedCount, query, selectionMode, showArchived],
+  )
+
+  const onArchiveTouchMove = useCallback((e: React.TouchEvent) => {
+    const state = archiveTouchRef.current
+    if (!state) return
+    const touch = e.touches[0]
+    if (!touch) return
+    const dy = touch.clientY - state.startY
+    const dx = touch.clientX - state.startX
+
+    if (state.swipingBack) {
+      if (Math.abs(dx) > Math.abs(dy) && dx > 0) {
+        const pull = Math.min(120, dx * 0.85)
+        archivePullRef.current = pull
+        setArchivePull(pull)
+      }
+      return
+    }
+
+    if (!state.pulling) return
+    const el = chatListScrollRef.current
+    if (el && el.scrollTop > 0) {
+      state.pulling = false
+      archivePullRef.current = 0
+      setArchivePull(0)
+      return
+    }
+    if (dy <= 0 || Math.abs(dx) > Math.abs(dy) + 12) {
+      archivePullRef.current = 0
+      setArchivePull(0)
+      return
+    }
+    const pull = Math.min(120, dy * 0.55)
+    archivePullRef.current = pull
+    setArchivePull(pull)
+  }, [])
+
+  const onArchiveTouchEnd = useCallback(() => {
+    const state = archiveTouchRef.current
+    const pull = archivePullRef.current
+    archiveTouchRef.current = null
+    archivePullRef.current = 0
+    setArchivePull(0)
+    if (!state) return
+
+    if (state.swipingBack && pull >= ARCHIVE_SWIPE_BACK) {
+      setShowArchived(false)
+      return
+    }
+    if (state.pulling && pull >= ARCHIVE_PULL_OPEN) {
+      setShowArchived(true)
+    }
+  }, [])
+
   const totalUnread = useMemo(
     () =>
       chats
@@ -612,9 +696,52 @@ export function ChatSidebar({
 
           {/* Chat list — h-0 + flex-1 required for scroll inside flex column on desktop */}
           <div className="mt-1 flex h-0 min-h-0 flex-1 flex-col overflow-hidden">
-            <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-0 [-webkit-overflow-scrolling:touch]">
+            <div
+              ref={chatListScrollRef}
+              className="relative min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-0 [-webkit-overflow-scrolling:touch]"
+              onTouchStart={onArchiveTouchStart}
+              onTouchMove={onArchiveTouchMove}
+              onTouchEnd={onArchiveTouchEnd}
+              onTouchCancel={onArchiveTouchEnd}
+            >
+            {/* Pull-to-open archive (Telegram-style) */}
+            {!showArchived && archivedCount > 0 && archivePull > 0 && (
+              <div
+                className="pointer-events-none sticky top-0 z-20 flex items-center justify-center gap-2 overflow-hidden bg-sidebar/95 text-[#3390ec] backdrop-blur-sm xl:hidden"
+                style={{ height: Math.max(0, archivePull) }}
+                aria-hidden
+              >
+                <Archive
+                  className={cn(
+                    'h-5 w-5 transition-transform',
+                    archivePull >= ARCHIVE_PULL_OPEN && 'scale-110',
+                  )}
+                />
+                <span className="text-xs font-medium">
+                  {archivePull >= ARCHIVE_PULL_OPEN
+                    ? t('sidebar.releaseArchive')
+                    : t('sidebar.pullArchive')}
+                </span>
+              </div>
+            )}
+            {showArchived && archivePull > 0 && (
+              <div
+                className="pointer-events-none absolute inset-y-0 left-0 z-20 flex w-14 items-center justify-center bg-gradient-to-r from-[#3390ec]/25 to-transparent xl:hidden"
+                style={{ opacity: Math.min(1, archivePull / ARCHIVE_SWIPE_BACK) }}
+                aria-hidden
+              >
+                <ArrowLeft className="h-5 w-5 text-[#3390ec]" />
+              </div>
+            )}
             {/* Clearance under floating bottom nav on mobile */}
-            <div className="pb-[calc(5.75rem+env(safe-area-inset-bottom))] xl:pb-4">
+            <div
+              className="pb-[calc(5.75rem+env(safe-area-inset-bottom))] xl:pb-4"
+              style={
+                showArchived && archivePull > 0
+                  ? { transform: `translateX(${Math.min(56, archivePull * 0.35)}px)` }
+                  : undefined
+              }
+            >
               {/* Stories strip — Telegram-style above chat list */}
               {!showArchived && !query.trim() && currentUser && (
                 <StoriesRow
@@ -643,14 +770,19 @@ export function ChatSidebar({
                 </button>
               )}
               {showArchived && (
-                <button
-                  type="button"
-                  onClick={() => setShowArchived(false)}
-                  className="flex w-full items-center gap-2 px-4 py-2 text-sm font-medium text-[#3390ec] xl:hidden"
-                >
-                  <ArrowLeft className="h-4 w-4" />
-                  {t('sidebar.allChats')}
-                </button>
+                <div className="xl:hidden">
+                  <button
+                    type="button"
+                    onClick={() => setShowArchived(false)}
+                    className="flex w-full items-center gap-2 px-4 py-2 text-sm font-medium text-[#3390ec]"
+                  >
+                    <ArrowLeft className="h-4 w-4" />
+                    {t('sidebar.allChats')}
+                  </button>
+                  <p className="px-4 pb-1 text-[11px] text-muted-foreground">
+                    {t('sidebar.swipeBackChats')}
+                  </p>
+                </div>
               )}
               {query.trim() && (
                 <div className="mb-3">

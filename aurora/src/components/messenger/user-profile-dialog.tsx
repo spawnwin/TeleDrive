@@ -426,11 +426,6 @@ export function UserProfileDialog({
                     className="rounded-full ring-4 ring-background [&_>div]:!rounded-full"
                   />
                 </StoryRing>
-                {profile.isPremium && (
-                  <span className="absolute bottom-0 right-0 flex h-7 w-7 items-center justify-center rounded-full bg-gradient-to-br from-amber-400 to-[#3390ec] shadow-lg ring-2 ring-background">
-                    <Crown className="h-3.5 w-3.5 text-white" />
-                  </span>
-                )}
               </button>
 
               <div className="w-full min-w-0 text-center">
@@ -438,7 +433,11 @@ export function UserProfileDialog({
                   <span className="max-w-full break-words">{profile.name}</span>
                   <EmojiStatusBadge emojiStatus={profile.emojiStatus} size="lg" />
                   {profile.isPremium && (
-                    <span className="rounded-full bg-[#3390ec]/15 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-[#3390ec]">
+                    <span
+                      className="inline-flex items-center gap-1 rounded-full bg-gradient-to-br from-amber-400/25 to-[#3390ec]/20 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-amber-500"
+                      title="Aurora Premium"
+                    >
+                      <Crown className="h-3.5 w-3.5" />
                       Premium
                     </span>
                   )}
