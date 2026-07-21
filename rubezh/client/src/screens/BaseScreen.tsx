@@ -3,6 +3,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { api } from '../api';
 import { BuildingNode } from '../components/BuildingNode';
+import { DistrictMapCard } from '../components/DistrictMapCard';
 import { BuildingModal, RequestModal } from '../components/Modals';
 import { TopBar } from '../components/TopBar';
 import { TutorialOverlay } from '../components/TutorialOverlay';
@@ -41,15 +42,31 @@ export function BaseScreen() {
 
   const urgent = state.requests.filter((r) => r.status !== 'claimed').slice(0, 8);
   const highlightWarehouse = !state.user.tutorialDone && state.user.tutorialStep >= 2;
+  const secured = state.region.nodes?.filter((n) => n.status === 'secured').length ?? 0;
 
   return (
     <View style={styles.root}>
       <TopBar state={state} onCollectAll={() => act(() => api.collectAll())} />
       <ScrollView contentContainerStyle={[styles.content, { paddingBottom: Math.max(insets.bottom, 8) + 24 }]}>
+        <DistrictMapCard
+          compact
+          name={state.region.name}
+          stability={state.region.stability}
+          nodes={state.region.nodes || []}
+          lastEvent={state.region.lastEvent}
+        />
+
         <View style={styles.regionRow}>
-          <Text style={styles.region}>{state.region.name}</Text>
-          <Text style={styles.stability}>Устойчивость {state.region.stability}%</Text>
+          <Text style={styles.regionMeta}>Узлы обеспечены: {secured}/{state.region.nodes?.length || 0}</Text>
+          {state.region.lastEvent ? (
+            <Text style={styles.regionEvent} numberOfLines={1}>
+              {state.region.lastEvent}
+            </Text>
+          ) : (
+            <Text style={styles.stability}>Район на карте</Text>
+          )}
         </View>
+
         <View style={styles.storyCard}>
           <Text style={styles.storyTitle}>
             Глава {state.story.chapter}: {state.story.title}
@@ -59,8 +76,14 @@ export function BaseScreen() {
               ? `${state.story.objective} (${state.story.objectiveProgress ?? 0}/${state.story.objectiveTarget ?? 1})`
               : state.story.text}
           </Text>
+          {state.story.canClaim ? (
+            <Pressable style={styles.storyBtn} onPress={() => act(() => api.advanceStory())}>
+              <Text style={styles.storyBtnText}>Получить награду главы</Text>
+            </Pressable>
+          ) : null}
         </View>
 
+        <Text style={styles.yardLabel}>Площадка базы</Text>
         <View style={styles.baseYard}>
           <View style={styles.road} />
           <View style={[styles.road, styles.roadH]} />
@@ -86,10 +109,7 @@ export function BaseScreen() {
 
         <View style={styles.sectionHead}>
           <Text style={styles.sectionTitle}>Заявки</Text>
-          <Pressable
-            style={styles.offlineBtn}
-            onPress={() => act(() => api.claimOffline())}
-          >
+          <Pressable style={styles.offlineBtn} onPress={() => act(() => api.claimOffline())}>
             <Text style={styles.offlineText}>Офлайн {state.offline.hoursAvailable.toFixed(1)}ч</Text>
           </Pressable>
         </View>
@@ -162,15 +182,18 @@ function statusLabel(status: string) {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
-  content: { paddingBottom: 28 },
+  content: { paddingBottom: 28, paddingTop: 8 },
   regionRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    alignItems: 'center',
     paddingHorizontal: 14,
-    paddingVertical: 10,
+    marginBottom: 8,
+    gap: 8,
   },
-  region: { color: colors.sand, fontWeight: '700' },
-  stability: { color: colors.info },
+  regionMeta: { color: colors.sand, fontWeight: '700', flexShrink: 0 },
+  regionEvent: { color: colors.info, flex: 1, textAlign: 'right', fontSize: 12 },
+  stability: { color: colors.info, fontSize: 12 },
   storyCard: {
     marginHorizontal: 12,
     marginBottom: 8,
@@ -182,6 +205,21 @@ const styles = StyleSheet.create({
   },
   storyTitle: { color: colors.gold, fontWeight: '800', fontSize: 13 },
   storyText: { color: colors.textDim, marginTop: 4, fontSize: 12, lineHeight: 17 },
+  storyBtn: {
+    marginTop: 10,
+    backgroundColor: colors.olive,
+    borderRadius: 8,
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  storyBtnText: { color: colors.text, fontWeight: '800', fontSize: 13 },
+  yardLabel: {
+    color: colors.gold,
+    fontWeight: '800',
+    marginHorizontal: 14,
+    marginBottom: 8,
+    marginTop: 4,
+  },
   baseYard: {
     marginHorizontal: 12,
     height: 540,

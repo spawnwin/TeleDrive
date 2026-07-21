@@ -1,20 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { ImageBackground, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { api } from '../api';
+import { DistrictMapCard } from '../components/DistrictMapCard';
 import { useScreenInsets } from '../hooks/useScreenInsets';
 import { useGame } from '../state/GameContext';
 import { colors } from '../theme';
 import { RESOURCE_LABELS } from '../types';
-
-const DISTRICT_MAP = require('../../assets/training-district-map.jpg');
-
-const NODE_PINS: Record<string, { top: string; left: string }> = {
-  camp: { top: '58%', left: '22%' },
-  depot: { top: '42%', left: '68%' },
-  bridge: { top: '48%', left: '48%' },
-  comms_node: { top: '28%', left: '34%' },
-  med: { top: '70%', left: '72%' },
-};
 
 export function MapScreen() {
   const { state, error, act, online, syncing, lastSyncedAt } = useGame();
@@ -35,30 +26,12 @@ export function MapScreen() {
         <SyncLabel online={online} syncing={syncing} lastSyncedAt={lastSyncedAt} />
       </View>
 
-      <View style={styles.mapCard}>
-        <ImageBackground source={DISTRICT_MAP} style={styles.mapImage} imageStyle={styles.mapImageInner}>
-          <View style={styles.mapFog} />
-          {state.region.nodes?.map((n) => {
-            const pin = NODE_PINS[n.id] || { top: '50%', left: '50%' };
-            return (
-              <View key={n.id} style={[styles.pin, { top: pin.top as any, left: pin.left as any }]}>
-                <View style={[styles.pinDot, statusColor(n.status)]} />
-                <Text style={styles.pinLabel} numberOfLines={1}>
-                  {n.name}
-                </Text>
-              </View>
-            );
-          })}
-          <View style={styles.mapFooter}>
-            <Text style={styles.mapTitle}>{state.region.name}</Text>
-            <Text style={styles.mapMeta}>Устойчивость снабжения {state.region.stability}%</Text>
-            {state.region.lastEvent ? <Text style={styles.mapMeta}>{state.region.lastEvent}</Text> : null}
-            <View style={styles.barBg}>
-              <View style={[styles.barFill, { width: `${Math.min(100, state.region.stability)}%` }]} />
-            </View>
-          </View>
-        </ImageBackground>
-      </View>
+      <DistrictMapCard
+        name={state.region.name}
+        stability={state.region.stability}
+        nodes={state.region.nodes || []}
+        lastEvent={state.region.lastEvent}
+      />
 
       <Text style={styles.section}>Узлы района</Text>
       {state.region.nodes?.map((n) => (
@@ -214,48 +187,6 @@ const styles = StyleSheet.create({
   dotOn: { backgroundColor: colors.accent },
   dotOff: { backgroundColor: colors.warn },
   syncText: { color: colors.sand, fontSize: 12, fontWeight: '700' },
-  mapCard: {
-    borderRadius: 16,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: colors.border,
-    marginBottom: 8,
-    backgroundColor: colors.panel,
-  },
-  mapImage: { width: '100%', aspectRatio: 16 / 10, justifyContent: 'flex-end' },
-  mapImageInner: { resizeMode: 'cover' },
-  mapFog: {
-    ...StyleSheet.absoluteFill,
-    backgroundColor: 'rgba(18,24,18,0.12)',
-  },
-  pin: {
-    position: 'absolute',
-    transform: [{ translateX: -40 }, { translateY: -18 }],
-    width: 120,
-    alignItems: 'center',
-  },
-  pinDot: {
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    borderWidth: 2,
-    borderColor: '#f2ebe0',
-    marginBottom: 4,
-  },
-  pinLabel: {
-    color: '#f4efe4',
-    fontSize: 10,
-    fontWeight: '800',
-    textShadowColor: 'rgba(0,0,0,0.85)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 3,
-    textAlign: 'center',
-  },
-  mapFooter: { padding: 14, paddingTop: 28 },
-  mapTitle: { color: '#f4efe4', fontSize: 18, fontWeight: '800' },
-  mapMeta: { color: '#d8cfb8', marginTop: 4, fontWeight: '600' },
-  barBg: { height: 8, backgroundColor: 'rgba(0,0,0,0.35)', borderRadius: 4, marginTop: 10, overflow: 'hidden' },
-  barFill: { height: 8, backgroundColor: colors.info },
   section: { color: colors.gold, fontSize: 16, fontWeight: '800', marginTop: 16, marginBottom: 8 },
   card: {
     backgroundColor: colors.panel,
