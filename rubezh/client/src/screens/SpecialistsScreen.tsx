@@ -1,15 +1,20 @@
 import React from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { api } from '../api';
+import { useScreenInsets } from '../hooks/useScreenInsets';
 import { useGame } from '../state/GameContext';
 import { colors } from '../theme';
 
 export function SpecialistsScreen() {
   const { state, act } = useGame();
+  const { top, bottom } = useScreenInsets({ bottomExtra: 28 });
   if (!state) return null;
 
   return (
-    <ScrollView style={styles.root} contentContainerStyle={{ padding: 14, paddingBottom: 40 }}>
+    <ScrollView
+      style={styles.root}
+      contentContainerStyle={{ paddingTop: top + 8, paddingHorizontal: 14, paddingBottom: bottom }}
+    >
       <Text style={styles.title}>Специалисты</Text>
       <Text style={styles.sub}>Назначьте офицеров на объекты базы для ускорения работ.</Text>
 

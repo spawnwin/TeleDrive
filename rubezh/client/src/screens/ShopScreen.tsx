@@ -1,15 +1,20 @@
 import React from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { api } from '../api';
+import { useScreenInsets } from '../hooks/useScreenInsets';
 import { useGame } from '../state/GameContext';
 import { colors } from '../theme';
 
 export function ShopScreen() {
   const { state, act } = useGame();
+  const { bottom } = useScreenInsets({ top: false, bottomExtra: 28 });
   if (!state) return null;
 
   return (
-    <ScrollView style={styles.root} contentContainerStyle={{ padding: 14, paddingBottom: 40 }}>
+    <ScrollView
+      style={styles.root}
+      contentContainerStyle={{ padding: 14, paddingBottom: bottom }}
+    >
       <Text style={styles.title}>Снабжение штаба</Text>
       <Text style={styles.sub}>
         Магазин за знаки отличия. Без случайных контейнеров — только понятные пакеты и ускорения.

@@ -8,6 +8,7 @@ import {
   View,
 } from 'react-native';
 import { api } from '../api';
+import { useScreenInsets } from '../hooks/useScreenInsets';
 import { useGame } from '../state/GameContext';
 import { colors } from '../theme';
 import type { SocialState } from '../types';
@@ -29,6 +30,7 @@ function roleLabel(role: string) {
 
 export function ClanScreen() {
   const { state, act, toast, clearToast } = useGame();
+  const { top, bottom } = useScreenInsets({ bottomExtra: 28 });
   const [social, setSocial] = useState<SocialState | null>(state?.social || null);
   const [name, setName] = useState('Надёжный Тыл');
   const [tag, setTag] = useState('ТЫЛ');
@@ -59,7 +61,10 @@ export function ClanScreen() {
   const data = social || state.social;
 
   return (
-    <ScrollView style={styles.root} contentContainerStyle={{ padding: 14, paddingBottom: 40 }}>
+    <ScrollView
+      style={styles.root}
+      contentContainerStyle={{ paddingTop: top + 8, paddingHorizontal: 14, paddingBottom: bottom }}
+    >
       <Text style={styles.title}>Онлайн-штаб</Text>
       <Text style={styles.sub}>
         Объединения, помощь союзникам, чат и логистическая гонка. Прямых атак на базы нет.

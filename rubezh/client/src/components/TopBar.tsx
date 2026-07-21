@@ -1,12 +1,14 @@
 import React from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../theme';
 import type { GameState } from '../types';
 
 export function TopBar({ state, onCollectAll }: { state: GameState; onCollectAll: () => void }) {
+  const insets = useSafeAreaInsets();
   const r = state.resources;
   return (
-    <View style={styles.wrap}>
+    <View style={[styles.wrap, { paddingTop: Math.max(insets.top, 8) + 4 }]}>
       <View style={styles.row}>
         <Text style={styles.callsign}>{state.user.callsign}</Text>
         <Text style={styles.level}>КП {state.user.level}</Text>
@@ -40,7 +42,6 @@ const styles = StyleSheet.create({
   wrap: {
     backgroundColor: colors.panel,
     paddingHorizontal: 12,
-    paddingTop: 8,
     paddingBottom: 10,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,

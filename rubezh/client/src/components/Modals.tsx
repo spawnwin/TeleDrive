@@ -1,5 +1,6 @@
 import React from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../theme';
 import { RESOURCE_LABELS, type Building, type GameRequest, type Vehicle } from '../types';
 
@@ -13,6 +14,7 @@ type Props = {
 };
 
 export function RequestModal({ visible, request, vehicles, onClose, onStart, onClaim }: Props) {
+  const insets = useSafeAreaInsets();
   if (!request) return null;
   const idle = vehicles.filter((v) => v.status === 'idle');
   const remaining = request.ends_at ? Math.max(0, Math.ceil((new Date(request.ends_at).getTime() - Date.now()) / 1000)) : 0;
@@ -20,7 +22,7 @@ export function RequestModal({ visible, request, vehicles, onClose, onStart, onC
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
       <View style={styles.backdrop}>
-        <View style={styles.card}>
+        <View style={[styles.card, { paddingBottom: Math.max(insets.bottom, 12) + 18 }]}>
           <Text style={styles.title}>{request.title}</Text>
           <Text style={styles.desc}>{request.description}</Text>
           <Text style={styles.meta}>
@@ -84,6 +86,7 @@ export function BuildingModal({
   onUpgrade: () => void;
   onCollect: () => void;
 }) {
+  const insets = useSafeAreaInsets();
   if (!building) return null;
   const ends = building.upgrade_ends_at
     ? Math.max(0, Math.ceil((new Date(building.upgrade_ends_at).getTime() - Date.now()) / 1000))
@@ -92,7 +95,7 @@ export function BuildingModal({
   return (
     <Modal visible={visible} animationType="fade" transparent onRequestClose={onClose}>
       <View style={styles.backdrop}>
-        <View style={styles.card}>
+        <View style={[styles.card, { paddingBottom: Math.max(insets.bottom, 12) + 18 }]}>
           <Text style={styles.title}>{building.name}</Text>
           <Text style={styles.meta}>
             Уровень {building.level} · {building.state}

@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { api } from '../api';
 import { BuildingNode } from '../components/BuildingNode';
 import { BuildingModal, RequestModal } from '../components/Modals';
@@ -24,6 +25,7 @@ const LAYOUT: Array<{ type: string; top: number; left: number }> = [
 
 export function BaseScreen() {
   const { state, act, toast, clearToast } = useGame();
+  const insets = useSafeAreaInsets();
   const [selectedBuilding, setSelectedBuilding] = useState<Building | null>(null);
   const [selectedRequest, setSelectedRequest] = useState<GameRequest | null>(null);
 
@@ -43,7 +45,7 @@ export function BaseScreen() {
   return (
     <View style={styles.root}>
       <TopBar state={state} onCollectAll={() => act(() => api.collectAll())} />
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView contentContainerStyle={[styles.content, { paddingBottom: Math.max(insets.bottom, 8) + 24 }]}>
         <View style={styles.regionRow}>
           <Text style={styles.region}>{state.region.name}</Text>
           <Text style={styles.stability}>Устойчивость {state.region.stability}%</Text>
@@ -158,7 +160,7 @@ function statusLabel(status: string) {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
-  content: { paddingBottom: 120 },
+  content: { paddingBottom: 28 },
   regionRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -249,7 +251,7 @@ const styles = StyleSheet.create({
   reqAction: { color: colors.accent, fontWeight: '800' },
   toast: {
     position: 'absolute',
-    top: 100,
+    top: 120,
     alignSelf: 'center',
     backgroundColor: colors.olive,
     paddingHorizontal: 16,

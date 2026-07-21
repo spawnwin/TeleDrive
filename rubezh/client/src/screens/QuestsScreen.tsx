@@ -1,16 +1,21 @@
 import React from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { api } from '../api';
+import { useScreenInsets } from '../hooks/useScreenInsets';
 import { useGame } from '../state/GameContext';
 import { colors } from '../theme';
 import { RESOURCE_LABELS } from '../types';
 
 export function QuestsScreen() {
   const { state, act } = useGame();
+  const { bottom } = useScreenInsets({ top: false, bottomExtra: 28 });
   if (!state) return null;
 
   return (
-    <ScrollView style={styles.root} contentContainerStyle={{ padding: 14, paddingBottom: 40 }}>
+    <ScrollView
+      style={styles.root}
+      contentContainerStyle={{ padding: 14, paddingBottom: bottom }}
+    >
       <Text style={styles.title}>Задания дня</Text>
       <Text style={styles.sub}>Ежедневные задачи снабжения и награды штаба.</Text>
 

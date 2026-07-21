@@ -2,7 +2,7 @@ import React from 'react';
 import { ActivityIndicator, StatusBar, StyleSheet, Text, View } from 'react-native';
 import { NavigationContainer, DefaultTheme } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { GameProvider, useGame } from './src/state/GameContext';
 import { BaseScreen } from './src/screens/BaseScreen';
 import { MapScreen } from './src/screens/MapScreen';
@@ -28,10 +28,12 @@ const navTheme = {
 
 function RootTabs() {
   const { loading, error, state } = useGame();
+  const insets = useSafeAreaInsets();
+  const tabPad = Math.max(insets.bottom, 10);
 
   if (loading) {
     return (
-      <View style={styles.center}>
+      <View style={[styles.center, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
         <ActivityIndicator color={colors.accent} size="large" />
         <Text style={styles.loading}>Подключение к штабу…</Text>
       </View>
@@ -40,9 +42,11 @@ function RootTabs() {
 
   if (!state) {
     return (
-      <View style={styles.center}>
+      <View style={[styles.center, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
         <Text style={styles.errorTitle}>Нет связи с сервером</Text>
-        <Text style={styles.errorText}>{error || 'Запустите rubezh/server и укажите API URL на вкладке «Карта».'}</Text>
+        <Text style={styles.errorText}>
+          {error || 'Идёт автоматическое переподключение. Проверьте интернет.'}
+        </Text>
       </View>
     );
   }
@@ -51,7 +55,13 @@ function RootTabs() {
     <Tab.Navigator
       screenOptions={{
         headerShown: false,
-        tabBarStyle: styles.tabBar,
+        tabBarStyle: {
+          backgroundColor: colors.panel,
+          borderTopColor: colors.border,
+          height: 52 + tabPad,
+          paddingBottom: tabPad,
+          paddingTop: 6,
+        },
         tabBarActiveTintColor: colors.gold,
         tabBarInactiveTintColor: colors.textDim,
         tabBarLabelStyle: { fontSize: 10, fontWeight: '700' },
@@ -71,7 +81,7 @@ export default function App() {
     <SafeAreaProvider>
       <GameProvider>
         <NavigationContainer theme={navTheme}>
-          <StatusBar barStyle="light-content" />
+          <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
           <RootTabs />
           <UpdateModal />
         </NavigationContainer>
@@ -91,11 +101,4 @@ const styles = StyleSheet.create({
   loading: { color: colors.sand, marginTop: 12 },
   errorTitle: { color: colors.text, fontSize: 18, fontWeight: '800', textAlign: 'center' },
   errorText: { color: colors.textDim, marginTop: 10, textAlign: 'center', lineHeight: 20 },
-  tabBar: {
-    backgroundColor: colors.panel,
-    borderTopColor: colors.border,
-    height: 64,
-    paddingBottom: 8,
-    paddingTop: 6,
-  },
 });

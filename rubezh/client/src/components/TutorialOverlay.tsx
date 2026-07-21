@@ -1,5 +1,6 @@
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../theme';
 import { api } from '../api';
 import { useGame } from '../state/GameContext';
@@ -17,11 +18,15 @@ const STEPS = [
 
 export function TutorialOverlay() {
   const { state, act } = useGame();
+  const insets = useSafeAreaInsets();
   if (!state || state.user.tutorialDone) return null;
   const step = Math.min(state.user.tutorialStep, STEPS.length - 1);
 
   return (
-    <View style={styles.wrap} pointerEvents="box-none">
+    <View
+      style={[styles.wrap, { bottom: 56 + Math.max(insets.bottom, 10) + 12 }]}
+      pointerEvents="box-none"
+    >
       <View style={styles.card}>
         <Text style={styles.eyebrow}>Глава 1 · Первый приказ</Text>
         <Text style={styles.title}>Шаг {step + 1}/8</Text>
@@ -38,7 +43,7 @@ export function TutorialOverlay() {
 }
 
 const styles = StyleSheet.create({
-  wrap: { position: 'absolute', left: 12, right: 12, bottom: 88 },
+  wrap: { position: 'absolute', left: 12, right: 12 },
   card: {
     backgroundColor: 'rgba(28,36,28,0.94)',
     borderRadius: 14,
@@ -50,14 +55,11 @@ const styles = StyleSheet.create({
   title: { color: colors.text, fontSize: 16, fontWeight: '800', marginTop: 4 },
   text: { color: colors.sand, marginTop: 6, lineHeight: 20 },
   btn: {
-    marginTop: 10,
-    alignSelf: 'flex-start',
+    marginTop: 12,
     backgroundColor: colors.olive,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 8,
-    minHeight: 44,
-    justifyContent: 'center',
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: 'center',
   },
-  btnText: { color: colors.text, fontWeight: '700' },
+  btnText: { color: colors.text, fontWeight: '800' },
 });

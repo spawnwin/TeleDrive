@@ -574,7 +574,7 @@ export function getBaseState(userId: string) {
     },
     region: {
       id: 'training',
-      name: 'Учебный район',
+      name: 'Учебный район «Сосновый тыл»',
       stability: 62 + Math.min(30, user.level * 3) + Math.min(10, ((specialists as any[])?.length || 0)),
       nodes: [
         { id: 'camp', name: 'Базовый лагерь', status: 'active' },
