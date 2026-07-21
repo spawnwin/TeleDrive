@@ -245,6 +245,44 @@ export interface ClanInfo {
   }>;
 }
 
+export interface PlayerProfile {
+  id: string;
+  callsign: string;
+  nickname: string;
+  level: number;
+  experience?: number;
+  xpToNext?: number;
+  createdAt: string;
+  lastSeenAt: string;
+  isSelf: boolean;
+  tutorialDone?: boolean;
+  clan: {
+    id: string;
+    name: string;
+    tag: string;
+    motto: string;
+    role: string;
+    level: number;
+  } | null;
+  stats: {
+    requestsTotal: number;
+    collectsTotal: number;
+    operationsTotal: number;
+    helpsSent: number;
+    repairsTotal: number;
+    raceToday: number;
+  };
+  progress: {
+    commandLevel: number;
+    buildingsUnlocked: number;
+    vehiclesCount: number;
+    specialistsCount: number;
+    storyChapter: number;
+    achievementsUnlocked: number;
+    regionStability: number;
+  };
+}
+
 export const RESOURCE_LABELS: Record<ResourceType, string> = {
   materials: 'Материалы',
   fuel: 'Топливо',

@@ -35,6 +35,7 @@ import {
   leaveClan,
   postClanMessage,
 } from './social.js';
+import { getPlayerProfile, getSelfProfile, updateSelfProfile } from './profile.js';
 
 migrate();
 
@@ -72,6 +73,32 @@ function withSocial(uid: string, state: any) {
 app.get('/health', async () => ({ ok: true, service: 'rubezh-server' }));
 
 app.get('/v1/app/version', async () => loadAppVersion());
+
+app.get('/v1/profile', async (req, reply) => {
+  try {
+    return getSelfProfile(userId(req as any));
+  } catch (err) {
+    sendError(reply, err);
+  }
+});
+
+app.patch('/v1/profile', async (req, reply) => {
+  try {
+    const body = (req.body || {}) as { callsign?: string };
+    return updateSelfProfile(userId(req as any), body);
+  } catch (err) {
+    sendError(reply, err);
+  }
+});
+
+app.get('/v1/players/:id', async (req, reply) => {
+  try {
+    const { id } = req.params as { id: string };
+    return getPlayerProfile(userId(req as any), id);
+  } catch (err) {
+    sendError(reply, err);
+  }
+});
 
 app.post('/v1/auth/guest', async (req, reply) => {
   try {

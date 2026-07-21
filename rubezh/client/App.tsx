@@ -2,6 +2,7 @@ import React from 'react';
 import { ActivityIndicator, StatusBar, StyleSheet, Text, View } from 'react-native';
 import { NavigationContainer, DefaultTheme } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { GameProvider, useGame } from './src/state/GameContext';
 import { BaseScreen } from './src/screens/BaseScreen';
@@ -9,10 +10,12 @@ import { MapScreen } from './src/screens/MapScreen';
 import { SpecialistsScreen } from './src/screens/SpecialistsScreen';
 import { ClanScreen } from './src/screens/ClanScreen';
 import { MoreScreen } from './src/screens/MoreScreen';
+import { ProfileScreen, type RootStackParamList } from './src/screens/ProfileScreen';
 import { UpdateModal } from './src/components/UpdateModal';
 import { colors } from './src/theme';
 
 const Tab = createBottomTabNavigator();
+const Stack = createNativeStackNavigator<RootStackParamList>();
 
 const navTheme = {
   ...DefaultTheme,
@@ -27,32 +30,8 @@ const navTheme = {
 };
 
 function RootTabs() {
-  const { loading, error, state } = useGame();
   const insets = useSafeAreaInsets();
   const tabPad = Math.max(insets.bottom, 10);
-
-  if (loading) {
-    return (
-      <View style={[styles.center, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
-        <ActivityIndicator color={colors.accent} size="large" />
-        <Text style={styles.loading}>Подключение к штабу…</Text>
-      </View>
-    );
-  }
-
-  if (!state) {
-    return (
-      <View style={[styles.center, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
-        <Text style={styles.errorTitle}>Нет связи с сервером</Text>
-        <Text style={styles.errorText}>
-          {error || 'Идёт автоматическое переподключение. Проверьте интернет.'}
-          {error?.includes('CLEARTEXT')
-            ? '\n\nНужна сборка 0.2.2+: Android блокирует HTTP. Скачайте новый APK с сайта.'
-            : ''}
-        </Text>
-      </View>
-    );
-  }
 
   return (
     <Tab.Navigator
@@ -79,13 +58,48 @@ function RootTabs() {
   );
 }
 
+function RootNavigator() {
+  const { loading, error, state } = useGame();
+  const insets = useSafeAreaInsets();
+
+  if (loading) {
+    return (
+      <View style={[styles.center, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
+        <ActivityIndicator color={colors.accent} size="large" />
+        <Text style={styles.loading}>Подключение к штабу…</Text>
+      </View>
+    );
+  }
+
+  if (!state) {
+    return (
+      <View style={[styles.center, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
+        <Text style={styles.errorTitle}>Нет связи с сервером</Text>
+        <Text style={styles.errorText}>
+          {error || 'Идёт автоматическое переподключение. Проверьте интернет.'}
+          {error?.includes('CLEARTEXT')
+            ? '\n\nНужна сборка 0.2.2+: Android блокирует HTTP. Скачайте новый APK с сайта.'
+            : ''}
+        </Text>
+      </View>
+    );
+  }
+
+  return (
+    <Stack.Navigator screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.bg } }}>
+      <Stack.Screen name="Tabs" component={RootTabs} />
+      <Stack.Screen name="Profile" component={ProfileScreen} />
+    </Stack.Navigator>
+  );
+}
+
 export default function App() {
   return (
     <SafeAreaProvider>
       <GameProvider>
         <NavigationContainer theme={navTheme}>
           <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
-          <RootTabs />
+          <RootNavigator />
           <UpdateModal />
         </NavigationContainer>
       </GameProvider>

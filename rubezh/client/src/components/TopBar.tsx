@@ -1,16 +1,26 @@
 import React from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import type { RootStackParamList } from '../screens/ProfileScreen';
 import { colors } from '../theme';
 import type { GameState } from '../types';
 
 export function TopBar({ state, onCollectAll }: { state: GameState; onCollectAll: () => void }) {
   const insets = useSafeAreaInsets();
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const r = state.resources;
   return (
     <View style={[styles.wrap, { paddingTop: Math.max(insets.top, 8) + 4 }]}>
       <View style={styles.row}>
-        <Text style={styles.callsign}>{state.user.callsign}</Text>
+        <Pressable
+          style={styles.callsignBtn}
+          onPress={() => navigation.navigate('Profile', { userId: state.user.id })}
+        >
+          <Text style={styles.callsign}>{state.user.callsign}</Text>
+          <Text style={styles.profileHint}>профиль ›</Text>
+        </Pressable>
         <Text style={styles.level}>КП {state.user.level}</Text>
         <Text style={styles.xp}>
           {state.user.experience}/{state.user.xpToNext} XP
@@ -48,7 +58,9 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.border,
   },
   row: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8 },
-  callsign: { color: colors.text, fontSize: 16, fontWeight: '700', flex: 1 },
+  callsignBtn: { flex: 1 },
+  callsign: { color: colors.text, fontSize: 16, fontWeight: '700' },
+  profileHint: { color: colors.gold, fontSize: 11, marginTop: 2, fontWeight: '700' },
   level: { color: colors.accent, fontWeight: '700' },
   xp: { color: colors.textDim, fontSize: 12 },
   resRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },

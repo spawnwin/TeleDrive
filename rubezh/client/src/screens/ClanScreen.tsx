@@ -7,11 +7,14 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { api } from '../api';
 import { useScreenInsets } from '../hooks/useScreenInsets';
 import { useGame } from '../state/GameContext';
 import { colors } from '../theme';
 import type { SocialState } from '../types';
+import type { RootStackParamList } from './ProfileScreen';
 
 function roleLabel(role: string) {
   switch (role) {
@@ -29,6 +32,7 @@ function roleLabel(role: string) {
 }
 
 export function ClanScreen() {
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { state, act, toast, clearToast } = useGame();
   const { top, bottom } = useScreenInsets({ bottomExtra: 28 });
   const [social, setSocial] = useState<SocialState | null>(state?.social || null);
@@ -37,6 +41,10 @@ export function ClanScreen() {
   const [motto, setMotto] = useState('Снабжение без срывов');
   const [message, setMessage] = useState('');
   const [tab, setTab] = useState<'clan' | 'race' | 'board'>('clan');
+
+  const openProfile = (userId: string) => {
+    navigation.navigate('Profile', { userId });
+  };
 
   const refreshSocial = async () => {
     try {
@@ -152,7 +160,10 @@ export function ClanScreen() {
               <Text style={styles.section}>Помощь союзникам</Text>
               {data.clan.helpTargets.map((t) => (
                 <View key={t.userId} style={styles.card}>
-                  <Text style={styles.name}>{t.callsign}</Text>
+                  <Pressable onPress={() => openProfile(t.userId)}>
+                    <Text style={styles.name}>{t.callsign}</Text>
+                    <Text style={styles.profileHint}>открыть профиль ›</Text>
+                  </Pressable>
                   <Text style={styles.meta}>
                     {t.upgradingBuilding
                       ? `Строит: ${t.upgradingBuilding.type}`
@@ -170,23 +181,26 @@ export function ClanScreen() {
 
               <Text style={styles.section}>Участники</Text>
               {data.clan.members.map((m) => (
-                <View key={m.userId} style={styles.rowCard}>
+                <Pressable key={m.userId} style={styles.rowCard} onPress={() => openProfile(m.userId)}>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.name}>{m.callsign}</Text>
                     <Text style={styles.meta}>
                       {roleLabel(m.role)} · вклад {m.contribution} · заявок {m.requestsTotal}
                     </Text>
+                    <Text style={styles.profileHint}>профиль ›</Text>
                   </View>
-                </View>
+                </Pressable>
               ))}
 
               <Text style={styles.section}>Чат объединения</Text>
               <View style={styles.chatBox}>
                 {data.clan.messages.map((msg) => (
-                  <Text key={msg.id} style={styles.chatLine}>
-                    <Text style={styles.chatAuthor}>{msg.callsign}: </Text>
-                    {msg.body}
-                  </Text>
+                  <Pressable key={msg.id} onPress={() => openProfile(msg.user_id)}>
+                    <Text style={styles.chatLine}>
+                      <Text style={styles.chatAuthor}>{msg.callsign}: </Text>
+                      {msg.body}
+                    </Text>
+                  </Pressable>
                 ))}
               </View>
               <TextInput
@@ -218,15 +232,16 @@ export function ClanScreen() {
           <Text style={styles.sub}>{data.race.description}</Text>
           <Text style={styles.badges}>Ваш счёт сегодня: {data.race.myScore} заявок</Text>
           {data.race.top.map((row, idx) => (
-            <View key={row.user_id} style={styles.rowCard}>
+            <Pressable key={row.user_id} style={styles.rowCard} onPress={() => openProfile(row.user_id)}>
               <Text style={styles.rank}>#{idx + 1}</Text>
               <View style={{ flex: 1 }}>
                 <Text style={styles.name}>
                   {row.callsign} {row.clan_tag ? `[${row.clan_tag}]` : ''}
                 </Text>
                 <Text style={styles.meta}>{row.requests} заявок</Text>
+                <Text style={styles.profileHint}>профиль ›</Text>
               </View>
-            </View>
+            </Pressable>
           ))}
           {!data.race.top.length && <Text style={styles.meta}>Пока никто не выполнил заявки сегодня.</Text>}
         </View>
@@ -236,7 +251,7 @@ export function ClanScreen() {
         <View>
           <Text style={styles.section}>Глобальный рейтинг эффективности</Text>
           {data.leaderboard.map((row, idx) => (
-            <View key={row.id} style={styles.rowCard}>
+            <Pressable key={row.id} style={styles.rowCard} onPress={() => openProfile(row.id)}>
               <Text style={styles.rank}>#{idx + 1}</Text>
               <View style={{ flex: 1 }}>
                 <Text style={styles.name}>
@@ -245,8 +260,9 @@ export function ClanScreen() {
                 <Text style={styles.meta}>
                   Ур.{row.level} · заявок {row.requests_total} · операций {row.operations_total} · помощи {row.helps_sent}
                 </Text>
+                <Text style={styles.profileHint}>профиль ›</Text>
               </View>
-            </View>
+            </Pressable>
           ))}
         </View>
       )}
@@ -300,6 +316,7 @@ const styles = StyleSheet.create({
   },
   name: { color: colors.text, fontWeight: '800', fontSize: 16 },
   meta: { color: colors.sand, marginTop: 4, fontSize: 12 },
+  profileHint: { color: colors.gold, fontSize: 11, marginTop: 4, fontWeight: '700' },
   badges: { color: colors.gold, fontWeight: '800', marginBottom: 8 },
   rank: { color: colors.accent, fontWeight: '800', width: 36 },
   input: {
