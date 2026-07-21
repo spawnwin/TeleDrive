@@ -698,19 +698,19 @@ export function UserProfileDialog({
               : 'w-full max-w-md sm:max-w-md safe-right',
           )}
         >
-          <div className="flex items-center gap-2 border-b border-border px-3 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))]">
+          {/* Telegram-style: back only — no "Open profile" title; name lives under the avatar */}
+          <div className="flex items-center gap-2 px-3 pb-2 pt-[max(0.75rem,env(safe-area-inset-top))]">
             <Button
               variant="ghost"
               size="icon"
-              className="h-9 w-9 shrink-0"
+              className="h-9 w-9 shrink-0 rounded-full"
               onClick={onClose}
+              aria-label={isMobile ? t('misc.back') : t('misc.close')}
             >
               {isMobile ? <ChevronLeft className="h-5 w-5" /> : <X className="h-4 w-4" />}
             </Button>
-            <h3 className="flex-1 text-center text-sm font-semibold">
-              {profile?.isSelf ? t('profile.editProfile') : t('profile.viewProfile')}
-            </h3>
-            <div className="w-9" />
+            <div className="min-w-0 flex-1" />
+            <div className="h-9 w-9 shrink-0" aria-hidden />
           </div>
           {profileBody}
         </SheetContent>
