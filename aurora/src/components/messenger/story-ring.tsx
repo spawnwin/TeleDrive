@@ -99,7 +99,7 @@ export function StoryRing({
   const innerBg = hasStory || isSelf ? 'bg-sidebar' : 'bg-transparent'
 
   const inner = (
-    <div className={cn('relative shrink-0 rounded-full', outerSize[size])}>
+    <div className={cn('relative shrink-0 overflow-visible rounded-full', outerSize[size])}>
       {/* Базовый слой (цельный фон или пусто) */}
       <div
         className={cn(
@@ -181,7 +181,8 @@ export function StoryRing({
       )}
 
       <div className={cn('absolute inset-[3px] rounded-full', innerBg)} />
-      <div className="absolute inset-[5px] flex items-center justify-center rounded-full">
+      {/* overflow-visible: online status dot on Avatar must not be clipped */}
+      <div className="absolute inset-[5px] flex items-center justify-center overflow-visible rounded-full">
         {children}
       </div>
     </div>
@@ -192,12 +193,16 @@ export function StoryRing({
       <button
         type="button"
         onClick={onClick}
-        className={cn('shrink-0 rounded-full', className)}
+        className={cn('relative shrink-0 overflow-visible rounded-full', className)}
       >
         {inner}
       </button>
     )
   }
 
-  return <div className={cn('shrink-0 overflow-hidden rounded-full', className)}>{inner}</div>
+  return (
+    <div className={cn('relative shrink-0 overflow-visible rounded-full', className)}>
+      {inner}
+    </div>
+  )
 }

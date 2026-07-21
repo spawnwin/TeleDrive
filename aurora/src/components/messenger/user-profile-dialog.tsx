@@ -446,11 +446,11 @@ export function UserProfileDialog({
                 <button
                   type="button"
                   onClick={copyUsername}
-                  className="mt-1 max-w-full truncate text-sm text-[#3390ec] transition hover:text-[#1677d2]"
+                  className="mt-1.5 max-w-full truncate text-sm leading-snug text-[#3390ec] transition hover:text-[#1677d2]"
                 >
                   @{profile.username}
                 </button>
-                <p className="mt-1 text-sm text-muted-foreground">
+                <p className="mt-1.5 min-h-[1.25rem] px-2 text-sm leading-snug text-muted-foreground">
                   {formatLastSeen(profile.lastSeen, isOnline, lang)}
                 </p>
               </div>

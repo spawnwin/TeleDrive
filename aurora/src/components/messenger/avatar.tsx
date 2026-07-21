@@ -59,7 +59,7 @@ export function Avatar({
   const hasImage = resolvedImageUrl && !imgError
 
   return (
-    <div className={cn('relative shrink-0 rounded-full', className)}>
+    <div className={cn('relative shrink-0 overflow-visible rounded-full', className)}>
       <div
         className={cn(
           'flex aspect-square items-center justify-center overflow-hidden rounded-full font-semibold text-white',
@@ -88,10 +88,15 @@ export function Avatar({
       {showStatus && (
         <span
           className={cn(
-            'absolute bottom-0 right-0 rounded-full border-2 border-background',
+            // Keep the Telegram-style edge badge fully visible (not clipped by rings).
+            'absolute z-[1] rounded-full border-2 border-background',
+            size === '2xl' || size === 'xl'
+              ? 'bottom-0.5 right-0.5'
+              : 'bottom-0 right-0',
             dotSize[size],
             online ? 'bg-[#4dcd5e]' : 'bg-[#8e8e93]',
           )}
+          aria-hidden
         />
       )}
     </div>
