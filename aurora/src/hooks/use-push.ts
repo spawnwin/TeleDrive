@@ -163,7 +163,7 @@ export async function registerServiceWorker(): Promise<ServiceWorkerRegistration
     return null
   }
   try {
-    return await navigator.serviceWorker.register('/sw.js', { scope: '/' })
+    return await navigator.serviceWorker.register('/sw.js?v=16', { scope: '/' })
   } catch (e) {
     console.error('[push] service worker registration failed', e)
     return null
