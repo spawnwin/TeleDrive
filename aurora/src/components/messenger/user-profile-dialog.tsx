@@ -22,7 +22,6 @@ import {
   ChevronRight,
   Gift,
   Info,
-  AtSign,
   Trash2,
 } from 'lucide-react'
 import { Avatar } from './avatar'
@@ -454,8 +453,8 @@ export function UserProfileDialog({
                 </p>
               </div>
 
-              {/* Actions — only under avatar (Telegram-style) */}
-              <div className="w-full min-w-0 max-w-full pt-1">
+              {/* Actions — compact under avatar */}
+              <div className="flex w-full min-w-0 max-w-full flex-col items-center gap-2 pt-1">
                 {!profile.isSelf ? (
                   <div className="grid w-full min-w-0 max-w-full grid-cols-4 gap-1 rounded-2xl bg-muted/40 p-1.5 [grid-template-columns:repeat(4,minmax(0,1fr))]">
                     <button
@@ -493,40 +492,50 @@ export function UserProfileDialog({
                       </span>
                     </button>
                   </div>
-                ) : (
-                  <div className="grid w-full min-w-0 grid-cols-1 gap-1 rounded-2xl bg-muted/40 p-1.5">
-                    <button
+                ) : null}
+
+                <div className="flex flex-wrap items-center justify-center gap-2">
+                  {profile.isSelf && (
+                    <Button
                       type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-8 rounded-full px-3 text-xs font-medium"
                       onClick={() => {
                         onClose()
                         onEditProfile?.()
                       }}
-                      className="flex min-h-[3.25rem] min-w-0 flex-col items-center justify-center gap-1 overflow-hidden rounded-xl text-[#3390ec] transition hover:bg-background active:scale-[0.98]"
                     >
-                      <Edit3 className="h-6 w-6 shrink-0" strokeWidth={1.75} />
-                      <span className="block w-full truncate text-center text-[10px] font-medium">{t('profile.editProfile')}</span>
-                    </button>
-                  </div>
-                )}
+                      <Edit3 className="mr-1.5 h-3.5 w-3.5" />
+                      {t('profile.editProfile')}
+                    </Button>
+                  )}
+                  {(creatorTiersCount > 0 || profile.isSelf) && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-8 rounded-full px-3 text-xs font-medium"
+                      onClick={() => setShowPremium(true)}
+                    >
+                      <Crown className="mr-1.5 h-3.5 w-3.5 text-amber-500" />
+                      {t('premium.support')}
+                    </Button>
+                  )}
+                </div>
               </div>
             </div>
 
-            {/* Info rows */}
-            <div className="min-w-0 space-y-1.5 pb-3 pt-2">
-              {profile.bio && (
+            {/* Bio only — name/@username stay under the avatar */}
+            {profile.bio && (
+              <div className="min-w-0 space-y-1.5 pb-3 pt-2">
                 <InfoRow
                   icon={<Info className="h-4 w-4" />}
                   label={t('profile.bioLabel')}
                   value={profile.bio}
                 />
-              )}
-              <InfoRow
-                icon={<AtSign className="h-4 w-4" />}
-                label={t('profile.usernameLabel')}
-                value={`@${profile.username}`}
-                onClick={copyUsername}
-              />
-            </div>
+              </div>
+            )}
 
             {/* Gifts on profile */}
             <div className="min-w-0 max-w-full overflow-x-clip">
@@ -538,24 +547,6 @@ export function UserProfileDialog({
                 showRecentFeed={profile.isSelf}
               />
             </div>
-
-            {/* Creator Premium */}
-            {(creatorTiersCount > 0 || profile.isSelf) && (
-              <div className="min-w-0 pb-2">
-                <MenuRow
-                  icon={<Crown className="h-5 w-5" />}
-                  color="#f4a12e"
-                  label={t('premium.support')}
-                  hint={
-                    profile.isSelf
-                      ? t('premium.manage')
-                      : `${creatorTiersCount} ${t('premium.tiers').toLowerCase()}`
-                  }
-                  value={profile.isSelf ? t('shorts.edit') : t('premium.subscribe')}
-                  onClick={() => setShowPremium(true)}
-                />
-              </div>
-            )}
 
             {/* Friend request button */}
             {!profile.isSelf && !blocked && (
