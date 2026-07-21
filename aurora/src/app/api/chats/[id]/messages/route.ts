@@ -243,7 +243,9 @@ export const POST = withJsonApi(async function POST(
 
   // Determine message type
   let type = 'text'
-  if (body?.forceSticker && attachmentUrl) type = 'sticker'
+  if (body?.type === 'music' && shareMetadata) {
+    type = 'music'
+  } else if (body?.forceSticker && attachmentUrl) type = 'sticker'
   else if (attachmentMime?.startsWith('image/') || body?.forceImage) type = 'image'
   else if (isVoiceMessage) type = 'voice'
   else if (isVideoAttachment) type = 'video'
@@ -258,8 +260,19 @@ export const POST = withJsonApi(async function POST(
         : 'audio/webm'
   }
 
-  if (!content && !attachmentUrl && !forwardedFromId && type !== 'share') {
+  if (!content && !attachmentUrl && !forwardedFromId && type !== 'share' && type !== 'music') {
     return NextResponse.json({ error: 'Пустое сообщение' }, { status: 400 })
+  }
+
+  if (type === 'music') {
+    try {
+      const meta = typeof shareMetadata === 'string' ? JSON.parse(shareMetadata) : shareMetadata
+      if (!meta || meta.kind !== 'music' || meta.source !== 'yandex' || !meta.trackId) {
+        return NextResponse.json({ error: 'Некорректные данные трека' }, { status: 400 })
+      }
+    } catch {
+      return NextResponse.json({ error: 'Некорректные данные трека' }, { status: 400 })
+    }
   }
 
   // For forwarded messages, copy original content if no content given
@@ -311,7 +324,7 @@ export const POST = withJsonApi(async function POST(
       attachmentSize: finalAttachmentSize ? Number(finalAttachmentSize) : null,
       durationSec: finalDurationSec ? Number(finalDurationSec) : null,
       type,
-      metadata: type === 'share' ? shareMetadata : null,
+      metadata: type === 'share' || type === 'music' ? (typeof shareMetadata === 'string' ? shareMetadata : JSON.stringify(shareMetadata)) : null,
       albumId,
       topicId,
     },

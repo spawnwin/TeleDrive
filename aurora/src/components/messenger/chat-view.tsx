@@ -95,6 +95,8 @@ import { GiftMessageBubble } from './gift-message-bubble'
 import { StickerMessageBubble } from './sticker-message-bubble'
 import { StickerPickerDialog } from './sticker-picker-dialog'
 import { VoicePlayer } from './voice-player'
+import { MusicPickerDialog, type YandexTrack } from './music-picker-dialog'
+import { ChatMusicPlayer } from './chat-music-player'
 import { TypingDots } from './typing-dots'
 import { FileAttachment } from './file-attachment'
 import { ForwardDialog } from './forward-dialog'
@@ -110,6 +112,11 @@ import { isE2EEPayload } from '@/lib/e2ee-payload'
 import { callPreviewLabel, parseCallMetadata } from '@/lib/call-message'
 import { isVideoFile, isImageFile, CHAT_ATTACHMENT_ACCEPT } from '@/lib/media-type'
 import { uploadFileWithRetry } from '@/lib/upload-client'
+import {
+  buildChatMusicMetadata,
+  musicMessageLabel,
+  parseChatMusicMetadata,
+} from '@/lib/music-message'
 import {
   canRecordVoiceInBrowser,
   createVoiceMediaRecorder,
@@ -226,6 +233,7 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
   const [commentsFor, setCommentsFor] = useState<string | null>(null)
   const commentsSheetRef = useRef<ChannelCommentsSheetHandle>(null)
   const [showGiftPicker, setShowGiftPicker] = useState(false)
+  const [showMusicPicker, setShowMusicPicker] = useState(false)
   const [keyboardPad, setKeyboardPad] = useState(0)
   const [myAdminMembership, setMyAdminMembership] = useState<{
     role: string
@@ -1790,6 +1798,47 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
     }
   }
 
+  const sendMusicTrack = async (track: YandexTrack) => {
+    if (!activeChatId || !currentUser) return
+    setShowMusicPicker(false)
+    setShowAttachMenu(false)
+    setUploading(true)
+    try {
+      const meta = buildChatMusicMetadata(track)
+      const msgRes = await fetch(`/api/chats/${activeChatId}/messages`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'music',
+          content: musicMessageLabel(meta),
+          replyToId: replyTo?.id || null,
+          durationSec: meta.durationSec || null,
+          metadata: JSON.stringify(meta),
+        }),
+      })
+      const msgData = await msgRes.json().catch(() => ({}))
+      if (!msgRes.ok) throw new Error(msgData.error || t('composer.musicError'))
+      const newMsg: ChatMessage = msgData.message
+      setReplyTo(null)
+      setMessages((prev) => [...prev, newMsg])
+      updateLastMessage(activeChatId, {
+        id: newMsg.id,
+        content: messagePreview(newMsg, t),
+        createdAt: newMsg.createdAt,
+        senderName: newMsg.sender.name,
+        senderId: newMsg.sender.id,
+        type: newMsg.type,
+        attachmentUrl: newMsg.attachmentUrl,
+        durationSec: newMsg.durationSec,
+      })
+      socket.broadcastMessage(newMsg)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : t('composer.musicError'))
+    } finally {
+      setUploading(false)
+    }
+  }
+
   const stopRecording = async () => {
     if (!isRecording) return
     if (recordingModeRef.current === 'wav' && wavRecorderRef.current) {
@@ -3013,6 +3062,15 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
             />
             <AttachTile
               icon={<Music className="h-6 w-6" />}
+              color="from-rose-500 to-amber-500"
+              label={t('composer.attachMusic')}
+              onClick={() => {
+                setShowAttachMenu(false)
+                setShowMusicPicker(true)
+              }}
+            />
+            <AttachTile
+              icon={<Mic className="h-6 w-6" />}
               color="from-amber-500 to-orange-500"
               label={t('composer.attachAudio')}
               onClick={() => {
@@ -3169,6 +3227,14 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
           }}
         />
       )}
+
+      <MusicPickerDialog
+        open={showMusicPicker}
+        onOpenChange={setShowMusicPicker}
+        yandexOnly
+        title={t('composer.sendMusic')}
+        onPickYandex={sendMusicTrack}
+      />
 
       <ChatWallpaperDialog
         open={showWallpaper}
@@ -3343,6 +3409,13 @@ function messagePreview(msg: ChatMessage, t: (k: string) => string, viewerId?: s
   if (msg.type === 'image') return t('chat.image')
   if (msg.type === 'video') return '🎥 Видео'
   if (msg.type === 'voice') return t('chat.voice')
+  if (msg.type === 'music') {
+    try {
+      const meta = msg.metadata ? JSON.parse(msg.metadata) : null
+      if (meta?.title) return `🎵 ${meta.artist ? `${meta.artist} — ` : ''}${meta.title}`
+    } catch { /* ignore */ }
+    return t('chat.music')
+  }
   if (msg.type === 'gift') return t('chat.gift')
   if (msg.type === 'sticker') return t('chat.sticker')
   if (msg.type === 'file') return `${t('chat.file')}: ${msg.attachmentName || ''}`
@@ -3608,19 +3681,20 @@ function MessageBubble({
           <div
             className={cn(
               'relative min-w-0 max-w-full overflow-hidden rounded-2xl px-3 py-1.5 text-[15px] leading-snug shadow-none transition-shadow',
-              mine && msg.type !== 'gift' && msg.type !== 'sticker'
+              mine && msg.type !== 'gift' && msg.type !== 'sticker' && msg.type !== 'music'
                 ? 'bg-[var(--bubble-out)] text-white'
                 : mine
                   ? ''
-                  : msg.type !== 'gift' && msg.type !== 'sticker' && 'bg-[var(--bubble-in)] text-foreground shadow-none',
-              mine && msg.type !== 'gift' && msg.type !== 'sticker' && (grouped ? 'rounded-tr-2xl' : 'rounded-tr-md'),
-              !mine && msg.type !== 'gift' && msg.type !== 'sticker' && (grouped ? 'rounded-tl-2xl' : 'rounded-tl-md'),
-              mine && msg.type !== 'gift' && msg.type !== 'sticker' && (nextGrouped ? 'rounded-br-2xl' : 'rounded-br-md'),
-              !mine && msg.type !== 'gift' && msg.type !== 'sticker' && (nextGrouped ? 'rounded-bl-2xl' : 'rounded-bl-md'),
+                  : msg.type !== 'gift' && msg.type !== 'sticker' && msg.type !== 'music' && 'bg-[var(--bubble-in)] text-foreground shadow-none',
+              mine && msg.type !== 'gift' && msg.type !== 'sticker' && msg.type !== 'music' && (grouped ? 'rounded-tr-2xl' : 'rounded-tr-md'),
+              !mine && msg.type !== 'gift' && msg.type !== 'sticker' && msg.type !== 'music' && (grouped ? 'rounded-tl-2xl' : 'rounded-tl-md'),
+              mine && msg.type !== 'gift' && msg.type !== 'sticker' && msg.type !== 'music' && (nextGrouped ? 'rounded-br-2xl' : 'rounded-br-md'),
+              !mine && msg.type !== 'gift' && msg.type !== 'sticker' && msg.type !== 'music' && (nextGrouped ? 'rounded-bl-2xl' : 'rounded-bl-md'),
               msg.type === 'image' && !msg.content && 'p-1.5',
               showAsCircleVideo && !msg.content && 'p-1.5 bg-transparent shadow-none',
               showAsVideoAttachment && !msg.content && 'p-1.5',
               msg.type === 'voice' && 'min-w-[12rem] max-w-full px-2.5 py-2',
+              msg.type === 'music' && 'min-w-0 max-w-full bg-transparent p-0 shadow-none',
               msg.type === 'file' && !showAsVideoAttachment && 'w-full min-w-0 sm:min-w-[180px]',
               msg.type === 'share' && 'w-full min-w-0 sm:min-w-[180px]',
               msg.type === 'gift' && 'min-w-0 max-w-full bg-transparent shadow-none',
@@ -3725,6 +3799,17 @@ function MessageBubble({
                 caption={msg.content || undefined}
               />
             )}
+            {msg.type === 'music' && (() => {
+              const musicMeta = parseChatMusicMetadata(msg.metadata)
+              if (!musicMeta) return null
+              return (
+                <ChatMusicPlayer
+                  meta={musicMeta}
+                  mine={mine}
+                  messageId={msg.id}
+                />
+              )
+            })()}
             {msg.attachmentUrl && msg.type === 'voice' && (
               <VoicePlayer
                 url={resolveMediaUrl(msg.attachmentUrl) || msg.attachmentUrl}
@@ -3744,7 +3829,7 @@ function MessageBubble({
                 mine={mine}
               />
             )}
-            {msg.content && msg.type !== 'gift' && (
+            {msg.content && msg.type !== 'gift' && msg.type !== 'music' && (
               <ReadMoreText
                 text={
                   // Still-encrypted ciphertext is unreadable JSON — show a clear
@@ -3763,6 +3848,7 @@ function MessageBubble({
               className={cn(
                 'mt-0.5 flex items-center justify-end gap-1',
                 (msg.type === 'image' || msg.type === 'file' || msg.type === 'voice' || msg.type === 'sticker') && !msg.content && 'px-1 pb-0.5',
+                msg.type === 'music' && 'px-1 pb-0.5',
                 transparentBubble &&
                   'rounded-full bg-black/45 px-1.5 py-0.5 text-white shadow-sm backdrop-blur-sm',
               )}

@@ -19,10 +19,16 @@ function toUploadFile(file: File | Blob, filename?: string): File {
   return new File([file], name, { type })
 }
 
+function isRetryableStatus(status: number): boolean {
+  if (status === 408 || status === 429) return true
+  if (status >= 500 && status !== 502) return true
+  return false
+}
+
 /**
  * POST /api/uploads with retries — survives mid-deploy chunk errors
  * and empty/non-JSON error bodies from proxies.
- * Does not retry client/server permanent failures (4xx except 408/429, and 502).
+ * Does not retry permanent 4xx or 502 (e.g. voice transcode failure).
  */
 export async function uploadFileWithRetry(
   file: File | Blob,
@@ -44,16 +50,10 @@ export async function uploadFileWithRetry(
       const data = (await res.json().catch(() => ({}))) as UploadResponse & { error?: string }
       if (!res.ok) {
         const err = new Error(data.error || t('composer.errorUploadFailed'))
-        const permanent =
-          (res.status >= 400 && res.status < 500 && res.status !== 408 && res.status !== 429) ||
-          res.status === 502
-        if (permanent) throw err
+        if (!isRetryableStatus(res.status) || i === attempts - 1) throw err
         lastError = err
-        if (i < attempts - 1) {
-          await new Promise((r) => setTimeout(r, 400 * (i + 1)))
-          continue
-        }
-        throw err
+        await new Promise((r) => setTimeout(r, 400 * (i + 1)))
+        continue
       }
       if (!data.url) {
         throw new Error(t('composer.errorUploadFailed'))
@@ -61,12 +61,15 @@ export async function uploadFileWithRetry(
       return data
     } catch (err) {
       lastError = err instanceof Error ? err : new Error(t('composer.errorUpload'))
-      // Permanent API errors already thrown above; network/parse errors may retry.
-      if (i < attempts - 1 && !(err instanceof Error && /обработать голосовое|Не удалось обработать/.test(err.message))) {
-        await new Promise((r) => setTimeout(r, 400 * (i + 1)))
-        continue
-      }
-      throw lastError
+      // Don't retry permanent Error thrown from !res.ok above on last path —
+      // network failures still retry.
+      const msg = lastError.message || ''
+      const permanent =
+        /обработать голосовое|Не удалось обработать|слишком большой|Не авторизован|Недопустимое/.test(
+          msg,
+        )
+      if (permanent || i === attempts - 1) throw lastError
+      await new Promise((r) => setTimeout(r, 400 * (i + 1)))
     }
   }
   throw lastError || new Error(t('composer.errorUpload'))

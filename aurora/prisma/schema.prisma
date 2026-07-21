@@ -294,7 +294,7 @@ model Message {
   chatId         String
   senderId       String
   content        String
-  type           String    @default("text") // text | system | image | voice | file | video | share | call
+  type           String    @default("text") // text | system | image | voice | file | video | share | music | call | gift | sticker
   replyToId      String?
   threadRootId   String?   // channel post id for discussion comments
   topicId        String?   // forum topic id (only for isForum groups)
