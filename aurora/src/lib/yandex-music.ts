@@ -13,7 +13,7 @@ export function getYandexMusicApi(): Promise<YMApi> {
       const uid = process.env.YANDEX_MUSIC_UID
       if (token && uid) {
         try {
-          await api.init({ access_token: token, uid: Number(uid) || uid })
+          await api.init({ access_token: token, uid: String(uid) })
         } catch (e) {
           console.warn('[yandex-music] init with token failed, falling back to anonymous', String(e))
         }
