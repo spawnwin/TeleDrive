@@ -19,10 +19,12 @@ import {
   collectBuilding,
   createGuest,
   getBaseState,
+  repairVehicle,
   setAutomation,
   startOperation,
   startRequest,
   upgradeBuilding,
+  upgradeVehicle,
 } from './economy.js';
 import {
   claimWeeklyClanReward,
@@ -228,6 +230,24 @@ app.post('/v1/shop/:id/buy', async (req, reply) => {
 app.post('/v1/story/advance', async (req, reply) => {
   try {
     return advanceStory(userId(req as any));
+  } catch (err) {
+    sendError(reply, err);
+  }
+});
+
+app.post('/v1/vehicles/:id/repair', async (req, reply) => {
+  try {
+    const { id } = req.params as { id: string };
+    return repairVehicle(userId(req as any), id);
+  } catch (err) {
+    sendError(reply, err);
+  }
+});
+
+app.post('/v1/vehicles/:id/upgrade', async (req, reply) => {
+  try {
+    const { id } = req.params as { id: string };
+    return upgradeVehicle(userId(req as any), id);
   } catch (err) {
     sendError(reply, err);
   }

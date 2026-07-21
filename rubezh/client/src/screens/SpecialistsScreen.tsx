@@ -10,6 +10,8 @@ export function SpecialistsScreen() {
   const { top, bottom } = useScreenInsets({ bottomExtra: 28 });
   if (!state) return null;
 
+  const buildings = state.buildings.filter((b) => b.level > 0);
+
   return (
     <ScrollView
       style={styles.root}
@@ -28,18 +30,15 @@ export function SpecialistsScreen() {
             Упр {s.management} · Скор {s.speed} · Над {s.reliability}
           </Text>
           <View style={styles.row}>
-            {state.buildings
-              .filter((b) => b.level > 0)
-              .slice(0, 4)
-              .map((b) => (
-                <Pressable
-                  key={b.id}
-                  style={[styles.assignBtn, s.assigned_building_id === b.id && styles.assignActive]}
-                  onPress={() => act(() => api.assign(s.id, b.id))}
-                >
-                  <Text style={styles.assignText}>{b.name.split(' ')[0]}</Text>
-                </Pressable>
-              ))}
+            {buildings.map((b) => (
+              <Pressable
+                key={b.id}
+                style={[styles.assignBtn, s.assigned_building_id === b.id && styles.assignActive]}
+                onPress={() => act(() => api.assign(s.id, b.id))}
+              >
+                <Text style={styles.assignText}>{b.name.split(' ')[0]}</Text>
+              </Pressable>
+            ))}
             <Pressable style={styles.assignBtn} onPress={() => act(() => api.assign(s.id, null))}>
               <Text style={styles.assignText}>Снять</Text>
             </Pressable>
@@ -48,17 +47,38 @@ export function SpecialistsScreen() {
       ))}
 
       <Text style={[styles.title, { marginTop: 18 }]}>Техника</Text>
-      {state.vehicles.map((v) => (
-        <View key={v.id} style={styles.card}>
-          <Text style={styles.name}>{v.name}</Text>
-          <Text style={styles.meta}>
-            {v.category} · {v.status === 'idle' ? 'Свободен' : 'На задании'} · сост. {v.condition}%
-          </Text>
-          <Text style={styles.stats}>
-            Груз {v.capacity} · Скор {v.speed} · Расход {v.fuel_use}
-          </Text>
-        </View>
-      ))}
+      <Text style={styles.sub}>Ремонт требует ремонтный комплекс. Улучшение — автопарк 2+ уровня.</Text>
+      {state.vehicles.map((v) => {
+        const busy = v.status !== 'idle';
+        const needsRepair = v.condition < 100;
+        return (
+          <View key={v.id} style={styles.card}>
+            <Text style={styles.name}>{v.name}</Text>
+            <Text style={styles.meta}>
+              {v.category} · ур.{v.level} · {busy ? 'На задании' : 'Свободен'} · сост. {v.condition}%
+            </Text>
+            <Text style={styles.stats}>
+              Груз {v.capacity} · Скор {v.speed} · Над {v.reliability} · Расход {v.fuel_use}
+            </Text>
+            <View style={styles.row}>
+              <Pressable
+                style={[styles.assignBtn, (!needsRepair || busy) && styles.btnDisabled]}
+                disabled={!needsRepair || busy}
+                onPress={() => act(() => api.repairVehicle(v.id))}
+              >
+                <Text style={styles.assignText}>Ремонт</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.assignBtn, (busy || v.condition < 70 || v.level >= 5) && styles.btnDisabled]}
+                disabled={busy || v.condition < 70 || v.level >= 5}
+                onPress={() => act(() => api.upgradeVehicle(v.id))}
+              >
+                <Text style={styles.assignText}>Улучшить</Text>
+              </Pressable>
+            </View>
+          </View>
+        );
+      })}
     </ScrollView>
   );
 }
@@ -88,5 +108,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   assignActive: { backgroundColor: colors.olive },
+  btnDisabled: { opacity: 0.4 },
   assignText: { color: colors.text, fontSize: 12, fontWeight: '700' },
 });

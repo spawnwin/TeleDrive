@@ -1,10 +1,12 @@
 {
-  "versionName": "0.2.2",
-  "versionCode": 5,
+  "versionName": "0.3.0",
+  "versionCode": 6,
   "apkUrl": "http://135.106.173.99/download/rubezh-tyl-pobedy.apk",
-  "force": true,
+  "force": false,
   "changelog": [
-    "Исправлена ошибка CLEARTEXT / HTTP к серверу",
-    "Разрешена связь по http://135.106.173.99"
+    "Автозаявки реально работают",
+    "Прогресс района и последствия операций",
+    "Ремонт и улучшение техники",
+    "Сюжетные цели глав с наградами"
   ]
 }

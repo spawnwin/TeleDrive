@@ -37,12 +37,19 @@ export interface GameState {
     autoSimpleRequests: boolean;
     unlockAutoCollect: boolean;
     unlockAutoRequests: boolean;
+    lastAction?: string | null;
   };
   story: {
     chapter: number;
     title: string;
     text: string;
     total: number;
+    objective?: string;
+    objectiveProgress?: number;
+    objectiveTarget?: number;
+    objectiveDone?: boolean;
+    canClaim?: boolean;
+    reward?: Partial<Record<ResourceType, number>>;
   };
   social?: SocialState;
   offline: {
@@ -54,6 +61,7 @@ export interface GameState {
     id: string;
     name: string;
     stability: number;
+    lastEvent?: string | null;
     nodes: Array<{ id: string; name: string; status: string }>;
   };
   lastQuality?: string;
@@ -153,6 +161,7 @@ export interface AvailableOperation {
   reward: Partial<Record<ResourceType, number>>;
   xp: number;
   minCommandLevel: number;
+  locked?: boolean;
   active: Operation | null;
 }
 

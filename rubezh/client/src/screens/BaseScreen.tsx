@@ -39,7 +39,7 @@ export function BaseScreen() {
 
   if (!state) return null;
 
-  const urgent = state.requests.filter((r) => r.status !== 'claimed').slice(0, 4);
+  const urgent = state.requests.filter((r) => r.status !== 'claimed').slice(0, 8);
   const highlightWarehouse = !state.user.tutorialDone && state.user.tutorialStep >= 2;
 
   return (
@@ -55,7 +55,9 @@ export function BaseScreen() {
             Глава {state.story.chapter}: {state.story.title}
           </Text>
           <Text style={styles.storyText} numberOfLines={2}>
-            {state.story.text}
+            {state.story.objective
+              ? `${state.story.objective} (${state.story.objectiveProgress ?? 0}/${state.story.objectiveTarget ?? 1})`
+              : state.story.text}
           </Text>
         </View>
 

@@ -19,7 +19,8 @@ export function TopBar({ state, onCollectAll }: { state: GameState; onCollectAll
       <View style={styles.resRow}>
         <Res label="Мат" value={r.materials} />
         <Res label="Топл" value={r.fuel} />
-        <Res label="Энер" value={r.energy} />
+        <Res label="Запч" value={r.parts} />
+        <Res label="Еда" value={r.food} />
         <Res label="Знаки" value={r.badges} accent />
         <Pressable style={styles.collectBtn} onPress={onCollectAll}>
           <Text style={styles.collectText}>Сбор</Text>
@@ -54,9 +55,9 @@ const styles = StyleSheet.create({
   res: {
     backgroundColor: colors.bgAlt,
     borderRadius: 8,
-    paddingHorizontal: 8,
+    paddingHorizontal: 6,
     paddingVertical: 4,
-    minWidth: 52,
+    minWidth: 44,
   },
   resAccent: { borderWidth: 1, borderColor: colors.gold },
   resLabel: { color: colors.textDim, fontSize: 10 },

@@ -52,6 +52,7 @@ export function MapScreen() {
           <View style={styles.mapFooter}>
             <Text style={styles.mapTitle}>{state.region.name}</Text>
             <Text style={styles.mapMeta}>Устойчивость снабжения {state.region.stability}%</Text>
+            {state.region.lastEvent ? <Text style={styles.mapMeta}>{state.region.lastEvent}</Text> : null}
             <View style={styles.barBg}>
               <View style={[styles.barFill, { width: `${Math.min(100, state.region.stability)}%` }]} />
             </View>
@@ -77,6 +78,20 @@ export function MapScreen() {
       <View style={styles.card}>
         <Text style={styles.region}>{state.story.title}</Text>
         <Text style={styles.note}>{state.story.text}</Text>
+        {state.story.objective ? (
+          <>
+            <Text style={styles.meta}>Цель: {state.story.objective}</Text>
+            <Text style={styles.meta}>
+              Прогресс {state.story.objectiveProgress ?? 0}/{state.story.objectiveTarget ?? 1}
+              {state.story.objectiveDone ? ' · выполнено' : ''}
+            </Text>
+          </>
+        ) : null}
+        {state.story.canClaim ? (
+          <Pressable style={styles.btn} onPress={() => act(() => api.advanceStory())}>
+            <Text style={styles.btnText}>Получить награду главы</Text>
+          </Pressable>
+        ) : null}
       </View>
 
       <Text style={styles.section}>Операции</Text>
@@ -86,31 +101,37 @@ export function MapScreen() {
           ? Math.max(0, Math.ceil((new Date(active.ends_at).getTime() - Date.now()) / 1000))
           : 0;
         return (
-          <View key={op.id} style={styles.card}>
+          <View key={op.id} style={[styles.card, op.locked && styles.cardLocked]}>
             <Text style={styles.opTitle}>{op.title}</Text>
             <Text style={styles.note}>{op.description}</Text>
             <Text style={styles.meta}>
               Сложность {op.difficulty} · {op.durationSec}с · КП {op.minCommandLevel}+ · +{op.xp} XP
             </Text>
-            <Text style={styles.meta}>
-              Стоимость:{' '}
-              {Object.entries(op.cost)
-                .map(([k, v]) => `${RESOURCE_LABELS[k as keyof typeof RESOURCE_LABELS] || k} ${v}`)
-                .join(', ')}
-            </Text>
-            {active?.status === 'in_progress' && <Text style={styles.timer}>Идёт операция: {remaining}с</Text>}
-            {active?.status === 'ready' && (
-              <Text style={styles.ready}>Готово: {active.result_label || 'результат рассчитан'}</Text>
-            )}
-            {!active && (
-              <Pressable style={styles.btn} onPress={() => act(() => api.startOperation(op.id))}>
-                <Text style={styles.btnText}>Запустить</Text>
-              </Pressable>
-            )}
-            {active?.status === 'ready' && (
-              <Pressable style={styles.btn} onPress={() => act(() => api.claimOperation(active.id))}>
-                <Text style={styles.btnText}>Получить итог</Text>
-              </Pressable>
+            {op.locked ? (
+              <Text style={styles.locked}>Откроется на КП {op.minCommandLevel}</Text>
+            ) : (
+              <>
+                <Text style={styles.meta}>
+                  Стоимость:{' '}
+                  {Object.entries(op.cost)
+                    .map(([k, v]) => `${RESOURCE_LABELS[k as keyof typeof RESOURCE_LABELS] || k} ${v}`)
+                    .join(', ')}
+                </Text>
+                {active?.status === 'in_progress' && <Text style={styles.timer}>Идёт операция: {remaining}с</Text>}
+                {active?.status === 'ready' && (
+                  <Text style={styles.ready}>Готово: {active.result_label || 'результат рассчитан'}</Text>
+                )}
+                {!active && (
+                  <Pressable style={styles.btn} onPress={() => act(() => api.startOperation(op.id))}>
+                    <Text style={styles.btnText}>Запустить</Text>
+                  </Pressable>
+                )}
+                {active?.status === 'ready' && (
+                  <Pressable style={styles.btn} onPress={() => act(() => api.claimOperation(active.id))}>
+                    <Text style={styles.btnText}>Получить итог</Text>
+                  </Pressable>
+                )}
+              </>
             )}
           </View>
         );
@@ -244,6 +265,8 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     marginBottom: 8,
   },
+  cardLocked: { opacity: 0.72 },
+  locked: { color: colors.warn, marginTop: 8, fontWeight: '700' },
   region: { color: colors.gold, fontSize: 18, fontWeight: '800' },
   opTitle: { color: colors.text, fontSize: 16, fontWeight: '800' },
   meta: { color: colors.sand, marginTop: 8 },

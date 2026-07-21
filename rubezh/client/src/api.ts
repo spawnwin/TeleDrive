@@ -100,6 +100,8 @@ export const api = {
     request<GameState>(`/v1/achievements/${id}/claim`, { method: 'POST', body: '{}' }),
   buyShop: (id: string) => request<GameState>(`/v1/shop/${id}/buy`, { method: 'POST', body: '{}' }),
   advanceStory: () => request<GameState>('/v1/story/advance', { method: 'POST', body: '{}' }),
+  repairVehicle: (id: string) => request<GameState>(`/v1/vehicles/${id}/repair`, { method: 'POST', body: '{}' }),
+  upgradeVehicle: (id: string) => request<GameState>(`/v1/vehicles/${id}/upgrade`, { method: 'POST', body: '{}' }),
   social: () => request<import('./types').SocialState>('/v1/social'),
   createClan: (name: string, tag: string, motto?: string) =>
     request<GameState>('/v1/clans', { method: 'POST', body: JSON.stringify({ name, tag, motto }) }),

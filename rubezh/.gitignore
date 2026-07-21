@@ -6,3 +6,5 @@ client/.expo/
 **/node_modules/
 server/data/
 landing/download/
+*.db
+*.db-*

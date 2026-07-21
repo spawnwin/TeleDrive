@@ -254,12 +254,33 @@ export function migrate(): void {
       PRIMARY KEY (user_id, day_key),
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     );
+
+    CREATE TABLE IF NOT EXISTS region_state (
+      user_id TEXT PRIMARY KEY,
+      stability INTEGER NOT NULL DEFAULT 62,
+      last_event TEXT,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS region_nodes (
+      user_id TEXT NOT NULL,
+      node_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      status TEXT NOT NULL,
+      PRIMARY KEY (user_id, node_id),
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
   `);
 
   ensureColumn('users', 'story_chapter', 'story_chapter INTEGER NOT NULL DEFAULT 1');
   ensureColumn('users', 'speed_boost_until', 'speed_boost_until TEXT');
   ensureColumn('users', 'clan_id', 'clan_id TEXT');
+  ensureColumn('users', 'last_auto_action', 'last_auto_action TEXT');
   ensureColumn('quest_counters', 'operations', 'operations INTEGER NOT NULL DEFAULT 0');
   ensureColumn('quest_counters', 'clan_helps', 'clan_helps INTEGER NOT NULL DEFAULT 0');
   ensureColumn('player_stats', 'helps_sent', 'helps_sent INTEGER NOT NULL DEFAULT 0');
+  ensureColumn('player_stats', 'repairs_total', 'repairs_total INTEGER NOT NULL DEFAULT 0');
+  ensureColumn('story_progress', 'objective_done', 'objective_done INTEGER NOT NULL DEFAULT 0');
+  ensureColumn('story_progress', 'claimed_reward_chapter', 'claimed_reward_chapter INTEGER NOT NULL DEFAULT 0');
 }

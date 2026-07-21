@@ -341,7 +341,12 @@ export const ACHIEVEMENTS = [
   { id: 'always_online', title: 'Всегда на связи', description: 'Откройте узел связи', metric: 'commsUnlocked', target: 1, reward: { energy: 5, badges: 30 } },
   { id: 'reliable_rear', title: 'Надёжный тыл', description: 'Доведите КП до 5 уровня', metric: 'commandLevel', target: 5, reward: { badges: 80 } },
   { id: 'full_auto', title: 'Базовая автоматизация', description: 'Включите автосбор ресурсов', metric: 'autoCollect', target: 1, reward: { badges: 40 } },
+  { id: 'auto_requests', title: 'Конвейер заявок', description: 'Включите автозаявки', metric: 'autoSimpleRequests', target: 1, reward: { badges: 45, fuel: 20 } },
   { id: 'column_ready', title: 'Колонна готова', description: 'Завершите операцию «Большая колонна»', metric: 'op_first_column', target: 1, reward: { badges: 50, fuel: 30 } },
+  { id: 'route_fixed', title: 'Маршрут восстановлен', description: 'Завершите «Сломанный маршрут»', metric: 'op_broken_route', target: 1, reward: { badges: 40, parts: 20 } },
+  { id: 'stable_district', title: 'Устойчивый район', description: 'Доведите устойчивость района до 90%', metric: 'regionStability', target: 90, reward: { badges: 70, materials: 100 } },
+  { id: 'fleet_ready', title: 'Парк в строю', description: 'Отремонтируйте технику 5 раз', metric: 'repairsTotal', target: 5, reward: { parts: 30, badges: 35 } },
+  { id: 'story_done', title: 'Глава закрыта', description: 'Завершите сюжетную главу 5', metric: 'storyChapter', target: 5, reward: { badges: 100, materials: 150 } },
   { id: 'no_idle', title: 'Ни минуты простоя', description: 'Соберите ресурсы 25 раз', metric: 'collectsTotal', target: 25, reward: { materials: 100, badges: 25 } },
 ];
 
@@ -351,15 +356,93 @@ export const SHOP_ITEMS = [
   { id: 'pack_parts', title: 'Комплект запчастей', description: 'Для ремонтного комплекса', costBadges: 45, reward: { parts: 80 } },
   { id: 'boost_speed', title: 'Ускорение штаба', description: '+10% к скорости заявок на 30 минут', costBadges: 60, reward: {}, effect: 'speed_boost_30m' as const },
   { id: 'starter_rare', title: 'Контракт связиста', description: 'Получить специалиста «Эфир»', costBadges: 120, reward: {}, unlockSpecialist: 'comms_kirill' },
+  { id: 'contract_psych', title: 'Контракт «Опора»', description: 'Получить психолога Дмитрия', costBadges: 100, reward: {}, unlockSpecialist: 'psych_dmitry' },
+  { id: 'pack_kitchen', title: 'Полевая кухня', description: 'Добавить технику ПК-7 в автопарк', costBadges: 90, reward: {}, unlockVehicle: 'field_kitchen' },
+  { id: 'pack_loader', title: 'Погрузчик «Клин»', description: 'Ускорить складские работы', costBadges: 85, reward: {}, unlockVehicle: 'loader' },
 ];
 
-export const STORY_CHAPTERS = [
-  { id: 1, title: 'Первый приказ', text: 'Вы прибыли на небольшой полевой пункт. Одна палатка, две машины и нестабильная связь. Первая заявка уже на столе.' },
-  { id: 2, title: 'База на пустом месте', text: 'Склад растёт. Водители привыкают к маршрутам. Штаб начинает работать как система, а не как набор случайных поручений.' },
-  { id: 3, title: 'Сломанный маршрут', text: 'Основной путь снабжения перекрыт непогодой. Нужен запасной объезд и холодный расчёт ресурсов.' },
-  { id: 4, title: 'Резервная связь', text: 'Без связи заявки превращаются в хаос. Узел связи — нервная система всего тыла.' },
-  { id: 5, title: 'Большая колонна', text: 'Первая крупная операция. Если колонна пройдёт в срок, район удержит устойчивость.' },
+export type StoryObjectiveType = 'requests' | 'building_level' | 'operation' | 'region_node' | 'stability';
+
+export interface StoryChapterDef {
+  id: number;
+  title: string;
+  text: string;
+  objective: { type: StoryObjectiveType; target: number | string; label: string };
+  reward: Partial<Record<ResourceType, number>>;
+}
+
+export const STORY_CHAPTERS: StoryChapterDef[] = [
+  {
+    id: 1,
+    title: 'Первый приказ',
+    text: 'Вы прибыли на небольшой полевой пункт. Одна палатка, две машины и нестабильная связь. Первая заявка уже на столе.',
+    objective: { type: 'requests', target: 1, label: 'Выполните 1 заявку' },
+    reward: { badges: 15, materials: 40 },
+  },
+  {
+    id: 2,
+    title: 'База на пустом месте',
+    text: 'Склад растёт. Водители привыкают к маршрутам. Штаб начинает работать как система, а не как набор случайных поручений.',
+    objective: { type: 'building_level', target: 'warehouse:2', label: 'Улучшите склад до 2 уровня' },
+    reward: { badges: 20, fuel: 25 },
+  },
+  {
+    id: 3,
+    title: 'Сломанный маршрут',
+    text: 'Основной путь снабжения перекрыт непогодой. Нужен запасной объезд и холодный расчёт ресурсов.',
+    objective: { type: 'operation', target: 'op_broken_route', label: 'Завершите операцию «Сломанный маршрут»' },
+    reward: { badges: 30, parts: 20 },
+  },
+  {
+    id: 4,
+    title: 'Резервная связь',
+    text: 'Без связи заявки превращаются в хаос. Узел связи — нервная система всего тыла.',
+    objective: { type: 'region_node', target: 'comms_node', label: 'Обеспечьте узел связи на карте' },
+    reward: { badges: 35, energy: 3 },
+  },
+  {
+    id: 5,
+    title: 'Большая колонна',
+    text: 'Первая крупная операция. Если колонна пройдёт в срок, район удержит устойчивость.',
+    objective: { type: 'operation', target: 'op_first_column', label: 'Завершите «Большую колонну»' },
+    reward: { badges: 60, materials: 120, fuel: 40 },
+  },
 ];
+
+export const REGION_NODES = [
+  { id: 'camp', name: 'Базовый лагерь', initialStatus: 'active' },
+  { id: 'depot', name: 'Склад', initialStatus: 'pending' },
+  { id: 'bridge', name: 'Мост снабжения', initialStatus: 'watch' },
+  { id: 'comms_node', name: 'Узел связи', initialStatus: 'pending' },
+  { id: 'med', name: 'Медпункт', initialStatus: 'pending' },
+] as const;
+
+export const OPERATION_REGION_EFFECTS: Record<
+  string,
+  { nodeId?: string; nodeStatus?: string; stabilityDelta: number }
+> = {
+  op_first_column: { nodeId: 'camp', nodeStatus: 'secured', stabilityDelta: 8 },
+  op_broken_route: { nodeId: 'bridge', nodeStatus: 'secured', stabilityDelta: 12 },
+  op_reserve_comms: { nodeId: 'comms_node', nodeStatus: 'secured', stabilityDelta: 10 },
+  op_night_crisis: { stabilityDelta: 6 },
+  op_engineer_line: { nodeId: 'depot', nodeStatus: 'secured', stabilityDelta: 9 },
+};
+
+export function vehicleRepairCost(condition: number): Partial<Record<ResourceType, number>> {
+  const missing = Math.max(0, 100 - condition);
+  return {
+    parts: Math.max(5, Math.ceil(missing / 4)),
+    materials: Math.max(3, Math.ceil(missing / 6)),
+  };
+}
+
+export function vehicleUpgradeCost(level: number): Partial<Record<ResourceType, number>> {
+  return {
+    parts: 20 + level * 12,
+    materials: 30 + level * 15,
+    fuel: 10 + level * 5,
+  };
+}
 
 export const DAILY_QUESTS = [
   { id: 'daily_requests', title: 'Выполнить 5 заявок', target: 5, metric: 'requestsCompleted', reward: { materials: 80, badges: 20 } },

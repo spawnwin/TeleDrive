@@ -11,15 +11,15 @@ export function ShopScreen() {
   if (!state) return null;
 
   return (
-    <ScrollView
-      style={styles.root}
-      contentContainerStyle={{ padding: 14, paddingBottom: bottom }}
-    >
+    <ScrollView style={styles.root} contentContainerStyle={{ padding: 14, paddingBottom: bottom }}>
       <Text style={styles.title}>Снабжение штаба</Text>
       <Text style={styles.sub}>
         Магазин за знаки отличия. Без случайных контейнеров — только понятные пакеты и ускорения.
       </Text>
       <Text style={styles.badges}>Баланс: {Math.floor(state.resources.badges)} знаков</Text>
+      {state.automation.lastAction ? (
+        <Text style={styles.autoHint}>Автоматика: {state.automation.lastAction}</Text>
+      ) : null}
 
       <Text style={styles.section}>Автоматизация</Text>
       <View style={styles.card}>
@@ -38,7 +38,9 @@ export function ShopScreen() {
       <View style={styles.card}>
         <Text style={styles.name}>Автозаявки (простые)</Text>
         <Text style={styles.meta}>
-          {state.automation.unlockAutoRequests ? 'Доступно с КП 4' : 'Откроется на КП 4'}
+          {state.automation.unlockAutoRequests
+            ? 'Сами стартуют и принимают заявки сложности 1'
+            : 'Откроется на КП 4'}
         </Text>
         <Pressable
           style={[styles.btn, !state.automation.unlockAutoRequests && styles.btnDisabled]}
@@ -52,16 +54,23 @@ export function ShopScreen() {
       </View>
 
       <Text style={styles.section}>Каталог</Text>
-      {state.shop.map((item) => (
-        <View key={item.id} style={styles.card}>
-          <Text style={styles.name}>{item.title}</Text>
-          <Text style={styles.meta}>{item.description}</Text>
-          <Text style={styles.price}>{item.costBadges} знаков</Text>
-          <Pressable style={styles.btn} onPress={() => act(() => api.buyShop(item.id))}>
-            <Text style={styles.btnText}>Купить</Text>
-          </Pressable>
-        </View>
-      ))}
+      {state.shop.map((item) => {
+        const canBuy = state.resources.badges >= item.costBadges;
+        return (
+          <View key={item.id} style={styles.card}>
+            <Text style={styles.name}>{item.title}</Text>
+            <Text style={styles.meta}>{item.description}</Text>
+            <Text style={styles.price}>{item.costBadges} знаков</Text>
+            <Pressable
+              style={[styles.btn, !canBuy && styles.btnDisabled]}
+              disabled={!canBuy}
+              onPress={() => act(() => api.buyShop(item.id))}
+            >
+              <Text style={styles.btnText}>{canBuy ? 'Купить' : 'Не хватает знаков'}</Text>
+            </Pressable>
+          </View>
+        );
+      })}
     </ScrollView>
   );
 }
@@ -70,7 +79,8 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
   title: { color: colors.text, fontSize: 22, fontWeight: '800' },
   sub: { color: colors.textDim, marginVertical: 8, lineHeight: 20 },
-  badges: { color: colors.gold, fontWeight: '800', marginBottom: 8 },
+  badges: { color: colors.gold, fontWeight: '800', marginBottom: 4 },
+  autoHint: { color: colors.sand, fontSize: 12, marginBottom: 8 },
   section: { color: colors.gold, fontWeight: '800', marginTop: 14, marginBottom: 6 },
   card: {
     backgroundColor: colors.panel,
