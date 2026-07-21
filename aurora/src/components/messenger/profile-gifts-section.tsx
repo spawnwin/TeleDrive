@@ -77,7 +77,7 @@ export function ProfileGiftsSection({ gifts, isSelf, loading }: ProfileGiftsSect
             · {t('gifts.profileCount').replace('{count}', String(total))}
           </span>
         </p>
-        <div className="grid grid-cols-4 gap-2 sm:grid-cols-5">
+        <div className="grid w-full min-w-0 max-w-full grid-cols-4 gap-2 [grid-template-columns:repeat(4,minmax(0,1fr))] sm:grid-cols-5 sm:[grid-template-columns:repeat(5,minmax(0,1fr))]">
           {gifts.map((g) => {
             const isTop = g.gift.isLimited || g.gift.isPremium
             return (

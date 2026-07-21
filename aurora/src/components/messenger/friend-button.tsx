@@ -106,17 +106,17 @@ export function FriendButton({
             size={variant === 'compact' ? 'sm' : 'default'}
             disabled={loading}
             className={cn(
-              variant === 'default' && 'w-full rounded-xl border-cyan-500/30 bg-cyan-500/5',
+              variant === 'default' && 'w-full min-w-0 max-w-full rounded-xl border-cyan-500/30 bg-cyan-500/5',
               variant === 'compact' && 'h-8 gap-1 px-2 text-xs',
               className,
             )}
           >
             {loading ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
+              <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
             ) : (
-              <UserCheck className="h-4 w-4 text-cyan-500" />
+              <UserCheck className="h-4 w-4 shrink-0 text-[#3390ec]" />
             )}
-            {variant !== 'compact' && t('friends.inFriends')}
+            {variant !== 'compact' && <span className="truncate">{t('friends.inFriends')}</span>}
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="center">

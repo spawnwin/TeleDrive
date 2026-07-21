@@ -30,6 +30,7 @@ import {
   RotateCcw,
   Trash2,
   LogOut,
+  EllipsisVertical,
 } from 'lucide-react'
 import { Avatar } from './avatar'
 import { Button } from '@/components/ui/button'
@@ -41,6 +42,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { Switch } from '@/components/ui/switch'
 import { useAppStore } from '@/lib/store'
 import { useI18n } from '@/hooks/use-i18n'
@@ -482,12 +489,22 @@ export function SettingsDialog({ open, onOpenChange, onOpenPremium, onOpenCoins 
 
   const currentLangLabel = languages.find((l) => l.code === lang)?.label
 
+  const handleLogout = async () => {
+    if (!window.confirm(lang === 'ru' ? 'Выйти из аккаунта?' : 'Log out of this account?')) return
+    try {
+      await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' })
+    } catch {
+      /* still reload to clear local session UI */
+    }
+    window.location.href = '/'
+  }
+
   return (
     <>
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md gap-0 p-0 safe-top-min safe-bottom-min">
+      <DialogContent className="max-w-md gap-0 overflow-x-clip p-0 safe-top-min safe-bottom-min">
         <DialogHeader className="px-4 pt-4">
-          <DialogTitle className="flex items-center gap-1.5">
+          <DialogTitle className="flex items-center gap-1.5 pr-8">
             {page !== 'main' && (
               <button
                 type="button"
@@ -499,7 +516,31 @@ export function SettingsDialog({ open, onOpenChange, onOpenPremium, onOpenCoins 
                 <ArrowLeft className="h-4 w-4" />
               </button>
             )}
-            {pageTitles[page]}
+            <span className="min-w-0 flex-1 truncate">{pageTitles[page]}</span>
+            {/* Telegram Android/Desktop: Settings → ⋮ → Log out */}
+            {page === 'main' && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    className="-mr-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition hover:bg-muted"
+                    title={lang === 'ru' ? 'Ещё' : 'More'}
+                    aria-label={lang === 'ru' ? 'Ещё' : 'More'}
+                  >
+                    <EllipsisVertical className="h-4 w-4" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="min-w-[10rem]">
+                  <DropdownMenuItem
+                    className="gap-2 text-[#e53935] focus:text-[#e53935]"
+                    onClick={handleLogout}
+                  >
+                    <LogOut className="h-4 w-4" />
+                    {t('sidebar.logout')}
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
           </DialogTitle>
         </DialogHeader>
 
@@ -627,18 +668,10 @@ export function SettingsDialog({ open, onOpenChange, onOpenPremium, onOpenCoins 
                   />
                 </div>
 
-                {/* Telegram: Settings → Log out (bottom of settings) */}
+                {/* Telegram iOS-style: Log out at the bottom of Settings */}
                 <button
                   type="button"
-                  onClick={async () => {
-                    if (!window.confirm(lang === 'ru' ? 'Выйти из аккаунта?' : 'Log out of this account?')) return
-                    try {
-                      await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' })
-                    } catch {
-                      /* still reload to clear local session UI */
-                    }
-                    window.location.href = '/'
-                  }}
+                  onClick={handleLogout}
                   className="mt-6 flex w-full items-center justify-center gap-2 rounded-2xl bg-muted/50 px-4 py-3.5 text-sm font-semibold text-[#e53935] transition hover:bg-[#e53935]/10 active:scale-[0.99]"
                 >
                   <LogOut className="h-4 w-4" />
@@ -741,15 +774,7 @@ export function SettingsDialog({ open, onOpenChange, onOpenPremium, onOpenCoins 
 
                 <button
                   type="button"
-                  onClick={async () => {
-                    if (!window.confirm(lang === 'ru' ? 'Выйти из аккаунта?' : 'Log out of this account?')) return
-                    try {
-                      await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' })
-                    } catch {
-                      /* ignore */
-                    }
-                    window.location.href = '/'
-                  }}
+                  onClick={handleLogout}
                   className="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold text-[#e53935] transition hover:bg-[#e53935]/10"
                 >
                   <LogOut className="h-4 w-4" />
