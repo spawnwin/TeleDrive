@@ -401,10 +401,10 @@ export function ProfileTabContent({
                       setLightboxUrl(url)
                     }
                   }}
-                  className="flex h-full w-full items-center justify-center"
+                  className="absolute inset-0 z-0 flex items-center justify-center"
                 >
                 {item.isPinned && (
-                  <span className="absolute left-1 top-1 z-10 rounded bg-black/50 p-0.5">
+                  <span className="pointer-events-none absolute left-1 top-1 z-10 rounded bg-black/50 p-0.5">
                     <Pin className="h-3 w-3 text-white" />
                   </span>
                 )}
@@ -447,39 +447,43 @@ export function ProfileTabContent({
                   </span>
                 )}
                 </button>
-                {/* pointer-coarse (touch) has no hover, so hover-revealed
-                    controls would be unreachable on phones — keep them
-                    always visible there and hover-only on desktop. */}
+                {/* Controls above the open-photo hit target; always visible on touch. */}
+                <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start justify-end gap-1 p-1">
                 {url && (
                   <button
                     type="button"
                     onClick={(e) => {
+                      e.preventDefault()
                       e.stopPropagation()
                       openShareToChat(buildMediaSharePayload(item))
                     }}
-                    className={`absolute top-1 z-10 rounded-full bg-black/50 p-1.5 text-white transition hover:bg-black/70 pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100 ${
-                      isSelf && (item.source === 'gallery' || item.source === 'avatar')
-                        ? 'right-8'
-                        : 'right-1'
-                    }`}
+                    className="pointer-events-auto flex h-10 w-10 items-center justify-center rounded-full bg-black/55 text-white transition hover:bg-black/70 pointer-fine:h-8 pointer-fine:w-8 pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100"
                     title={t('share.title')}
                   >
-                    <Share2 className="h-3.5 w-3.5" />
+                    <Share2 className="h-4 w-4 pointer-fine:h-3.5 pointer-fine:w-3.5" />
                   </button>
                 )}
                 {isSelf && (item.source === 'gallery' || item.source === 'avatar') && (
-                  <DropdownMenu>
+                  <DropdownMenu modal={false}>
                     <DropdownMenuTrigger asChild>
                       <button
                         type="button"
+                        onPointerDown={(e) => e.stopPropagation()}
                         onClick={(e) => e.stopPropagation()}
-                        className="absolute right-1 top-1 z-10 rounded-full bg-black/50 p-1.5 text-white transition hover:bg-black/70 pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100"
+                        className="pointer-events-auto flex h-10 w-10 items-center justify-center rounded-full bg-black/55 text-white transition hover:bg-black/70 pointer-fine:h-8 pointer-fine:w-8 pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100"
                         title={t('profile.more')}
+                        aria-label={t('profile.more')}
                       >
-                        <MoreVertical className="h-3.5 w-3.5" />
+                        <MoreVertical className="h-4 w-4 pointer-fine:h-3.5 pointer-fine:w-3.5" />
                       </button>
                     </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                    <DropdownMenuContent
+                      align="end"
+                      sideOffset={6}
+                      className="z-[500]"
+                      onCloseAutoFocus={(e) => e.preventDefault()}
+                      onClick={(e) => e.stopPropagation()}
+                    >
                       {item.source === 'gallery' && (
                         <>
                           <DropdownMenuItem onClick={() => handleTogglePin(item)} disabled={galleryActionLoading}>
@@ -520,6 +524,7 @@ export function ProfileTabContent({
                     </DropdownMenuContent>
                   </DropdownMenu>
                 )}
+                </div>
               </div>
             )
           })}
