@@ -29,6 +29,8 @@ import { useAppStore } from '@/lib/store'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import { uploadFileWithRetry } from '@/lib/upload-client'
+import { VoicePlayer } from './voice-player'
+import { resolveMediaUrl } from '@/lib/media-url'
 
 interface WallAuthor {
   id: string
@@ -590,8 +592,11 @@ function WallPostCard({
       )}
       {post.type === 'voice' && post.attachmentUrl && (
         <VoicePlayer
-          url={post.attachmentUrl}
-          duration={post.attachmentDuration ?? 0}
+          url={resolveMediaUrl(post.attachmentUrl) || post.attachmentUrl}
+          durationSec={post.attachmentDuration ?? 0}
+          mimeType={post.attachmentMime}
+          mine={false}
+          circle={false}
         />
       )}
       {post.type === 'music' && post.attachmentUrl && (
@@ -601,64 +606,6 @@ function WallPostCard({
           coverUrl={post.attachmentCoverUrl}
         />
       )}
-    </div>
-  )
-}
-
-function VoicePlayer({ url, duration }: { url: string; duration: number }) {
-  const audioRef = useRef<HTMLAudioElement>(null)
-  const [playing, setPlaying] = useState(false)
-  const [progress, setProgress] = useState(0)
-
-  useEffect(() => {
-    const a = audioRef.current
-    if (!a) return
-    const onTime = () => setProgress(a.duration ? a.currentTime / a.duration : 0)
-    const onEnd = () => {
-      setPlaying(false)
-      setProgress(0)
-    }
-    a.addEventListener('timeupdate', onTime)
-    a.addEventListener('ended', onEnd)
-    return () => {
-      a.removeEventListener('timeupdate', onTime)
-      a.removeEventListener('ended', onEnd)
-    }
-  }, [])
-
-  const toggle = () => {
-    const a = audioRef.current
-    if (!a) return
-    if (playing) {
-      a.pause()
-      setPlaying(false)
-    } else {
-      void a.play()
-      setPlaying(true)
-    }
-  }
-
-  return (
-    <div className="flex items-center gap-3 rounded-lg bg-violet-500/10 px-3 py-2">
-      <button
-        type="button"
-        onClick={toggle}
-        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-violet-500 text-white transition hover:bg-violet-400"
-      >
-        {playing ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
-      </button>
-      <div className="min-w-0 flex-1">
-        <div className="h-1.5 w-full overflow-hidden rounded-full bg-violet-500/20">
-          <div
-            className="h-full bg-violet-500 transition-[width]"
-            style={{ width: `${Math.round(progress * 100)}%` }}
-          />
-        </div>
-        <p className="mt-0.5 text-[11px] text-muted-foreground">
-          {duration > 0 ? `${Math.round(duration)}с` : '—'}
-        </p>
-      </div>
-      <audio ref={audioRef} src={url} preload="metadata" />
     </div>
   )
 }

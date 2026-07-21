@@ -98,10 +98,20 @@ export const GET = withJsonApi(async function GET(
     }
   }
 
+  let peerLastReadAt: string | null = null
+  if (chat?.type === 'private') {
+    const peer = await db.chatMember.findFirst({
+      where: { chatId: id, userId: { not: me.id } },
+      select: { lastReadAt: true },
+    })
+    peerLastReadAt = peer?.lastReadAt?.toISOString() ?? null
+  }
+
   return NextResponse.json({
     commentsEnabled: chat?.commentsEnabled ?? false,
     isForum: chat?.isForum ?? false,
     pinnedMessage,
+    peerLastReadAt,
     messages: messages.reverse().map((m) => ({
       id: m.id,
       chatId: m.chatId,

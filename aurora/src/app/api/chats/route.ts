@@ -76,6 +76,8 @@ export const GET = withJsonApi(async function GET() {
         m.chat.type === 'private'
           ? m.chat.members.find((mem) => mem.userId !== me.id)
           : null
+      const peerLastReadAt =
+        m.chat.type === 'private' && otherMember ? otherMember.lastReadAt : null
       const title =
         m.chat.type === 'saved'
           ? me.language === 'en'
@@ -111,6 +113,7 @@ export const GET = withJsonApi(async function GET() {
         slowModeSeconds: m.chat.slowModeSeconds,
         unread,
         lastReadAt: m.lastReadAt,
+        peerLastReadAt,
         isPinned: m.isPinned,
         isMuted: m.isMuted,
         isArchived: m.isArchived,

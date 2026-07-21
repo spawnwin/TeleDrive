@@ -51,7 +51,7 @@ export function VoicePlayer({
   mine,
   messageId,
   mimeType,
-  circle = true,
+  circle = false,
   onReact,
   reactions,
 }: VoicePlayerProps) {

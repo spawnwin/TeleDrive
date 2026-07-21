@@ -964,6 +964,7 @@ export function ProfileTabContent({
                 durationSec={item.durationSec}
                 mimeType={item.attachmentMime}
                 mine={false}
+                circle={false}
               />
             )}
             <p className="mt-1 text-[10px] text-muted-foreground">

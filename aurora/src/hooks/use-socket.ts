@@ -112,7 +112,7 @@ interface UseSocketOptions {
   onTypingStart?: (data: { chatId: string; userId: string; name: string }) => void
   onTypingStop?: (data: { chatId: string; userId: string }) => void
   onMessageDeleted?: (data: { chatId: string; messageId: string }) => void
-  onMessageRead?: (data: { chatId: string; userId: string }) => void
+  onMessageRead?: (data: { chatId: string; userId: string; lastReadAt?: string }) => void
   onMessageEdited?: (data: EditedMessagePayload) => void
   onMessagePinned?: (data: PinnedMessagePayload) => void
   onReaction?: (data: ReactionPayload) => void
@@ -326,7 +326,11 @@ export function useSocket(opts: UseSocketOptions) {
   }, [])
 
   const markRead = useCallback((chatId: string, uid: string) => {
-    socketRef.current?.emit('message:read', { chatId, userId: uid })
+    socketRef.current?.emit('message:read', {
+      chatId,
+      userId: uid,
+      lastReadAt: new Date().toISOString(),
+    })
   }, [])
 
   const deleteMessage = useCallback((chatId: string, messageId: string) => {

@@ -226,6 +226,7 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
   const [commentsFor, setCommentsFor] = useState<string | null>(null)
   const commentsSheetRef = useRef<ChannelCommentsSheetHandle>(null)
   const [showGiftPicker, setShowGiftPicker] = useState(false)
+  const [keyboardPad, setKeyboardPad] = useState(0)
   const [myAdminMembership, setMyAdminMembership] = useState<{
     role: string
     canDeleteMessages?: boolean
@@ -514,10 +515,12 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
   )
 
   const onMessageRead = useCallback(
-    (data: { chatId: string; userId: string }) => {
+    (data: { chatId: string; userId: string; lastReadAt?: string }) => {
       if (data.chatId !== activeChatId) return
       if (!currentUser || data.userId === currentUser.id) return
-      setPeerLastReadAt(Date.now())
+      const ts = data.lastReadAt ? new Date(data.lastReadAt).getTime() : Date.now()
+      if (!Number.isFinite(ts)) return
+      setPeerLastReadAt((prev) => Math.max(prev, ts))
     },
     [activeChatId, currentUser],
   )
@@ -848,6 +851,17 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
         setCommentsEnabled(!!data.commentsEnabled)
         setIsForum(!!data.isForum)
         setPinnedMessage(data.pinnedMessage ?? null)
+        if (data.peerLastReadAt) {
+          const ts = new Date(data.peerLastReadAt).getTime()
+          if (Number.isFinite(ts)) setPeerLastReadAt(ts)
+        } else {
+          // Fallback: peerLastReadAt from chat list cache
+          const listed = useAppStore.getState().chats.find((c) => c.id === activeChatId)
+          if (listed?.peerLastReadAt) {
+            const ts = new Date(listed.peerLastReadAt).getTime()
+            if (Number.isFinite(ts)) setPeerLastReadAt(ts)
+          }
+        }
         markChatRead(activeChatId)
         // Notify peer of read receipts when opening a chat (unless user hid them).
         if (!loadHideReadReceipts(activeChatId)) {
@@ -1837,6 +1851,23 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
     }
   }, [])
 
+  // Lift composer above the soft keyboard (iOS Safari / Android Chrome).
+  useEffect(() => {
+    const vv = window.visualViewport
+    if (!vv) return
+    const sync = () => {
+      const overlap = Math.max(0, window.innerHeight - vv.height - vv.offsetTop)
+      setKeyboardPad(overlap > 48 ? Math.round(overlap) : 0)
+    }
+    sync()
+    vv.addEventListener('resize', sync)
+    vv.addEventListener('scroll', sync)
+    return () => {
+      vv.removeEventListener('resize', sync)
+      vv.removeEventListener('scroll', sync)
+    }
+  }, [])
+
   const togglePin = async () => {
     if (!activeChatId || activeChat?.type === 'saved') return
     const next = !activeChat?.isPinned
@@ -2441,6 +2472,14 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
                         canDeleteOthers={canDeleteOthers}
                         canPin={canPinMessages}
                         isPinned={pinnedMessage?.id === entry.messages[0].id}
+                        isRead={
+                          mine &&
+                          activeChat.type === 'private' &&
+                          !loadHideReadReceipts(activeChatId || '') &&
+                          peerLastReadAt > 0 &&
+                          new Date(entry.messages[entry.messages.length - 1].createdAt).getTime() <=
+                            peerLastReadAt
+                        }
                         onViewProfile={() => setProfileUserId(curMsg.sender.id)}
                         onReply={() => {
                           setEditingMessage(null)
@@ -2494,6 +2533,7 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
                       isRead={
                         mine &&
                         activeChat.type === 'private' &&
+                        !loadHideReadReceipts(activeChatId || '') &&
                         peerLastReadAt > 0 &&
                         new Date(msg.createdAt).getTime() <= peerLastReadAt
                       }
@@ -2679,7 +2719,12 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
           {t('channel.readOnly')}
         </div>
       ) : (
-      <div className="shrink-0 overflow-hidden bg-background/90 px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-1.5 sm:px-3">
+      <div
+        className="shrink-0 overflow-hidden bg-background/90 px-2 pt-1.5 sm:px-3"
+        style={{
+          paddingBottom: `max(0.5rem, calc(env(safe-area-inset-bottom) + ${keyboardPad}px))`,
+        }}
+      >
         {/* Hidden file pickers used by attach sheet */}
         <input
           ref={imageInputRef}
@@ -3424,6 +3469,11 @@ function MessageBubble({
         isVideoUrl(msg.attachmentUrl, msg.attachmentMime, msg.attachmentName)))
   const videoSrc = resolveMediaUrl(msg.attachmentUrl)
   const imageSrc = resolveMediaUrl(msg.attachmentUrl)
+  const transparentBubble =
+    msg.type === 'sticker' ||
+    msg.type === 'gift' ||
+    (showAsCircleVideo && !msg.content) ||
+    (showAsImage && !msg.content && msg.type === 'image')
 
   // Group reactions by emoji
   const reactionGroups: Record<string, { count: number; userIds: string[]; names: string[] }> = {}
@@ -3708,19 +3758,37 @@ function MessageBubble({
               className={cn(
                 'mt-0.5 flex items-center justify-end gap-1',
                 (msg.type === 'image' || msg.type === 'file' || msg.type === 'voice' || msg.type === 'sticker') && !msg.content && 'px-1 pb-0.5',
+                transparentBubble &&
+                  'rounded-full bg-black/45 px-1.5 py-0.5 text-white shadow-sm backdrop-blur-sm',
               )}
             >
               {msg.isFavorite && (
-                <Star className={cn('h-3 w-3', mine ? 'fill-amber-300 text-amber-300' : 'fill-amber-500 text-amber-500')} />
+                <Star
+                  className={cn(
+                    'h-3 w-3',
+                    transparentBubble || !mine
+                      ? 'fill-amber-400 text-amber-400'
+                      : 'fill-amber-300 text-amber-300',
+                  )}
+                />
               )}
               {isPinned && (
-                <Pin className={cn('h-3 w-3', mine ? 'text-white/70' : 'text-primary')} />
+                <Pin
+                  className={cn(
+                    'h-3 w-3',
+                    transparentBubble ? 'text-white/90' : mine ? 'text-white/70' : 'text-primary',
+                  )}
+                />
               )}
               {msg.editedAt && (
                 <span
                   className={cn(
                     'text-[10px] italic',
-                    mine ? 'text-white/50' : 'text-muted-foreground',
+                    transparentBubble
+                      ? 'text-white/80'
+                      : mine
+                        ? 'text-white/50'
+                        : 'text-muted-foreground',
                   )}
                 >
                   {t('msg.edited')}
@@ -3729,7 +3797,11 @@ function MessageBubble({
               <span
                 className={cn(
                   'text-[10px] tabular-nums',
-                  mine ? 'text-white/70' : 'text-muted-foreground',
+                  transparentBubble
+                    ? 'text-white/90'
+                    : mine
+                      ? 'text-white/70'
+                      : 'text-muted-foreground',
                 )}
               >
                 {formatMessageTime(msg.createdAt)}
@@ -3739,10 +3811,12 @@ function MessageBubble({
                   className={cn(
                     'h-3.5 w-3.5 shrink-0',
                     isRead
-                      ? msg.type === 'voice' || msg.type === 'image' || msg.type === 'sticker'
+                      ? transparentBubble
                         ? 'text-sky-300'
                         : 'text-sky-200'
-                      : 'text-white/55',
+                      : transparentBubble
+                        ? 'text-white/80'
+                        : 'text-white/55',
                   )}
                   strokeWidth={2.25}
                 />
@@ -3897,6 +3971,7 @@ interface AlbumBubbleProps {
   canDeleteOthers?: boolean
   canPin?: boolean
   isPinned?: boolean
+  isRead?: boolean
   onViewProfile?: () => void
   onReply: () => void
   onDelete: () => void
@@ -3922,6 +3997,7 @@ function AlbumBubble({
   canDeleteOthers,
   canPin,
   isPinned,
+  isRead,
   onViewProfile,
   onReply,
   onDelete,
@@ -4102,6 +4178,15 @@ function AlbumBubble({
             >
               {formatMessageTime(last.createdAt)}
             </span>
+            {mine && (
+              <CheckCheck
+                className={cn(
+                  'h-3.5 w-3.5 shrink-0',
+                  isRead ? 'text-sky-200' : 'text-white/55',
+                )}
+                strokeWidth={2.25}
+              />
+            )}
           </div>
         </div>
 

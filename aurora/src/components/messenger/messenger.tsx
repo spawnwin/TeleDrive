@@ -616,8 +616,8 @@ export function Messenger() {
       <div className="flex h-screen items-center justify-center bg-background">
         <div className="flex flex-col items-center gap-4">
           <div className="relative h-16 w-16">
-            <div className="absolute inset-0 animate-ping rounded-2xl bg-[#3390ec]/30" />
-            <div className="relative flex h-16 w-16 items-center justify-center rounded-2xl bg-[#3390ec] shadow-lg shadow-[#3390ec]/40">
+            <div className="absolute inset-0 animate-ping rounded-2xl bg-primary/30" />
+            <div className="relative flex h-16 w-16 items-center justify-center rounded-2xl bg-primary shadow-lg shadow-primary/40">
               <svg
                 viewBox="0 0 24 24"
                 fill="none"
@@ -659,7 +659,7 @@ export function Messenger() {
                 setBootstrapped(false)
                 setBootRetry((n) => n + 1)
               }}
-              className="rounded-xl bg-[#3390ec] px-6 py-2.5 text-sm font-medium text-white shadow-lg shadow-[#3390ec]/30 transition hover:bg-[#2b82d9]"
+              className="rounded-xl bg-primary px-6 py-2.5 text-sm font-medium text-white shadow-lg shadow-primary/30 transition hover:bg-primary/90"
             >
               {translate(lang, 'misc.retry')}
             </button>
