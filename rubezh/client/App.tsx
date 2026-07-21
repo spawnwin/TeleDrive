@@ -9,6 +9,7 @@ import { MapScreen } from './src/screens/MapScreen';
 import { SpecialistsScreen } from './src/screens/SpecialistsScreen';
 import { ClanScreen } from './src/screens/ClanScreen';
 import { MoreScreen } from './src/screens/MoreScreen';
+import { UpdateModal } from './src/components/UpdateModal';
 import { colors } from './src/theme';
 
 const Tab = createBottomTabNavigator();
@@ -72,6 +73,7 @@ export default function App() {
         <NavigationContainer theme={navTheme}>
           <StatusBar barStyle="light-content" />
           <RootTabs />
+          <UpdateModal />
         </NavigationContainer>
       </GameProvider>
     </SafeAreaProvider>

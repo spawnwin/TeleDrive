@@ -1,4 +1,7 @@
 import 'dotenv/config';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import { migrate } from './db.js';
@@ -36,6 +39,17 @@ migrate();
 const app = Fastify({ logger: true });
 await app.register(cors, { origin: true });
 
+const serverRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
+function loadAppVersion() {
+  return JSON.parse(readFileSync(join(serverRoot, 'config/app-version.json'), 'utf8')) as {
+    versionName: string;
+    versionCode: number;
+    apkUrl: string;
+    force: boolean;
+    changelog: string[];
+  };
+}
+
 function userId(req: { headers: Record<string, unknown> }): string {
   const id = req.headers['x-user-id'];
   if (typeof id !== 'string' || !id) {
@@ -54,6 +68,8 @@ function withSocial(uid: string, state: any) {
 }
 
 app.get('/health', async () => ({ ok: true, service: 'rubezh-server' }));
+
+app.get('/v1/app/version', async () => loadAppVersion());
 
 app.post('/v1/auth/guest', async (req, reply) => {
   try {

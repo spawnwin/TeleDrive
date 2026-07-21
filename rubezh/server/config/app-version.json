@@ -1,0 +1,11 @@
+{
+  "versionName": "0.2.0",
+  "versionCode": 3,
+  "apkUrl": "http://135.106.173.99/download/rubezh-tyl-pobedy.apk",
+  "force": false,
+  "changelog": [
+    "Автопроверка обновлений из игры",
+    "Новая иконка приложения",
+    "Онлайн-союзы, чат и гонка логистики"
+  ]
+}

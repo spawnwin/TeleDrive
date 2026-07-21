@@ -2,7 +2,7 @@
   "expo": {
     "name": "Рубеж: Тыл Победы",
     "slug": "rubezh-tyl-pobedy",
-    "version": "0.1.0",
+    "version": "0.2.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
@@ -18,14 +18,17 @@
     },
     "android": {
       "package": "com.rubezh.tylpobedy",
-      "versionCode": 2,
+      "versionCode": 3,
       "adaptiveIcon": {
         "backgroundColor": "#142016",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "permissions": []
+      "permissions": [
+        "INTERNET",
+        "REQUEST_INSTALL_PACKAGES"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
