@@ -38,6 +38,9 @@ export function StoryViewer({
   const [isLiked, setIsLiked] = useState(false)
   const [likeBusy, setLikeBusy] = useState(false)
   const [showViewers, setShowViewers] = useState(false)
+  const [viewerPreviews, setViewerPreviews] = useState<
+    Array<{ id: string; name: string; avatarColor: string; avatarUrl?: string | null }>
+  >([])
   const [, setNowTick] = useState(0)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const viewedRef = useRef<Set<string>>(new Set())
@@ -148,8 +151,34 @@ export function StoryViewer({
     setLikes((currentStory as { likes?: number }).likes ?? 0)
     setIsLiked(Boolean((currentStory as { liked?: boolean }).liked))
     setShowViewers(false)
+    setViewerPreviews([])
     void markViewed(currentStory.id)
   }, [currentStory, markViewed])
+
+  useEffect(() => {
+    if (!currentStory || !currentUser?.isSelf) return
+    let cancelled = false
+    fetch(`/api/stories/${currentStory.id}/viewers`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (cancelled) return
+        if (typeof data.total === 'number') setViews(data.total)
+        else if (typeof data.views === 'number') setViews(data.views)
+        const viewers = Array.isArray(data.viewers) ? data.viewers : []
+        setViewerPreviews(
+          viewers.slice(0, 3).map((v: { id: string; name: string; avatarColor: string; avatarUrl?: string | null }) => ({
+            id: v.id,
+            name: v.name,
+            avatarColor: v.avatarColor,
+            avatarUrl: v.avatarUrl,
+          })),
+        )
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [currentStory?.id, currentUser?.isSelf])
 
   useEffect(() => {
     if (!currentStory || paused || showViewers) return
@@ -239,37 +268,6 @@ export function StoryViewer({
             </div>
           </div>
           <div className="flex items-center gap-1">
-            {currentUser.isSelf && views != null && (
-              <button
-                type="button"
-                className="mr-1 flex items-center gap-1 rounded-full px-2 py-1 text-xs text-white/90 transition hover:bg-white/10"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  setShowViewers(true)
-                  setPaused(true)
-                }}
-                title={t('stories.tapViewers')}
-              >
-                <Eye className="h-3.5 w-3.5" />
-                {views}
-                {likes > 0 && (
-                  <>
-                    <Heart className="ml-1 h-3.5 w-3.5 fill-rose-400 text-rose-400" />
-                    {likes}
-                  </>
-                )}
-              </button>
-            )}
-            {currentUser.isSelf && (
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8 text-white hover:bg-white/10"
-                onClick={handleDelete}
-              >
-                <Trash2 className="h-4 w-4" />
-              </Button>
-            )}
             <Button
               variant="ghost"
               size="icon"
@@ -367,7 +365,72 @@ export function StoryViewer({
           )}
         </div>
 
-        {!showViewers && (currentStory.content && currentStory.type !== 'text' || !currentUser.isSelf) && (
+        {!showViewers && currentUser.isSelf && (
+          <div
+            className="absolute bottom-0 left-0 right-0 z-20 bg-gradient-to-t from-black/85 via-black/45 to-transparent px-4 pb-[max(1.25rem,calc(env(safe-area-inset-bottom)+1rem))] pt-12"
+            onPointerDown={(e) => e.stopPropagation()}
+          >
+            {currentStory.content && currentStory.type !== 'text' && (
+              <p className="mb-3 text-center text-sm text-white">{currentStory.content}</p>
+            )}
+            <div className="flex items-center justify-between gap-3">
+              <button
+                type="button"
+                className="flex min-w-0 flex-1 items-center gap-2.5 text-left active:opacity-80"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setShowViewers(true)
+                  setPaused(true)
+                }}
+              >
+                {viewerPreviews.length > 0 ? (
+                  <span className="flex shrink-0 items-center pl-1">
+                    {viewerPreviews.map((viewer, index) => (
+                      <span
+                        key={viewer.id}
+                        className="relative inline-flex rounded-full ring-2 ring-black"
+                        style={{
+                          marginLeft: index === 0 ? 0 : -10,
+                          zIndex: viewerPreviews.length - index,
+                        }}
+                      >
+                        <Avatar
+                          name={viewer.name}
+                          color={viewer.avatarColor}
+                          imageUrl={viewer.avatarUrl}
+                          size="sm"
+                          className="h-8 w-8 [&>div]:!h-8 [&>div]:!w-8 [&>div]:!rounded-full [&>div]:text-[10px]"
+                        />
+                      </span>
+                    ))}
+                  </span>
+                ) : (
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/15 text-white">
+                    <Eye className="h-4 w-4" />
+                  </span>
+                )}
+                <span className="truncate text-[15px] font-medium text-white">
+                  {(views ?? 0) > 0
+                    ? t('profile.photoViewsCount').replace('{count}', String(views ?? 0))
+                    : t('stories.noViewers')}
+                </span>
+              </button>
+              <button
+                type="button"
+                aria-label={t('misc.delete')}
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-white active:bg-white/10"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  void handleDelete()
+                }}
+              >
+                <Trash2 className="h-6 w-6" strokeWidth={1.75} />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {!showViewers && !currentUser.isSelf && (
           <div
             className="absolute bottom-0 left-0 right-0 z-20 bg-gradient-to-t from-black/80 to-transparent px-4 pb-[max(2rem,calc(env(safe-area-inset-bottom)+2rem))] pt-12"
             onPointerDown={(e) => e.stopPropagation()}
@@ -375,23 +438,21 @@ export function StoryViewer({
             {currentStory.content && currentStory.type !== 'text' && (
               <p className="mb-3 text-center text-sm text-white">{currentStory.content}</p>
             )}
-            {!currentUser.isSelf && (
-              <div className="flex justify-center">
-                <button
-                  type="button"
-                  onClick={toggleLike}
-                  disabled={likeBusy}
-                  className={cn(
-                    'flex items-center gap-2 rounded-full px-5 py-2.5 text-sm font-medium text-white backdrop-blur transition active:scale-95',
-                    isLiked ? 'bg-rose-500/40' : 'bg-white/15 hover:bg-white/25',
-                  )}
-                >
-                  <Heart className={cn('h-5 w-5', isLiked && 'fill-rose-400 text-rose-400')} />
-                  {isLiked ? t('stories.liked') : t('stories.like')}
-                  {likes > 0 && <span className="text-white/80">{likes}</span>}
-                </button>
-              </div>
-            )}
+            <div className="flex justify-center">
+              <button
+                type="button"
+                onClick={toggleLike}
+                disabled={likeBusy}
+                className={cn(
+                  'flex items-center gap-2 rounded-full px-5 py-2.5 text-sm font-medium text-white backdrop-blur transition active:scale-95',
+                  isLiked ? 'bg-rose-500/40' : 'bg-white/15 hover:bg-white/25',
+                )}
+              >
+                <Heart className={cn('h-5 w-5', isLiked && 'fill-rose-400 text-rose-400')} />
+                {isLiked ? t('stories.liked') : t('stories.like')}
+                {likes > 0 && <span className="text-white/80">{likes}</span>}
+              </button>
+            </div>
           </div>
         )}
 

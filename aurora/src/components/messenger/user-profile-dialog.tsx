@@ -128,6 +128,9 @@ export function UserProfileDialog({
   const [photoOpen, setPhotoOpen] = useState(false)
   const [photoViewersOpen, setPhotoViewersOpen] = useState(false)
   const [photoViewCount, setPhotoViewCount] = useState(0)
+  const [photoViewerPreviews, setPhotoViewerPreviews] = useState<
+    Array<{ id: string; name: string; avatarColor: string; avatarUrl?: string | null }>
+  >([])
   const [confirmRemovePhoto, setConfirmRemovePhoto] = useState(false)
   const [removingPhoto, setRemovingPhoto] = useState(false)
   const [profileStories, setProfileStories] = useState<StoryFeedUser | null>(null)
@@ -151,6 +154,7 @@ export function UserProfileDialog({
       setPhotoOpen(false)
       setPhotoViewersOpen(false)
       setPhotoViewCount(0)
+      setPhotoViewerPreviews([])
       setProfileStories(null)
       setShowStoryViewer(false)
       setProfileGifts([])
@@ -219,10 +223,21 @@ export function UserProfileDialog({
       })
         .then((res) => res.json())
         .then((data) => {
-          if (!cancelled && typeof data.total === 'number') setPhotoViewCount(data.total)
+          if (cancelled) return
+          if (typeof data.total === 'number') setPhotoViewCount(data.total)
+          const viewers = Array.isArray(data.viewers) ? data.viewers : []
+          setPhotoViewerPreviews(
+            viewers.slice(0, 3).map((v: { id: string; name: string; avatarColor: string; avatarUrl?: string | null }) => ({
+              id: v.id,
+              name: v.name,
+              avatarColor: v.avatarColor,
+              avatarUrl: v.avatarUrl,
+            })),
+          )
         })
         .catch(() => {})
     } else {
+      setPhotoViewerPreviews([])
       fetch(`/api/users/${encodeURIComponent(userId)}/profile/photo/view`, {
         method: 'POST',
         credentials: 'include',
@@ -792,44 +807,71 @@ export function UserProfileDialog({
       <MediaLightbox
         url={photoOpen && profile?.avatarUrl ? profile.avatarUrl : null}
         alt={profile?.name ?? ''}
+        hideCloseLabel={!!profile?.isSelf}
         onClose={() => {
           setPhotoOpen(false)
           setPhotoViewersOpen(false)
         }}
         footer={
-          profile?.avatarUrl ? (
-            <div className="mx-auto flex max-w-sm flex-col items-center gap-2">
-              {profile.isSelf ? (
-                <>
-                  <button
-                    type="button"
-                    className="flex min-h-11 items-center justify-center gap-2 rounded-full bg-white/15 px-5 text-sm font-semibold text-white backdrop-blur active:bg-white/25"
-                    onClick={(e) => {
-                      e.preventDefault()
-                      e.stopPropagation()
-                      setPhotoViewersOpen(true)
-                    }}
-                  >
+          profile?.isSelf && profile.avatarUrl ? (
+            <div className="flex w-full items-center justify-between gap-3">
+              <button
+                type="button"
+                className="flex min-w-0 flex-1 items-center gap-2.5 text-left active:opacity-80"
+                style={{ WebkitTapHighlightColor: 'transparent' }}
+                onClick={(e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  setPhotoViewersOpen(true)
+                }}
+              >
+                {photoViewerPreviews.length > 0 ? (
+                  <span className="flex shrink-0 items-center pl-1">
+                    {photoViewerPreviews.map((viewer, index) => (
+                      <span
+                        key={viewer.id}
+                        className="relative inline-flex rounded-full ring-2 ring-black"
+                        style={{
+                          marginLeft: index === 0 ? 0 : -10,
+                          zIndex: photoViewerPreviews.length - index,
+                        }}
+                      >
+                        <Avatar
+                          name={viewer.name}
+                          color={viewer.avatarColor}
+                          imageUrl={viewer.avatarUrl}
+                          size="sm"
+                          className="h-8 w-8 [&>div]:!h-8 [&>div]:!w-8 [&>div]:!rounded-full [&>div]:text-[10px]"
+                        />
+                      </span>
+                    ))}
+                  </span>
+                ) : (
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/15 text-white">
                     <Eye className="h-4 w-4" />
-                    {photoViewCount > 0
-                      ? t('profile.photoViewsCount').replace('{count}', String(photoViewCount))
-                      : t('profile.photoViewsEmpty')}
-                  </button>
-                  <button
-                    type="button"
-                    className="flex min-h-11 items-center justify-center gap-2 rounded-full bg-red-500/90 px-5 text-sm font-semibold text-white active:bg-red-600"
-                    onClick={(e) => {
-                      e.preventDefault()
-                      e.stopPropagation()
-                      setPhotoOpen(false)
-                      window.setTimeout(() => setConfirmRemovePhoto(true), 50)
-                    }}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                    {t('profile.removePhotoAction')}
-                  </button>
-                </>
-              ) : null}
+                  </span>
+                )}
+                <span className="truncate text-[15px] font-medium text-white">
+                  {photoViewCount > 0
+                    ? t('profile.photoViewsCount').replace('{count}', String(photoViewCount))
+                    : t('profile.photoViewsEmpty')}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                aria-label={t('profile.removePhotoAction')}
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-white active:bg-white/10"
+                style={{ WebkitTapHighlightColor: 'transparent' }}
+                onClick={(e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  setPhotoOpen(false)
+                  window.setTimeout(() => setConfirmRemovePhoto(true), 50)
+                }}
+              >
+                <Trash2 className="h-6 w-6" strokeWidth={1.75} />
+              </button>
             </div>
           ) : null
         }

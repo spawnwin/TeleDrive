@@ -14,6 +14,8 @@ interface MediaLightboxProps {
   zIndexClass?: string
   /** Extra actions under the photo (e.g. delete profile photo). */
   footer?: ReactNode
+  /** Hide the default «Close» text under the footer (Telegram-style chrome). */
+  hideCloseLabel?: boolean
 }
 
 export function MediaLightbox({
@@ -22,6 +24,7 @@ export function MediaLightbox({
   onClose,
   zIndexClass = 'z-[9999]',
   footer,
+  hideCloseLabel = false,
 }: MediaLightboxProps) {
   const { t } = useI18n()
   const src = resolveMediaUrl(url)
@@ -74,7 +77,9 @@ export function MediaLightbox({
           className={`fixed inset-0 ${zIndexClass} isolate touch-manipulation`}
           style={{
             paddingTop: 'env(safe-area-inset-top)',
-            paddingBottom: 'calc(5.75rem + env(safe-area-inset-bottom))',
+            paddingBottom: hideCloseLabel
+              ? 'env(safe-area-inset-bottom)'
+              : 'calc(5.75rem + env(safe-area-inset-bottom))',
           }}
         >
           <button
@@ -113,18 +118,28 @@ export function MediaLightbox({
               />
             </div>
 
-            <div className="pointer-events-auto shrink-0 space-y-2 px-4 pb-4 text-center">
+            <div
+              className={
+                hideCloseLabel
+                  ? 'pointer-events-auto shrink-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-10'
+                  : 'pointer-events-auto shrink-0 space-y-2 px-4 pb-4 text-center'
+              }
+              onClick={stopClose}
+              onPointerDown={stopClose}
+            >
               {footer}
-              <button
-                type="button"
-                className="min-h-11 px-4 text-sm text-white/80 active:text-white"
-                style={{ WebkitTapHighlightColor: 'transparent' }}
-                onClick={onClosePress}
-                onPointerUp={onClosePress}
-                onTouchEnd={onClosePress}
-              >
-                {t('misc.close')}
-              </button>
+              {!hideCloseLabel && (
+                <button
+                  type="button"
+                  className="min-h-11 px-4 text-sm text-white/80 active:text-white"
+                  style={{ WebkitTapHighlightColor: 'transparent' }}
+                  onClick={onClosePress}
+                  onPointerUp={onClosePress}
+                  onTouchEnd={onClosePress}
+                >
+                  {t('misc.close')}
+                </button>
+              )}
             </div>
           </div>
         </motion.div>
