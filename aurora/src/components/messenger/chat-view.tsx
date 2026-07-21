@@ -575,33 +575,81 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
     },
   })
 
+  // Fetch peer's public key to determine if E2EE is active for this chat
+  const [peerHasPublicKey, setPeerHasPublicKey] = useState(false)
+  useEffect(() => {
+    if (!activeChatId || !activeChat || activeChat.type !== 'private') {
+      setPeerHasPublicKey(false)
+      return
+    }
+    let cancelled = false
+    ;(async () => {
+      try {
+        const res = await fetch(`/api/chats/${activeChatId}/members`)
+        const data = await res.json()
+        if (cancelled) return
+        const peer = data.chat?.members?.find((m: { id: string; publicKey?: string | null }) => m.id !== currentUser?.id)
+        setPeerHasPublicKey(!!peer?.publicKey)
+      } catch {
+        setPeerHasPublicKey(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [activeChatId, activeChat, currentUser?.id])
+
+  const isChatEncrypted = e2eeEnabled && activeChat?.type === 'private' && peerHasPublicKey
+
   const encryptPrivateContent = useCallback(
     async (plaintext: string): Promise<{ content: string; encrypted: boolean }> => {
+      // Encrypt only when THIS chat is actually E2EE (self enabled + peer has a key).
+      // Having E2EE on for yourself must not block plaintext chats with peers without keys.
       if (!e2eeEnabled || activeChat?.type !== 'private' || !currentUser?.publicKey || !activeChatId) {
         return { content: plaintext, encrypted: false }
       }
+
       const membersRes = await fetch(`/api/chats/${activeChatId}/members`)
       if (!membersRes.ok) {
-        throw new Error(t('e2ee.encryptFailed'))
+        // UI already shows a lock for this chat — don't silently send plaintext.
+        if (peerHasPublicKey) throw new Error(t('e2ee.encryptFailed'))
+        return { content: plaintext, encrypted: false }
       }
+
       const membersData = await membersRes.json()
       const recipientWithKey = membersData.chat?.members?.find(
         (m: { id: string; publicKey?: string | null }) => m.id !== currentUser.id,
       )
+
+      // Peer has no E2EE key → normal plaintext chat.
       if (!recipientWithKey?.publicKey) {
-        // Chat UI may still show lock from an older peer key — never fall back to plaintext.
-        throw new Error(t('e2ee.peerKeyMissing'))
+        return { content: plaintext, encrypted: false }
       }
-      const sendContent = await encryptMessage(
-        plaintext,
-        recipientWithKey.publicKey,
-        recipientWithKey.id,
-        currentUser.publicKey,
-        currentUser.id,
-      )
-      return { content: sendContent, encrypted: true }
+
+      try {
+        const sendContent = await encryptMessage(
+          plaintext,
+          recipientWithKey.publicKey,
+          recipientWithKey.id,
+          currentUser.publicKey,
+          currentUser.id,
+        )
+        return { content: sendContent, encrypted: true }
+      } catch (err) {
+        // Peer key exists: never fall back to plaintext (UI shows encrypted).
+        console.error('[e2ee] encrypt failed', err)
+        throw new Error(t('e2ee.encryptFailed'))
+      }
     },
-    [e2eeEnabled, activeChat?.type, activeChatId, currentUser, encryptMessage, t],
+    [
+      e2eeEnabled,
+      activeChat?.type,
+      activeChatId,
+      currentUser,
+      encryptMessage,
+      peerHasPublicKey,
+      t,
+    ],
   )
 
   const handleStartCall = (type: 'audio' | 'video') => {
@@ -691,32 +739,6 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
     setSwipeBackOffset(0)
     setSwipeBackAnimating(false)
   }, [activeChatId])
-
-  // Fetch peer's public key to determine if E2EE is active for this chat
-  const [peerHasPublicKey, setPeerHasPublicKey] = useState(false)
-  useEffect(() => {
-    if (!activeChatId || !activeChat || activeChat.type !== 'private') {
-      setPeerHasPublicKey(false)
-      return
-    }
-    let cancelled = false
-    ;(async () => {
-      try {
-        const res = await fetch(`/api/chats/${activeChatId}/members`)
-        const data = await res.json()
-        if (cancelled) return
-        const peer = data.chat?.members?.find((m: any) => m.id !== currentUser?.id)
-        setPeerHasPublicKey(!!peer?.publicKey)
-      } catch {
-        setPeerHasPublicKey(false)
-      }
-    })()
-    return () => {
-      cancelled = true
-    }
-  }, [activeChatId, activeChat, currentUser?.id])
-
-  const isChatEncrypted = e2eeEnabled && activeChat?.type === 'private' && peerHasPublicKey
 
   // Decrypt messages after any load path: initial load, search, favorites,
   // jump-to-message pagination, gifts, and forwarded messages all replace the
@@ -1045,6 +1067,7 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
     }
 
     setInput('')
+    const pendingReply = replyTo
     setReplyTo(null)
     clearDraft(activeChatId)
     try {
@@ -1053,7 +1076,7 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
       const res = await fetch(`/api/chats/${activeChatId}/messages`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: sendContent, replyToId: replyTo?.id || null, topicId: activeTopicId }),
+        body: JSON.stringify({ content: sendContent, replyToId: pendingReply?.id || null, topicId: activeTopicId }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || t('misc.error'))
@@ -1074,6 +1097,7 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
     } catch (err) {
       toast.error(err instanceof Error ? err.message : t('msg.errorSend'))
       setInput(content)
+      if (pendingReply) setReplyTo(pendingReply)
     }
   }
 
