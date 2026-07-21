@@ -172,7 +172,7 @@ export function MobileBottomNav({
                           absoluteStrokeWidth
                           className={cn(
                             'h-[22px] w-[22px] transition-colors duration-150',
-                            active ? 'text-[#3390ec]' : 'text-white/55',
+                            active ? 'text-[#5eb3f6]' : 'text-white/55',
                           )}
                         />
                         {id === 'chats' && unreadCount > 0 && (
@@ -185,7 +185,7 @@ export function MobileBottomNav({
                       <span
                         className={cn(
                           'max-w-full truncate text-[9px] leading-none tracking-tight',
-                          active ? 'font-medium text-[#3390ec]' : 'font-normal text-white/50',
+                          active ? 'font-semibold text-[#5eb3f6]' : 'font-normal text-white/50',
                         )}
                       >
                         {label}
