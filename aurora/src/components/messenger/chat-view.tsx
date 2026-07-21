@@ -128,13 +128,16 @@ import { DeleteConfirmDialog } from './delete-confirm-dialog'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 
-const EMOJI_SETS: Record<string, string[]> = {
-  'Часто': ['😀', '😂', '🥰', '😍', '😎', '🤔', '🙃', '😴', '🥳', '😭', '😡', '👍', '👎', '👏', '🙏', '💪', '🔥', '✨', '🎉', '💜', '❤️', '🧡', '💛', '💚', '💙', '🤍', '🖤', '💯', '👀', '🤝'],
-  'Жесты': ['👋', '🤚', '✋', '🖐️', '👌', '🤌', '🤏', '✌️', '🤞', '🤟', '🤘', '👈', '👉', '👆', '👇', '☝️', '🫵', '🫱', '🫲', '🫳', '🫴', '✍️', '💪', '🦾', '🙌', '🫶'],
-  'Животные': ['🐶', '🐱', '🐭', '🐹', '🐰', '🦊', '🐻', '🐼', '🐨', '🐯', '🦁', '🐮', '🐷', '🐸', '🐵', '🐔', '🦄', '🐝', '🦋', '🐢', '🐙', '🦕', '🐳', '🦈'],
-  'Еда': ['🍕', '🍔', '🍟', '🌭', '🥪', '🌮', '🌯', '🥗', '🍝', '🍜', '🍣', '🍱', '🍛', '🥟', '🍩', '🍪', '🎂', '🍰', '🧁', '🍫', '🍬', '🍭', '🍯', '☕', '🍵', '🍺', '🍷', '🥂'],
-  'Активности': ['⚽', '🏀', '🏈', '⚾', '🎾', '🏐', '🎱', '🏓', '🏸', '🥊', '🎯', '🎮', '🎲', '🎨', '🎭', '🎤', '🎧', '🎹', '🥁', '🎸', '🎻', '🏆', '🥇', '🥈', '🥉'],
-  'Путешествия': ['🚗', '🚕', '🚙', '🏎️', '🚓', '🚑', '🚒', '✈️', '🚀', '🛸', '🚁', '⛵', '🚤', '🚲', '🛵', '🏍️', '🏰', '🌉', '⛰️', '🌋', '🏝️', '🏖️', '🌆', '🌃', '🌅'],
+const EMOJI_SET_IDS = ['frequent', 'gestures', 'animals', 'food', 'activity', 'travel'] as const
+type EmojiSetId = (typeof EMOJI_SET_IDS)[number]
+
+const EMOJI_SETS: Record<EmojiSetId, string[]> = {
+  frequent: ['😀', '😂', '🥰', '😍', '😎', '🤔', '🙃', '😴', '🥳', '😭', '😡', '👍', '👎', '👏', '🙏', '💪', '🔥', '✨', '🎉', '💜', '❤️', '🧡', '💛', '💚', '💙', '🤍', '🖤', '💯', '👀', '🤝'],
+  gestures: ['👋', '🤚', '✋', '🖐️', '👌', '🤌', '🤏', '✌️', '🤞', '🤟', '🤘', '👈', '👉', '👆', '👇', '☝️', '🫵', '🫱', '🫲', '🫳', '🫴', '✍️', '💪', '🦾', '🙌', '🫶'],
+  animals: ['🐶', '🐱', '🐭', '🐹', '🐰', '🦊', '🐻', '🐼', '🐨', '🐯', '🦁', '🐮', '🐷', '🐸', '🐵', '🐔', '🦄', '🐝', '🦋', '🐢', '🐙', '🦕', '🐳', '🦈'],
+  food: ['🍕', '🍔', '🍟', '🌭', '🥪', '🌮', '🌯', '🥗', '🍝', '🍜', '🍣', '🍱', '🍛', '🥟', '🍩', '🍪', '🎂', '🍰', '🧁', '🍫', '🍬', '🍭', '🍯', '☕', '🍵', '🍺', '🍷', '🥂'],
+  activity: ['⚽', '🏀', '🏈', '⚾', '🎾', '🏐', '🎱', '🏓', '🏸', '🥊', '🎯', '🎮', '🎲', '🎨', '🎭', '🎤', '🎧', '🎹', '🥁', '🎸', '🎻', '🏆', '🥇', '🥈', '🥉'],
+  travel: ['🚗', '🚕', '🚙', '🏎️', '🚓', '🚑', '🚒', '✈️', '🚀', '🛸', '🚁', '⛵', '🚤', '🚲', '🛵', '🏍️', '🏰', '🌉', '⛰️', '🌋', '🏝️', '🏖️', '🌆', '🌃', '🌅'],
 }
 
 const QUICK_REACTIONS = ['👍', '❤️', '🔥', '😂', '🎉', '👏', '🙏', '😮']
@@ -190,9 +193,10 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
   const [editingMessage, setEditingMessage] = useState<ChatMessage | null>(null)
   const [typingUsers, setTypingUsers] = useState<Record<string, { name: string; ts: number }>>({})
   const [emojiOpen, setEmojiOpen] = useState(false)
-  const [activeEmojiSet, setActiveEmojiSet] = useState('Часто')
+  const [activeEmojiSet, setActiveEmojiSet] = useState<EmojiSetId>('frequent')
   const [showSearch, setShowSearch] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
+  const messageSearchAbortRef = useRef<AbortController | null>(null)
   const [uploading, setUploading] = useState(false)
   const [pendingFile, setPendingFile] = useState<File | null>(null)
   const [pendingPreviewUrl, setPendingPreviewUrl] = useState<string | null>(null)
@@ -315,7 +319,7 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
         }
         const sidebarPreview =
           display.content ||
-          (isEncryptedRef.current(msg.content) ? '🔒 Зашифрованное сообщение' : messagePreview(display, t))
+          (isEncryptedRef.current(msg.content) ? t('chat.encrypted') : messagePreview(display, t))
         updateLastMessage(msg.chatId, {
           id: msg.id,
           content: sidebarPreview,
@@ -331,7 +335,7 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
           clearTyping(msg.chatId, msg.senderId)
           const notifyBody =
             display.content ||
-            (isEncryptedRef.current(msg.content) ? '🔒 Зашифрованное сообщение' : messagePreview(display, t))
+            (isEncryptedRef.current(msg.content) ? t('chat.encrypted') : messagePreview(display, t))
           notifyRef.current(msg.sender.name, notifyBody, msg.chatId)
         }
         if (msg.chatId === activeChatId && msg.senderId !== currentUser?.id) {
@@ -758,6 +762,8 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
       setMessages([])
       return
     }
+    messageSearchAbortRef.current?.abort()
+    messageSearchAbortRef.current = null
     let cancelled = false
     setLoadingMessages(true)
     setMessages([])
@@ -1824,27 +1830,44 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
   const runSearch = async (q: string) => {
     setSearchQuery(q)
     if (!activeChatId) return
-    if (!q.trim()) {
-      const res = await fetch(`/api/chats/${activeChatId}/messages?take=50`)
-      const data = await res.json()
-      setMessages(data.messages || [])
-      return
-    }
+    messageSearchAbortRef.current?.abort()
+    const ac = new AbortController()
+    messageSearchAbortRef.current = ac
+    const chatId = activeChatId
     try {
-      const res = await fetch(
-        `/api/chats/${activeChatId}/messages?take=100&q=${encodeURIComponent(q)}`,
-      )
+      const url = !q.trim()
+        ? `/api/chats/${chatId}/messages?take=50`
+        : `/api/chats/${chatId}/messages?take=100&q=${encodeURIComponent(q)}`
+      const res = await fetch(url, { signal: ac.signal })
+      if (!res.ok) return
       const data = await res.json()
+      if (ac.signal.aborted) return
+      if (useAppStore.getState().activeChatId !== chatId) return
       setMessages(data.messages || [])
-    } catch {}
+    } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') return
+    }
   }
 
   const loadFavorites = async () => {
     if (!activeChatId) return
     setShowFavorites(true)
-    const res = await fetch(`/api/chats/${activeChatId}/messages?take=100&favorites=1`)
-    const data = await res.json()
-    setMessages(data.messages || [])
+    messageSearchAbortRef.current?.abort()
+    const ac = new AbortController()
+    messageSearchAbortRef.current = ac
+    const chatId = activeChatId
+    try {
+      const res = await fetch(`/api/chats/${chatId}/messages?take=100&favorites=1`, {
+        signal: ac.signal,
+      })
+      if (!res.ok) return
+      const data = await res.json()
+      if (ac.signal.aborted) return
+      if (useAppStore.getState().activeChatId !== chatId) return
+      setMessages(data.messages || [])
+    } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') return
+    }
   }
 
   if (!activeChat) {
@@ -1896,9 +1919,18 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
 
   const reloadRecentMessages = () => {
     if (!activeChatId) return
-    fetch(`/api/chats/${activeChatId}/messages?take=50`)
+    const chatId = activeChatId
+    messageSearchAbortRef.current?.abort()
+    const ac = new AbortController()
+    messageSearchAbortRef.current = ac
+    fetch(`/api/chats/${chatId}/messages?take=50`, { signal: ac.signal })
       .then((r) => r.json())
-      .then((d) => setMessages(d.messages || []))
+      .then((d) => {
+        if (ac.signal.aborted) return
+        if (useAppStore.getState().activeChatId !== chatId) return
+        setMessages(d.messages || [])
+      })
+      .catch(() => {})
   }
 
   const toggleMessageSearch = () => {
@@ -2701,10 +2733,10 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
                   <div className="flex gap-1 border-b border-border p-2">
                     <button
                       type="button"
-                      onClick={() => setActiveEmojiSet(Object.keys(EMOJI_SETS)[0])}
+                      onClick={() => setActiveEmojiSet(EMOJI_SET_IDS[0])}
                       className={cn(
                         'rounded-md px-2 py-1 text-xs font-medium transition',
-                        !Object.keys(EMOJI_SETS).includes(activeEmojiSet) || EMOJI_SETS[activeEmojiSet]
+                        EMOJI_SET_IDS.includes(activeEmojiSet)
                           ? 'bg-[#3390ec]/15 text-[#3390ec]'
                           : 'text-muted-foreground hover:bg-muted',
                       )}
@@ -2724,18 +2756,19 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
                   </div>
                   <div className="border-b border-border p-2">
                     <div className="flex flex-wrap gap-1">
-                      {Object.keys(EMOJI_SETS).map((setName) => (
+                      {EMOJI_SET_IDS.map((setId) => (
                         <button
-                          key={setName}
-                          onClick={() => setActiveEmojiSet(setName)}
+                          key={setId}
+                          type="button"
+                          onClick={() => setActiveEmojiSet(setId)}
                           className={cn(
                             'rounded-md px-2 py-1 text-xs font-medium transition',
-                            activeEmojiSet === setName
+                            activeEmojiSet === setId
                               ? 'bg-[#3390ec]/15 text-[#3390ec]'
                               : 'text-muted-foreground hover:bg-muted',
                           )}
                         >
-                          {setName}
+                          {t(`emoji.${setId}`)}
                         </button>
                       ))}
                     </div>
@@ -3567,7 +3600,7 @@ function MessageBubble({
                   // Still-encrypted ciphertext is unreadable JSON — show a clear
                   // label until the decrypt effect replaces it with plaintext.
                   isE2EEPayload(msg.content)
-                    ? '🔒 Зашифрованное сообщение'
+                    ? t('chat.encrypted')
                     : msg.content
                 }
                 linkClassName={mine ? 'text-white/90' : 'text-[#3390ec]'}

@@ -9,8 +9,8 @@
  *    HTML but fall back to cache when offline
  */
 
-// v13: selection hides nav, search DB filter, chat-info xl sheet, banner xl offset.
-const CACHE_VERSION = 'aurora-v13'
+// v14: push open chat URL, search abort, archive errors, i18n polish.
+const CACHE_VERSION = 'aurora-v14'
 const SHELL_CACHE = `${CACHE_VERSION}-shell`
 const ASSET_CACHE = `${CACHE_VERSION}-assets`
 
@@ -62,9 +62,9 @@ self.addEventListener('push', (event) => {
   if (!event.data) return
   let payload = {
     title: 'Aurora',
-    body: 'Новое сообщение',
+    body: 'New message',
     chatId: null,
-    url: '/',
+    url: null,
     type: 'message',
     callId: null,
     fromUserId: null,
@@ -80,6 +80,13 @@ self.addEventListener('push', (event) => {
   const isCall = payload.type === 'call'
   const isCallCancel = payload.type === 'call-cancel'
   const ringCount = Number(payload.ringCount) || 1
+  const openUrl =
+    payload.url ||
+    (payload.chatId
+      ? `/?chat=${payload.chatId}${isCall ? '&call=1' : ''}`
+      : payload.fromUserId
+        ? `/?callFrom=${payload.fromUserId}`
+        : '/')
 
   event.waitUntil(
     (async () => {
@@ -116,7 +123,7 @@ self.addEventListener('push', (event) => {
         sound: isCall ? '/sounds/call-ring.wav' : undefined,
         data: {
           chatId: payload.chatId,
-          url: payload.url || '/',
+          url: openUrl,
           type: payload.type,
           callId: payload.callId,
           fromUserId: payload.fromUserId,
@@ -163,9 +170,10 @@ self.addEventListener('notificationclick', (event) => {
   }
 
   const url =
+    (chatId ? `/?chat=${chatId}${isCall ? '&call=1' : ''}` : null) ||
     data.url ||
-    (chatId ? `/?chat=${chatId}${isCall ? '&call=1' : ''}` : '/') ||
-    (data.fromUserId ? `/?callFrom=${data.fromUserId}` : '/')
+    (data.fromUserId ? `/?callFrom=${data.fromUserId}` : '/') ||
+    '/'
 
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
@@ -214,7 +222,7 @@ self.addEventListener('fetch', (event) => {
           if (cached) return cached
           // Last-resort: a minimal HTML shell that re-routes to the app.
           return new Response(
-            '<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>Aurora</title><style>html,body{margin:0;height:100%;background:#0b0b1a;color:#fff;font-family:system-ui,sans-serif}.c{display:flex;height:100%;align-items:center;justify-content:center;flex-direction:column;gap:12px}.s{width:36px;height:36px;border:3px solid #7c3aed;border-top-color:transparent;border-radius:50%;animation:sp 1s linear infinite}@keyframes sp{to{transform:rotate(360deg)}}</style><div class="c"><div class="s"></div><p>Загрузка Aurora…</p></div><script>location.href='/'</script>',
+            '<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>Aurora</title><style>html,body{margin:0;height:100%;background:#0b0b1a;color:#fff;font-family:system-ui,sans-serif}.c{display:flex;height:100%;align-items:center;justify-content:center;flex-direction:column;gap:12px}.s{width:36px;height:36px;border:3px solid #7c3aed;border-top-color:transparent;border-radius:50%;animation:sp 1s linear infinite}@keyframes sp{to{transform:rotate(360deg)}}</style><div class="c"><div class="s"></div><p>Loading Aurora…</p></div><script>location.href="/"</script>',
             { headers: { 'Content-Type': 'text/html; charset=utf-8' } },
           )
         }

@@ -225,18 +225,7 @@ export function Messenger() {
     }
   }, [currentUser, setPushEnabled])
 
-  useEffect(() => {
-    if (!currentUser) return
-    const onVisible = () => {
-      if (document.visibilityState !== 'visible') return
-      if (Notification.permission !== 'granted' || getIosPushBlockReason()) return
-      syncPushSubscription().then((ok) => {
-        if (ok) setPushEnabled(true)
-      })
-    }
-    document.addEventListener('visibilitychange', onVisible)
-    return () => document.removeEventListener('visibilitychange', onVisible)
-  }, [currentUser, setPushEnabled])
+  // Visibility re-sync lives in usePush (single owner + in-flight dedupe).
 
   // Browser history — replace on first paint, push on real navigations
   const historyBootRef = useRef(true)

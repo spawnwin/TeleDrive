@@ -200,6 +200,8 @@ export function ChatSidebar({
   const bulkArchive = useCallback(async () => {
     if (selectedIds.size === 0) return
     const ids = Array.from(selectedIds)
+    let ok = 0
+    let fail = 0
     await Promise.all(
       ids.map(async (id) => {
         setChatArchived(id, true)
@@ -209,14 +211,21 @@ export function ChatSidebar({
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ archived: true }),
           })
-          if (!res.ok) setChatArchived(id, false)
+          if (!res.ok) {
+            setChatArchived(id, false)
+            fail++
+            return
+          }
+          ok++
         } catch {
           setChatArchived(id, false)
+          fail++
         }
       }),
     )
     exitSelection()
-    toast.success(t('chat.archived'))
+    if (ok > 0) toast.success(t('chat.archived'))
+    if (fail > 0) toast.error(t('chat.archiveError'))
   }, [selectedIds, exitSelection, t, setChatArchived])
 
   const bulkMarkRead = useCallback(() => {
@@ -1493,7 +1502,7 @@ function SavedChatRow({ chat, selectionMode = false }: { chat: ChatListItem; sel
       return `${t('chat.file')}: ${chat.lastMessage.attachmentName || ''}`
     }
     if (chat.lastMessage.content && isE2EEPayload(chat.lastMessage.content)) {
-      return '🔒 Зашифрованное сообщение'
+      return t('chat.encrypted')
     }
     return chat.lastMessage.content
   }
@@ -1640,7 +1649,7 @@ function ChatListItemRow({
     if (isVoice && !chat.lastMessage.content) return t('chat.voice')
     if (isFile && !chat.lastMessage.content) return `${t('chat.file')}: ${chat.lastMessage.attachmentName || ''}`
     if (chat.lastMessage.content && isE2EEPayload(chat.lastMessage.content)) {
-      return '🔒 Зашифрованное сообщение'
+      return t('chat.encrypted')
     }
     return chat.lastMessage.content
   }

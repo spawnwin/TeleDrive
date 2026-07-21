@@ -668,7 +668,7 @@ export function SettingsDialog({ open, onOpenChange, onOpenPremium, onOpenCoins,
           'max-xl:flex max-xl:flex-col max-xl:gap-0',
         )}
       >
-        <DialogHeader className="px-4 pt-4">
+        <DialogHeader className="px-4 pt-[max(1rem,env(safe-area-inset-top))]">
           <DialogTitle className="flex items-center gap-1.5">
             {page !== 'main' && (
               <button
@@ -1094,11 +1094,9 @@ export function SettingsDialog({ open, onOpenChange, onOpenPremium, onOpenCoins,
                   <div className="flex items-center gap-2.5 text-sm">
                     <KeyRound className="h-4 w-4 text-[#3390ec]" />
                     <div>
-                      <p>Сквозное шифрование (E2EE)</p>
+                      <p>{t('settings.e2ee')}</p>
                       <p className="text-xs text-muted-foreground">
-                        {e2eeEnabled
-                          ? 'Включено — сообщения шифруются на устройстве'
-                          : 'Сообщения хранятся в открытом виде'}
+                        {e2eeEnabled ? t('settings.e2eeOn') : t('settings.e2eeOff')}
                       </p>
                     </div>
                   </div>

@@ -140,7 +140,7 @@ export function FriendsDialog({
           'max-xl:flex max-xl:flex-col',
         )}
       >
-        <DialogHeader className="px-5 pt-5">
+        <DialogHeader className="px-5 pt-[max(1.25rem,env(safe-area-inset-top))]">
           <DialogTitle className="flex items-center gap-2">
             <span className="flex-1">{t('friends.title')}</span>
             <Button

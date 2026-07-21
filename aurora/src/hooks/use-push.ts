@@ -247,51 +247,60 @@ export async function getPushSubscriptionStatus(): Promise<{
 /** Re-subscribe when permission granted but THIS DEVICE has no subscription (e.g. new tunnel URL). */
 let pushSyncedThisSession = false
 let pushSyncFailedUntil = 0
+let pushSyncInFlight: Promise<boolean> | null = null
 const PUSH_SYNC_FAILURE_COOLDOWN_MS = 10 * 60 * 1000
 
 export async function syncPushSubscription(): Promise<boolean> {
-  if (Date.now() < pushSyncFailedUntil) return false
+  if (pushSyncInFlight) return pushSyncInFlight
 
-  // Capacitor native: use native push registration instead of Web Push
-  if (isCapacitorNative()) {
-    if (pushSyncedThisSession) return true
-    const ok = await registerCapacitorPush()
+  pushSyncInFlight = (async () => {
+    if (Date.now() < pushSyncFailedUntil) return false
+
+    // Capacitor native: use native push registration instead of Web Push
+    if (isCapacitorNative()) {
+      if (pushSyncedThisSession) return true
+      const ok = await registerCapacitorPush()
+      if (ok) {
+        pushSyncedThisSession = true
+        pushSyncFailedUntil = 0
+      } else {
+        pushSyncFailedUntil = Date.now() + PUSH_SYNC_FAILURE_COOLDOWN_MS
+      }
+      return ok
+    }
+
+    if (!isWebPushSupported()) return false
+    if (getIosPushBlockReason()) return false
+    if (Notification.permission !== 'granted') return false
+
+    // ВАЖНО: проверяем подписку именно этого устройства, а не пользователя.
+    // /api/push/status отвечает subscribed=true при наличии ЛЮБОЙ подписки
+    // пользователя (например, с ПК) — из-за этого телефон после смены origin
+    // никогда не переподписывался и пуши приходили только на ПК.
+    const reg =
+      (await navigator.serviceWorker.getRegistration('/')) ?? (await registerServiceWorker())
+    if (!reg) return false
+    await navigator.serviceWorker.ready
+
+    const local = await reg.pushManager.getSubscription()
+    if (local && pushSyncedThisSession) return true
+
+    // subscribeToPush() идемпотентен: переиспользует локальную подписку,
+    // если она есть, и upsert'ит её на сервере.
+    const ok = await subscribeToPush()
     if (ok) {
       pushSyncedThisSession = true
       pushSyncFailedUntil = 0
     } else {
+      // Avoid hammering /api/push/subscribe on every focus when Apple returns 400.
       pushSyncFailedUntil = Date.now() + PUSH_SYNC_FAILURE_COOLDOWN_MS
     }
     return ok
-  }
+  })().finally(() => {
+    pushSyncInFlight = null
+  })
 
-  if (!isWebPushSupported()) return false
-  if (getIosPushBlockReason()) return false
-  if (Notification.permission !== 'granted') return false
-
-  // ВАЖНО: проверяем подписку именно этого устройства, а не пользователя.
-  // /api/push/status отвечает subscribed=true при наличии ЛЮБОЙ подписки
-  // пользователя (например, с ПК) — из-за этого телефон после смены origin
-  // никогда не переподписывался и пуши приходили только на ПК.
-  const reg =
-    (await navigator.serviceWorker.getRegistration('/')) ?? (await registerServiceWorker())
-  if (!reg) return false
-  await navigator.serviceWorker.ready
-
-  const local = await reg.pushManager.getSubscription()
-  if (local && pushSyncedThisSession) return true
-
-  // subscribeToPush() идемпотентен: переиспользует локальную подписку,
-  // если она есть, и upsert'ит её на сервере.
-  const ok = await subscribeToPush()
-  if (ok) {
-    pushSyncedThisSession = true
-    pushSyncFailedUntil = 0
-  } else {
-    // Avoid hammering /api/push/subscribe on every focus when Apple returns 400.
-    pushSyncFailedUntil = Date.now() + PUSH_SYNC_FAILURE_COOLDOWN_MS
-  }
-  return ok
+  return pushSyncInFlight
 }
 
 export async function unsubscribeFromPush(): Promise<void> {

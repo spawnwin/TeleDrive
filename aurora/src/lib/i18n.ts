@@ -136,6 +136,8 @@ const ru: Dict = {
   'chat.unpinShort': 'Откреп.',
   'chat.deleteShort': 'Удалить',
   'chat.archived': 'Чат архивирован',
+  'chat.archiveError': 'Не удалось архивировать чат',
+  'chat.encrypted': '🔒 Зашифрованное сообщение',
   'chat.unarchived': 'Чат возвращён из архива',
   'chat.deleteForMe': 'Удалить у себя',
   'chat.deleteForMeAnd': 'Удалить у себя и у',
@@ -300,6 +302,9 @@ const ru: Dict = {
   'settings.accountHint': 'Имя, о себе, фото',
   'settings.privacy': 'Конфиденциальность',
   'settings.privacyHint': 'Шифрование, 2FA',
+  'settings.e2ee': 'Сквозное шифрование (E2EE)',
+  'settings.e2eeOn': 'Включено — сообщения шифруются на устройстве',
+  'settings.e2eeOff': 'Сообщения хранятся в открытом виде',
   'settings.notificationsHint': 'Звук, push, превью',
   'settings.appearanceHint': 'Тема, обои чата',
   'settings.data': 'Данные и память',
@@ -402,6 +407,13 @@ const ru: Dict = {
   // Notifications
   'notif.newMessage': 'Новое сообщение',
   'notif.from': 'От',
+
+  'emoji.frequent': 'Часто',
+  'emoji.gestures': 'Жесты',
+  'emoji.animals': 'Животные',
+  'emoji.food': 'Еда',
+  'emoji.activity': 'Активности',
+  'emoji.travel': 'Путешествия',
 
   // Misc
   'misc.ok': 'ОК',
@@ -1332,6 +1344,8 @@ const en: Dict = {
   'chat.unpinShort': 'Unpin',
   'chat.deleteShort': 'Delete',
   'chat.archived': 'Chat archived',
+  'chat.archiveError': 'Failed to archive chat',
+  'chat.encrypted': '🔒 Encrypted message',
   'chat.unarchived': 'Chat unarchived',
   'chat.deleteForMe': 'Delete for me',
   'chat.deleteForMeAnd': 'Delete for me and',
@@ -1492,6 +1506,9 @@ const en: Dict = {
   'settings.accountHint': 'Name, bio, photo',
   'settings.privacy': 'Privacy and Security',
   'settings.privacyHint': 'Encryption, 2FA',
+  'settings.e2ee': 'End-to-end encryption (E2EE)',
+  'settings.e2eeOn': 'On — messages are encrypted on this device',
+  'settings.e2eeOff': 'Messages are stored in plaintext',
   'settings.notificationsHint': 'Sound, push, preview',
   'settings.appearanceHint': 'Theme, chat wallpaper',
   'settings.data': 'Data and Storage',
@@ -1590,6 +1607,13 @@ const en: Dict = {
 
   'notif.newMessage': 'New message',
   'notif.from': 'From',
+
+  'emoji.frequent': 'Frequent',
+  'emoji.gestures': 'Gestures',
+  'emoji.animals': 'Animals',
+  'emoji.food': 'Food',
+  'emoji.activity': 'Activity',
+  'emoji.travel': 'Travel',
 
   'misc.ok': 'OK',
   'misc.cancel': 'Cancel',

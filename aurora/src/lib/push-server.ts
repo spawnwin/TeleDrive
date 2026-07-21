@@ -157,12 +157,23 @@ export async function sendPushToUser(
     return result
   }
 
-  const data = JSON.stringify(payload)
+  const normalized: PushPayload = {
+    ...payload,
+    url:
+      payload.url ||
+      (payload.chatId
+        ? `/?chat=${payload.chatId}${payload.type === 'call' ? '&call=1' : ''}`
+        : payload.fromUserId
+          ? `/?callFrom=${payload.fromUserId}`
+          : undefined),
+  }
+
+  const data = JSON.stringify(normalized)
   console.log('[push] sending', {
     userId,
     subs: deliverable.length,
     skipped: subs.length - deliverable.length,
-    title: payload.title,
+    title: normalized.title,
   })
 
   // Determine if we have web push configured
@@ -177,7 +188,7 @@ export async function sendPushToUser(
       if (isNativeIos) {
         // Send via APNs
         const deviceToken = sub.endpoint.replace('capacitor://', '')
-        const apns = await sendApnsPush(deviceToken, payload)
+        const apns = await sendApnsPush(deviceToken, normalized)
         if (apns.ok) {
           result.sent++
           console.log('[push] apns ok', { userId, token: deviceToken.slice(0, 16) + '...' })
