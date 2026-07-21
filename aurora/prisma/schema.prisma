@@ -66,6 +66,7 @@ model User {
   sentMessages Message[]   @relation("MessageSender")
   reactions    Reaction[]
   favorites    Favorite[]
+  hiddenMessages MessageHide[]
 
   shorts          Short[]         @relation("ShortCreator")
   shortViews      ShortView[]
@@ -315,12 +316,28 @@ model Message {
   topic           Topic?      @relation(fields: [topicId], references: [id], onDelete: SetNull)
   reactions       Reaction[]
   favorites       Favorite[]
+  hiddenFor       MessageHide[]
 
   @@index([chatId, createdAt])
   @@index([senderId])
   @@index([threadRootId])
   @@index([topicId])
   @@index([albumId])
+}
+
+/** Soft-hide a message for one user ("delete for me"). */
+model MessageHide {
+  id        String   @id @default(cuid())
+  messageId String
+  userId    String
+  createdAt DateTime @default(now())
+
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, userId])
+  @@index([userId])
+  @@index([messageId])
 }
 
 model Reaction {

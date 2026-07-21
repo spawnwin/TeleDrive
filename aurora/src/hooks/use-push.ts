@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { useAppStore } from '@/lib/store'
 import { playNotificationSound } from '@/lib/notification-sound'
+import { loadShowNotificationPreview, syncShowPreviewToServiceWorker } from '@/lib/push-prefs'
 
 interface InAppNotification {
   id: string
@@ -200,7 +201,7 @@ export async function registerServiceWorker(): Promise<ServiceWorkerRegistration
     return null
   }
   try {
-    return await navigator.serviceWorker.register('/sw.js?v=17', { scope: '/' })
+    return await navigator.serviceWorker.register('/sw.js?v=19', { scope: '/' })
   } catch (e) {
     console.error('[push] service worker registration failed', e)
     return null
@@ -432,6 +433,7 @@ export function usePush({ userId, enabled, onMessage }: UsePushOptions) {
 
   useEffect(() => {
     if (!enabled || !userId) return
+    void syncShowPreviewToServiceWorker()
     if (isCapacitorNative()) {
       void bindCapacitorPushHandlers()
       void syncPushSubscription()
@@ -469,10 +471,13 @@ export function usePush({ userId, enabled, onMessage }: UsePushOptions) {
       const chat = chatsRef.current.find((c) => c.id === chatId)
       if (chat?.isMuted) return
 
+      const showPreview = loadShowNotificationPreview()
+      const displayBody = showPreview ? body : 'Новое сообщение'
+
       const notif: InAppNotification = {
         id: `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
         title,
-        body,
+        body: displayBody,
         chatId,
         senderName,
         timestamp: Date.now(),
@@ -492,7 +497,7 @@ export function usePush({ userId, enabled, onMessage }: UsePushOptions) {
       if (isPushSupported() && Notification.permission === 'granted') {
         try {
           const n = new Notification(title, {
-            body,
+            body: displayBody,
             icon: '/apple-touch-icon.png',
             tag: `aurora-${chatId}`,
             badge: '/apple-touch-icon.png',

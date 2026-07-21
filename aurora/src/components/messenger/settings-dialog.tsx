@@ -65,6 +65,11 @@ import { useAppStore } from '@/lib/store'
 import { useI18n } from '@/hooks/use-i18n'
 import { getPushPermission, enableWebPush, unsubscribeFromPush, isWebPushSupported, getIosPushBlockReason, syncPushSubscription, isCapacitorNative } from '@/hooks/use-push'
 import {
+  loadShowNotificationPreview,
+  saveShowNotificationPreview,
+  syncShowPreviewToServiceWorker,
+} from '@/lib/push-prefs'
+import {
   clearCustomSound,
   CUSTOM_SOUND_ACCEPT,
   CUSTOM_SOUND_MAX_SIZE,
@@ -371,6 +376,7 @@ export function SettingsDialog({ open, onOpenChange, onOpenPremium, onOpenCoins,
   const [callSoundName, setCallSoundName] = useState('')
   const [messagePresetId, setMessagePresetId] = useState('note')
   const [callPresetId, setCallPresetId] = useState('ringtone-marimba')
+  const [showNotificationPreview, setShowNotificationPreview] = useState(true)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const messageSoundInputRef = useRef<HTMLInputElement>(null)
   const callSoundInputRef = useRef<HTMLInputElement>(null)
@@ -387,6 +393,8 @@ export function SettingsDialog({ open, onOpenChange, onOpenPremium, onOpenCoins,
       setCallSoundName(loadCustomSound('call')?.name || '')
       setMessagePresetId(loadSoundPresetId('message'))
       setCallPresetId(loadSoundPresetId('call'))
+      setShowNotificationPreview(loadShowNotificationPreview())
+      void syncShowPreviewToServiceWorker()
     }
   }, [open, currentUser])
 
@@ -1054,12 +1062,18 @@ export function SettingsDialog({ open, onOpenChange, onOpenPremium, onOpenCoins,
                   onPreview={playCallRingPreview}
                   onChoose={() => setPage('sound-call')}
                 />
-                <div className="flex items-center justify-between rounded-xl bg-muted/50 px-3 py-2.5">
+                  <div className="flex items-center justify-between rounded-xl bg-muted/50 px-3 py-2.5">
                   <div className="flex items-center gap-2.5 text-sm">
                     <Shield className="h-4 w-4" />
                     <span>{t('settings.showPreview')}</span>
                   </div>
-                  <Switch defaultChecked />
+                  <Switch
+                    checked={showNotificationPreview}
+                    onCheckedChange={(enabled) => {
+                      setShowNotificationPreview(enabled)
+                      saveShowNotificationPreview(enabled)
+                    }}
+                  />
                 </div>
                 <div className="flex items-center justify-between rounded-xl bg-muted/50 px-3 py-2.5">
                   <div className="flex items-center gap-2.5 text-sm">

@@ -9,10 +9,12 @@
  *    HTML but fall back to cache when offline
  */
 
-// v18: bugfix pass (e2ee/archive/push/i18n).
-const CACHE_VERSION = 'aurora-v18'
+// v19: notification preview prefs + missing-logic wiring.
+const CACHE_VERSION = 'aurora-v19'
 const SHELL_CACHE = `${CACHE_VERSION}-shell`
 const ASSET_CACHE = `${CACHE_VERSION}-assets`
+const PREFS_CACHE = 'aurora-prefs'
+const PREVIEW_CACHE_URL = '/aurora-prefs/show-preview'
 
 // Routes that make up the app shell — anything that isn't an API call,
 // a media blob, or a hot path that should always hit the network.
@@ -46,11 +48,11 @@ self.addEventListener('install', (event) => {
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     (async () => {
-      // Drop caches from previous versions
+      // Drop caches from previous versions (keep prefs cache across upgrades)
       const keys = await caches.keys()
       await Promise.all(
         keys
-          .filter((k) => !k.startsWith(CACHE_VERSION))
+          .filter((k) => k !== PREFS_CACHE && !k.startsWith(CACHE_VERSION))
           .map((k) => caches.delete(k)),
       )
       await self.clients.claim()
@@ -111,8 +113,24 @@ self.addEventListener('push', (event) => {
           ? `aurora-${payload.chatId}`
           : 'aurora'
 
+      let body = payload.body
+      if (!isCall && !isCallCancel) {
+        try {
+          const cache = await caches.open(PREFS_CACHE)
+          const prefRes = await cache.match(PREVIEW_CACHE_URL)
+          if (prefRes) {
+            const pref = await prefRes.json()
+            if (pref && pref.showPreview === false) {
+              body = 'Новое сообщение'
+            }
+          }
+        } catch {
+          /* keep original body */
+        }
+      }
+
       await self.registration.showNotification(payload.title, {
-        body: payload.body,
+        body,
         icon: '/apple-touch-icon.png',
         badge: '/apple-touch-icon.png',
         tag: notifTag,

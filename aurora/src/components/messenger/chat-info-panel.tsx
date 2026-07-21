@@ -42,6 +42,7 @@ import { getChatAvatarImageUrl } from '@/lib/chat-avatar'
 import { getPublicChannelLink } from '@/lib/chat-id'
 import { ChatWallpaperDialog } from './chat-wallpaper-dialog'
 import { useIsNarrowLayout, MESSENGER_NARROW_MAX_WIDTH } from '@/hooks/use-mobile'
+import { loadHideReadReceipts, saveHideReadReceipts } from '@/lib/read-receipts-prefs'
 
 const XL_BREAKPOINT = MESSENGER_NARROW_MAX_WIDTH
 const XXL_BREAKPOINT = 1536
@@ -79,7 +80,7 @@ export function ChatInfoPanel({ open, onClose }: ChatInfoPanelProps) {
   /** Full-screen sheet below xl — matches sidebar/chat swap and swipe-back. */
   const isNarrowLayout = useIsNarrowLayout()
   const panelWidth = useInfoPanelWidth()
-  const { activeChatId, chats, currentUser, onlineUserIds, presenceSynced, setProfileUserId, upsertChat } = useAppStore()
+  const { activeChatId, chats, currentUser, onlineUserIds, presenceSynced, setProfileUserId, upsertChat, setChatMuted } = useAppStore()
   const [chat, setChat] = useState<any>(null)
   const [myMembership, setMyMembership] = useState<ChatAdminMember | null>(null)
   const [favorites, setFavorites] = useState<any[]>([])
@@ -92,6 +93,8 @@ export function ChatInfoPanel({ open, onClose }: ChatInfoPanelProps) {
   const [editDesc, setEditDesc] = useState('')
   const [editSlug, setEditSlug] = useState('')
   const [blocking, setBlocking] = useState(false)
+  const [hideReadReceipts, setHideReadReceipts] = useState(false)
+  const [muting, setMuting] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const activeChat = chats.find((c) => c.id === activeChatId)
@@ -138,6 +141,46 @@ export function ChatInfoPanel({ open, onClose }: ChatInfoPanelProps) {
     setEditDesc(chat.description || '')
     setEditSlug(chat.slug || '')
   }, [chat])
+
+  useEffect(() => {
+    if (!activeChatId) {
+      setHideReadReceipts(false)
+      return
+    }
+    setHideReadReceipts(loadHideReadReceipts(activeChatId))
+  }, [activeChatId, open])
+
+  const toggleNotifications = async (enabled: boolean) => {
+    if (!activeChatId || muting) return
+    const muted = !enabled
+    const prev = !!activeChat?.isMuted
+    setMuting(true)
+    setChatMuted(activeChatId, muted)
+    try {
+      const res = await fetch(`/api/chats/${activeChatId}/mute`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ muted }),
+      })
+      if (!res.ok) {
+        setChatMuted(activeChatId, prev)
+        toast.error(t('misc.error'))
+        return
+      }
+      toast.success(muted ? t('chat.muted') : t('chat.unmuted'))
+    } catch {
+      setChatMuted(activeChatId, prev)
+      toast.error(t('misc.error'))
+    } finally {
+      setMuting(false)
+    }
+  }
+
+  const toggleHideReadReceipts = (hide: boolean) => {
+    if (!activeChatId) return
+    setHideReadReceipts(hide)
+    saveHideReadReceipts(activeChatId, hide)
+  }
 
   const handleBlock = async () => {
     if (!otherMember || blocking) return
@@ -437,7 +480,13 @@ export function ChatInfoPanel({ open, onClose }: ChatInfoPanelProps) {
 
       {/* Preferences */}
       <div className="space-y-1 px-2 py-2">
-        <ToggleRow icon={<Bell className="h-4 w-4" />} label={t('info.notifications')} defaultChecked />
+        <ToggleRow
+          icon={<Bell className="h-4 w-4" />}
+          label={t('info.notifications')}
+          checked={!activeChat.isMuted}
+          onCheckedChange={toggleNotifications}
+          disabled={muting}
+        />
         <button
           type="button"
           onClick={() => setShowWallpaper(true)}
@@ -451,7 +500,12 @@ export function ChatInfoPanel({ open, onClose }: ChatInfoPanelProps) {
           </div>
           <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
         </button>
-        <ToggleRow icon={<Shield className="h-4 w-4" />} label={t('info.hideReadReceipts')} />
+        <ToggleRow
+          icon={<Shield className="h-4 w-4" />}
+          label={t('info.hideReadReceipts')}
+          checked={hideReadReceipts}
+          onCheckedChange={toggleHideReadReceipts}
+        />
       </div>
 
       {favorites.length > 0 && (
@@ -636,11 +690,15 @@ export function ChatInfoPanel({ open, onClose }: ChatInfoPanelProps) {
 function ToggleRow({
   icon,
   label,
-  defaultChecked = false,
+  checked = false,
+  onCheckedChange,
+  disabled = false,
 }: {
   icon: React.ReactNode
   label: string
-  defaultChecked?: boolean
+  checked?: boolean
+  onCheckedChange?: (checked: boolean) => void
+  disabled?: boolean
 }) {
   return (
     <div className="flex items-center justify-between gap-3 rounded-lg px-2 py-2">
@@ -648,7 +706,7 @@ function ToggleRow({
         <span className="shrink-0 text-muted-foreground">{icon}</span>
         <span className="truncate">{label}</span>
       </div>
-      <Switch defaultChecked={defaultChecked} />
+      <Switch checked={checked} onCheckedChange={onCheckedChange} disabled={disabled} />
     </div>
   )
 }

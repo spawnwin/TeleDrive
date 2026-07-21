@@ -218,9 +218,10 @@ export function UserProfileDialog({
     if (!photoOpen || !userId || !profile?.avatarUrl) return
     let cancelled = false
     if (profile.isSelf) {
-      fetch(`/api/users/${encodeURIComponent(userId)}/profile/photo/viewers`, {
-        credentials: 'include',
-      })
+      fetch(
+        `/api/users/${encodeURIComponent(userId)}/profile/photo/viewers?url=${encodeURIComponent(profile.avatarUrl)}`,
+        { credentials: 'include' },
+      )
         .then((res) => res.json())
         .then((data) => {
           if (cancelled) return
@@ -241,6 +242,8 @@ export function UserProfileDialog({
       fetch(`/api/users/${encodeURIComponent(userId)}/profile/photo/view`, {
         method: 'POST',
         credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: profile.avatarUrl }),
       })
         .then((res) => res.json())
         .then((data) => {

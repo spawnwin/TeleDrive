@@ -125,6 +125,7 @@ import { EmojiStatusBadge } from './emoji-status-badge'
 import { ChatWallpaperBackground } from './chat-wallpaper-bg'
 import { ChatWallpaperDialog } from './chat-wallpaper-dialog'
 import { DeleteConfirmDialog } from './delete-confirm-dialog'
+import { loadHideReadReceipts } from '@/lib/read-receipts-prefs'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 
@@ -623,8 +624,11 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
 
       // Peer has no E2EE key → normal plaintext chat.
       if (!recipientWithKey?.publicKey) {
+        if (peerHasPublicKey) setPeerHasPublicKey(false)
         return { content: plaintext, encrypted: false }
       }
+
+      if (!peerHasPublicKey) setPeerHasPublicKey(true)
 
       try {
         const sendContent = await encryptMessage(
@@ -832,6 +836,10 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
         setIsForum(!!data.isForum)
         setPinnedMessage(data.pinnedMessage ?? null)
         markChatRead(activeChatId)
+        // Notify peer of read receipts when opening a chat (unless user hid them).
+        if (!loadHideReadReceipts(activeChatId)) {
+          markReadRef.current(activeChatId)
+        }
       })
       .finally(() => {
         if (!cancelled) setLoadingMessages(false)
@@ -1130,6 +1138,7 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
 
   const markRead = useCallback((chatId: string) => {
     if (!currentUser) return
+    if (loadHideReadReceipts(chatId)) return
     socket.markRead(chatId, currentUser.id)
   }, [currentUser, socket.markRead])
 
@@ -1145,10 +1154,14 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
   const confirmDelete = async (forEveryone: boolean) => {
     if (!activeChatId || !deleteConfirmMsg) return
     const msgId = deleteConfirmMsg.id
+    // Private "delete for me" soft-hides; everything else hard-deletes for all.
+    const scope =
+      activeChat?.type === 'private' && !forEveryone ? 'me' : 'everyone'
     try {
-      const res = await fetch(`/api/chats/${activeChatId}/messages?messageId=${msgId}`, {
-        method: 'DELETE',
-      })
+      const res = await fetch(
+        `/api/chats/${activeChatId}/messages?messageId=${encodeURIComponent(msgId)}&scope=${scope}`,
+        { method: 'DELETE' },
+      )
       const data = await res.json().catch(() => ({}))
       if (!res.ok) {
         toast.error(data.error || t('msg.errorDelete'))
@@ -1156,7 +1169,7 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
       }
       setMessages((prev) => prev.filter((m) => m.id !== msgId))
       if (pinnedMessage?.id === msgId) setPinnedMessage(null)
-      if (forEveryone) {
+      if (scope === 'everyone') {
         socket.deleteMessage(activeChatId, msgId)
       }
       toast.success(t('msg.deleted'))
@@ -1834,11 +1847,16 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
     const next = !activeChat?.isMuted
     setChatMuted(activeChatId, next)
     try {
-      await fetch(`/api/chats/${activeChatId}/mute`, {
+      const res = await fetch(`/api/chats/${activeChatId}/mute`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ muted: next }),
       })
+      if (!res.ok) {
+        setChatMuted(activeChatId, !next)
+        toast.error(t('misc.error'))
+        return
+      }
       toast.success(next ? t('chat.muted') : t('chat.unmuted'))
     } catch {
       setChatMuted(activeChatId, !next)
