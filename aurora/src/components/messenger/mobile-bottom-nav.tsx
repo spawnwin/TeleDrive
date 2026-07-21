@@ -32,9 +32,9 @@ export function MobileBottomNav({
   return (
     <nav
       aria-label="Мобильная навигация"
-      className="safe-bottom fixed inset-x-0 bottom-0 z-50 border-t border-border/60 bg-background/95 backdrop-blur-md xl:hidden"
+      className="safe-bottom fixed inset-x-0 bottom-0 z-50 border-t border-border bg-background xl:hidden"
     >
-      <div className="mx-auto grid h-[3.25rem] max-w-lg grid-cols-3">
+      <div className="mx-auto grid h-14 max-w-lg grid-cols-3">
         {items.map(({ id, icon: Icon, onClick }) => {
           const active = activeTab === id
           return (

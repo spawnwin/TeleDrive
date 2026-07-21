@@ -1,19 +1,31 @@
-# Aurora — Telegram/Max-style bottom nav
+# Aurora — UI + chat/call fixes
 
-Patch applied to the live Aurora messenger on `135.106.173.99` (`/opt/aurora`).
+Patches applied on the live Aurora messenger at `135.106.173.99` (`/opt/aurora`).
 
-## Change
+## UI (Telegram / Max style)
 
-Replaced the floating island bottom tab bar with a full-width Telegram/Max-style tab bar:
+- Full-width flat bottom tab bar (no floating island, no gradient circle)
+- Chat list: flat rows, underline folder tabs, muted “New chat” button
+- Search / header cleaned up; list padding accounts for the tab bar
 
-- Edge-to-edge, flush to the bottom (with safe-area inset)
-- Thin top hairline border, no rounded “island”, no heavy shadow
-- Active tab: accent color on icon + label (no gradient circle)
-- Inactive: muted outline icons
-- Banner offset and chat-list bottom padding adjusted to the new height
+## Calls
+
+- Wired coturn TURN into app env (`NEXT_PUBLIC_TURN_URL` + credentials) — calls across Wi‑Fi/mobile NAT were failing on STUN-only
+- Wait briefly for call socket reconnect before starting a call
+- Clearer ICE/connection failure handling and user-facing error
+
+## Chat sockets
+
+- Stop tearing down the chat WebSocket when profile name/avatar changes
+- Infinite reconnect with backoff; retry after transient auth token failures
 
 ## Files
 
 - `src/components/messenger/mobile-bottom-nav.tsx`
-- `src/components/messenger/messenger.tsx` (sidebar bottom padding)
-- `src/app/globals.css` (floating banner offset)
+- `src/components/messenger/messenger.tsx`
+- `src/components/messenger/chat-sidebar.tsx`
+- `src/components/messenger/unread-indicator.tsx`
+- `src/hooks/use-socket.ts`
+- `src/hooks/use-webrtc.ts`
+- `src/lib/ice-servers.ts`
+- `src/app/globals.css`
