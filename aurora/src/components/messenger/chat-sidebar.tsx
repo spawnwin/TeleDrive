@@ -34,6 +34,7 @@ import {
   Radio,
   MoreVertical,
   ArrowLeft,
+  Megaphone,
 } from 'lucide-react'
 import { Avatar } from './avatar'
 import { Button } from '@/components/ui/button'
@@ -447,6 +448,11 @@ export function ChatSidebar({
               <DropdownMenuItem onClick={onOpenCoins}>
                 <Coins className="mr-2 h-4 w-4" /> {t('coins.title')}
               </DropdownMenuItem>
+              {currentUser?.isAdmin && (
+                <DropdownMenuItem onClick={() => router.push('/admin')}>
+                  <Shield className="mr-2 h-4 w-4 text-slate-500" /> {t('sidebar.admin')}
+                </DropdownMenuItem>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
           <Button
@@ -504,6 +510,17 @@ export function ChatSidebar({
           >
             <Settings className="h-4 w-4" />
           </Button>
+          {currentUser?.isAdmin && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-9 w-9 rounded-lg"
+              onClick={() => router.push('/admin')}
+              title={t('sidebar.admin')}
+            >
+              <Shield className="h-4 w-4" />
+            </Button>
+          )}
         </div>
           </>
         )}
@@ -1493,14 +1510,42 @@ function ChatListItemRow({
             : undefined
         }
       >
-        <Avatar
-          name={chat.title}
-          color={chat.avatarColor}
-          imageUrl={getChatAvatarImageUrl(chat, currentUser?.id)}
-          size="md"
-          showStatus={chat.type === 'private'}
-          online={isOnline}
-        />
+        <span
+          className={cn(
+            'relative inline-flex rounded-full',
+            chat.type === 'group' && 'ring-2 ring-[#2aabee]/55 ring-offset-1 ring-offset-background',
+            chat.type === 'channel' && 'ring-2 ring-[#8b5cf6]/60 ring-offset-1 ring-offset-background',
+            chat.type === 'private' && 'ring-2 ring-transparent',
+          )}
+          title={
+            chat.type === 'group'
+              ? t('chat.typeGroup')
+              : chat.type === 'channel'
+                ? t('chat.typeChannel')
+                : chat.type === 'private'
+                  ? t('chat.typePrivate')
+                  : undefined
+          }
+        >
+          <Avatar
+            name={chat.title}
+            color={chat.avatarColor}
+            imageUrl={getChatAvatarImageUrl(chat, currentUser?.id)}
+            size="md"
+            showStatus={chat.type === 'private'}
+            online={isOnline}
+          />
+          {chat.type === 'group' && (
+            <span className="absolute -bottom-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-[#2aabee] text-white shadow-sm ring-2 ring-background">
+              <Users className="h-2.5 w-2.5" strokeWidth={2.5} />
+            </span>
+          )}
+          {chat.type === 'channel' && (
+            <span className="absolute -bottom-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-[#8b5cf6] text-white shadow-sm ring-2 ring-background">
+              <Megaphone className="h-2.5 w-2.5" strokeWidth={2.5} />
+            </span>
+          )}
+        </span>
       </StoryRing>
       <div className="min-w-0 flex-1">
         <div className="flex items-center justify-between gap-2">
@@ -1513,6 +1558,12 @@ function ChatListItemRow({
               )}
             >
               <span className="inline-flex max-w-full items-center gap-1">
+                {chat.type === 'channel' && (
+                  <Megaphone className="h-3.5 w-3.5 shrink-0 text-[#8b5cf6]" aria-hidden />
+                )}
+                {chat.type === 'group' && (
+                  <Users className="h-3.5 w-3.5 shrink-0 text-[#2aabee]" aria-hidden />
+                )}
                 <span className="truncate">{chat.title}</span>
                 {displayEmojiStatus && (
                   <EmojiStatusBadge emojiStatus={displayEmojiStatus} size="sm" />

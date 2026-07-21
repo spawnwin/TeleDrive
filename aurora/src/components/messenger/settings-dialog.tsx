@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
+import { useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
 import {
   Sparkles,
@@ -328,6 +329,7 @@ function SoundPickerList({
 
 export function SettingsDialog({ open, onOpenChange, onOpenPremium, onOpenCoins, onOpenMyProfile }: SettingsDialogProps) {
   const { t, lang, setLang } = useI18n()
+  const router = useRouter()
   const {
     currentUser,
     theme,
@@ -869,6 +871,18 @@ export function SettingsDialog({ open, onOpenChange, onOpenPremium, onOpenCoins,
                     hint={t('settings.botsHint')}
                     onClick={() => setPage('bots')}
                   />
+                  {currentUser?.isAdmin && (
+                    <MenuRow
+                      icon={<Shield className="h-5 w-5" />}
+                      color="#546e7a"
+                      label={t('sidebar.admin')}
+                      hint={t('sidebar.adminHint')}
+                      onClick={() => {
+                        onOpenChange(false)
+                        router.push('/admin')
+                      }}
+                    />
+                  )}
                 </div>
 
                 {/* Telegram iOS-style: Log out at the bottom of Settings */}
