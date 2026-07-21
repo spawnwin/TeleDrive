@@ -8,9 +8,9 @@
     "userInterfaceStyle": "dark",
     "scheme": "rubezh",
     "splash": {
-      "image": "./assets/icon.png",
+      "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#1c241c"
+      "backgroundColor": "#142016"
     },
     "ios": {
       "supportsTablet": false,
@@ -18,9 +18,9 @@
     },
     "android": {
       "package": "com.rubezh.tylpobedy",
-      "versionCode": 1,
+      "versionCode": 2,
       "adaptiveIcon": {
-        "backgroundColor": "#1c241c",
+        "backgroundColor": "#142016",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
