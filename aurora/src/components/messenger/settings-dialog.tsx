@@ -29,6 +29,7 @@ import {
   Play,
   RotateCcw,
   Trash2,
+  LogOut,
 } from 'lucide-react'
 import { Avatar } from './avatar'
 import { Button } from '@/components/ui/button'
@@ -626,7 +627,23 @@ export function SettingsDialog({ open, onOpenChange, onOpenPremium, onOpenCoins 
                   />
                 </div>
 
-                <div className="mt-5" />
+                {/* Telegram: Settings → Log out (bottom of settings) */}
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (!window.confirm(lang === 'ru' ? 'Выйти из аккаунта?' : 'Log out of this account?')) return
+                    try {
+                      await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' })
+                    } catch {
+                      /* still reload to clear local session UI */
+                    }
+                    window.location.href = '/'
+                  }}
+                  className="mt-6 flex w-full items-center justify-center gap-2 rounded-2xl bg-muted/50 px-4 py-3.5 text-sm font-semibold text-[#e53935] transition hover:bg-[#e53935]/10 active:scale-[0.99]"
+                >
+                  <LogOut className="h-4 w-4" />
+                  {t('sidebar.logout')}
+                </button>
               </>
             )}
 
@@ -717,10 +734,27 @@ export function SettingsDialog({ open, onOpenChange, onOpenPremium, onOpenCoins 
                 <Button
                   onClick={saveProfile}
                   disabled={saving}
-                  className="mt-5 w-full bg-violet-500 text-white hover:bg-violet-600"
+                  className="mt-5 w-full bg-[#3390ec] text-white hover:bg-[#2b82d9]"
                 >
                   {saving ? t('settings.saving') : t('settings.save')}
                 </Button>
+
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (!window.confirm(lang === 'ru' ? 'Выйти из аккаунта?' : 'Log out of this account?')) return
+                    try {
+                      await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' })
+                    } catch {
+                      /* ignore */
+                    }
+                    window.location.href = '/'
+                  }}
+                  className="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold text-[#e53935] transition hover:bg-[#e53935]/10"
+                >
+                  <LogOut className="h-4 w-4" />
+                  {t('sidebar.logout')}
+                </button>
               </>
             )}
 

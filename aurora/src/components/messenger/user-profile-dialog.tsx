@@ -31,7 +31,6 @@ import { StoryViewer } from './story-viewer'
 import { AddStoryDialog } from './add-story-dialog'
 import type { StoryFeedUser } from '@/lib/stories'
 import { Button } from '@/components/ui/button'
-import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
 import { Sheet, SheetContent } from '@/components/ui/sheet'
 import { useAppStore } from '@/lib/store'
@@ -358,10 +357,11 @@ export function UserProfileDialog({
           <Loader2 className="h-8 w-8 animate-spin text-[#3390ec]" />
         </div>
       ) : profile ? (
-        <ScrollArea className="min-h-0 min-w-0 flex-1 overflow-x-hidden">
-          <div className="w-full min-w-0 max-w-full box-border pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))]">
+        <div className="min-h-0 w-full min-w-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-y-contain [-webkit-overflow-scrolling:touch]">
+          {/* Fixed horizontal padding — avoids Radix ScrollArea display:table overflow */}
+          <div className="box-border w-full max-w-full px-4 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
           {/* Profile header — Telegram style */}
-          <div className="relative flex w-full min-w-0 flex-col items-center gap-3 bg-gradient-to-b from-[#3390ec]/12 via-background to-background px-1 pb-5 pt-4">
+          <div className="relative flex w-full min-w-0 flex-col items-center gap-3 bg-gradient-to-b from-[#3390ec]/12 via-background to-background pb-5 pt-2">
             <button
               type="button"
               onClick={() => {
@@ -410,7 +410,7 @@ export function UserProfileDialog({
               )}
             </button>
 
-            <div className="w-full min-w-0 px-2 text-center">
+            <div className="w-full min-w-0 text-center">
               <p className="flex flex-wrap items-center justify-center gap-1.5 text-xl font-semibold tracking-tight">
                 <span className="max-w-full break-words">{profile.name}</span>
                 <EmojiStatusBadge emojiStatus={profile.emojiStatus} size="lg" />
@@ -439,34 +439,34 @@ export function UserProfileDialog({
                   <button
                     type="button"
                     onClick={handleMessage}
-                    className="flex min-h-[4rem] min-w-0 flex-col items-center justify-center gap-1 rounded-xl text-[#3390ec] transition hover:bg-background active:scale-[0.98]"
+                    className="flex min-h-[4rem] min-w-0 flex-col items-center justify-center gap-1 overflow-hidden rounded-xl text-[#3390ec] transition hover:bg-background active:scale-[0.98]"
                   >
                     <MessageCircle className="h-6 w-6 shrink-0" strokeWidth={1.75} />
-                    <span className="w-full truncate px-0.5 text-center text-[10px] font-medium leading-tight">{t('profile.message')}</span>
+                    <span className="block w-full truncate text-center text-[10px] font-medium leading-tight">{t('profile.message')}</span>
                   </button>
                   <button
                     type="button"
                     onClick={() => handleCall('audio')}
-                    className="flex min-h-[4rem] min-w-0 flex-col items-center justify-center gap-1 rounded-xl text-[#3390ec] transition hover:bg-background active:scale-[0.98]"
+                    className="flex min-h-[4rem] min-w-0 flex-col items-center justify-center gap-1 overflow-hidden rounded-xl text-[#3390ec] transition hover:bg-background active:scale-[0.98]"
                   >
                     <Phone className="h-6 w-6 shrink-0" strokeWidth={1.75} />
-                    <span className="w-full truncate px-0.5 text-center text-[10px] font-medium leading-tight">{t('profile.call')}</span>
+                    <span className="block w-full truncate text-center text-[10px] font-medium leading-tight">{t('profile.call')}</span>
                   </button>
                   <button
                     type="button"
                     onClick={() => handleCall('video')}
-                    className="flex min-h-[4rem] min-w-0 flex-col items-center justify-center gap-1 rounded-xl text-[#3390ec] transition hover:bg-background active:scale-[0.98]"
+                    className="flex min-h-[4rem] min-w-0 flex-col items-center justify-center gap-1 overflow-hidden rounded-xl text-[#3390ec] transition hover:bg-background active:scale-[0.98]"
                   >
                     <Video className="h-6 w-6 shrink-0" strokeWidth={1.75} />
-                    <span className="w-full truncate px-0.5 text-center text-[10px] font-medium leading-tight">{t('profile.video')}</span>
+                    <span className="block w-full truncate text-center text-[10px] font-medium leading-tight">{t('profile.video')}</span>
                   </button>
                   <button
                     type="button"
                     onClick={() => setShowGiftPicker(true)}
-                    className="flex min-h-[4rem] min-w-0 flex-col items-center justify-center gap-1 rounded-xl text-[#3390ec] transition hover:bg-background active:scale-[0.98]"
+                    className="flex min-h-[4rem] min-w-0 flex-col items-center justify-center gap-1 overflow-hidden rounded-xl text-[#3390ec] transition hover:bg-background active:scale-[0.98]"
                   >
                     <Gift className="h-6 w-6 shrink-0" strokeWidth={1.75} />
-                    <span className="w-full truncate px-0.5 text-center text-[10px] font-medium leading-tight">
+                    <span className="block w-full truncate text-center text-[10px] font-medium leading-tight">
                       {lang === 'ru' ? 'Подарок' : 'Gift'}
                     </span>
                   </button>
@@ -479,10 +479,10 @@ export function UserProfileDialog({
                       onClose()
                       onEditProfile?.()
                     }}
-                    className="flex min-h-[3.25rem] min-w-0 flex-col items-center justify-center gap-1 rounded-xl text-[#3390ec] transition hover:bg-background active:scale-[0.98]"
+                    className="flex min-h-[3.25rem] min-w-0 flex-col items-center justify-center gap-1 overflow-hidden rounded-xl text-[#3390ec] transition hover:bg-background active:scale-[0.98]"
                   >
                     <Edit3 className="h-6 w-6 shrink-0" strokeWidth={1.75} />
-                    <span className="w-full truncate px-0.5 text-center text-[10px] font-medium">{t('profile.editProfile')}</span>
+                    <span className="block w-full truncate text-center text-[10px] font-medium">{t('profile.editProfile')}</span>
                   </button>
                 </div>
               )}
@@ -507,11 +507,13 @@ export function UserProfileDialog({
           </div>
 
           {/* Gifts on profile */}
+          <div className="min-w-0 overflow-hidden">
           <ProfileGiftsSection
             gifts={profileGifts}
             isSelf={profile.isSelf}
             loading={giftsLoading}
           />
+          </div>
 
           {/* Creator Premium */}
           {(creatorTiersCount > 0 || profile.isSelf) && (
@@ -546,7 +548,7 @@ export function UserProfileDialog({
 
           {/* Media tabs — Telegram underline style */}
           <div className="min-w-0 py-1">
-            <div className="-mx-[max(1rem,env(safe-area-inset-left))] flex gap-0 overflow-x-auto border-b border-border pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <div className="-mx-4 flex gap-0 overflow-x-auto border-b border-border px-4 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
               {tabs.map((tab) => (
                 <button
                   key={tab.id}
@@ -568,7 +570,7 @@ export function UserProfileDialog({
               ))}
             </div>
 
-            <div className="min-w-0">
+            <div className="min-w-0 overflow-hidden">
             {userId ? (
               <ProfileTabContent
                 key={`${userId}:${activeTab}:${scopeChatId || 'all'}`}
@@ -638,18 +640,20 @@ export function UserProfileDialog({
           {profile.isSelf && userId && (
             <>
               <Separator />
+              <div className="min-w-0 overflow-hidden">
               <ProfileVisitorsSection
                 userId={userId}
                 isPremium={!!profile.isPremium}
                 onOpenPremium={onOpenPremium}
                 onOpenProfile={(id) => setProfileUserId(id)}
               />
+              </div>
             </>
           )}
 
           {/* VK-style wall */}
           <Separator />
-          <div className="min-w-0">
+          <div className="min-w-0 overflow-hidden">
           <ProfileWall
             profileId={profile.id}
             isSelf={profile.isSelf}
@@ -674,10 +678,8 @@ export function UserProfileDialog({
               />
             </div>
           )}
-
-          <div className="h-[max(1rem,env(safe-area-inset-bottom))]" />
           </div>
-        </ScrollArea>
+        </div>
       ) : (
         <div className="flex flex-1 flex-col items-center justify-center gap-2 py-24 px-6 text-center text-sm text-muted-foreground">
           <p>
@@ -699,15 +701,14 @@ export function UserProfileDialog({
         <SheetContent
           side={isMobile ? 'bottom' : 'right'}
           className={cn(
-            // Override sheet default safe-x / w-3/4 so content is not clipped on the right
-            'flex max-w-full flex-col gap-0 overflow-hidden p-0 !px-0 [&>button]:hidden',
+            // Kill sheet default safe-x / gap so nothing clips on the right edge
+            'flex flex-col gap-0 overflow-hidden border-0 bg-background p-0 shadow-lg [padding:0!important] [&>button]:hidden',
             isMobile
-              ? 'h-[100dvh] max-h-[100dvh] w-full rounded-none border-0'
+              ? 'inset-x-0 bottom-0 h-[100dvh] max-h-[100dvh] w-full max-w-none rounded-none'
               : 'inset-y-0 right-0 h-full w-full max-w-md border-l sm:max-w-md',
           )}
         >
-          {/* Telegram-style: back only — no "Open profile" title; name lives under the avatar */}
-          <div className="flex shrink-0 items-center gap-2 pl-[max(0.75rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))] pb-2 pt-[max(0.75rem,env(safe-area-inset-top))]">
+          <div className="flex w-full shrink-0 items-center gap-2 px-4 pb-2 pt-[max(0.75rem,env(safe-area-inset-top))]">
             <Button
               variant="ghost"
               size="icon"
