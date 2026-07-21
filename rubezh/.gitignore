@@ -5,3 +5,4 @@ client/ios/
 client/.expo/
 **/node_modules/
 server/data/
+landing/download/
