@@ -600,9 +600,9 @@ export function ChatSidebar({
 
           {/* Chat list — h-0 + flex-1 required for scroll inside flex column on desktop */}
           <div className="mt-1 flex h-0 min-h-0 flex-1 flex-col overflow-hidden">
-            <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-0 [-webkit-overflow-scrolling:touch] [scrollbar-gutter:stable] scroll-pb-[5.5rem]">
-            {/* Small pad only — list paints under floating nav to screen bottom */}
-            <div className="pb-[max(0.5rem,env(safe-area-inset-bottom))] xl:pb-4">
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-0 [-webkit-overflow-scrolling:touch]">
+            {/* Clearance under floating bottom nav on mobile */}
+            <div className="pb-[calc(5.75rem+env(safe-area-inset-bottom))] xl:pb-4">
               {/* Stories strip — Telegram-style above chat list */}
               {!showArchived && !query.trim() && currentUser && (
                 <StoriesRow

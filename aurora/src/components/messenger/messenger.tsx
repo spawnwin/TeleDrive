@@ -114,12 +114,18 @@ export function Messenger() {
     return () => document.removeEventListener('visibilitychange', onVisible)
   }, [currentUser, setPushEnabled])
 
-  // Browser history management — pushState on navigation, popstate for back/forward
+  // Browser history — replace on first paint, push on real navigations
+  const historyBootRef = useRef(true)
   useEffect(() => {
     const state = { chatId: activeChatId, view, profileUserId }
     historyStateRef.current = state
     if (!poppingStateRef.current) {
-      window.history.pushState(state, '')
+      if (historyBootRef.current) {
+        window.history.replaceState(state, '')
+        historyBootRef.current = false
+      } else {
+        window.history.pushState(state, '')
+      }
     }
     poppingStateRef.current = false
   }, [activeChatId, view, profileUserId])
@@ -456,8 +462,8 @@ export function Messenger() {
       <div className="flex h-screen items-center justify-center bg-background">
         <div className="flex flex-col items-center gap-4">
           <div className="relative h-16 w-16">
-            <div className="absolute inset-0 animate-ping rounded-2xl bg-violet-500/30" />
-            <div className="relative flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-500 to-cyan-400 shadow-lg shadow-violet-500/40">
+            <div className="absolute inset-0 animate-ping rounded-2xl bg-[#3390ec]/30" />
+            <div className="relative flex h-16 w-16 items-center justify-center rounded-2xl bg-[#3390ec] shadow-lg shadow-[#3390ec]/40">
               <svg
                 viewBox="0 0 24 24"
                 fill="none"
@@ -499,7 +505,7 @@ export function Messenger() {
                 setBootstrapped(false)
                 setBootRetry((n) => n + 1)
               }}
-              className="rounded-xl bg-gradient-to-r from-violet-500 to-cyan-400 px-6 py-2.5 text-sm font-medium text-white shadow-lg shadow-violet-500/30 transition hover:opacity-90"
+              className="rounded-xl bg-[#3390ec] px-6 py-2.5 text-sm font-medium text-white shadow-lg shadow-[#3390ec]/30 transition hover:bg-[#2b82d9]"
             >
               {translate(lang, 'misc.retry')}
             </button>
@@ -584,7 +590,14 @@ export function Messenger() {
           <ChatInfoPanel open={showInfo} onClose={() => setShowInfo(false)} />
         )}
 
-      {!activeChatId && (
+      {!activeChatId &&
+        !showSettings &&
+        !showFriends &&
+        !showCoins &&
+        !showPremium &&
+        !showP2PMarketplace &&
+        !showStreams &&
+        !profileUserId && (
         <MobileBottomNav
           activeTab={mobileTab}
           unreadCount={mobileUnreadCount}

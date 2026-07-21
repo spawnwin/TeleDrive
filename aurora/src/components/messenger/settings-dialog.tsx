@@ -31,6 +31,7 @@ import {
   Trash2,
   LogOut,
   EllipsisVertical,
+  X,
 } from 'lucide-react'
 import { Avatar } from './avatar'
 import { Button } from '@/components/ui/button'
@@ -503,7 +504,7 @@ export function SettingsDialog({ open, onOpenChange, onOpenPremium, onOpenCoins 
     <>
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        showCloseButton
+        showCloseButton={false}
         className={cn(
           'max-w-md gap-0 overflow-x-clip p-0 safe-top-min safe-bottom-min',
           // Full-bleed Telegram settings on mobile — MUST reset Dialog's 50%/translate centering
@@ -514,7 +515,7 @@ export function SettingsDialog({ open, onOpenChange, onOpenPremium, onOpenCoins 
         )}
       >
         <DialogHeader className="px-4 pt-4">
-          <DialogTitle className="flex items-center gap-1.5 pr-8">
+          <DialogTitle className="flex items-center gap-1.5">
             {page !== 'main' && (
               <button
                 type="button"
@@ -527,13 +528,23 @@ export function SettingsDialog({ open, onOpenChange, onOpenPremium, onOpenCoins 
               </button>
             )}
             <span className="min-w-0 flex-1 truncate">{pageTitles[page]}</span>
+            {/* Close (Telegram-style X) */}
+            <button
+              type="button"
+              onClick={() => onOpenChange(false)}
+              className="-mr-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition hover:bg-muted"
+              title={t('misc.close')}
+              aria-label={t('misc.close')}
+            >
+              <X className="h-4 w-4" />
+            </button>
             {/* Telegram Android/Desktop: Settings → ⋮ → Log out */}
             {page === 'main' && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <button
                     type="button"
-                    className="-mr-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition hover:bg-muted"
+                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition hover:bg-muted"
                     title={lang === 'ru' ? 'Ещё' : 'More'}
                     aria-label={lang === 'ru' ? 'Ещё' : 'More'}
                   >

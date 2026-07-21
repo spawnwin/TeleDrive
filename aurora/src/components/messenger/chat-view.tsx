@@ -226,10 +226,7 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
 
   // Delete confirmation dialog state
   const [deleteConfirmMsg, setDeleteConfirmMsg] = useState<ChatMessage | null>(null)
-
-  // Select mode (multi-select)
-  const [selectMode, setSelectMode] = useState(false)
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const inputAreaRef = useRef<HTMLTextAreaElement>(null)
 
   // Right-click context menu state (mobile long-press + desktop right-click)
   const [contextMenu, setContextMenu] = useState<{
@@ -1036,6 +1033,13 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
 
   const handleInputChange = (v: string) => {
     setInput(v)
+    // Telegram-style auto-grow
+    requestAnimationFrame(() => {
+      const el = inputAreaRef.current
+      if (!el) return
+      el.style.height = 'auto'
+      el.style.height = `${Math.min(el.scrollHeight, 128)}px`
+    })
     if (editingMessage) return
     if (activeChatId) setDraft(activeChatId, v)
     if (!activeChatId || !currentUser) return
@@ -2516,7 +2520,7 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
 
       {/* Composer */}
       {!canPost ? (
-        <div className="shrink-0 border-t border-border bg-muted/30 px-4 py-4 text-center text-sm text-muted-foreground">
+        <div className="shrink-0 border-t border-border bg-muted/30 px-4 py-4 pb-[max(1rem,env(safe-area-inset-bottom))] text-center text-sm text-muted-foreground">
           {t('channel.readOnly')}
         </div>
       ) : (
@@ -2552,7 +2556,45 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
           onChange={handleFileSelect}
           className="hidden"
         />
-        <div className="mx-auto flex w-full max-w-none items-end gap-1.5">
+        <div className="mx-auto flex w-full max-w-none flex-col gap-1.5">
+          {/* Pending attachment — Telegram strip above the input row */}
+          {pendingFile && pendingPreviewUrl && !isRecording && (
+            <div className="flex items-center gap-2 rounded-2xl bg-muted/40 px-2 py-2">
+              <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-lg border border-border bg-muted">
+                {pendingFile.type.startsWith('image/') ? (
+                  <img src={pendingPreviewUrl} alt="" className="h-full w-full object-cover" />
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center">
+                    <FileIcon className="h-5 w-5 text-muted-foreground" />
+                  </div>
+                )}
+              </div>
+              <div className="min-w-0 flex-1">
+                {pendingFile.type.startsWith('image/') ? (
+                  <p className="text-xs text-muted-foreground">
+                    {(pendingFile.size / 1024 / 1024).toFixed(1)} МБ
+                  </p>
+                ) : (
+                  <>
+                    <p className="truncate text-sm font-medium">{pendingFile.name}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {(pendingFile.size / 1024 / 1024).toFixed(1)} МБ
+                    </p>
+                  </>
+                )}
+              </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 shrink-0 rounded-full"
+                onClick={cancelPendingFile}
+              >
+                <X className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          )}
+
+          <div className="flex w-full items-end gap-1.5">
           {/* Telegram: rounded text field; circular send/mic sits outside to the right */}
           {isRecording ? (
             <div className="flex flex-1 items-center justify-center rounded-2xl border border-rose-500/40 bg-rose-500/10 px-3 py-3 text-sm font-medium text-rose-600 dark:text-rose-400">
@@ -2579,43 +2621,9 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
               {isChatEncrypted && !editingMessage && (
                 <Lock className="mb-2 ml-0.5 h-3.5 w-3.5 shrink-0 text-emerald-500" />
               )}
-              {pendingFile && pendingPreviewUrl && (
-                <div className="mb-2 flex items-center gap-2 border-b border-border/50 px-2 pb-2">
-                  <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-lg border border-border bg-muted">
-                    {pendingFile.type.startsWith('image/') ? (
-                      <img src={pendingPreviewUrl} alt="" className="h-full w-full object-cover" />
-                    ) : (
-                      <div className="flex h-full w-full items-center justify-center">
-                        <FileIcon className="h-5 w-5 text-muted-foreground" />
-                      </div>
-                    )}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    {pendingFile.type.startsWith('image/') ? (
-                      <p className="text-xs text-muted-foreground">
-                        {(pendingFile.size / 1024 / 1024).toFixed(1)} МБ
-                      </p>
-                    ) : (
-                      <>
-                        <p className="truncate text-sm font-medium">{pendingFile.name}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {(pendingFile.size / 1024 / 1024).toFixed(1)} МБ
-                        </p>
-                      </>
-                    )}
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7 shrink-0 rounded-full"
-                    onClick={cancelPendingFile}
-                  >
-                    <X className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
-              )}
 
               <textarea
+                ref={inputAreaRef}
                 value={input}
                 onChange={(e) => handleInputChange(e.target.value)}
                 onKeyDown={(e) => {
@@ -2639,7 +2647,7 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
                       : t('composer.placeholder')
                 }
                 rows={1}
-                className="max-h-32 w-full min-w-0 flex-1 resize-none bg-transparent py-2 text-[15px] outline-none placeholder:text-muted-foreground"
+                className="max-h-32 w-full min-w-0 flex-1 resize-none overflow-y-auto bg-transparent py-2 text-[15px] outline-none placeholder:text-muted-foreground"
                 style={{ height: 'auto', minHeight: '24px' }}
               />
 
@@ -2696,7 +2704,7 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
                     {EMOJI_SETS[activeEmojiSet].map((emoji, i) => (
                       <button
                         key={`${emoji}-${i}`}
-                        onClick={() => setInput((prev) => prev + emoji)}
+                        onClick={() => handleInputChange(input + emoji)}
                         className="flex h-9 w-9 items-center justify-center rounded-md text-xl transition hover:bg-muted"
                       >
                         {emoji}
@@ -2750,6 +2758,7 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
               <Check className="h-4 w-4" />
             </Button>
           )}
+          </div>
         </div>
       </div>
       )}
@@ -2974,8 +2983,9 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
               setActiveTopicId(topicId)
               setShowTopicList(false)
               // Reload messages for the selected topic
-              const topicParam = topicId ? `?topicId=${topicId}` : ''
-              fetch(`/api/chats/${activeChatId}/messages${topicParam}&take=50`)
+              const params = new URLSearchParams({ take: '50' })
+              if (topicId) params.set('topicId', topicId)
+              fetch(`/api/chats/${activeChatId}/messages?${params.toString()}`)
                 .then((r) => r.json())
                 .then((data) => {
                   setMessages(data.messages || [])
@@ -3055,15 +3065,6 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
               />
             )}
             <div className="my-1 h-px bg-border" />
-            <ContextMenuItem2
-              icon={<Check className="h-4 w-4" />}
-              label={t('msg.select')}
-              onClick={() => {
-                setSelectMode(true)
-                setSelectedIds(new Set([contextMenu.msg.id]))
-                setContextMenu(null)
-              }}
-            />
             {(contextMenu.msg.senderId === currentUser?.id || canDeleteOthers) && (
               <ContextMenuItem2
                 icon={<Trash2 className="h-4 w-4 text-destructive" />}

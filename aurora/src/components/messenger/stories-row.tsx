@@ -111,7 +111,7 @@ export function StoriesRow({ feed, currentUser, onAddStory, onOpenViewer }: Stor
           />
         </StoryRing>
         <span
-          className="absolute -bottom-0.5 -right-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-gradient-to-br from-violet-500 to-cyan-400 text-white shadow"
+          className="absolute -bottom-0.5 -right-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-[#3390ec] text-white shadow"
           onClick={(e) => {
             e.stopPropagation()
             onAddStory()
