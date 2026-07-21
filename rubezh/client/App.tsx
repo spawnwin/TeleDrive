@@ -46,6 +46,9 @@ function RootTabs() {
         <Text style={styles.errorTitle}>Нет связи с сервером</Text>
         <Text style={styles.errorText}>
           {error || 'Идёт автоматическое переподключение. Проверьте интернет.'}
+          {error?.includes('CLEARTEXT')
+            ? '\n\nНужна сборка 0.2.2+: Android блокирует HTTP. Скачайте новый APK с сайта.'
+            : ''}
         </Text>
       </View>
     );

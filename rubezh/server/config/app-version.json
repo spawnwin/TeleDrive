@@ -1,11 +1,10 @@
 {
-  "versionName": "0.2.1",
-  "versionCode": 4,
+  "versionName": "0.2.2",
+  "versionCode": 5,
   "apkUrl": "http://135.106.173.99/download/rubezh-tyl-pobedy.apk",
-  "force": false,
+  "force": true,
   "changelog": [
-    "Контент больше не уходит под меню и статусбар",
-    "Автосинхронизация с сервером без кнопки",
-    "Новая карта учебного района «Сосновый тыл»"
+    "Исправлена ошибка CLEARTEXT / HTTP к серверу",
+    "Разрешена связь по http://135.106.173.99"
   ]
 }
