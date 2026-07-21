@@ -60,10 +60,12 @@ export function MobileBottomNav({
     { id: 'chats' as const, icon: MessageCircle, onClick: onChats, label: labels.chats },
   ]
 
-  const glass =
-    'border border-white/10 bg-[#1c1c1e]/72 shadow-[0_8px_28px_rgba(0,0,0,0.35)] backdrop-blur-2xl dark:bg-[#2c2c2e]/75'
+  // Telegram tab bar: frosted bar, blue active tint (not red badges)
+  const bar =
+    'border-t border-white/10 bg-[#1c1c1e]/88 shadow-[0_-4px_24px_rgba(0,0,0,0.25)] backdrop-blur-2xl dark:bg-[#17212b]/92'
+  const pill =
+    'border border-white/10 bg-[#2c2c2e]/80 shadow-[0_4px_16px_rgba(0,0,0,0.28)] backdrop-blur-2xl'
 
-  // Keep focus in the same gesture / after the sheet finishes sliding up.
   useEffect(() => {
     if (!searchOpen) return
     const id = window.setTimeout(() => inputRef.current?.focus(), 40)
@@ -75,7 +77,7 @@ export function MobileBottomNav({
       aria-label="Мобильная навигация"
       className="pointer-events-none fixed inset-x-0 bottom-0 z-[200] xl:hidden"
     >
-      <div className="pointer-events-none mx-auto w-full max-w-lg px-3 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-1">
+      <div className="pointer-events-none mx-auto w-full max-w-lg px-2 pb-[max(0.35rem,env(safe-area-inset-bottom))] pt-1">
         <AnimatePresence mode="wait" initial={false}>
           {searchOpen ? (
             <motion.div
@@ -86,12 +88,7 @@ export function MobileBottomNav({
               transition={{ type: 'spring', stiffness: 420, damping: 34, mass: 0.85 }}
               className="pointer-events-auto flex items-center gap-2"
             >
-              <div
-                className={cn(
-                  'flex h-[52px] min-w-0 flex-1 items-center gap-2 rounded-full px-3.5',
-                  glass,
-                )}
-              >
+              <div className={cn('flex h-[48px] min-w-0 flex-1 items-center gap-2 rounded-full px-3.5', pill)}>
                 <Search
                   strokeWidth={1.75}
                   absoluteStrokeWidth
@@ -129,8 +126,8 @@ export function MobileBottomNav({
                 type="button"
                 onClick={onSearchClose}
                 className={cn(
-                  'h-[52px] shrink-0 touch-manipulation rounded-full px-4 text-[15px] font-medium text-white active:opacity-70',
-                  glass,
+                  'h-[48px] shrink-0 touch-manipulation rounded-full px-4 text-[15px] font-medium text-[#3390ec] active:opacity-70',
+                  pill,
                 )}
               >
                 {cancelLabel}
@@ -145,11 +142,10 @@ export function MobileBottomNav({
               transition={{ type: 'spring', stiffness: 420, damping: 34, mass: 0.85 }}
               className="pointer-events-none flex items-end gap-2"
             >
-              {/* Floating pill — Telegram style */}
               <div
                 className={cn(
-                  'pointer-events-auto flex min-w-0 flex-1 items-stretch justify-between rounded-full px-1.5 py-1',
-                  glass,
+                  'pointer-events-auto flex min-w-0 flex-1 items-stretch justify-between rounded-[22px] px-1 py-1',
+                  bar,
                 )}
               >
                 {items.map(({ id, icon: Icon, onClick, label }) => {
@@ -161,28 +157,28 @@ export function MobileBottomNav({
                       onClick={onClick}
                       aria-label={label}
                       aria-current={active ? 'page' : undefined}
-                      className="relative flex min-w-0 flex-1 touch-manipulation flex-col items-center justify-center gap-0.5 rounded-full px-1 py-0.5 transition-opacity active:opacity-60"
+                      className="relative flex min-w-0 flex-1 touch-manipulation flex-col items-center justify-center gap-0.5 rounded-2xl px-1 py-0.5 transition-opacity active:opacity-60"
                     >
                       <span className="relative flex h-[22px] w-[22px] items-center justify-center">
                         <Icon
-                          strokeWidth={active ? 2.15 : 1.55}
+                          strokeWidth={active ? 2.25 : 1.55}
                           absoluteStrokeWidth
                           className={cn(
                             'h-[22px] w-[22px] transition-colors duration-150',
-                            active ? 'text-white' : 'text-white/55',
+                            active ? 'text-[#3390ec]' : 'text-white/50',
                           )}
                         />
                         {id === 'chats' && unreadCount > 0 && (
                           <UnreadBadge
                             count={unreadCount}
-                            className="absolute -right-2.5 -top-1.5 h-[15px] min-w-[15px] border-[1.5px] border-[#1c1c1e] bg-red-500 px-0.5 text-[8px] leading-none shadow-none"
+                            className="absolute -right-2.5 -top-1.5 h-[15px] min-w-[15px] border-[1.5px] border-[#1c1c1e] bg-[#3390ec] px-0.5 text-[8px] leading-none shadow-none"
                           />
                         )}
                       </span>
                       <span
                         className={cn(
                           'max-w-full truncate text-[9px] leading-none tracking-tight',
-                          active ? 'font-medium text-white' : 'font-normal text-white/50',
+                          active ? 'font-medium text-[#3390ec]' : 'font-normal text-white/45',
                         )}
                       >
                         {label}
@@ -196,25 +192,24 @@ export function MobileBottomNav({
                     type="button"
                     onClick={onSettings}
                     aria-label={settingsLabel}
-                    className="relative flex min-w-0 flex-1 touch-manipulation flex-col items-center justify-center gap-0.5 rounded-full px-1 py-0.5 transition-opacity active:opacity-60"
+                    className="relative flex min-w-0 flex-1 touch-manipulation flex-col items-center justify-center gap-0.5 rounded-2xl px-1 py-0.5 transition-opacity active:opacity-60"
                   >
-                    <span className="flex h-[22px] w-[22px] items-center justify-center overflow-hidden rounded-full">
+                    <span className="flex h-[22px] w-[22px] items-center justify-center overflow-hidden rounded-full ring-1 ring-white/15">
                       <Avatar
                         name={userName || 'U'}
-                        color={userAvatarColor || '#7c3aed'}
+                        color={userAvatarColor || '#3390ec'}
                         imageUrl={userAvatarUrl}
                         size="sm"
-                        className="h-[22px] w-[22px] overflow-hidden rounded-full [&>div]:!h-[22px] [&>div]:!w-[22px] [&>div]:!rounded-full [&>div]:text-[8px] [&>div]:ring-1 [&>div]:ring-white/20 [&>div]:shadow-none"
+                        className="h-[22px] w-[22px] overflow-hidden rounded-full [&>div]:!h-[22px] [&>div]:!w-[22px] [&>div]:!rounded-full [&>div]:text-[8px] [&>div]:shadow-none"
                       />
                     </span>
-                    <span className="max-w-full truncate text-[9px] font-normal leading-none tracking-tight text-white/50">
+                    <span className="max-w-full truncate text-[9px] font-normal leading-none tracking-tight text-white/45">
                       {settingsLabel}
                     </span>
                   </button>
                 )}
               </div>
 
-              {/* Separate search island — opens bottom search field */}
               {onSearch && (
                 <button
                   type="button"
@@ -225,14 +220,14 @@ export function MobileBottomNav({
                   }}
                   aria-label={searchLabel}
                   className={cn(
-                    'pointer-events-auto relative z-[1] flex h-[52px] w-[52px] shrink-0 touch-manipulation items-center justify-center rounded-full transition-opacity active:opacity-60',
-                    glass,
+                    'pointer-events-auto relative z-[1] flex h-[48px] w-[48px] shrink-0 touch-manipulation items-center justify-center rounded-full transition-opacity active:opacity-60',
+                    pill,
                   )}
                 >
                   <Search
                     strokeWidth={1.75}
                     absoluteStrokeWidth
-                    className="pointer-events-none h-[22px] w-[22px] text-white"
+                    className="pointer-events-none h-[20px] w-[20px] text-white"
                   />
                 </button>
               )}

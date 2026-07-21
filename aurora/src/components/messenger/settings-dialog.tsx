@@ -502,7 +502,7 @@ export function SettingsDialog({ open, onOpenChange, onOpenPremium, onOpenCoins 
   return (
     <>
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md gap-0 overflow-x-clip p-0 safe-top-min safe-bottom-min">
+      <DialogContent className="max-w-md gap-0 overflow-x-clip p-0 safe-top-min safe-bottom-min max-md:fixed max-md:inset-0 max-md:h-[100dvh] max-md:max-h-[100dvh] max-md:w-full max-md:max-w-none max-md:rounded-none max-md:border-0">
         <DialogHeader className="px-4 pt-4">
           <DialogTitle className="flex items-center gap-1.5 pr-8">
             {page !== 'main' && (
@@ -566,7 +566,7 @@ export function SettingsDialog({ open, onOpenChange, onOpenPremium, onOpenCoins 
           className="hidden"
         />
 
-        <div className="max-h-[75vh] overflow-y-auto overflow-x-hidden p-4">
+        <div className="max-h-[75vh] overflow-y-auto overflow-x-hidden p-4 max-md:max-h-none max-md:flex-1">
           <motion.div
             key={page}
             initial={{ opacity: 0, x: page === 'main' ? -24 : 24 }}
@@ -587,7 +587,7 @@ export function SettingsDialog({ open, onOpenChange, onOpenPremium, onOpenCoins 
                     <button
                       onClick={() => fileInputRef.current?.click()}
                       disabled={uploadingAvatar}
-                      className="absolute bottom-0 right-0 flex h-8 w-8 items-center justify-center rounded-full bg-violet-500 text-white shadow-md transition hover:bg-violet-600 disabled:opacity-50"
+                      className="absolute bottom-0 right-0 flex h-8 w-8 items-center justify-center rounded-full bg-[#3390ec] text-white shadow-md transition hover:bg-[#2b82d9] disabled:opacity-50"
                       title={t('settings.changePhoto')}
                     >
                       {uploadingAvatar ? (
@@ -693,7 +693,7 @@ export function SettingsDialog({ open, onOpenChange, onOpenPremium, onOpenCoins 
                     <button
                       onClick={() => fileInputRef.current?.click()}
                       disabled={uploadingAvatar}
-                      className="absolute bottom-0 right-0 flex h-8 w-8 items-center justify-center rounded-full bg-violet-500 text-white shadow-md transition hover:bg-violet-600 disabled:opacity-50"
+                      className="absolute bottom-0 right-0 flex h-8 w-8 items-center justify-center rounded-full bg-[#3390ec] text-white shadow-md transition hover:bg-[#2b82d9] disabled:opacity-50"
                       title={t('settings.changePhoto')}
                     >
                       {uploadingAvatar ? (
@@ -725,7 +725,7 @@ export function SettingsDialog({ open, onOpenChange, onOpenPremium, onOpenCoins 
                   <button
                     onClick={() => fileInputRef.current?.click()}
                     disabled={uploadingAvatar}
-                    className="text-xs text-violet-500 hover:underline"
+                    className="text-xs text-[#3390ec] hover:underline"
                   >
                     {uploadingAvatar ? t('avatarCrop.saving') : t('settings.changePhoto')}
                   </button>
@@ -786,7 +786,7 @@ export function SettingsDialog({ open, onOpenChange, onOpenPremium, onOpenCoins 
             {page === 'notifications' && (
               <div className="space-y-1">
                 <SoundSettingRow
-                  icon={<Bell className="h-4 w-4 text-violet-500" />}
+                  icon={<Bell className="h-4 w-4 text-[#3390ec]" />}
                   label={t('settings.messageSound')}
                   hint={t('settings.messageSoundHint')}
                   enabled={messageSoundEnabled}
@@ -843,7 +843,7 @@ export function SettingsDialog({ open, onOpenChange, onOpenPremium, onOpenCoins 
               <>
                 <div className="flex items-center justify-between rounded-xl bg-muted/50 px-3 py-2.5">
                   <div className="flex items-center gap-2.5 text-sm">
-                    <KeyRound className="h-4 w-4 text-violet-500" />
+                    <KeyRound className="h-4 w-4 text-[#3390ec]" />
                     <div>
                       <p>Сквозное шифрование (E2EE)</p>
                       <p className="text-xs text-muted-foreground">
@@ -902,7 +902,7 @@ export function SettingsDialog({ open, onOpenChange, onOpenPremium, onOpenCoins 
                           className={cn(
                             'rounded-xl border px-2 py-2 text-xs font-medium transition',
                             premiumTheme === th
-                              ? 'border-violet-500 bg-violet-500/10 text-violet-500'
+                              ? 'border-[#3390ec] bg-[#3390ec]/10 text-[#3390ec]'
                               : 'border-border hover:bg-muted',
                           )}
                         >
@@ -913,7 +913,7 @@ export function SettingsDialog({ open, onOpenChange, onOpenPremium, onOpenCoins 
                     <Button
                       onClick={saveProfile}
                       disabled={saving}
-                      className="mt-4 w-full bg-violet-500 text-white hover:bg-violet-600"
+                      className="mt-4 w-full bg-[#3390ec] text-white hover:bg-[#2b82d9]"
                     >
                       {saving ? t('settings.saving') : t('settings.save')}
                     </Button>
@@ -930,7 +930,7 @@ export function SettingsDialog({ open, onOpenChange, onOpenPremium, onOpenCoins 
                     onClick={() => void applyLanguage(l.code)}
                     className={cn(
                       'flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition hover:bg-muted',
-                      lang === l.code && 'bg-violet-500/10 text-violet-500',
+                      lang === l.code && 'bg-[#3390ec]/10 text-[#3390ec]',
                     )}
                   >
                     <span className="text-lg">{l.flag}</span>
@@ -1019,7 +1019,7 @@ export function SettingsDialog({ open, onOpenChange, onOpenPremium, onOpenCoins 
                       <p className="text-xs text-muted-foreground">{t('premium.tiers')} · {t('premium.subscribers')}</p>
                     </div>
                   </div>
-                  <span className="text-xs text-violet-500">{t('shorts.edit')}</span>
+                  <span className="text-xs text-[#3390ec]">{t('shorts.edit')}</span>
                 </button>
               </>
             )}

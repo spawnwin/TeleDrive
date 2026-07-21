@@ -108,7 +108,7 @@ export function ChatSidebar({
 }: SidebarProps) {
   const { t, lang } = useI18n()
   const router = useRouter()
-  const { currentUser, chats, activeChatId, onlineUserIds, presenceSynced, view, setView, setProfileUserId, setChatPinned, chatFolders, activeFolderId, setActiveFolderId, removeChat } = useAppStore()
+  const { currentUser, chats, activeChatId, onlineUserIds, presenceSynced, view, setView, setProfileUserId, setChatPinned, chatFolders, activeFolderId, setActiveFolderId, removeChat, setChatArchived, markChatRead } = useAppStore()
   const [localQuery, setLocalQuery] = useState('')
   const query = queryProp !== undefined ? queryProp : localQuery
   const setQuery = onQueryChange ?? setLocalQuery
@@ -175,6 +175,34 @@ export function ChatSidebar({
     if (ok > 0) toast.success(t('chat.deleted'))
     if (fail > 0) toast.error(t('chat.deleteError'))
   }, [selectedIds, removeChat, exitSelection, t])
+
+  const bulkArchive = useCallback(async () => {
+    if (selectedIds.size === 0) return
+    const ids = Array.from(selectedIds)
+    await Promise.all(
+      ids.map(async (id) => {
+        setChatArchived(id, true)
+        try {
+          const res = await fetch(`/api/chats/${id}/archive`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ archived: true }),
+          })
+          if (!res.ok) setChatArchived(id, false)
+        } catch {
+          setChatArchived(id, false)
+        }
+      }),
+    )
+    exitSelection()
+    toast.success(t('chat.archived'))
+  }, [selectedIds, exitSelection, t, setChatArchived])
+
+  const bulkMarkRead = useCallback(() => {
+    if (selectedIds.size === 0) return
+    for (const id of selectedIds) markChatRead(id)
+    exitSelection()
+  }, [selectedIds, exitSelection, markChatRead])
 
   const refreshPendingFriendRequests = useCallback(async () => {
     if (!currentUser) return
@@ -575,6 +603,15 @@ export function ChatSidebar({
             <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-0 [-webkit-overflow-scrolling:touch] [scrollbar-gutter:stable] scroll-pb-[5.5rem]">
             {/* Small pad only — list paints under floating nav to screen bottom */}
             <div className="pb-[max(0.5rem,env(safe-area-inset-bottom))] xl:pb-4">
+              {/* Stories strip — Telegram-style above chat list */}
+              {!showArchived && !query.trim() && currentUser && (
+                <StoriesRow
+                  feed={storyFeed}
+                  currentUser={currentUser}
+                  onAddStory={() => setShowAddStory(true)}
+                  onOpenViewer={(idx) => setStoryViewerIndex(idx)}
+                />
+              )}
               {/* Telegram-style Archive row (mobile) */}
               {!showArchived && !query.trim() && archivedCount > 0 && (
                 <button
@@ -687,9 +724,6 @@ export function ChatSidebar({
                   )}
                   {pinned.length > 0 && !showArchived && (
                     <>
-                      <p className="px-3 pt-1 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                        {t('sidebar.pinned')}
-                      </p>
                       {pinned.map((chat) => (
                         <ChatListItemRow
                           key={chat.id}
@@ -705,9 +739,6 @@ export function ChatSidebar({
                           onEnterSelection={() => enterSelectionMode(chat.id)}
                         />
                       ))}
-                      {unpinned.length > 0 && (
-                        <div className="my-2 ml-3 mr-3 border-t border-sidebar-border/50" />
-                      )}
                     </>
                   )}
                   {unpinned.map((chat) => (
@@ -909,6 +940,41 @@ export function ChatSidebar({
         </AlertDialogContent>
       </AlertDialog>
 
+      {/* Telegram-style multi-select action strip */}
+      {selectionMode && (
+        <div className="pointer-events-auto fixed inset-x-0 bottom-0 z-[210] border-t border-border bg-background/95 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur-md xl:static xl:z-auto">
+          <div className="mx-auto flex max-w-lg items-center justify-around gap-1">
+            <button
+              type="button"
+              disabled={selectedIds.size === 0}
+              onClick={() => void bulkArchive()}
+              className="flex min-w-0 flex-1 flex-col items-center gap-1 rounded-xl px-2 py-2 text-[#3390ec] transition hover:bg-[#3390ec]/10 disabled:opacity-40"
+            >
+              <Archive className="h-5 w-5" />
+              <span className="truncate text-[11px] font-medium">{t('chat.archiveShort')}</span>
+            </button>
+            <button
+              type="button"
+              disabled={selectedIds.size === 0}
+              onClick={bulkMarkRead}
+              className="flex min-w-0 flex-1 flex-col items-center gap-1 rounded-xl px-2 py-2 text-[#3390ec] transition hover:bg-[#3390ec]/10 disabled:opacity-40"
+            >
+              <CheckCheck className="h-5 w-5" />
+              <span className="truncate text-[11px] font-medium">{t('chat.readShort')}</span>
+            </button>
+            <button
+              type="button"
+              disabled={selectedIds.size === 0 || bulkDeleting}
+              onClick={() => setBulkDeleteOpen(true)}
+              className="flex min-w-0 flex-1 flex-col items-center gap-1 rounded-xl px-2 py-2 text-destructive transition hover:bg-destructive/10 disabled:opacity-40"
+            >
+              <Trash2 className="h-5 w-5" />
+              <span className="truncate text-[11px] font-medium">{t('misc.delete')}</span>
+            </button>
+          </div>
+        </div>
+      )}
+
       <AddStoryDialog
         open={showAddStory}
         onOpenChange={setShowAddStory}
@@ -934,8 +1000,8 @@ function ShortsModeHint({ onOpenUpload }: { onOpenUpload: () => void }) {
   const { t } = useI18n()
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-4 px-6 text-center">
-      <div className="flex h-20 w-20 items-center justify-center rounded-3xl bg-gradient-to-br from-violet-500/20 to-cyan-400/20">
-        <Clapperboard className="h-10 w-10 text-violet-500" />
+      <div className="flex h-20 w-20 items-center justify-center rounded-3xl bg-gradient-to-br from-[#3390ec]/20 to-[#3390ec]/5">
+        <Clapperboard className="h-10 w-10 text-[#3390ec]" />
       </div>
       <div>
         <p className="text-base font-semibold">{t('shorts.title')}</p>
@@ -976,24 +1042,21 @@ function FolderTabs({
     [folders],
   )
 
-  // Unread counts per tab. "All Chats" counts non-archived, non-saved, non-muted
-  // chats with unread > 0. A real folder runs filterChatsByFolder first, then
-  // counts unread & non-muted chats within that filtered set.
+  // Unread message totals per tab (Telegram-style), not chat counts
   const allUnread = useMemo(
     () =>
-      chats.filter(
-        (c) =>
-          c.unread > 0 && !c.isMuted && !c.isArchived && c.type !== 'saved',
-      ).length,
+      chats
+        .filter((c) => !c.isMuted && !c.isArchived && c.type !== 'saved')
+        .reduce((sum, c) => sum + (c.unread || 0), 0),
     [chats],
   )
   const folderUnread = useMemo(() => {
     const map = new Map<string, number>()
     for (const folder of sorted) {
       const filtered = filterChatsByFolder(chats, folder)
-      const count = filtered.filter(
-        (c) => c.unread > 0 && !c.isMuted,
-      ).length
+      const count = filtered
+        .filter((c) => !c.isMuted)
+        .reduce((sum, c) => sum + (c.unread || 0), 0)
       map.set(folder.id, count)
     }
     return map
@@ -1385,7 +1448,7 @@ function ChatListItemRow({
         }
       }}
       className={cn(
-        'group relative flex w-full min-w-0 items-center gap-3 rounded-none px-3 py-2 text-left transition-colors sm:px-4 sm:py-2.5',
+        'group relative flex w-full min-w-0 items-center gap-3 rounded-none px-3 py-2.5 text-left transition-colors sm:px-4',
         selectionMode && selected
           ? 'bg-[#3390ec]/10'
           : isActive
@@ -1440,8 +1503,8 @@ function ChatListItemRow({
           <div className="flex min-w-0 items-center gap-1">
             <p
               className={cn(
-                'truncate text-sm',
-                chat.unread > 0 ? 'font-bold' : 'font-semibold',
+                'truncate text-[16px] leading-tight',
+                chat.unread > 0 ? 'font-semibold' : 'font-medium',
                 chat.unread > 0 && 'text-foreground',
               )}
             >
@@ -1475,7 +1538,7 @@ function ChatListItemRow({
         <div className="mt-0.5 flex items-center justify-between gap-2">
           <p
             className={cn(
-              'flex min-w-0 items-center gap-1 truncate text-xs',
+              'flex min-w-0 items-center gap-1 truncate text-[14px] leading-snug',
               showTyping
                 ? 'text-[#3390ec]'
                 : showDraft
@@ -1496,7 +1559,7 @@ function ChatListItemRow({
             ) : (
               <>
                 {lastMsgMine && chat.lastMessage && (
-                  <CheckCheck className="h-3.5 w-3.5 shrink-0 text-[#3390ec]" />
+                  <CheckCheck className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                 )}
                 {isImage && !lastMsgMine && (
                   <ImageIcon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
@@ -1561,7 +1624,7 @@ function ChatListItemRow({
             key: 'pin',
             label: chat.isPinned ? t('chat.unpinShort') : t('chat.pinShort'),
             icon: chat.isPinned ? PinOff : Pin,
-            bg: 'bg-violet-500',
+            bg: 'bg-[#3390ec]',
             onClick: () => void togglePin(),
           },
           ...(chat.type !== 'saved'
@@ -1913,7 +1976,7 @@ function NewChatDialog({
                 onClick={() => setGroupIsForum(!groupIsForum)}
                 className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left transition hover:bg-muted/60 active:bg-muted"
               >
-                <div className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-lg border-2 transition ${groupIsForum ? 'border-violet-500 bg-violet-500' : 'border-muted-foreground/40'}`}>
+                <div className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-lg border-2 transition ${groupIsForum ? 'border-[#3390ec] bg-[#3390ec]' : 'border-muted-foreground/40'}`}>
                   {groupIsForum && (
                     <svg className="h-3.5 w-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
@@ -1949,7 +2012,7 @@ function NewChatDialog({
                     }}
                     className={cn(
                       'flex w-full items-center gap-3 rounded-xl px-2 py-2 text-left transition hover:bg-muted',
-                      checked && 'bg-violet-500/10',
+                      checked && 'bg-[#3390ec]/10',
                     )}
                   >
                     <Avatar name={u.name} color={u.avatarColor} imageUrl={u.avatarUrl} size="sm" />
@@ -1957,14 +2020,14 @@ function NewChatDialog({
                       <p className="truncate text-sm font-medium">{u.name}</p>
                       <p className="truncate text-xs text-muted-foreground">@{u.username}</p>
                     </div>
-                    {checked && <Check className="h-4 w-4 text-violet-500" />}
+                    {checked && <Check className="h-4 w-4 text-[#3390ec]" />}
                   </button>
                 )
               })}
             </div>
             <Button
               onClick={createGroup}
-              className="mt-4 w-full bg-gradient-to-r from-violet-500 to-cyan-400 text-white"
+              className="mt-4 w-full bg-[#3390ec] text-white hover:bg-[#2b82d9]"
             >
               <Users className="mr-2 h-4 w-4" />
               {t('newChat.createGroupBtn')}
@@ -1997,7 +2060,7 @@ function NewChatDialog({
             />
             <Button
               onClick={createChannel}
-              className="mt-4 w-full bg-gradient-to-r from-violet-500 to-cyan-400 text-white"
+              className="mt-4 w-full bg-[#3390ec] text-white hover:bg-[#2b82d9]"
             >
               <Sparkles className="mr-2 h-4 w-4" />
               {t('channel.createBtn')}

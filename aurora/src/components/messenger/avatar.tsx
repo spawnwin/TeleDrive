@@ -16,7 +16,8 @@ interface AvatarProps {
 
 const sizeMap = {
   sm: 'h-9 w-9 text-xs',
-  md: 'h-11 w-11 text-sm',
+  // Telegram chat-list avatars are ~48–54px
+  md: 'h-12 w-12 text-[15px]',
   lg: 'h-14 w-14 text-base',
   xl: 'h-20 w-20 text-2xl',
   '2xl': 'h-28 w-28 text-3xl',

@@ -1995,7 +1995,7 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
           <Button
             variant="ghost"
             size="icon"
-            className="h-9 w-9"
+            className="hidden h-9 w-9 sm:inline-flex"
             onClick={toggleMessageSearch}
             title={showFavorites ? t('misc.close') : t('chat.search')}
           >
@@ -2024,7 +2024,7 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-9 w-9"
+                className="hidden h-9 w-9 sm:inline-flex"
                 onClick={() => handleStartCall('video')}
                 title={t('chat.video')}
               >
@@ -2053,9 +2053,17 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
+              <DropdownMenuItem className="sm:hidden" onClick={toggleMessageSearch}>
+                <Search className="mr-2 h-4 w-4" /> {t('chat.search')}
+              </DropdownMenuItem>
               <DropdownMenuItem className="sm:hidden" onClick={toggleFavoritesView}>
                 <Star className="mr-2 h-4 w-4" /> {t('info.favorites')}
               </DropdownMenuItem>
+              {activeChat.type === 'private' && (
+                <DropdownMenuItem className="sm:hidden" onClick={() => handleStartCall('video')}>
+                  <Video className="mr-2 h-4 w-4" /> {t('chat.video')}
+                </DropdownMenuItem>
+              )}
               {activeChat.type === 'private' && otherUser && (
                 <DropdownMenuItem className="sm:hidden" onClick={() => setShowGiftPicker(true)}>
                   <Gift className="mr-2 h-4 w-4" /> {t('gifts.sendGift')}
@@ -2134,7 +2142,7 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
                   value={searchQuery}
                   onChange={(e) => runSearch(e.target.value)}
                   placeholder={t('search.messages')}
-                  className="h-9 rounded-lg border-none bg-background pl-10 pr-9 text-sm focus-visible:ring-1 focus-visible:ring-violet-400"
+                  className="h-9 rounded-lg border-none bg-background pl-10 pr-9 text-sm focus-visible:ring-1 focus-visible:ring-[#3390ec]"
                   autoFocus
                 />
                 {searchQuery && (
@@ -2393,7 +2401,7 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
             >
               <ChevronDown className="h-5 w-5" />
               {belowViewportUnread > 0 && (
-                <span className="absolute -right-1 -top-1 flex min-w-[18px] items-center justify-center rounded-full bg-violet-500 px-1 text-[10px] font-semibold leading-[18px] text-white shadow">
+                <span className="absolute -right-1 -top-1 flex min-w-[18px] items-center justify-center rounded-full bg-[#3390ec] px-1 text-[10px] font-semibold leading-[18px] text-white shadow">
                   {belowViewportUnread > 99 ? '99+' : belowViewportUnread}
                 </span>
               )}
@@ -2412,9 +2420,9 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
             className="shrink-0 overflow-hidden border-t border-border bg-muted/50"
           >
             <div className="flex items-center gap-3 px-4 py-2.5">
-              <Reply className="h-4 w-4 shrink-0 text-violet-500" />
-              <div className="min-w-0 flex-1 border-l-2 border-violet-500 pl-2">
-                <p className="text-xs font-medium text-violet-500">
+              <Reply className="h-4 w-4 shrink-0 text-[#3390ec]" />
+              <div className="min-w-0 flex-1 border-l-2 border-[#3390ec] pl-2">
+                <p className="text-xs font-medium text-[#3390ec]">
                   {t('msg.replyTo')} {replyTo.sender.name}
                 </p>
                 <p className="truncate text-xs text-muted-foreground">
@@ -2545,14 +2553,14 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
           className="hidden"
         />
         <div className="mx-auto flex w-full max-w-none items-end gap-1.5">
-          {/* Pill composer: attach + text + emoji + mic/send — Telegram-style single field */}
+          {/* Telegram: rounded text field; circular send/mic sits outside to the right */}
           {isRecording ? (
             <div className="flex flex-1 items-center justify-center rounded-2xl border border-rose-500/40 bg-rose-500/10 px-3 py-3 text-sm font-medium text-rose-600 dark:text-rose-400">
               <span className="mr-2 h-2 w-2 animate-pulse rounded-full bg-rose-500" />
               {Math.floor(recordSeconds / 60)}:{(recordSeconds % 60).toString().padStart(2, '0')}
             </div>
           ) : (
-            <div className="flex flex-1 items-end gap-0.5 rounded-[22px] bg-muted/50 px-1 py-1 transition focus-within:bg-muted/70">
+            <div className="flex min-w-0 flex-1 items-end gap-0.5 rounded-[22px] bg-muted/50 px-1 py-1 transition focus-within:bg-muted/70">
               <Button
                 variant="ghost"
                 size="icon"
@@ -2571,9 +2579,8 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
               {isChatEncrypted && !editingMessage && (
                 <Lock className="mb-2 ml-0.5 h-3.5 w-3.5 shrink-0 text-emerald-500" />
               )}
-              {/* Pending attachment preview */}
               {pendingFile && pendingPreviewUrl && (
-                <div className="flex items-center gap-2 border-b border-border/50 px-2 pb-2 mb-2">
+                <div className="mb-2 flex items-center gap-2 border-b border-border/50 px-2 pb-2">
                   <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-lg border border-border bg-muted">
                     {pendingFile.type.startsWith('image/') ? (
                       <img src={pendingPreviewUrl} alt="" className="h-full w-full object-cover" />
@@ -2632,7 +2639,7 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
                       : t('composer.placeholder')
                 }
                 rows={1}
-                className="max-h-32 w-full flex-1 resize-none bg-transparent py-2 text-[15px] outline-none placeholder:text-muted-foreground"
+                className="max-h-32 w-full min-w-0 flex-1 resize-none bg-transparent py-2 text-[15px] outline-none placeholder:text-muted-foreground"
                 style={{ height: 'auto', minHeight: '24px' }}
               />
 
@@ -2698,50 +2705,40 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
                   </div>
                 </PopoverContent>
               </Popover>
-
-              {/* Mic / send morph: same circular accent slot, icon crossfades. */}
-              {input.trim() || editingMessage || pendingFile ? (
-                <Button
-                  onClick={() => pendingFile ? confirmSendPendingFile() : sendMessage()}
-                  disabled={uploading}
-                  className="h-9 w-9 shrink-0 rounded-full bg-[#3390ec] p-0 text-white shadow-none transition hover:bg-[#2b82d9] disabled:opacity-40"
-                  title={t('composer.send')}
-                >
-                  <AnimatePresence mode="wait" initial={false}>
-                    <motion.span
-                      key={editingMessage ? 'check' : 'send'}
-                      initial={{ rotate: -90, opacity: 0, scale: 0.6 }}
-                      animate={{ rotate: 0, opacity: 1, scale: 1 }}
-                      exit={{ rotate: 90, opacity: 0, scale: 0.6 }}
-                      transition={{ duration: 0.15 }}
-                      className="flex items-center justify-center"
-                    >
-                      {editingMessage ? <Check className="h-4 w-4" /> : <Send className="h-4 w-4" />}
-                    </motion.span>
-                  </AnimatePresence>
-                </Button>
-              ) : (
-                <Button
-                  onClick={handleVoiceMicClick}
-                  disabled={uploading}
-                  className="h-9 w-9 shrink-0 rounded-full bg-[#3390ec] p-0 text-white shadow-none transition hover:bg-[#2b82d9] disabled:opacity-40"
-                  title={t('composer.recordVoice')}
-                >
-                  <AnimatePresence mode="wait" initial={false}>
-                    <motion.span
-                      key="mic"
-                      initial={{ rotate: 90, opacity: 0, scale: 0.6 }}
-                      animate={{ rotate: 0, opacity: 1, scale: 1 }}
-                      exit={{ rotate: -90, opacity: 0, scale: 0.6 }}
-                      transition={{ duration: 0.15 }}
-                      className="flex items-center justify-center"
-                    >
-                      <Mic className="h-4 w-4" />
-                    </motion.span>
-                  </AnimatePresence>
-                </Button>
-              )}
             </div>
+          )}
+
+          {!isRecording && (
+            input.trim() || editingMessage || pendingFile ? (
+              <Button
+                onClick={() => (pendingFile ? confirmSendPendingFile() : sendMessage())}
+                disabled={uploading}
+                className="mb-0.5 h-10 w-10 shrink-0 rounded-full bg-[#3390ec] p-0 text-white shadow-none transition hover:bg-[#2b82d9] disabled:opacity-40"
+                title={t('composer.send')}
+              >
+                <AnimatePresence mode="wait" initial={false}>
+                  <motion.span
+                    key={editingMessage ? 'check' : 'send'}
+                    initial={{ rotate: -90, opacity: 0, scale: 0.6 }}
+                    animate={{ rotate: 0, opacity: 1, scale: 1 }}
+                    exit={{ rotate: 90, opacity: 0, scale: 0.6 }}
+                    transition={{ duration: 0.15 }}
+                    className="flex items-center justify-center"
+                  >
+                    {editingMessage ? <Check className="h-4 w-4" /> : <Send className="h-4 w-4" />}
+                  </motion.span>
+                </AnimatePresence>
+              </Button>
+            ) : (
+              <Button
+                onClick={handleVoiceMicClick}
+                disabled={uploading}
+                className="mb-0.5 h-10 w-10 shrink-0 rounded-full bg-[#3390ec] p-0 text-white shadow-none transition hover:bg-[#2b82d9] disabled:opacity-40"
+                title={t('composer.recordVoice')}
+              >
+                <Mic className="h-4 w-4" />
+              </Button>
+            )
           )}
 
           {isRecording && (
@@ -3360,7 +3357,7 @@ function MessageBubble({
                       }}
                       className={cn(
                         'flex h-8 w-8 items-center justify-center rounded-full text-lg transition hover:bg-muted',
-                        active && 'bg-violet-500/10',
+                        active && 'bg-[#3390ec]/10',
                       )}
                     >
                       {emoji}
@@ -3388,10 +3385,10 @@ function MessageBubble({
             className={cn(
               'relative min-w-0 max-w-full rounded-2xl px-3 py-1.5 text-[15px] leading-snug shadow-none transition-shadow',
               mine && msg.type !== 'gift' && msg.type !== 'sticker'
-                ? 'bg-[#3390ec] text-white'
+                ? 'bg-[var(--bubble-out)] text-white'
                 : mine
                   ? ''
-                  : msg.type !== 'gift' && msg.type !== 'sticker' && 'bg-white text-foreground shadow-sm dark:bg-[#212121] dark:shadow-none',
+                  : msg.type !== 'gift' && msg.type !== 'sticker' && 'bg-[var(--bubble-in)] text-foreground shadow-none',
               mine && msg.type !== 'gift' && msg.type !== 'sticker' && (grouped ? 'rounded-tr-2xl' : 'rounded-tr-md'),
               !mine && msg.type !== 'gift' && msg.type !== 'sticker' && (grouped ? 'rounded-tl-2xl' : 'rounded-tl-md'),
               mine && msg.type !== 'gift' && msg.type !== 'sticker' && (nextGrouped ? 'rounded-br-2xl' : 'rounded-br-md'),
@@ -3426,10 +3423,10 @@ function MessageBubble({
                   'mb-1.5 cursor-pointer rounded-md border-l-[3px] px-2 py-1 text-xs',
                   mine
                     ? 'border-white/70 bg-white/10 text-white/90'
-                    : 'border-violet-500 bg-violet-500/10 text-muted-foreground',
+                    : 'border-[#3390ec] bg-[#3390ec]/10 text-muted-foreground',
                 )}
               >
-                <p className={cn('font-semibold', mine ? 'text-white' : 'text-violet-500')}>
+                <p className={cn('font-semibold', mine ? 'text-white' : 'text-[#3390ec]')}>
                   {msg.replyTo.senderName}
                 </p>
                 <p className="line-clamp-2 break-words opacity-90">{msg.replyTo.content}</p>
@@ -3556,7 +3553,7 @@ function MessageBubble({
                 {formatMessageTime(msg.createdAt)}
               </span>
               {mine && (
-                <CheckCheck className="h-3.5 w-3.5 shrink-0 text-[#8fc8ff]" strokeWidth={2.25} />
+                <CheckCheck className="h-3.5 w-3.5 shrink-0 text-white/55" strokeWidth={2.25} />
               )}
             </div>
           </div>
@@ -3903,7 +3900,7 @@ function AlbumBubble({
               <Star className={cn('h-3 w-3', mine ? 'fill-amber-300 text-amber-300' : 'fill-amber-500 text-amber-500')} />
             )}
             {isPinned && (
-              <Pin className={cn('h-3 w-3', mine ? 'text-white/70' : 'text-violet-500')} />
+              <Pin className={cn('h-3 w-3', mine ? 'text-white/70' : 'text-[#3390ec]')} />
             )}
             <span
               className={cn(
@@ -3933,7 +3930,7 @@ function AlbumBubble({
                   className={cn(
                     'flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-xs transition',
                     mineReacted
-                      ? 'border-violet-500 bg-violet-500/15 text-violet-500'
+                      ? 'border-[#3390ec] bg-[#3390ec]/15 text-[#3390ec]'
                       : 'border-border bg-background text-muted-foreground hover:bg-muted',
                   )}
                 >
