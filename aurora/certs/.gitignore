@@ -1,0 +1,4 @@
+# APNs private keys — never commit
+*.p8
+apns.json
+.env

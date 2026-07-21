@@ -3,6 +3,8 @@ import { db } from '@/lib/db'
 import { adminGuard } from '@/lib/admin-api'
 import { withJsonApi } from '@/lib/with-json-api'
 import { cleanupExpiredSessions } from '@/lib/auth'
+import { isApnsConfigured } from '@/lib/push-server'
+import { getApnsStatus } from '@/lib/apns-config'
 
 export const GET = withJsonApi(async function GET() {
   const guard = await adminGuard()
@@ -42,9 +44,7 @@ export const GET = withJsonApi(async function GET() {
   const vapidConfigured = Boolean(
     process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY,
   )
-  const apnsConfigured = Boolean(
-    process.env.APNS_KEY_ID && process.env.APNS_TEAM_ID && process.env.APNS_KEY_PATH,
-  )
+  const apnsStatus = getApnsStatus()
 
   return NextResponse.json({
     db: { users, messages, chats, shorts, stories, sessions },
@@ -55,7 +55,8 @@ export const GET = withJsonApi(async function GET() {
     cleanup: { expiredStories, expiredSessions },
     push: {
       vapidConfigured,
-      apnsConfigured,
+      apnsConfigured: isApnsConfigured(),
+      apns: apnsStatus,
       subscriptions: pushSubs,
     },
   })

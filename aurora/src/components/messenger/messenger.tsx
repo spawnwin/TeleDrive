@@ -31,7 +31,7 @@ import { translate } from '@/lib/i18n'
 import { loadPushEnabledPreference } from '@/lib/push-prefs'
 import { unlockNotificationAudio, warmUpCallRing, initCallRingElement, stopIncomingCallRing, startIncomingCallRing } from '@/lib/notification-sound'
 import { CallManager } from './call-manager'
-import { syncPushSubscription, registerServiceWorker, isWebPushSupported, getIosPushBlockReason } from '@/hooks/use-push'
+import { syncPushSubscription, registerServiceWorker, isWebPushSupported, getIosPushBlockReason, isCapacitorNative } from '@/hooks/use-push'
 import { useSwipeToBack } from '@/hooks/use-swipe-to-back'
 import { ArrowLeft } from 'lucide-react'
 
@@ -209,6 +209,15 @@ export function Messenger() {
 
   useEffect(() => {
     if (!currentUser) return
+    if (isCapacitorNative()) {
+      const pref = loadPushEnabledPreference()
+      if (pref !== false) {
+        syncPushSubscription().then((ok) => {
+          if (ok) setPushEnabled(true)
+        })
+      }
+      return
+    }
     registerServiceWorker().catch(() => {})
     const pref = loadPushEnabledPreference()
     if (!pref && !isWebPushSupported()) return

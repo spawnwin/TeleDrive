@@ -37,7 +37,6 @@ export async function registerCapacitorPush(): Promise<boolean> {
   try {
     const { PushNotifications } = await import('@capacitor/push-notifications')
 
-    // Request permission
     let perm = await PushNotifications.checkPermissions()
     if (perm.receive === 'prompt') {
       perm = await PushNotifications.requestPermissions()
@@ -47,11 +46,7 @@ export async function registerCapacitorPush(): Promise<boolean> {
       return false
     }
 
-    // Register for push
-    await PushNotifications.register()
-
-    // Listen for registration token
-    return new Promise<boolean>((resolve) => {
+    return await new Promise<boolean>((resolve) => {
       let regListener: { remove: () => void } | null = null
       let errListener: { remove: () => void } | null = null
       let settled = false
@@ -61,10 +56,16 @@ export async function registerCapacitorPush(): Promise<boolean> {
         errListener?.remove()
       }
 
-      PushNotifications.addListener('registration', (token) => {
+      const finish = (ok: boolean) => {
         if (settled) return
-        console.log('[push] Capacitor push token:', token.value.substring(0, 20) + '...')
         settled = true
+        cleanup()
+        resolve(ok)
+      }
+
+      // Listeners MUST be attached before register() — iOS can fire immediately.
+      void PushNotifications.addListener('registration', (token) => {
+        console.log('[push] Capacitor push token:', token.value.substring(0, 20) + '...')
         fetch('/api/push/subscribe', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -75,34 +76,66 @@ export async function registerCapacitorPush(): Promise<boolean> {
             platform: 'ios',
             deviceToken: token.value,
           }),
-        }).then(() => {
-          cleanup()
-          resolve(true)
-        }).catch((e) => {
-          console.error('[push] failed to save Capacitor token:', e)
-          cleanup()
-          resolve(false)
         })
-      }).then((l) => { regListener = l })
+          .then((res) => finish(res.ok))
+          .catch((e) => {
+            console.error('[push] failed to save Capacitor token:', e)
+            finish(false)
+          })
+      }).then((l) => {
+        regListener = l
+      })
 
-      PushNotifications.addListener('registrationError', (err) => {
-        if (settled) return
+      void PushNotifications.addListener('registrationError', (err) => {
         console.error('[push] Capacitor registration error:', err)
-        settled = true
-        cleanup()
-        resolve(false)
-      }).then((l) => { errListener = l })
+        finish(false)
+      }).then((l) => {
+        errListener = l
+      })
 
-      setTimeout(() => {
-        if (settled) return
-        settled = true
-        cleanup()
-        resolve(false)
-      }, 10000)
+      void PushNotifications.register().catch((e) => {
+        console.error('[push] Capacitor register() failed:', e)
+        finish(false)
+      })
+
+      setTimeout(() => finish(false), 15000)
     })
   } catch (e) {
     console.error('[push] Capacitor push init failed:', e)
     return false
+  }
+}
+
+/** Attach native notification tap / foreground handlers once. */
+let capacitorPushHandlersBound = false
+export async function bindCapacitorPushHandlers(
+  onOpenUrl?: (url: string) => void,
+): Promise<void> {
+  if (capacitorPushHandlersBound || !isCapacitorNative()) return
+  try {
+    const { PushNotifications } = await import('@capacitor/push-notifications')
+    capacitorPushHandlersBound = true
+
+    await PushNotifications.addListener('pushNotificationActionPerformed', (event) => {
+      const data = (event.notification?.data || {}) as Record<string, string>
+      const url =
+        data.url ||
+        (data.chatId
+          ? `/?chat=${data.chatId}${data.type === 'call' ? '&call=1' : ''}`
+          : data.fromUserId
+            ? `/?callFrom=${data.fromUserId}`
+            : null)
+      if (url) {
+        if (onOpenUrl) onOpenUrl(url)
+        else if (typeof window !== 'undefined') window.location.href = url
+      }
+    })
+
+    await PushNotifications.addListener('pushNotificationReceived', (notification) => {
+      console.log('[push] foreground native notification', notification.title)
+    })
+  } catch (e) {
+    console.warn('[push] Capacitor handlers bind failed:', e)
   }
 }
 
@@ -304,6 +337,20 @@ export async function syncPushSubscription(): Promise<boolean> {
 }
 
 export async function unsubscribeFromPush(): Promise<void> {
+  if (isCapacitorNative()) {
+    try {
+      await fetch('/api/push/subscribe', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ nativeOnly: true }),
+      })
+    } catch (e) {
+      console.error('[push] Capacitor unsubscribe failed', e)
+    }
+    return
+  }
+
   if (!('serviceWorker' in navigator)) return
   try {
     const reg = await navigator.serviceWorker.getRegistration('/')
@@ -381,6 +428,11 @@ export function usePush({ userId, enabled, onMessage }: UsePushOptions) {
 
   useEffect(() => {
     if (!enabled || !userId) return
+    if (isCapacitorNative()) {
+      void bindCapacitorPushHandlers()
+      void syncPushSubscription()
+      return
+    }
     registerServiceWorker().catch(() => {})
     if (Notification.permission === 'granted') {
       syncPushSubscription().catch(() => {})
@@ -389,6 +441,7 @@ export function usePush({ userId, enabled, onMessage }: UsePushOptions) {
 
   useEffect(() => {
     if (!enabled || !userId) return
+    if (isCapacitorNative()) return
     const onVisible = () => {
       if (document.visibilityState === 'visible' && Notification.permission === 'granted') {
         syncPushSubscription().catch(() => {})

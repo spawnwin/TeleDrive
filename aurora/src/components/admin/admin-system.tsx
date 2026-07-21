@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
+import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
   Select,
@@ -30,6 +31,15 @@ type SystemData = {
     vapidConfigured: boolean
     apnsConfigured: boolean
     subscriptions: number
+    apns?: {
+      configured: boolean
+      keyId: string | null
+      teamId: string | null
+      bundleId: string
+      production: boolean
+      keyFileExists: boolean
+      source: string | null
+    }
   }
 }
 
@@ -63,6 +73,12 @@ export function AdminSystemPage() {
   const [logLevel, setLogLevel] = useState('all')
   const [logs, setLogs] = useState<Record<string, LogFile>>({})
   const [logsLoading, setLogsLoading] = useState(false)
+  const [apnsKeyId, setApnsKeyId] = useState('')
+  const [apnsTeamId, setApnsTeamId] = useState('')
+  const [apnsBundleId, setApnsBundleId] = useState('com.aurora.messenger')
+  const [apnsProduction, setApnsProduction] = useState(true)
+  const [apnsKeyPem, setApnsKeyPem] = useState('')
+  const [apnsSaving, setApnsSaving] = useState(false)
 
   const loadFlags = useCallback(() => {
     fetch('/api/admin/settings')
@@ -114,6 +130,12 @@ export function AdminSystemPage() {
           return
         }
         setData(json)
+        if (json.push?.apns) {
+          if (json.push.apns.keyId) setApnsKeyId(json.push.apns.keyId)
+          if (json.push.apns.teamId) setApnsTeamId(json.push.apns.teamId)
+          if (json.push.apns.bundleId) setApnsBundleId(json.push.apns.bundleId)
+          setApnsProduction(!!json.push.apns.production)
+        }
       })
       .catch(() => {
         setData(null)
@@ -149,6 +171,32 @@ export function AdminSystemPage() {
   useEffect(() => {
     void loadLogs()
   }, [loadLogs])
+
+  const saveApns = async () => {
+    setApnsSaving(true)
+    try {
+      const res = await fetch('/api/admin/apns', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          keyId: apnsKeyId,
+          teamId: apnsTeamId,
+          bundleId: apnsBundleId,
+          production: apnsProduction,
+          keyPem: apnsKeyPem,
+        }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(json.error || 'Ошибка сохранения APNs')
+      setApnsKeyPem('')
+      toast.success('APNs сохранён')
+      load()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Ошибка сохранения APNs')
+    } finally {
+      setApnsSaving(false)
+    }
+  }
 
   const runAction = async (action: string) => {
     setBusy(action)
@@ -238,13 +286,77 @@ export function AdminSystemPage() {
             </div>
             <div className="flex justify-between">
               <span className="text-zinc-500">APNs (iOS native)</span>
-              <span className={data?.push?.apnsConfigured ? 'text-emerald-400' : 'text-zinc-500'}>
-                {data?.push?.apnsConfigured ? 'настроен' : 'нет'}
+              <span className={data?.push?.apnsConfigured ? 'text-emerald-400' : 'text-amber-400'}>
+                {data?.push?.apnsConfigured ? 'настроен' : 'не настроен'}
               </span>
             </div>
+            {data?.push?.apns && (
+              <div className="rounded-lg border border-zinc-800 bg-zinc-950/40 p-3 text-xs text-zinc-400 space-y-1">
+                <p>Bundle: {data.push.apns.bundleId}</p>
+                <p>Mode: {data.push.apns.production ? 'production' : 'sandbox'}</p>
+                <p>Key file: {data.push.apns.keyFileExists ? 'есть' : 'нет'}</p>
+                {data.push.apns.keyId ? <p>Key ID: {data.push.apns.keyId}</p> : null}
+              </div>
+            )}
             <div className="flex justify-between">
               <span className="text-zinc-500">Подписок push</span>
               <span>{data?.push?.subscriptions ?? 0}</span>
+            </div>
+
+            <div className="space-y-2 border-t border-zinc-800 pt-3">
+              <p className="text-sm font-medium text-zinc-300">Настройка APNs</p>
+              <p className="text-xs text-zinc-500">
+                Apple Developer → Keys → Apple Push Notifications service (APNs). Bundle ID:{' '}
+                <code className="text-zinc-400">com.aurora.messenger</code>
+              </p>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <div className="space-y-1">
+                  <Label className="text-xs text-zinc-500">Key ID</Label>
+                  <Input
+                    value={apnsKeyId}
+                    onChange={(e) => setApnsKeyId(e.target.value.trim())}
+                    placeholder="ABCDE12345"
+                    className="bg-zinc-950"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs text-zinc-500">Team ID</Label>
+                  <Input
+                    value={apnsTeamId}
+                    onChange={(e) => setApnsTeamId(e.target.value.trim())}
+                    placeholder="TEAMID1234"
+                    className="bg-zinc-950"
+                  />
+                </div>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs text-zinc-500">Bundle ID</Label>
+                <Input
+                  value={apnsBundleId}
+                  onChange={(e) => setApnsBundleId(e.target.value.trim())}
+                  className="bg-zinc-950"
+                />
+              </div>
+              <div className="flex items-center justify-between rounded-lg border border-zinc-800 px-3 py-2">
+                <span className="text-xs text-zinc-400">Production APNs</span>
+                <Switch checked={apnsProduction} onCheckedChange={setApnsProduction} />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs text-zinc-500">Содержимое .p8 ключа</Label>
+                <Textarea
+                  value={apnsKeyPem}
+                  onChange={(e) => setApnsKeyPem(e.target.value)}
+                  placeholder={'-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----'}
+                  className="min-h-28 bg-zinc-950 font-mono text-xs"
+                />
+              </div>
+              <Button
+                type="button"
+                disabled={apnsSaving || !apnsKeyId || !apnsTeamId || !apnsKeyPem}
+                onClick={() => void saveApns()}
+              >
+                {apnsSaving ? 'Сохранение…' : 'Сохранить APNs'}
+              </Button>
             </div>
           </CardContent>
         </Card>

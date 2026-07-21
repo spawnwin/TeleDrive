@@ -63,7 +63,7 @@ import {
 import { Switch } from '@/components/ui/switch'
 import { useAppStore } from '@/lib/store'
 import { useI18n } from '@/hooks/use-i18n'
-import { getPushPermission, enableWebPush, unsubscribeFromPush, isWebPushSupported, getIosPushBlockReason, syncPushSubscription } from '@/hooks/use-push'
+import { getPushPermission, enableWebPush, unsubscribeFromPush, isWebPushSupported, getIosPushBlockReason, syncPushSubscription, isCapacitorNative } from '@/hooks/use-push'
 import {
   clearCustomSound,
   CUSTOM_SOUND_ACCEPT,
@@ -487,6 +487,16 @@ export function SettingsDialog({ open, onOpenChange, onOpenPremium, onOpenCoins,
       await unsubscribeFromPush()
       return
     }
+    if (isCapacitorNative()) {
+      const result = await enableWebPush()
+      if (result.ok) {
+        setPushEnabled(true)
+        toast.success(t('settings.pushEnabled'))
+      } else {
+        toast.error(t('settings.pushSubscribeFailed'))
+      }
+      return
+    }
     if (!isWebPushSupported()) {
       toast.error(t('settings.pushUnsupported'))
       return
@@ -619,6 +629,10 @@ export function SettingsDialog({ open, onOpenChange, onOpenPremium, onOpenCoins,
   })()
 
   const pushStatusText = (() => {
+    if (isCapacitorNative()) {
+      if (pushEnabled) return t('settings.pushEnabled')
+      return t('settings.pushNativeIos')
+    }
     if (!isWebPushSupported()) return t('settings.pushUnsupported')
     const iosBlock = getIosPushBlockReason()
     if (iosBlock === 'ios-home-screen') return t('settings.pushIosHomeScreen')
@@ -1058,7 +1072,11 @@ export function SettingsDialog({ open, onOpenChange, onOpenPremium, onOpenCoins,
                   <Switch
                     checked={pushEnabled}
                     onCheckedChange={togglePush}
-                    disabled={!isWebPushSupported() || getPushPermission() === 'denied' || !!getIosPushBlockReason()}
+                    disabled={
+                      isCapacitorNative()
+                        ? false
+                        : !isWebPushSupported() || getPushPermission() === 'denied' || !!getIosPushBlockReason()
+                    }
                   />
                 </div>
               </div>

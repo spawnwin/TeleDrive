@@ -58,6 +58,15 @@ export const DELETE = withJsonApi(async function DELETE(req: NextRequest) {
     await db.pushSubscription.deleteMany({
       where: { userId: me.id, endpoint: body.endpoint },
     })
+  } else if (body?.nativeOnly) {
+    const subs = await db.pushSubscription.findMany({
+      where: { userId: me.id },
+      select: { id: true, endpoint: true },
+    })
+    const ids = subs.filter((s) => s.endpoint.startsWith('capacitor://')).map((s) => s.id)
+    if (ids.length) {
+      await db.pushSubscription.deleteMany({ where: { id: { in: ids } } })
+    }
   } else {
     await db.pushSubscription.deleteMany({ where: { userId: me.id } })
   }
