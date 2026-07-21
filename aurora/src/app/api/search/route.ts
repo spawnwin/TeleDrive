@@ -7,6 +7,8 @@ import { getFriendshipView } from '@/lib/friends'
 
 const USER_LIMIT = 20
 const CHAT_LIMIT = 15
+/** DB prefilter batch — SQLite `contains` is case-sensitive for Cyrillic. */
+const CANDIDATE_TAKE = 120
 
 type PublicChatHit = {
   id: string
@@ -28,6 +30,20 @@ function rankText(haystack: string, q: string): number {
   return 99
 }
 
+/** Case/title variants so SQLite LIKE can still hit Cyrillic names. */
+function searchVariants(raw: string, normalized: string): string[] {
+  const variants = new Set<string>()
+  for (const s of [raw, normalized, raw.replace(/^@/, '')]) {
+    const t = s.trim()
+    if (!t) continue
+    variants.add(t)
+    variants.add(t.toLowerCase())
+    variants.add(t.toUpperCase())
+    variants.add(t.charAt(0).toUpperCase() + t.slice(1).toLowerCase())
+  }
+  return [...variants]
+}
+
 export const GET = withJsonApi(async function GET(req: NextRequest) {
   const me = await getCurrentUser()
   if (!me) return NextResponse.json({ error: 'Не авторизован' }, { status: 401 })
@@ -40,6 +56,7 @@ export const GET = withJsonApi(async function GET(req: NextRequest) {
   }
 
   const slugQ = normalizeChannelSlug(raw)
+  const textVariants = searchVariants(raw, q)
 
   const blocks = await db.userBlock.findMany({
     where: {
@@ -58,9 +75,28 @@ export const GET = withJsonApi(async function GET(req: NextRequest) {
   })
   const myChatIds = new Set(myMemberships.map((m) => m.chatId))
 
+  const userOr = textVariants.flatMap((v) => [
+    { username: { contains: v } },
+    { name: { contains: v } },
+  ])
+
+  const chatOr = [
+    ...textVariants.flatMap((v) => [
+      { slug: { contains: v } },
+      { title: { contains: v } },
+      { description: { contains: v } },
+    ]),
+    ...(slugQ && !textVariants.includes(slugQ)
+      ? [{ slug: { contains: slugQ } }, { title: { contains: slugQ } }]
+      : []),
+  ]
+
   const [userCandidates, publicChats] = await Promise.all([
     db.user.findMany({
-      where: { id: { not: me.id } },
+      where: {
+        id: { not: me.id },
+        OR: userOr,
+      },
       select: {
         id: true,
         name: true,
@@ -70,12 +106,13 @@ export const GET = withJsonApi(async function GET(req: NextRequest) {
         online: true,
         lastSeen: true,
       },
-      take: 500,
+      take: CANDIDATE_TAKE,
     }),
     db.chat.findMany({
       where: {
         slug: { not: null },
         type: { in: ['channel', 'group'] },
+        OR: chatOr,
       },
       select: {
         id: true,
@@ -87,7 +124,7 @@ export const GET = withJsonApi(async function GET(req: NextRequest) {
         avatarUrl: true,
         _count: { select: { members: true } },
       },
-      take: 500,
+      take: CANDIDATE_TAKE,
     }),
   ])
 

@@ -76,6 +76,7 @@ export function Messenger() {
   const [inviteToken, setInviteToken] = useState<string | null>(null)
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false)
   const [sidebarQuery, setSidebarQuery] = useState('')
+  const [sidebarSelectionMode, setSidebarSelectionMode] = useState(false)
   const historyStateRef = useRef<{ chatId: string | null; view: string; profileUserId: string | null }>({ chatId: null, view: 'chats', profileUserId: null })
   const poppingStateRef = useRef(false)
 
@@ -149,6 +150,12 @@ export function Messenger() {
       closeMobileSearch()
       return
     }
+    if (sidebarSelectionMode) {
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('aurora:exit-selection'))
+      }
+      return
+    }
     if (view === 'shorts') {
       setView('chats')
       return
@@ -171,6 +178,7 @@ export function Messenger() {
     showInfo,
     showFriends,
     mobileSearchOpen,
+    sidebarSelectionMode,
     view,
     activeChatId,
     closeMobileSearch,
@@ -715,6 +723,7 @@ export function Messenger() {
             onOpenStreams={() => setShowStreams(true)}
             query={sidebarQuery}
             onQueryChange={setSidebarQuery}
+            onSelectionModeChange={setSidebarSelectionMode}
           />
         </aside>
 
@@ -772,6 +781,7 @@ export function Messenger() {
           userName={currentUser?.name}
           userAvatarColor={currentUser?.avatarColor}
           userAvatarUrl={currentUser?.avatarUrl}
+          hidden={sidebarSelectionMode}
           searchOpen={mobileSearchOpen}
           searchQuery={sidebarQuery}
           onSearchQueryChange={setSidebarQuery}

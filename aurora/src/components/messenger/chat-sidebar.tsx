@@ -100,6 +100,8 @@ interface SidebarProps {
   /** Shared with mobile bottom search (Telegram-style). */
   query?: string
   onQueryChange?: (query: string) => void
+  /** Hide mobile bottom nav while multi-select is active. */
+  onSelectionModeChange?: (active: boolean) => void
 }
 
 export function ChatSidebar({
@@ -109,6 +111,7 @@ export function ChatSidebar({
   onOpenStreams,
   query: queryProp,
   onQueryChange,
+  onSelectionModeChange,
 }: SidebarProps) {
   const { t, lang } = useI18n()
   const router = useRouter()
@@ -249,6 +252,20 @@ export function ChatSidebar({
   useEffect(() => {
     if (view === 'shorts' && selectionMode) exitSelection()
   }, [view, selectionMode, exitSelection])
+
+  useEffect(() => {
+    onSelectionModeChange?.(selectionMode)
+  }, [selectionMode, onSelectionModeChange])
+
+  useEffect(() => {
+    const onExit = () => exitSelection()
+    window.addEventListener('aurora:exit-to-chats', onExit)
+    window.addEventListener('aurora:exit-selection', onExit)
+    return () => {
+      window.removeEventListener('aurora:exit-to-chats', onExit)
+      window.removeEventListener('aurora:exit-selection', onExit)
+    }
+  }, [exitSelection])
 
   const openFriendsDialog = (tab: 'friends' | 'incoming' | 'outgoing' = 'friends') => {
     setFriendsInitialTab(tab)
@@ -1251,9 +1268,9 @@ export function ChatSidebar({
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Telegram-style multi-select strip — inside sidebar, does NOT cover bottom nav */}
+      {/* Telegram-style multi-select strip — replaces bottom nav while active */}
       {selectionMode && (
-        <div className="z-10 shrink-0 border-t border-border bg-background/95 px-2 pt-2 pb-[max(4.75rem,calc(3.75rem+env(safe-area-inset-bottom)))] backdrop-blur-md xl:pb-2">
+        <div className="z-10 shrink-0 border-t border-border bg-background/95 px-2 pt-2 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur-md">
           <div className="mx-auto flex max-w-lg items-center justify-around gap-1">
             <button
               type="button"

@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Upload, Wallet, X, ChevronUp, ChevronLeft, Loader2 } from 'lucide-react'
+import { Upload, Wallet, ChevronUp, ChevronLeft, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useI18n } from '@/hooks/use-i18n'
 import { ShortCard, type ShortData } from './short-card'
@@ -467,8 +467,9 @@ export function ShortsFeed({ onBack }: ShortsFeedProps) {
           size="icon"
           className="pointer-events-auto h-9 w-9 rounded-full bg-black/30 text-white backdrop-blur hover:bg-black/50"
           onClick={onBack}
+          aria-label={t('misc.back')}
         >
-          <X className="h-5 w-5" />
+          <ChevronLeft className="h-5 w-5" />
         </Button>
         <div className="flex flex-col items-center">
           <h1 className="text-base font-bold text-white">{t('shorts.title')}</h1>

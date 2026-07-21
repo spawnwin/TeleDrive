@@ -9,8 +9,8 @@
  *    HTML but fall back to cache when offline
  */
 
-// v12: friendship search, nav on contacts/shorts, push cooldown; drop stale shell.
-const CACHE_VERSION = 'aurora-v12'
+// v13: selection hides nav, search DB filter, chat-info xl sheet, banner xl offset.
+const CACHE_VERSION = 'aurora-v13'
 const SHELL_CACHE = `${CACHE_VERSION}-shell`
 const ASSET_CACHE = `${CACHE_VERSION}-assets`
 
