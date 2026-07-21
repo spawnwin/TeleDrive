@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getCurrentUser } from '@/lib/auth'
 import { withJsonApi } from '@/lib/with-json-api'
+import { areUsersBlocked } from '@/lib/user-blocks'
 
 const EARTH_KM = 6371
 const DEFAULT_RADIUS_KM = 2.5
@@ -18,18 +19,106 @@ function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number) {
   return 2 * EARTH_KM * Math.asin(Math.min(1, Math.sqrt(a)))
 }
 
+function relativeMeters(lat1: number, lng1: number, lat2: number, lng2: number) {
+  const toRad = (d: number) => (d * Math.PI) / 180
+  const x = (lng2 - lng1) * 111320 * Math.cos(toRad(lat1))
+  const y = (lat2 - lat1) * 110540
+  return { x: Math.round(x), y: Math.round(y) }
+}
+
 function clampCoord(n: unknown, min: number, max: number): number | null {
   if (typeof n !== 'number' || !Number.isFinite(n)) return null
   if (n < min || n > max) return null
   return n
 }
 
-/** Publish or refresh anonymous nearby presence. */
+async function getOrCreatePrivateChat(meId: string, otherId: string) {
+  if (await areUsersBlocked(meId, otherId)) {
+    return { ok: false as const, error: 'Пользователь заблокирован' }
+  }
+  const existing = await db.chat.findFirst({
+    where: {
+      type: 'private',
+      AND: [
+        { members: { some: { userId: meId } } },
+        { members: { some: { userId: otherId } } },
+      ],
+    },
+    select: { id: true },
+  })
+  if (existing) return { ok: true as const, chatId: existing.id }
+
+  const colors = ['#3390ec', '#06b6d4', '#ec4899']
+  const chat = await db.chat.create({
+    data: {
+      type: 'private',
+      avatarColor: colors[Math.floor(Math.random() * colors.length)],
+      members: {
+        create: [
+          { userId: meId, role: 'owner' },
+          { userId: otherId, role: 'member' },
+        ],
+      },
+    },
+  })
+  return { ok: true as const, chatId: chat.id }
+}
+
 export const POST = withJsonApi(async function POST(req: NextRequest) {
   const me = await getCurrentUser()
   if (!me) return NextResponse.json({ error: 'Не авторизован' }, { status: 401 })
 
   const body = await req.json().catch(() => ({}))
+
+  if (body?.action === 'wave' && typeof body.presenceId === 'string') {
+    const presence = await db.nearbyPresence.findFirst({
+      where: { id: body.presenceId, expiresAt: { gt: new Date() } },
+      include: { user: { select: { id: true, name: true, isBanned: true } } },
+    })
+    if (!presence || presence.user.isBanned) {
+      return NextResponse.json({ error: 'Пользователь уже не рядом' }, { status: 404 })
+    }
+    if (presence.userId === me.id) {
+      return NextResponse.json({ error: 'Нельзя помахать себе' }, { status: 400 })
+    }
+
+    const chatRes = await getOrCreatePrivateChat(me.id, presence.userId)
+    if (!chatRes.ok) {
+      return NextResponse.json({ error: chatRes.error }, { status: 400 })
+    }
+
+    const waveText = presence.anonymous
+      ? '👋 Кто-то рядом помахал вам'
+      : `👋 ${me.name} рядом и хочет познакомиться`
+
+    const message = await db.message.create({
+      data: {
+        chatId: chatRes.chatId,
+        senderId: me.id,
+        content: waveText,
+        type: 'text',
+      },
+    })
+    await db.chat.update({ where: { id: chatRes.chatId }, data: { updatedAt: new Date() } })
+
+    try {
+      const { sendPushToOfflineChatMembers } = await import('@/lib/push-server')
+      sendPushToOfflineChatMembers(chatRes.chatId, me.id, {
+        title: me.name,
+        body: waveText,
+      }).catch(() => {})
+    } catch {
+      // optional
+    }
+
+    return NextResponse.json({
+      ok: true,
+      chatId: chatRes.chatId,
+      messageId: message.id,
+      anonymous: presence.anonymous,
+    })
+  }
+
   const lat = clampCoord(body?.lat, -90, 90)
   const lng = clampCoord(body?.lng, -180, 180)
   if (lat == null || lng == null) {
@@ -57,7 +146,6 @@ export const POST = withJsonApi(async function POST(req: NextRequest) {
   return NextResponse.json({ ok: true, expiresAt: expiresAt.toISOString() })
 })
 
-/** List people nearby (anonymous by default). */
 export const GET = withJsonApi(async function GET(req: NextRequest) {
   const me = await getCurrentUser()
   if (!me) return NextResponse.json({ error: 'Не авторизован' }, { status: 401 })
@@ -73,7 +161,6 @@ export const GET = withJsonApi(async function GET(req: NextRequest) {
   if (!Number.isFinite(radiusKm) || radiusKm <= 0) radiusKm = DEFAULT_RADIUS_KM
   radiusKm = Math.min(MAX_RADIUS_KM, Math.max(0.3, radiusKm))
 
-  // Rough bounding box to cut candidates before precise haversine.
   const latDelta = radiusKm / 111
   const lngDelta = radiusKm / (111 * Math.max(0.2, Math.cos((lat * Math.PI) / 180)))
   const now = new Date()
@@ -103,9 +190,12 @@ export const GET = withJsonApi(async function GET(req: NextRequest) {
     .map((row) => {
       const distanceKm = haversineKm(lat, lng, row.lat, row.lng)
       if (distanceKm > radiusKm) return null
+      const offset = relativeMeters(lat, lng, row.lat, row.lng)
       return {
         id: row.anonymous ? `anon-${row.id.slice(-8)}` : row.user.id,
+        presenceId: row.id,
         distanceKm: Math.round(distanceKm * 100) / 100,
+        offsetMeters: offset,
         anonymous: row.anonymous,
         label: row.label,
         updatedAt: row.updatedAt.toISOString(),

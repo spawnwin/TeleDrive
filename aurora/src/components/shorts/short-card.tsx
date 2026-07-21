@@ -582,8 +582,46 @@ export function ShortCard({
 
   return (
     <div className="relative h-full w-full overflow-hidden bg-black">
-      {/* Video / Embed */}
-      {isNativeVideo && short.videoUrl ? (
+      {/* Video / Embed — duet mode uses side-by-side split with parent */}
+      {isNativeVideo && short.videoUrl && short.duetMode === 'duet' && short.parentShort?.videoUrl ? (
+        <div className="absolute inset-0 flex" onClick={handleVideoAreaTap}>
+          <div className="relative h-full w-1/2 overflow-hidden border-r border-white/20">
+            <video
+              src={short.parentShort.videoUrl}
+              poster={short.parentShort.thumbnailUrl || undefined}
+              className="h-full w-full object-cover"
+              loop
+              muted
+              playsInline
+              autoPlay={isActive}
+              preload={isActive ? 'auto' : 'metadata'}
+            />
+            <span className="absolute left-2 top-2 rounded bg-black/50 px-1.5 py-0.5 text-[10px] font-semibold text-white backdrop-blur">
+              @{short.parentShort.creator?.username || '…'}
+            </span>
+          </div>
+          <div className="relative h-full w-1/2 overflow-hidden">
+            <video
+              ref={videoRef}
+              poster={short.thumbnailUrl || undefined}
+              className="h-full w-full object-cover"
+              loop
+              muted={muted}
+              playsInline
+              autoPlay={isActive}
+              preload={isActive ? 'auto' : 'metadata'}
+              onTimeUpdate={onTimeUpdate}
+              onLoadedMetadata={onLoadedMetadata}
+            >
+              {videoMime ? <source src={short.videoUrl} type={videoMime} /> : null}
+              <source src={short.videoUrl} />
+            </video>
+            <span className="absolute right-2 top-2 rounded bg-black/50 px-1.5 py-0.5 text-[10px] font-semibold text-white backdrop-blur">
+              @{short.creator.username}
+            </span>
+          </div>
+        </div>
+      ) : isNativeVideo && short.videoUrl ? (
         <video
           ref={videoRef}
           poster={short.thumbnailUrl || undefined}
@@ -643,6 +681,28 @@ export function ShortCard({
       ) : (
         <div className="flex h-full items-center justify-center p-8 text-center text-white/60">
           <p>{t('misc.error')}</p>
+        </div>
+      )}
+
+      {/* Parent PiP for reply / challenge (non-duet) */}
+      {short.parentShort && short.duetMode !== 'duet' && (short.parentShort.videoUrl || short.parentShort.thumbnailUrl) && (
+        <div className="absolute left-3 top-[max(5.5rem,calc(env(safe-area-inset-top)+5.5rem))] z-20 h-36 w-24 overflow-hidden rounded-xl border border-white/30 shadow-lg">
+          {short.parentShort.videoUrl ? (
+            <video
+              src={short.parentShort.videoUrl}
+              poster={short.parentShort.thumbnailUrl || undefined}
+              className="h-full w-full object-cover"
+              muted
+              loop
+              playsInline
+              autoPlay={isActive}
+            />
+          ) : (
+            <img src={short.parentShort.thumbnailUrl!} alt="" className="h-full w-full object-cover" />
+          )}
+          <span className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent px-1 pb-1 pt-4 text-[9px] font-semibold text-white">
+            {short.duetMode === 'challenge' ? t('shorts.challengeOf') : t('shorts.replyOf')}
+          </span>
         </div>
       )}
 
