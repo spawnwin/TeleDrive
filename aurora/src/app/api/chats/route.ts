@@ -5,7 +5,6 @@ import { getOrCreateSavedChat } from '@/lib/saved-chat'
 import { areUsersBlocked } from '@/lib/user-blocks'
 import { parseChatWallpaper } from '@/lib/chat-wallpaper'
 import { withJsonApi } from '@/lib/with-json-api'
-import { pushBodyForContent } from '@/lib/e2ee-payload'
 
 export const GET = withJsonApi(async function GET() {
   try {
@@ -132,7 +131,7 @@ export const GET = withJsonApi(async function GET() {
         lastMessage: lastMessage
           ? {
               id: lastMessage.id,
-              content: pushBodyForContent(lastMessage.content),
+              content: lastMessage.content,
               createdAt: lastMessage.createdAt,
               senderName: lastMessage.sender.name,
               senderId: lastMessage.senderId,

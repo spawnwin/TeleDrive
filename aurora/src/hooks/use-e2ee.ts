@@ -4,23 +4,8 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import { useAppStore } from '@/lib/store'
 import { isE2EEPayload } from '@/lib/e2ee-payload'
 
-// End-to-end encryption using WebCrypto.
-//
-// Strategy:
-//   - Each user generates an RSA-OAEP key pair (2048-bit) on first enable.
-//   - Public key is published to the server (User.publicKey, base64 SPKI).
-//   - For each private chat, generate a random AES-GCM 256-bit session key.
-//   - Wrap (encrypt) the AES key with the recipient's RSA public key,
-//     store the wrapped key on the message (or in a separate key exchange message).
-//   - Encrypt message content with AES-GCM, store ciphertext in `content`.
-//
-// In this implementation, we keep it simple:
-//   - Encrypt message content directly with the recipient's RSA public key.
-//   - RSA-OAEP can encrypt up to ~190 bytes for a 2048-bit key, which is
-//     enough for short messages. For longer messages, we'd need AES+RSA hybrid.
-//   - We use the hybrid approach: random AES key per message, wrapped with RSA.
-//
-// For group chats, E2EE is not enabled (would need a per-member wrapped key).
+// End-to-end encryption using WebCrypto (RSA-OAEP + AES-GCM hybrid).
+// Private chats only — group E2EE would need per-member wrapped keys.
 
 const RSA_KEY_CONFIG: RsaHashedKeyGenParams = {
   name: 'RSA-OAEP',
@@ -41,42 +26,41 @@ function bufferToBase64(buf: ArrayBuffer | Uint8Array): string {
   return btoa(binary)
 }
 
-function base64ToBuffer(b64: string): Uint8Array<ArrayBuffer> {
+/** Copy into a fresh ArrayBuffer — required by WebKit/Safari subtle crypto. */
+function base64ToArrayBuffer(b64: string): ArrayBuffer {
   const binary = atob(b64)
   const bytes = new Uint8Array(binary.length)
   for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
-  return bytes
+  return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength)
 }
 
 async function importPublicKey(spkiBase64: string): Promise<CryptoKey> {
-  const spki = base64ToBuffer(spkiBase64)
-  return crypto.subtle.importKey('spki', spki, RSA_KEY_CONFIG, false, ['encrypt'])
+  return crypto.subtle.importKey('spki', base64ToArrayBuffer(spkiBase64), RSA_KEY_CONFIG, false, [
+    'encrypt',
+  ])
 }
 
 async function importPrivateKey(pkcs8Base64: string): Promise<CryptoKey> {
-  const pkcs8 = base64ToBuffer(pkcs8Base64)
-  return crypto.subtle.importKey('pkcs8', pkcs8, RSA_KEY_CONFIG, false, ['decrypt'])
+  return crypto.subtle.importKey(
+    'pkcs8',
+    base64ToArrayBuffer(pkcs8Base64),
+    RSA_KEY_CONFIG,
+    false,
+    ['decrypt'],
+  )
 }
 
 interface E2EEPayload {
-  // Base64 AES key wrapped with recipient's RSA public key
   wk: string
-  // Same AES key wrapped with sender's RSA public key (so sender can read own msgs after reload)
   wkSelf?: string
-  // Base64 IV (12 bytes for AES-GCM)
   iv: string
-  // Base64 ciphertext
   ct: string
 }
 
-function isE2EEPayloadLocal(s: string): boolean {
-  return isE2EEPayload(s)
-}
-
-// IndexedDB for storing the private key (browser-only persistent storage).
 const DB_NAME = 'aurora-e2ee'
 const DB_STORE = 'keys'
-const DB_KEY = 'private-key'
+const DB_PRIVATE = 'private-key'
+const DB_PUBLIC = 'public-key'
 
 let cachedDb: IDBDatabase | null = null
 function openDB(): Promise<IDBDatabase> {
@@ -100,7 +84,7 @@ async function idbGet(key: string): Promise<string | null> {
     return new Promise((resolve, reject) => {
       const tx = db.transaction(DB_STORE, 'readonly')
       const req = tx.objectStore(DB_STORE).get(key)
-      req.onsuccess = () => resolve(req.result || null)
+      req.onsuccess = () => resolve((req.result as string) || null)
       req.onerror = () => reject(req.error)
     })
   } catch {
@@ -118,60 +102,35 @@ async function idbSet(key: string, value: string): Promise<void> {
   })
 }
 
+async function keysMatch(privateKey: CryptoKey, publicKeyB64: string): Promise<boolean> {
+  try {
+    const pub = await importPublicKey(publicKeyB64)
+    const data = crypto.getRandomValues(new Uint8Array(32))
+    const enc = await crypto.subtle.encrypt({ name: 'RSA-OAEP' }, pub, data)
+    const dec = new Uint8Array(await crypto.subtle.decrypt({ name: 'RSA-OAEP' }, privateKey, enc))
+    if (dec.length !== data.length) return false
+    for (let i = 0; i < data.length; i++) {
+      if (dec[i] !== data[i]) return false
+    }
+    return true
+  } catch {
+    return false
+  }
+}
+
+export type E2EEKeyStatus = 'loading' | 'ready' | 'missing' | 'mismatch'
+
 export function useE2EE() {
   const { currentUser, setCurrentUser } = useAppStore()
   const [generating, setGenerating] = useState(false)
   const [privateKey, setPrivateKey] = useState<CryptoKey | null>(null)
+  const [localPublicKey, setLocalPublicKey] = useState<string | null>(null)
   const [ready, setReady] = useState(false)
-  // Cache of imported public keys (userId -> CryptoKey)
+  const [keyStatus, setKeyStatus] = useState<E2EEKeyStatus>('loading')
   const publicKeyCacheRef = useRef<Map<string, CryptoKey>>(new Map())
 
-  // Load private key from IndexedDB on mount
-  useEffect(() => {
-    if (!currentUser) return
-    let cancelled = false
-    ;(async () => {
-      // Only load private key if user has a public key (E2EE enabled)
-      if (!currentUser.publicKey) {
-        setReady(true)
-        return
-      }
-      const pkcs8 = await idbGet(`${DB_KEY}:${currentUser.id}`)
-      if (cancelled) return
-      if (pkcs8) {
-        try {
-          const key = await importPrivateKey(pkcs8)
-          setPrivateKey(key)
-        } catch (e) {
-          console.error('[e2ee] failed to import private key', e)
-        }
-      }
-      setReady(true)
-    })()
-    return () => {
-      cancelled = true
-    }
-  }, [currentUser?.id, currentUser?.publicKey])
-
-  const enableE2EE = useCallback(async () => {
-    if (!currentUser) return
-    setGenerating(true)
-    try {
-      // Generate RSA key pair
-      const keyPair = await crypto.subtle.generateKey(RSA_KEY_CONFIG, true, [
-        'encrypt',
-        'decrypt',
-      ])
-      // Export public key as SPKI base64
-      const spki = await crypto.subtle.exportKey('spki', keyPair.publicKey)
-      const spkiB64 = bufferToBase64(spki)
-      // Export private key as PKCS8 base64
-      const pkcs8 = await crypto.subtle.exportKey('pkcs8', keyPair.privateKey)
-      const pkcs8B64 = bufferToBase64(pkcs8)
-      // Save private key to IndexedDB
-      await idbSet(`${DB_KEY}:${currentUser.id}`, pkcs8B64)
-      setPrivateKey(keyPair.privateKey)
-      // Publish public key to server
+  const publishPublicKey = useCallback(
+    async (spkiB64: string | null) => {
       const res = await fetch('/api/auth/profile', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -181,48 +140,159 @@ export function useE2EE() {
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Failed to publish public key')
       setCurrentUser(data.user)
+      return data.user as { publicKey?: string | null }
+    },
+    [setCurrentUser],
+  )
+
+  // Load private key from IndexedDB — decrypt must work even if server flag is off.
+  useEffect(() => {
+    if (!currentUser) {
+      setPrivateKey(null)
+      setLocalPublicKey(null)
+      setKeyStatus('loading')
+      setReady(false)
+      return
+    }
+    let cancelled = false
+    ;(async () => {
+      setKeyStatus('loading')
+      const pkcs8 = await idbGet(`${DB_PRIVATE}:${currentUser.id}`)
+      const savedPub = await idbGet(`${DB_PUBLIC}:${currentUser.id}`)
+      if (cancelled) return
+
+      if (!pkcs8) {
+        setPrivateKey(null)
+        setLocalPublicKey(null)
+        setKeyStatus(currentUser.publicKey ? 'missing' : 'ready')
+        setReady(true)
+        return
+      }
+
+      try {
+        const key = await importPrivateKey(pkcs8)
+        if (cancelled) return
+        setPrivateKey(key)
+
+        let pub = savedPub
+        // Prefer verifying against server key when present.
+        if (currentUser.publicKey) {
+          const match = await keysMatch(key, currentUser.publicKey)
+          if (cancelled) return
+          if (match) {
+            pub = currentUser.publicKey
+            if (savedPub !== pub) {
+              await idbSet(`${DB_PUBLIC}:${currentUser.id}`, pub).catch(() => {})
+            }
+            setLocalPublicKey(pub)
+            setKeyStatus('ready')
+          } else if (savedPub) {
+            // Local keypair is healthy but server was rotated elsewhere — restore ours
+            // so peers encrypt to a key we can still decrypt.
+            const localMatch = await keysMatch(key, savedPub)
+            if (cancelled) return
+            if (localMatch) {
+              try {
+                await publishPublicKey(savedPub)
+                if (cancelled) return
+                setLocalPublicKey(savedPub)
+                setKeyStatus('ready')
+              } catch (e) {
+                console.error('[e2ee] failed to restore public key', e)
+                setLocalPublicKey(savedPub)
+                setKeyStatus('mismatch')
+              }
+            } else {
+              setLocalPublicKey(savedPub)
+              setKeyStatus('mismatch')
+            }
+          } else {
+            // Private key present but does not match server and we have no saved public —
+            // can still try decrypting old ciphertext; encryption is unsafe.
+            setLocalPublicKey(null)
+            setKeyStatus('mismatch')
+          }
+        } else {
+          setLocalPublicKey(pub)
+          setKeyStatus('ready')
+        }
+      } catch (e) {
+        console.error('[e2ee] failed to import private key', e)
+        if (!cancelled) {
+          setPrivateKey(null)
+          setLocalPublicKey(null)
+          setKeyStatus('missing')
+        }
+      }
+      if (!cancelled) setReady(true)
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [currentUser?.id, currentUser?.publicKey, publishPublicKey])
+
+  const enableE2EE = useCallback(async () => {
+    if (!currentUser) return
+    setGenerating(true)
+    try {
+      // Reuse existing local keypair instead of rotating (rotation breaks history).
+      const existingPkcs8 = await idbGet(`${DB_PRIVATE}:${currentUser.id}`)
+      const existingPub = await idbGet(`${DB_PUBLIC}:${currentUser.id}`)
+      if (existingPkcs8 && existingPub) {
+        const key = await importPrivateKey(existingPkcs8)
+        const match = await keysMatch(key, existingPub)
+        if (match) {
+          setPrivateKey(key)
+          setLocalPublicKey(existingPub)
+          await publishPublicKey(existingPub)
+          setKeyStatus('ready')
+          return
+        }
+      }
+
+      const keyPair = await crypto.subtle.generateKey(RSA_KEY_CONFIG, true, [
+        'encrypt',
+        'decrypt',
+      ])
+      const spki = await crypto.subtle.exportKey('spki', keyPair.publicKey)
+      const spkiB64 = bufferToBase64(spki)
+      const pkcs8 = await crypto.subtle.exportKey('pkcs8', keyPair.privateKey)
+      const pkcs8B64 = bufferToBase64(pkcs8)
+      await idbSet(`${DB_PRIVATE}:${currentUser.id}`, pkcs8B64)
+      await idbSet(`${DB_PUBLIC}:${currentUser.id}`, spkiB64)
+      setPrivateKey(keyPair.privateKey)
+      setLocalPublicKey(spkiB64)
+      await publishPublicKey(spkiB64)
+      setKeyStatus('ready')
     } catch (e) {
       console.error('[e2ee] enable failed', e)
       throw e
     } finally {
       setGenerating(false)
     }
-  }, [currentUser, setCurrentUser])
+  }, [currentUser, publishPublicKey])
 
   const disableE2EE = useCallback(async () => {
     if (!currentUser) return
-    // Just clear the public key on the server; we keep the private key locally
-    // in case the user re-enables later.
+    // Clear server public key; keep local keys so old messages stay readable.
     try {
-      const res = await fetch('/api/auth/profile', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ publicKey: null }),
-      })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Failed')
-      setCurrentUser(data.user)
-      setPrivateKey(null)
+      await publishPublicKey(null)
+      setKeyStatus(privateKey ? 'ready' : 'missing')
       publicKeyCacheRef.current.clear()
     } catch (e) {
       console.error('[e2ee] disable failed', e)
       throw e
     }
-  }, [currentUser, setCurrentUser])
+  }, [currentUser, publishPublicKey, privateKey])
 
   const toggleE2EE = useCallback(
     async (enabled: boolean) => {
-      if (enabled) {
-        await enableE2EE()
-      } else {
-        await disableE2EE()
-      }
+      if (enabled) await enableE2EE()
+      else await disableE2EE()
     },
     [enableE2EE, disableE2EE],
   )
 
-  // Get the cached public key for a user, or import and cache it
   const getPublicKey = useCallback(async (userId: string, publicKeyB64: string): Promise<CryptoKey | null> => {
     const cached = publicKeyCacheRef.current.get(userId)
     if (cached) return cached
@@ -236,7 +306,6 @@ export function useE2EE() {
     }
   }, [])
 
-  // Encrypt a plaintext message for a recipient
   const encryptMessage = useCallback(
     async (
       plaintext: string,
@@ -245,29 +314,14 @@ export function useE2EE() {
       senderPublicKeyB64?: string,
       senderId?: string,
     ): Promise<string> => {
-      // Generate random AES-GCM key
-      const aesKey = await crypto.subtle.generateKey(AES_KEY_CONFIG, true, [
-        'encrypt',
-        'decrypt',
-      ])
-      // Generate random IV (12 bytes)
+      const aesKey = await crypto.subtle.generateKey(AES_KEY_CONFIG, true, ['encrypt', 'decrypt'])
       const iv = crypto.getRandomValues(new Uint8Array(12))
-      // Encrypt plaintext with AES-GCM
       const encoded = new TextEncoder().encode(plaintext)
-      const ciphertext = await crypto.subtle.encrypt(
-        { name: 'AES-GCM', iv },
-        aesKey,
-        encoded,
-      )
-      // Export AES key, then wrap it with recipient's RSA public key
+      const ciphertext = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, aesKey, encoded)
       const rawAesKey = await crypto.subtle.exportKey('raw', aesKey)
       const publicKey = await getPublicKey(recipientId, recipientPublicKeyB64)
       if (!publicKey) throw new Error('No recipient public key')
-      const wrappedKey = await crypto.subtle.encrypt(
-        { name: 'RSA-OAEP' },
-        publicKey,
-        rawAesKey,
-      )
+      const wrappedKey = await crypto.subtle.encrypt({ name: 'RSA-OAEP' }, publicKey, rawAesKey)
       const payload: E2EEPayload = {
         wk: bufferToBase64(wrappedKey),
         iv: bufferToBase64(iv),
@@ -276,11 +330,7 @@ export function useE2EE() {
       if (senderPublicKeyB64 && senderId) {
         const senderKey = await getPublicKey(senderId, senderPublicKeyB64)
         if (!senderKey) throw new Error('No sender public key')
-        const wrappedSelf = await crypto.subtle.encrypt(
-          { name: 'RSA-OAEP' },
-          senderKey,
-          rawAesKey,
-        )
+        const wrappedSelf = await crypto.subtle.encrypt({ name: 'RSA-OAEP' }, senderKey, rawAesKey)
         payload.wkSelf = bufferToBase64(wrappedSelf)
       }
       return JSON.stringify(payload)
@@ -288,54 +338,65 @@ export function useE2EE() {
     [getPublicKey],
   )
 
-  const unwrapAesKey = useCallback(
-    async (privateKey: CryptoKey, wrappedB64: string): Promise<ArrayBuffer> => {
-      return crypto.subtle.decrypt(
-        { name: 'RSA-OAEP' },
-        privateKey,
-        base64ToBuffer(wrappedB64),
-      )
-    },
-    [],
-  )
+  const unwrapAesKey = useCallback(async (key: CryptoKey, wrappedB64: string): Promise<ArrayBuffer> => {
+    return crypto.subtle.decrypt({ name: 'RSA-OAEP' }, key, base64ToArrayBuffer(wrappedB64))
+  }, [])
 
-  // Decrypt an incoming message
   const decryptMessage = useCallback(
     async (encrypted: string): Promise<string> => {
       if (!privateKey) throw new Error('No private key')
-      if (!isE2EEPayloadLocal(encrypted)) return encrypted // not encrypted
+      if (!isE2EEPayload(encrypted)) return encrypted
       const payload: E2EEPayload = JSON.parse(encrypted)
-      let rawAesKey: ArrayBuffer
-      try {
-        rawAesKey = await unwrapAesKey(privateKey, payload.wk)
-      } catch {
-        if (!payload.wkSelf) throw new Error('Cannot decrypt message')
-        rawAesKey = await unwrapAesKey(privateKey, payload.wkSelf)
+
+      // Try both wraps: recipients use `wk`, senders use `wkSelf` after reload.
+      // Order does not matter — wrong wrap throws and we fall through.
+      const wraps = [payload.wk, payload.wkSelf].filter(Boolean) as string[]
+      let rawAesKey: ArrayBuffer | null = null
+      let lastErr: unknown = null
+      for (const wrapped of wraps) {
+        try {
+          rawAesKey = await unwrapAesKey(privateKey, wrapped)
+          break
+        } catch (e) {
+          lastErr = e
+        }
       }
-      // Import the raw AES key
+      if (!rawAesKey) {
+        throw lastErr instanceof Error ? lastErr : new Error('Cannot decrypt message')
+      }
+
       const aesKey = await crypto.subtle.importKey('raw', rawAesKey, AES_KEY_CONFIG, false, [
         'decrypt',
       ])
-      // Decrypt the ciphertext
       const plaintext = await crypto.subtle.decrypt(
-        { name: 'AES-GCM', iv: base64ToBuffer(payload.iv) },
+        { name: 'AES-GCM', iv: base64ToArrayBuffer(payload.iv) },
         aesKey,
-        base64ToBuffer(payload.ct),
+        base64ToArrayBuffer(payload.ct),
       )
       return new TextDecoder().decode(plaintext)
     },
     [privateKey, unwrapAesKey],
   )
 
-  const isEncrypted = useCallback((s: string): boolean => isE2EEPayloadLocal(s), [])
+  const isEncrypted = useCallback((s: string): boolean => isE2EEPayload(s), [])
 
-  const e2eeEnabled = !!currentUser?.publicKey && !!privateKey
+  /** Local private key is available — decrypt old/incoming ciphertext. */
+  const canDecrypt = !!privateKey
+  /** Healthy keypair published on server — safe to encrypt new messages. */
+  const e2eeEnabled =
+    !!currentUser?.publicKey &&
+    !!privateKey &&
+    keyStatus === 'ready' &&
+    (!localPublicKey || localPublicKey === currentUser.publicKey)
 
   return {
     e2eeEnabled,
-    generating,
+    canDecrypt,
+    keyStatus,
     ready,
+    generating,
     toggleE2EE,
+    enableE2EE,
     encryptMessage,
     decryptMessage,
     isEncrypted,

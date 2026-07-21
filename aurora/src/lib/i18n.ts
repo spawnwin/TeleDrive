@@ -138,6 +138,11 @@ const ru: Dict = {
   'chat.archived': 'Чат архивирован',
   'chat.archiveError': 'Не удалось архивировать чат',
   'chat.encrypted': '🔒 Зашифрованное сообщение',
+  'chat.encryptedUnavailable': '🔒 Не удалось расшифровать',
+  'chat.e2eeKeyProblemTitle': 'Ключ шифрования не совпадает',
+  'chat.e2eeKeyProblemHint':
+    'Сообщения зашифрованы другим ключом. Восстановите ключ на этом устройстве или попросите собеседника написать снова.',
+  'chat.e2eeRepair': 'Восстановить',
   'chat.unarchived': 'Чат возвращён из архива',
   'chat.deleteForMe': 'Удалить у себя',
   'chat.deleteForMeAnd': 'Удалить у себя и у',
@@ -1346,6 +1351,11 @@ const en: Dict = {
   'chat.archived': 'Chat archived',
   'chat.archiveError': 'Failed to archive chat',
   'chat.encrypted': '🔒 Encrypted message',
+  'chat.encryptedUnavailable': '🔒 Unable to decrypt',
+  'chat.e2eeKeyProblemTitle': 'Encryption key mismatch',
+  'chat.e2eeKeyProblemHint':
+    'These messages were encrypted with a different key. Repair the key on this device or ask your contact to write again.',
+  'chat.e2eeRepair': 'Repair',
   'chat.unarchived': 'Chat unarchived',
   'chat.deleteForMe': 'Delete for me',
   'chat.deleteForMeAnd': 'Delete for me and',

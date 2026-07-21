@@ -534,16 +534,38 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
     return () => setMessageBroadcastFn(null)
   }, [socket.broadcastMessage, setMessageBroadcastFn])
 
+  const { e2eeEnabled, canDecrypt, keyStatus, ready: e2eeReady, encryptMessage, decryptMessage, isEncrypted, enableE2EE } = useE2EE()
+
+  useEffect(() => {
+    e2eeRef.current = canDecrypt
+    decryptRef.current = decryptMessage
+    isEncryptedRef.current = isEncrypted
+  }, [canDecrypt, decryptMessage, isEncrypted])
+
   useEffect(() => {
     setAppendMessageFn((msg) => {
-      if (msg.chatId === activeChatId) {
+      if (msg.chatId !== activeChatId) return
+      void (async () => {
+        let display = msg
+        if (
+          canDecrypt &&
+          msg.type === 'text' &&
+          isEncrypted(msg.content)
+        ) {
+          try {
+            const plain = await decryptMessage(msg.content)
+            display = { ...msg, content: plain }
+          } catch {
+            // keep ciphertext; decrypt effect will retry
+          }
+        }
         setMessages((prev) =>
-          prev.some((m) => m.id === msg.id) ? prev : [...prev, msg],
+          prev.some((m) => m.id === display.id) ? prev : [...prev, display],
         )
-      }
+      })()
     })
     return () => setAppendMessageFn(null)
-  }, [activeChatId, setAppendMessageFn])
+  }, [activeChatId, setAppendMessageFn, canDecrypt, decryptMessage, isEncrypted])
 
   const { notify, inAppNotifications, dismissNotification, clickNotification } = usePush({
     userId: currentUser?.id ?? null,
@@ -552,14 +574,6 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
       setActiveChat(chatId)
     },
   })
-
-  const { e2eeEnabled, encryptMessage, decryptMessage, isEncrypted } = useE2EE()
-
-  useEffect(() => {
-    e2eeRef.current = e2eeEnabled
-    decryptRef.current = decryptMessage
-    isEncryptedRef.current = isEncrypted
-  }, [e2eeEnabled, decryptMessage, isEncrypted])
 
   const encryptPrivateContent = useCallback(
     async (plaintext: string): Promise<{ content: string; encrypted: boolean }> => {
@@ -709,9 +723,9 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
   const lastDecryptPassRef = useRef<string>('')
   useEffect(() => {
     lastDecryptPassRef.current = ''
-  }, [decryptMessage, e2eeEnabled])
+  }, [decryptMessage, canDecrypt])
   useEffect(() => {
-    if (!e2eeEnabled || messages.length === 0) return
+    if (!canDecrypt || messages.length === 0) return
     const encrypted = messages.filter((m) => m.type === 'text' && isEncrypted(m.content))
     if (encrypted.length === 0) return
     const passSig = encrypted
@@ -728,22 +742,21 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
             const plaintext = await decryptMessage(m.content)
             if (plaintext !== m.content) anyChanged = true
             return { ...m, content: plaintext }
-          } catch {
-            // Keep ciphertext so a later key load can retry — do not overwrite
-            // with a lock placeholder that can never be decrypted again.
+          } catch (err) {
+            console.warn('[e2ee] decrypt failed', m.id, err instanceof Error ? err.name : err)
             return m
           }
         }),
       )
       if (cancelled) return
-      // Mark this ciphertext set attempted so permanent failures do not loop.
-      lastDecryptPassRef.current = passSig
+      // Only seal this pass when keys are ready — otherwise retry after load/restore.
+      if (e2eeReady) lastDecryptPassRef.current = passSig
       if (anyChanged) setMessages(decrypted)
     })()
     return () => {
       cancelled = true
     }
-  }, [e2eeEnabled, messages, decryptMessage, isEncrypted])
+  }, [canDecrypt, e2eeReady, messages, decryptMessage, isEncrypted])
 
   // Join ALL chat rooms on connect so we receive typing indicators and live
   // last-message updates for every chat (Telegram-style chat list). We never
@@ -2194,6 +2207,29 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
         </div>
       </div>
 
+      {(keyStatus === 'mismatch' || keyStatus === 'missing') &&
+        activeChat.type === 'private' &&
+        messages.some((m) => m.type === 'text' && isEncrypted(m.content)) && (
+          <div className="flex items-start gap-2 border-b border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[12px] text-amber-200 sm:px-4">
+            <Lock className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+            <div className="min-w-0 flex-1">
+              <p className="font-medium text-amber-100">{t('chat.e2eeKeyProblemTitle')}</p>
+              <p className="mt-0.5 text-amber-200/80">{t('chat.e2eeKeyProblemHint')}</p>
+            </div>
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              className="h-7 shrink-0 px-2 text-[11px]"
+              onClick={() => {
+                void enableE2EE().catch(() => toast.error(t('misc.error')))
+              }}
+            >
+              {t('chat.e2eeRepair')}
+            </Button>
+          </div>
+        )}
+
       {/* Search bar (collapsible) */}
       <AnimatePresence>
         {showSearch && (
@@ -2440,6 +2476,11 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
                         setContextMenu({ msg: m, x: clientX, y: clientY })
                       }}
                       currentUserId={currentUser?.id || ''}
+                      encryptedLabel={
+                        keyStatus === 'mismatch' || keyStatus === 'missing'
+                          ? t('chat.encryptedUnavailable')
+                          : t('chat.encrypted')
+                      }
                       t={t}
                       lang={lang}
                     />
@@ -3275,6 +3316,7 @@ interface MessageBubbleProps {
   onLinkClick?: (url: string) => void
   onContextMenu?: (e: React.MouseEvent | React.TouchEvent, msg: ChatMessage) => void
   currentUserId: string
+  encryptedLabel?: string
   t: (k: string) => string
   lang: string
 }
@@ -3306,6 +3348,7 @@ function MessageBubble({
   onLinkClick,
   onContextMenu,
   currentUserId,
+  encryptedLabel,
   t,
   lang,
 }: MessageBubbleProps) {
@@ -3600,7 +3643,7 @@ function MessageBubble({
                   // Still-encrypted ciphertext is unreadable JSON — show a clear
                   // label until the decrypt effect replaces it with plaintext.
                   isE2EEPayload(msg.content)
-                    ? t('chat.encrypted')
+                    ? encryptedLabel || t('chat.encrypted')
                     : msg.content
                 }
                 linkClassName={mine ? 'text-white/90' : 'text-[#3390ec]'}
