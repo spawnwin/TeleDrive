@@ -495,6 +495,36 @@ export function Messenger() {
     return () => window.removeEventListener('aurora:incoming-call-open', handler)
   }, [currentUser])
 
+  // Hooks must run unconditionally (before any early return).
+  const isShortsMode = view === 'shorts'
+  const swipeBackToChatsEnabled =
+    !!currentUser &&
+    bootstrapped &&
+    (isShortsMode ||
+      showFriends ||
+      showSettings ||
+      showCoins ||
+      showPremium ||
+      showP2PMarketplace ||
+      showStreams ||
+      showNearby ||
+      !!profileUserId ||
+      mobileSearchOpen ||
+      !!browserUrl ||
+      showInfo ||
+      chromeOverlayOpen ||
+      !!inviteToken)
+
+  const {
+    hintVisible: swipeHintVisible,
+    hintOpacity: swipeHintOpacity,
+  } = useSwipeToBack({
+    enabled: swipeBackToChatsEnabled,
+    onBack: exitToChats,
+    attachToWindow: true,
+    threshold: 72,
+  })
+
   if (!bootstrapped) {
     return (
       <div className="flex h-screen items-center justify-center bg-background">
@@ -553,37 +583,6 @@ export function Messenger() {
     }
     return <AuthScreen />
   }
-
-  // In shorts mode on desktop: sidebar shows shorts hint, main area shows feed full-screen
-  const isShortsMode = view === 'shorts'
-
-  // Swipe-right → chats (archive-style) from shorts, dialogs, profile, search, etc.
-  // Open chat uses ChatView's own gesture; archive uses ChatSidebar's.
-  const swipeBackToChatsEnabled =
-    isShortsMode ||
-    showFriends ||
-    showSettings ||
-    showCoins ||
-    showPremium ||
-    showP2PMarketplace ||
-    showStreams ||
-    showNearby ||
-    !!profileUserId ||
-    mobileSearchOpen ||
-    !!browserUrl ||
-    showInfo ||
-    chromeOverlayOpen ||
-    !!inviteToken
-
-  const {
-    hintVisible: swipeHintVisible,
-    hintOpacity: swipeHintOpacity,
-  } = useSwipeToBack({
-    enabled: swipeBackToChatsEnabled,
-    onBack: exitToChats,
-    attachToWindow: true,
-    threshold: 72,
-  })
 
   const profileScopeChatId = (() => {
     if (!profileUserId || !activeChatId) return null
