@@ -96,6 +96,8 @@ model User {
   profileGallery      ProfileGalleryItem[]
   giftsSent           GiftSent[] @relation("GiftSender")
   giftsReceived       GiftSent[] @relation("GiftRecipient")
+  profilePhotoViewsReceived ProfilePhotoView[] @relation("ProfilePhotoViewsReceived")
+  profilePhotoViewsMade     ProfilePhotoView[] @relation("ProfilePhotoViewsMade")
 
   // Creator Premium — fan-funded subscriptions
   premiumTiersOwned      CreatorPremiumTier[]  @relation("PremiumTierCreator")
@@ -1124,6 +1126,23 @@ model BotSession {
   updatedAt DateTime @updatedAt
 
   @@unique([botUserId, userId])
+}
+
+// Who viewed a user's current (or historical) profile photo — Telegram-style.
+// Scoped by avatarUrl so changing the photo starts a fresh viewer list.
+model ProfilePhotoView {
+  id        String   @id @default(cuid())
+  ownerId   String
+  viewerId  String
+  avatarUrl String
+  viewedAt  DateTime @default(now())
+
+  owner  User @relation("ProfilePhotoViewsReceived", fields: [ownerId], references: [id], onDelete: Cascade)
+  viewer User @relation("ProfilePhotoViewsMade", fields: [viewerId], references: [id], onDelete: Cascade)
+
+  @@unique([ownerId, viewerId, avatarUrl])
+  @@index([ownerId, avatarUrl, viewedAt])
+  @@index([viewerId])
 }
 
 // One row per (profile, visitor) pair, upserted on each view — naturally

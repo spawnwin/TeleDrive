@@ -23,6 +23,7 @@ import {
   Gift,
   Info,
   Trash2,
+  Eye,
 } from 'lucide-react'
 import { Avatar } from './avatar'
 import { EmojiStatusBadge } from './emoji-status-badge'
@@ -55,6 +56,7 @@ import {
 import { ProfileTabContent, PROFILE_EMPTY_KEYS, type ProfileTab } from './profile-tab-content'
 import { FriendButton, type FriendshipState } from './friend-button'
 import { MediaLightbox } from './media-lightbox'
+import { ProfilePhotoViewersPanel } from './profile-photo-viewers-panel'
 import { GiftPickerDialog } from './gift-picker-dialog'
 import { ProfileGiftsSection, type ProfileGiftItem } from './profile-gifts-section'
 import { CreatorPremiumDialog } from '../shorts/creator-premium-dialog'
@@ -124,6 +126,8 @@ export function UserProfileDialog({
   const [loadError, setLoadError] = useState<'not_found' | 'error' | null>(null)
   const [activeTab, setActiveTab] = useState<ProfileTab>('profilePhotos')
   const [photoOpen, setPhotoOpen] = useState(false)
+  const [photoViewersOpen, setPhotoViewersOpen] = useState(false)
+  const [photoViewCount, setPhotoViewCount] = useState(0)
   const [confirmRemovePhoto, setConfirmRemovePhoto] = useState(false)
   const [removingPhoto, setRemovingPhoto] = useState(false)
   const [profileStories, setProfileStories] = useState<StoryFeedUser | null>(null)
@@ -145,6 +149,8 @@ export function UserProfileDialog({
       setLoadError(null)
       setActiveTab('profilePhotos')
       setPhotoOpen(false)
+      setPhotoViewersOpen(false)
+      setPhotoViewCount(0)
       setProfileStories(null)
       setShowStoryViewer(false)
       setProfileGifts([])
@@ -202,6 +208,39 @@ export function UserProfileDialog({
       controller.abort()
     }
   }, [userId, lang, scopeChatId])
+
+  // Record / load profile-photo views when the avatar lightbox opens.
+  useEffect(() => {
+    if (!photoOpen || !userId || !profile?.avatarUrl) return
+    let cancelled = false
+    if (profile.isSelf) {
+      fetch(`/api/users/${encodeURIComponent(userId)}/profile/photo/viewers`, {
+        credentials: 'include',
+      })
+        .then((res) => res.json())
+        .then((data) => {
+          if (!cancelled && typeof data.total === 'number') setPhotoViewCount(data.total)
+        })
+        .catch(() => {})
+    } else {
+      fetch(`/api/users/${encodeURIComponent(userId)}/profile/photo/view`, {
+        method: 'POST',
+        credentials: 'include',
+      })
+        .then((res) => res.json())
+        .then((data) => {
+          if (!cancelled && typeof data.total === 'number') setPhotoViewCount(data.total)
+        })
+        .catch(() => {})
+    }
+    return () => {
+      cancelled = true
+    }
+  }, [photoOpen, userId, profile?.avatarUrl, profile?.isSelf])
+
+  useEffect(() => {
+    if (!photoOpen) setPhotoViewersOpen(false)
+  }, [photoOpen])
 
   useEffect(() => {
     if (!userId) {
@@ -753,26 +792,61 @@ export function UserProfileDialog({
       <MediaLightbox
         url={photoOpen && profile?.avatarUrl ? profile.avatarUrl : null}
         alt={profile?.name ?? ''}
-        onClose={() => setPhotoOpen(false)}
+        onClose={() => {
+          setPhotoOpen(false)
+          setPhotoViewersOpen(false)
+        }}
         footer={
-          profile?.isSelf && profile.avatarUrl ? (
-            <button
-              type="button"
-              className="mx-auto flex min-h-11 items-center justify-center gap-2 rounded-full bg-red-500/90 px-5 text-sm font-semibold text-white active:bg-red-600"
-              onClick={(e) => {
-                e.preventDefault()
-                e.stopPropagation()
-                setPhotoOpen(false)
-                // Let lightbox unmount before showing confirm above everything.
-                window.setTimeout(() => setConfirmRemovePhoto(true), 50)
-              }}
-            >
-              <Trash2 className="h-4 w-4" />
-              {t('profile.removePhotoAction')}
-            </button>
+          profile?.avatarUrl ? (
+            <div className="mx-auto flex max-w-sm flex-col items-center gap-2">
+              {profile.isSelf ? (
+                <>
+                  <button
+                    type="button"
+                    className="flex min-h-11 items-center justify-center gap-2 rounded-full bg-white/15 px-5 text-sm font-semibold text-white backdrop-blur active:bg-white/25"
+                    onClick={(e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      setPhotoViewersOpen(true)
+                    }}
+                  >
+                    <Eye className="h-4 w-4" />
+                    {photoViewCount > 0
+                      ? t('profile.photoViewsCount').replace('{count}', String(photoViewCount))
+                      : t('profile.photoViewsEmpty')}
+                  </button>
+                  <button
+                    type="button"
+                    className="flex min-h-11 items-center justify-center gap-2 rounded-full bg-red-500/90 px-5 text-sm font-semibold text-white active:bg-red-600"
+                    onClick={(e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      setPhotoOpen(false)
+                      window.setTimeout(() => setConfirmRemovePhoto(true), 50)
+                    }}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    {t('profile.removePhotoAction')}
+                  </button>
+                </>
+              ) : null}
+            </div>
           ) : null
         }
       />
+
+      {profile?.isSelf && userId && (
+        <ProfilePhotoViewersPanel
+          userId={userId}
+          open={photoViewersOpen}
+          onClose={() => setPhotoViewersOpen(false)}
+          onSelectUser={(id) => {
+            setPhotoOpen(false)
+            setPhotoViewersOpen(false)
+            setProfileUserId(id)
+          }}
+        />
+      )}
 
       <AlertDialog
         open={confirmRemovePhoto}
