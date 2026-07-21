@@ -541,31 +541,31 @@ export function UserProfileDialog({
 
           <Separator />
 
-          {/* Media tabs */}
-          <div className="safe-x px-4 py-3">
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              {t('profile.media')}
-            </p>
-            <div className="flex gap-1 overflow-x-auto rounded-xl bg-muted/60 p-1">
+          {/* Media tabs — Telegram underline style */}
+          <div className="safe-x px-0 py-1">
+            <div className="flex gap-0 overflow-x-auto border-b border-border px-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
               {tabs.map((tab) => (
                 <button
                   key={tab.id}
                   type="button"
                   onClick={() => setActiveTab(tab.id)}
                   className={cn(
-                    'flex min-w-0 flex-1 flex-col items-center gap-0.5 rounded-lg px-2 py-2 text-[10px] font-medium transition',
+                    'relative flex shrink-0 items-center gap-1.5 px-3 py-2.5 text-[13px] font-medium transition',
                     activeTab === tab.id
-                      ? 'bg-background text-foreground shadow-sm'
+                      ? 'text-[#3390ec]'
                       : 'text-muted-foreground hover:text-foreground',
                   )}
                 >
-                  {tab.icon}
                   <span className="truncate">{tab.label}</span>
-                  <span className="tabular-nums text-muted-foreground">{tab.count}</span>
+                  <span className="tabular-nums opacity-70">{tab.count}</span>
+                  {activeTab === tab.id && (
+                    <span className="absolute inset-x-2 bottom-0 h-0.5 rounded-full bg-[#3390ec]" />
+                  )}
                 </button>
               ))}
             </div>
 
+            <div className="px-4">
             {userId ? (
               <ProfileTabContent
                 key={`${userId}:${activeTab}:${scopeChatId || 'all'}`}
@@ -592,6 +592,7 @@ export function UserProfileDialog({
                 <p className="text-sm text-muted-foreground">{t(PROFILE_EMPTY_KEYS[activeTab])}</p>
               </div>
             )}
+            </div>
           </div>
 
           {/* Shared groups & channels */}

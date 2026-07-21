@@ -33,6 +33,7 @@ import {
   Store,
   Radio,
   MoreHorizontal,
+  ArrowLeft,
 } from 'lucide-react'
 import { Avatar } from './avatar'
 import { Button } from '@/components/ui/button'
@@ -369,41 +370,42 @@ export function ChatSidebar({
           </>
         ) : (
           <>
-        <button
-          onClick={() => currentUser && setProfileUserId(currentUser.id)}
-          className="flex min-w-0 items-center gap-2 text-left transition hover:opacity-80 sm:gap-2.5"
-        >
-          {currentUser ? (
-            <Avatar
-              name={currentUser.name}
-              color={currentUser.avatarColor}
-              imageUrl={currentUser.avatarUrl}
-              size="sm"
-              className="[&>div]:h-8 [&>div]:w-8 [&>div]:text-xs sm:[&>div]:h-9 sm:[&>div]:w-9"
-            />
-          ) : (
-            <img src="/logo.png" alt="Aurora" className="h-8 w-8 shrink-0 rounded-full sm:h-9 sm:w-9" />
-          )}
-          <div className="min-w-0">
-            <h1 className="text-sm font-bold leading-tight sm:text-base">{t('app.name')}</h1>
-            <p className="truncate text-[10px] uppercase tracking-wider text-muted-foreground">
-              {currentUser?.name}
-            </p>
-          </div>
-        </button>
-        <div className="flex items-center gap-1">
+        {/* Telegram-style: large "Chats" title + compose / menu */}
+        <div className="flex min-w-0 flex-1 items-center gap-2">
+          <h1 className="truncate text-[26px] font-bold leading-none tracking-tight xl:text-lg">
+            {t('nav.chats')}
+          </h1>
+        </div>
+        <div className="flex items-center gap-0.5">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-9 w-9 rounded-full text-[#3390ec] xl:hidden"
+            onClick={() => setShowNewChat(true)}
+            title={t('sidebar.newChat')}
+          >
+            <Plus className="h-5 w-5" strokeWidth={2.25} />
+          </Button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-9 w-9 rounded-lg xl:hidden"
+                className="h-9 w-9 rounded-full xl:hidden"
                 title={t('chat.more')}
               >
-                <MoreHorizontal className="h-4 w-4" />
+                <MoreHorizontal className="h-5 w-5" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => setShowNewChat(true)}>
+                <Plus className="mr-2 h-4 w-4" /> {t('sidebar.newChat')}
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setShowArchived((v) => !v)}>
+                <Archive className="mr-2 h-4 w-4" />
+                {showArchived ? t('sidebar.allChats') : t('sidebar.archived')}
+                {archivedCount > 0 && !showArchived ? ` (${archivedCount})` : ''}
+              </DropdownMenuItem>
               <DropdownMenuItem onClick={onOpenP2PMarketplace}>
                 <Store className="mr-2 h-4 w-4 text-emerald-500" /> {t('marketplace.title')}
               </DropdownMenuItem>
@@ -418,6 +420,15 @@ export function ChatSidebar({
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="hidden h-9 w-9 rounded-lg xl:inline-flex"
+            onClick={() => setShowNewChat(true)}
+            title={t('sidebar.newChat')}
+          >
+            <Plus className="h-4 w-4" />
+          </Button>
           <Button
             variant="ghost"
             size="icon"
@@ -531,8 +542,8 @@ export function ChatSidebar({
             />
           )}
 
-          {/* New chat button + archive toggle */}
-          <div className="flex items-center gap-2 px-4 pt-2">
+          {/* Desktop-only: new chat + archive toggle (mobile uses header compose + menu) */}
+          <div className="hidden items-center gap-2 px-4 pt-2 xl:flex">
             <Button
               onClick={() => setShowNewChat(true)}
               className="flex-1 justify-start gap-2 rounded-lg bg-sidebar-accent text-foreground shadow-none hover:bg-sidebar-accent/80"
@@ -545,25 +556,18 @@ export function ChatSidebar({
               size="icon"
               className={cn(
                 'relative h-10 w-10 rounded-lg border-transparent bg-transparent text-muted-foreground shadow-none hover:bg-sidebar-accent',
-                showArchived && 'bg-sidebar-accent text-primary',
+                showArchived && 'bg-sidebar-accent text-[#3390ec]',
               )}
               onClick={() => setShowArchived((v) => !v)}
               title={t('sidebar.archived')}
             >
               <Archive className="h-4 w-4" />
               {archivedCount > 0 && (
-                <span className="absolute -right-1 -top-1 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-primary px-1 text-[9px] font-bold text-primary-foreground">
+                <span className="absolute -right-1 -top-1 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-[#3390ec] px-1 text-[9px] font-bold text-white">
                   {archivedCount}
                 </span>
               )}
             </Button>
-          </div>
-
-          {/* Section title */}
-          <div className="px-4 pt-2">
-            <p className="text-[11px] font-medium text-muted-foreground">
-              {showArchived ? t('sidebar.archivedChats') : t('sidebar.allChats')}
-            </p>
           </div>
 
           {/* Chat list — h-0 + flex-1 required for scroll inside flex column on desktop */}
@@ -571,6 +575,34 @@ export function ChatSidebar({
             <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-0 [-webkit-overflow-scrolling:touch] [scrollbar-gutter:stable] scroll-pb-[5.5rem]">
             {/* Small pad only — list paints under floating nav to screen bottom */}
             <div className="pb-[max(0.5rem,env(safe-area-inset-bottom))] xl:pb-4">
+              {/* Telegram-style Archive row (mobile) */}
+              {!showArchived && !query.trim() && archivedCount > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setShowArchived(true)}
+                  className="flex w-full items-center gap-3 px-3 py-2.5 text-left transition hover:bg-sidebar-accent active:bg-sidebar-accent xl:hidden"
+                >
+                  <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[#3390ec] text-white">
+                    <Archive className="h-5 w-5" />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-[16px] font-medium leading-tight">{t('sidebar.archived')}</span>
+                    <span className="block truncate text-[14px] text-muted-foreground">
+                      {archivedCount}
+                    </span>
+                  </span>
+                </button>
+              )}
+              {showArchived && (
+                <button
+                  type="button"
+                  onClick={() => setShowArchived(false)}
+                  className="flex w-full items-center gap-2 px-4 py-2 text-sm font-medium text-[#3390ec] xl:hidden"
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                  {t('sidebar.allChats')}
+                </button>
+              )}
               {query.trim() && (
                 <div className="mb-3">
                   <p className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
@@ -1432,7 +1464,7 @@ function ChatListItemRow({
               <span
                 className={cn(
                   'text-[11px] tabular-nums',
-                  chat.unread > 0 ? 'font-semibold text-primary' : 'text-muted-foreground',
+                  chat.unread > 0 ? 'font-semibold text-[#3390ec]' : 'text-muted-foreground',
                 )}
               >
                 {formatChatTime(chat.lastMessage.createdAt, lang)}
@@ -1445,16 +1477,16 @@ function ChatListItemRow({
             className={cn(
               'flex min-w-0 items-center gap-1 truncate text-xs',
               showTyping
-                ? 'text-primary'
+                ? 'text-[#3390ec]'
                 : showDraft
                   ? 'text-rose-500'
                   : 'text-muted-foreground',
             )}
           >
             {showTyping ? (
-              <span className="inline-flex items-center gap-1 truncate text-primary" title={t('chat.typing')} aria-label={t('chat.typing')}>
+              <span className="inline-flex items-center gap-1 truncate text-[#3390ec]" title={t('chat.typing')} aria-label={t('chat.typing')}>
                 <span className="truncate">{typingNames.join(', ')}</span>
-                <TypingDots className="text-primary" size={3} gap={1.5} />
+                <TypingDots className="text-[#3390ec]" size={3} gap={1.5} />
               </span>
             ) : showDraft ? (
               <>
@@ -1464,7 +1496,7 @@ function ChatListItemRow({
             ) : (
               <>
                 {lastMsgMine && chat.lastMessage && (
-                  <CheckCheck className="h-3.5 w-3.5 shrink-0 text-cyan-500" />
+                  <CheckCheck className="h-3.5 w-3.5 shrink-0 text-[#3390ec]" />
                 )}
                 {isImage && !lastMsgMine && (
                   <ImageIcon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />

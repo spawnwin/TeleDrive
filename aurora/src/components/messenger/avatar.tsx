@@ -30,18 +30,6 @@ const dotSize = {
   '2xl': 'h-5 w-5',
 }
 
-function shadeColor(hex: string, percent: number): string {
-  const h = hex.replace('#', '')
-  const num = parseInt(h.length === 3 ? h.split('').map((c) => c + c).join('') : h, 16)
-  let r = (num >> 16) & 0xff
-  let g = (num >> 8) & 0xff
-  let b = num & 0xff
-  r = Math.max(0, Math.min(255, r + Math.round((percent / 100) * 255)))
-  g = Math.max(0, Math.min(255, g + Math.round((percent / 100) * 255)))
-  b = Math.max(0, Math.min(255, b + Math.round((percent / 100) * 255)))
-  return `#${((r << 16) | (g << 8) | b).toString(16).padStart(6, '0')}`
-}
-
 export function Avatar({
   name,
   color,
@@ -71,14 +59,15 @@ export function Avatar({
     <div className={cn('relative shrink-0 rounded-full', className)}>
       <div
         className={cn(
-          'flex aspect-square items-center justify-center overflow-hidden rounded-full font-semibold text-white shadow-sm ring-2 ring-white/10',
+          'flex aspect-square items-center justify-center overflow-hidden rounded-full font-semibold text-white',
           sizeMap[size],
         )}
         style={
           hasImage
             ? undefined
             : {
-                background: `linear-gradient(135deg, ${color}, ${shadeColor(color, -20)})`,
+                // Telegram: flat solid color, no gradient / ring / shadow
+                background: color || '#3390ec',
               }
         }
       >
@@ -98,7 +87,7 @@ export function Avatar({
           className={cn(
             'absolute bottom-0 right-0 rounded-full border-2 border-background',
             dotSize[size],
-            online ? 'bg-emerald-500' : 'bg-slate-400',
+            online ? 'bg-[#4dcd5e]' : 'bg-[#8e8e93]',
           )}
         />
       )}

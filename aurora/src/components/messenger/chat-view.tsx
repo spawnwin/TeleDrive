@@ -22,6 +22,7 @@ import {
   Edit3,
   Copy,
   Check,
+  CheckCheck,
   Star,
   Sticker as StickerIcon,
   StarOff,
@@ -2014,20 +2015,20 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
               <Button
                 variant="ghost"
                 size="icon"
-                className="hidden h-9 w-9 sm:flex"
+                className="h-9 w-9"
                 onClick={() => handleStartCall('audio')}
                 title={t('chat.call')}
               >
-                <Phone className="h-4 w-4" />
+                <Phone className="h-5 w-5" />
               </Button>
               <Button
                 variant="ghost"
                 size="icon"
-                className="hidden h-9 w-9 sm:flex"
+                className="h-9 w-9"
                 onClick={() => handleStartCall('video')}
                 title={t('chat.video')}
               >
-                <Video className="h-4 w-4" />
+                <Video className="h-5 w-5" />
               </Button>
             </>
           )}
@@ -2200,9 +2201,9 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
           onClick={() => void jumpToMessage(pinnedMessage.id)}
           className="flex w-full items-center gap-2 border-b border-border bg-muted/30 px-4 py-2 text-left transition hover:bg-muted/60"
         >
-          <Pin className="h-4 w-4 shrink-0 text-violet-500" />
+          <Pin className="h-4 w-4 shrink-0 text-[#3390ec]" />
           <div className="min-w-0 flex-1">
-            <p className="text-xs font-semibold text-violet-500">{pinnedMessage.senderName}</p>
+            <p className="text-xs font-semibold text-[#3390ec]">{pinnedMessage.senderName}</p>
             <p className="truncate text-xs text-muted-foreground">
               {pinnedMessage.content || (pinnedMessage.type === 'image' ? t('chat.image') : t('chat.file'))}
             </p>
@@ -2223,11 +2224,11 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
         <div className="relative min-h-full">
         {loadingMessages ? (
           <div className="flex h-full items-center justify-center">
-            <div className="h-8 w-8 animate-spin rounded-full border-2 border-violet-500 border-t-transparent" />
+            <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#3390ec] border-t-transparent" />
           </div>
         ) : messages.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center gap-3 text-center">
-            <div className="flex h-16 w-16 items-center justify-center rounded-3xl bg-gradient-to-br from-violet-500/20 to-cyan-400/20">
+            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-[#3390ec]/15">
               <Avatar
                 name={activeChat.title}
                 color={activeChat.avatarColor}
@@ -2251,7 +2252,7 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
             {grouped.map((group) => (
               <div key={group.day} className="flex flex-col gap-1.5">
                 <div className="my-2 flex justify-center">
-                  <span className="rounded-full bg-muted px-3 py-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                  <span className="rounded-full bg-black/35 px-3 py-1 text-[12px] font-medium text-white shadow-sm backdrop-blur-sm dark:bg-black/45">
                     {formatDayDivider(group.items[0].createdAt, lang)}
                   </span>
                 </div>
@@ -2511,104 +2512,51 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
           {t('channel.readOnly')}
         </div>
       ) : (
-      <div className="shrink-0 border-t border-border bg-background/95 px-3 py-3 backdrop-blur-md sm:px-4 [&]:[padding-bottom:max(0.75rem,env(safe-area-inset-bottom))]">
-        <div className="mx-auto flex w-full max-w-none items-end gap-2">
-          <Popover open={emojiOpen} onOpenChange={setEmojiOpen}>
-            <PopoverTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-10 w-10 shrink-0 rounded-full">
-                <Smile className="h-5 w-5" />
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent side="top" align="start" className="w-80 p-0">
-              <div className="border-b border-border p-2">
-                <div className="flex flex-wrap gap-1">
-                  {Object.keys(EMOJI_SETS).map((setName) => (
-                    <button
-                      key={setName}
-                      onClick={() => setActiveEmojiSet(setName)}
-                      className={cn(
-                        'rounded-md px-2 py-1 text-xs font-medium transition',
-                        activeEmojiSet === setName
-                          ? 'bg-violet-500/15 text-violet-500'
-                          : 'text-muted-foreground hover:bg-muted',
-                      )}
-                    >
-                      {setName}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div className="grid max-h-64 grid-cols-7 gap-1 overflow-y-auto p-2">
-                {EMOJI_SETS[activeEmojiSet].map((emoji, i) => (
-                  <button
-                    key={`${emoji}-${i}`}
-                    onClick={() => setInput((prev) => prev + emoji)}
-                    className="flex h-9 w-9 items-center justify-center rounded-md text-xl transition hover:bg-muted"
-                  >
-                    {emoji}
-                  </button>
-                ))}
-              </div>
-            </PopoverContent>
-          </Popover>
-
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-10 w-10 shrink-0 rounded-full"
-            onClick={() => setShowStickerPicker(true)}
-            title={t('stickers.title')}
-          >
-            <StickerIcon className="h-5 w-5" />
-          </Button>
-
-          {/* Image / video attach (gallery) */}
-          <input
-            ref={imageInputRef}
-            type="file"
-            accept="image/*,image/png,image/jpeg,image/jpg,image/webp,image/gif,image/heic,image/heif,video/mp4,video/webm,video/quicktime,.heic,.heif,.mov"
-            multiple
-            onChange={handleFileSelect}
-            className="hidden"
-          />
-          {/* File attach */}
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept={CHAT_ATTACHMENT_ACCEPT}
-            onChange={handleFileSelect}
-            className="hidden"
-          />
-          {/* Audio attach */}
-          <input
-            ref={audioInputRef}
-            type="file"
-            accept="audio/mpeg,audio/mp3,audio/wav,audio/x-wav,audio/ogg,audio/m4a,audio/x-m4a,audio/aac,audio/flac,audio/x-flac,audio/mp4"
-            onChange={handleFileSelect}
-            className="hidden"
-          />
-          {/* Camera capture (mobile) */}
-          <input
-            ref={cameraInputRef}
-            type="file"
-            accept="image/*,video/*"
-            capture="environment"
-            onChange={handleFileSelect}
-            className="hidden"
-          />
-          {/* Pill composer: attach + textarea + send/mic morph sit inside one
-              rounded container, Telegram-style. The emoji button stays outside. */}
+      <div className="shrink-0 bg-background/90 px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-1.5 sm:px-3">
+        {/* Hidden file pickers used by attach sheet */}
+        <input
+          ref={imageInputRef}
+          type="file"
+          accept="image/*,image/png,image/jpeg,image/jpg,image/webp,image/gif,image/heic,image/heif,video/mp4,video/webm,video/quicktime,.heic,.heif,.mov"
+          multiple
+          onChange={handleFileSelect}
+          className="hidden"
+        />
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept={CHAT_ATTACHMENT_ACCEPT}
+          onChange={handleFileSelect}
+          className="hidden"
+        />
+        <input
+          ref={audioInputRef}
+          type="file"
+          accept="audio/mpeg,audio/mp3,audio/wav,audio/x-wav,audio/ogg,audio/m4a,audio/x-m4a,audio/aac,audio/flac,audio/x-flac,audio/mp4"
+          onChange={handleFileSelect}
+          className="hidden"
+        />
+        <input
+          ref={cameraInputRef}
+          type="file"
+          accept="image/*,video/*"
+          capture="environment"
+          onChange={handleFileSelect}
+          className="hidden"
+        />
+        <div className="mx-auto flex w-full max-w-none items-end gap-1.5">
+          {/* Pill composer: attach + text + emoji + mic/send — Telegram-style single field */}
           {isRecording ? (
             <div className="flex flex-1 items-center justify-center rounded-2xl border border-rose-500/40 bg-rose-500/10 px-3 py-3 text-sm font-medium text-rose-600 dark:text-rose-400">
               <span className="mr-2 h-2 w-2 animate-pulse rounded-full bg-rose-500" />
               {Math.floor(recordSeconds / 60)}:{(recordSeconds % 60).toString().padStart(2, '0')}
             </div>
           ) : (
-            <div className="flex flex-1 items-end gap-1 rounded-[22px] border border-border/80 bg-muted/40 px-1.5 py-1 transition focus-within:border-[#3390ec]/50 focus-within:ring-1 focus-within:ring-[#3390ec]/30">
+            <div className="flex flex-1 items-end gap-0.5 rounded-[22px] bg-muted/50 px-1 py-1 transition focus-within:bg-muted/70">
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-9 w-9 shrink-0 rounded-full"
+                className="h-9 w-9 shrink-0 rounded-full text-muted-foreground"
                 onClick={() => setShowAttachMenu(true)}
                 disabled={uploading || isRecording}
                 title={t('composer.attach')}
@@ -2684,9 +2632,72 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
                       : t('composer.placeholder')
                 }
                 rows={1}
-                className="max-h-32 w-full flex-1 resize-none bg-transparent py-2 text-sm outline-none placeholder:text-muted-foreground"
+                className="max-h-32 w-full flex-1 resize-none bg-transparent py-2 text-[15px] outline-none placeholder:text-muted-foreground"
                 style={{ height: 'auto', minHeight: '24px' }}
               />
+
+              <Popover open={emojiOpen} onOpenChange={setEmojiOpen}>
+                <PopoverTrigger asChild>
+                  <Button variant="ghost" size="icon" className="h-9 w-9 shrink-0 rounded-full text-muted-foreground">
+                    <Smile className="h-5 w-5" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent side="top" align="end" className="w-80 p-0">
+                  <div className="flex gap-1 border-b border-border p-2">
+                    <button
+                      type="button"
+                      onClick={() => setActiveEmojiSet(Object.keys(EMOJI_SETS)[0])}
+                      className={cn(
+                        'rounded-md px-2 py-1 text-xs font-medium transition',
+                        !Object.keys(EMOJI_SETS).includes(activeEmojiSet) || EMOJI_SETS[activeEmojiSet]
+                          ? 'bg-[#3390ec]/15 text-[#3390ec]'
+                          : 'text-muted-foreground hover:bg-muted',
+                      )}
+                    >
+                      Emoji
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEmojiOpen(false)
+                        setShowStickerPicker(true)
+                      }}
+                      className="rounded-md px-2 py-1 text-xs font-medium text-muted-foreground transition hover:bg-muted"
+                    >
+                      {t('stickers.title')}
+                    </button>
+                  </div>
+                  <div className="border-b border-border p-2">
+                    <div className="flex flex-wrap gap-1">
+                      {Object.keys(EMOJI_SETS).map((setName) => (
+                        <button
+                          key={setName}
+                          onClick={() => setActiveEmojiSet(setName)}
+                          className={cn(
+                            'rounded-md px-2 py-1 text-xs font-medium transition',
+                            activeEmojiSet === setName
+                              ? 'bg-[#3390ec]/15 text-[#3390ec]'
+                              : 'text-muted-foreground hover:bg-muted',
+                          )}
+                        >
+                          {setName}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="grid max-h-64 grid-cols-7 gap-1 overflow-y-auto p-2">
+                    {EMOJI_SETS[activeEmojiSet].map((emoji, i) => (
+                      <button
+                        key={`${emoji}-${i}`}
+                        onClick={() => setInput((prev) => prev + emoji)}
+                        className="flex h-9 w-9 items-center justify-center rounded-md text-xl transition hover:bg-muted"
+                      >
+                        {emoji}
+                      </button>
+                    ))}
+                  </div>
+                </PopoverContent>
+              </Popover>
 
               {/* Mic / send morph: same circular accent slot, icon crossfades. */}
               {input.trim() || editingMessage || pendingFile ? (
@@ -3265,7 +3276,12 @@ function MessageBubble({
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.18 }}
-      className={cn('group relative flex min-w-0 gap-2.5', mine ? 'flex-row-reverse' : 'flex-row')}
+      className={cn(
+        'group relative flex min-w-0',
+        showSenderProfile ? 'gap-2' : 'gap-0',
+        mine ? 'flex-row-reverse' : 'flex-row',
+        grouped ? 'mt-0.5' : 'mt-1.5',
+      )}
       onContextMenu={(e) => {
         e.preventDefault()
         onContextMenu?.(e, msg)
@@ -3288,9 +3304,10 @@ function MessageBubble({
         }
       }}
     >
-      <div className="w-9 shrink-0">
-        {!grouped && (
-          showSenderProfile && onViewProfile ? (
+      {/* Avatars only in groups/channels — Telegram hides them in private chats */}
+      {showSenderProfile ? (
+        <div className="w-9 shrink-0">
+          {!grouped && onViewProfile ? (
             <button
               type="button"
               onClick={onViewProfile}
@@ -3299,22 +3316,22 @@ function MessageBubble({
             >
               <Avatar name={msg.sender.name} color={msg.sender.avatarColor} imageUrl={msg.sender.avatarUrl} size="sm" />
             </button>
-          ) : (
+          ) : !grouped ? (
             <Avatar name={msg.sender.name} color={msg.sender.avatarColor} imageUrl={msg.sender.avatarUrl} size="sm" />
-          )
-        )}
-      </div>
-      <div className={cn('flex min-w-0 max-w-[78%] flex-col gap-0.5 sm:max-w-[62%]', mine ? 'items-end' : 'items-start')}>
-        {!grouped && (
-          <div className={cn('flex items-baseline gap-2 px-1', mine && 'flex-row-reverse')}>
-            <span
-              className={cn(
-                'text-xs font-semibold',
-                mine ? 'text-violet-500' : 'text-muted-foreground',
-              )}
+          ) : null}
+        </div>
+      ) : null}
+      <div className={cn('flex min-w-0 max-w-[85%] flex-col gap-0.5 sm:max-w-[65%]', mine ? 'items-end' : 'items-start')}>
+        {/* Sender name only for others in groups — never "You" */}
+        {!grouped && showSenderProfile && !mine && (
+          <div className="flex items-baseline gap-2 px-1">
+            <button
+              type="button"
+              onClick={onViewProfile}
+              className="text-xs font-semibold text-[#3390ec] transition hover:underline"
             >
-              {mine ? t('msg.you') : msg.sender.name}
-            </span>
+              {msg.sender.name}
+            </button>
           </div>
         )}
         <div className="relative min-w-0 max-w-full">
@@ -3502,7 +3519,7 @@ function MessageBubble({
             {msg.content && msg.type !== 'gift' && (
               <ReadMoreText
                 text={msg.content}
-                linkClassName={mine ? 'text-white/90' : 'text-violet-500'}
+                linkClassName={mine ? 'text-white/90' : 'text-[#3390ec]'}
                 readMoreLabel={t('share.readMore')}
                 readLessLabel={t('share.readLess')}
                 onLinkClick={onLinkClick}
@@ -3510,7 +3527,7 @@ function MessageBubble({
             )}
             <div
               className={cn(
-                'mt-0.5 flex items-center gap-1',
+                'mt-0.5 flex items-center justify-end gap-1',
                 (msg.type === 'image' || msg.type === 'file' || msg.type === 'voice' || msg.type === 'sticker') && !msg.content && 'px-1 pb-0.5',
               )}
             >
@@ -3518,7 +3535,7 @@ function MessageBubble({
                 <Star className={cn('h-3 w-3', mine ? 'fill-amber-300 text-amber-300' : 'fill-amber-500 text-amber-500')} />
               )}
               {isPinned && (
-                <Pin className={cn('h-3 w-3', mine ? 'text-white/70' : 'text-violet-500')} />
+                <Pin className={cn('h-3 w-3', mine ? 'text-white/70' : 'text-[#3390ec]')} />
               )}
               {msg.editedAt && (
                 <span
@@ -3533,11 +3550,14 @@ function MessageBubble({
               <span
                 className={cn(
                   'text-[10px] tabular-nums',
-                  mine ? 'text-white/60' : 'text-muted-foreground',
+                  mine ? 'text-white/70' : 'text-muted-foreground',
                 )}
               >
                 {formatMessageTime(msg.createdAt)}
               </span>
+              {mine && (
+                <CheckCheck className="h-3.5 w-3.5 shrink-0 text-[#8fc8ff]" strokeWidth={2.25} />
+              )}
             </div>
           </div>
 
@@ -3559,7 +3579,7 @@ function MessageBubble({
                     className={cn(
                       'flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-xs transition',
                       mineReacted
-                        ? 'border-violet-500 bg-violet-500/15 text-violet-500'
+                        ? 'border-[#3390ec] bg-[#3390ec]/15 text-[#3390ec]'
                         : 'border-border bg-background text-muted-foreground hover:bg-muted',
                     )}
                   >
@@ -3576,7 +3596,7 @@ function MessageBubble({
               type="button"
               onClick={onOpenComments}
               className={cn(
-                'mt-1 flex items-center gap-1.5 text-xs font-medium text-violet-500 transition hover:text-violet-400',
+                'mt-1 flex items-center gap-1.5 text-xs font-medium text-[#3390ec] transition hover:text-[#2b82d9]',
                 mine ? 'justify-end' : 'justify-start',
               )}
             >
@@ -3763,7 +3783,11 @@ function AlbumBubble({
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.18 }}
-      className={cn('group relative flex gap-2.5', mine ? 'flex-row-reverse' : 'flex-row')}
+      className={cn(
+        'group relative flex',
+        showSenderProfile ? 'gap-2' : 'gap-0',
+        mine ? 'flex-row-reverse' : 'flex-row',
+      )}
       onContextMenu={(e) => {
         e.preventDefault()
         onContextMenu?.(e, first)
@@ -3786,9 +3810,9 @@ function AlbumBubble({
         }
       }}
     >
-      <div className="w-9 shrink-0">
-        {!grouped && (
-          showSenderProfile && onViewProfile ? (
+      {showSenderProfile ? (
+        <div className="w-9 shrink-0">
+          {!grouped && onViewProfile ? (
             <button
               type="button"
               onClick={onViewProfile}
@@ -3797,17 +3821,21 @@ function AlbumBubble({
             >
               <Avatar name={first.sender.name} color={first.sender.avatarColor} imageUrl={first.sender.avatarUrl} size="sm" />
             </button>
-          ) : (
+          ) : !grouped ? (
             <Avatar name={first.sender.name} color={first.sender.avatarColor} imageUrl={first.sender.avatarUrl} size="sm" />
-          )
-        )}
-      </div>
-      <div className={cn('flex min-w-[200px] max-w-[78%] flex-col gap-0.5', mine ? 'items-end' : 'items-start')}>
-        {!grouped && (
-          <div className={cn('flex items-baseline gap-2 px-1', mine && 'flex-row-reverse')}>
-            <span className={cn('text-xs font-semibold', mine ? 'text-white/80' : 'text-violet-500')}>
+          ) : null}
+        </div>
+      ) : null}
+      <div className={cn('flex min-w-[200px] max-w-[85%] flex-col gap-0.5', mine ? 'items-end' : 'items-start')}>
+        {!grouped && showSenderProfile && !mine && (
+          <div className="flex items-baseline gap-2 px-1">
+            <button
+              type="button"
+              onClick={onViewProfile}
+              className="text-xs font-semibold text-[#3390ec] transition hover:underline"
+            >
               {first.sender.name}
-            </span>
+            </button>
           </div>
         )}
         <div
