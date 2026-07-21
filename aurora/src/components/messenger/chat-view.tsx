@@ -3641,8 +3641,9 @@ function MessageBubble({
             )}
             {msg.attachmentUrl && msg.type === 'voice' && (
               <VoicePlayer
-                url={msg.attachmentUrl}
+                url={resolveMediaUrl(msg.attachmentUrl) || msg.attachmentUrl}
                 durationSec={msg.durationSec}
+                mimeType={msg.attachmentMime}
                 mine={mine}
                 messageId={msg.id}
                 circle

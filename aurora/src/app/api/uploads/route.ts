@@ -14,6 +14,7 @@ import {
   VIDEO_MIME_TYPES,
 } from '@/lib/media-type'
 import { getUploadLimitMb, isPremiumActive } from '@/lib/coins'
+import { needsVoiceTranscode, transcodeVoiceToM4a } from '@/lib/voice-transcode'
 
 const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif', 'image/heic', 'image/heif', 'image/avif']
 const VOICE_TYPES = [
@@ -55,7 +56,7 @@ export const POST = withJsonApi(async function POST(req: NextRequest) {
 
   const isVoice = isVoiceFile({ type: file.type, name: file.name })
   const isVideo = !isVoice && isVideoFile({ type: file.type, name: file.name })
-  const resolvedMime = resolveAttachmentMime({ type: file.type, name: file.name })
+  let resolvedMime = resolveAttachmentMime({ type: file.type, name: file.name })
   const premium = isPremiumActive(me)
   const maxSize = isVideo
     ? MAX_SIZE_VIDEO
@@ -87,7 +88,7 @@ export const POST = withJsonApi(async function POST(req: NextRequest) {
   // payloads through as an "extension" and write outside uploadDir. Force it
   // down to a short alnum token before it can touch the filesystem path.
   const rawExt = file.name.split('.').pop()?.toLowerCase() || 'bin'
-  const ext = /^[a-z0-9]{1,15}$/.test(rawExt) ? rawExt : 'bin'
+  let ext = /^[a-z0-9]{1,15}$/.test(rawExt) ? rawExt : 'bin'
   // Block dangerous extensions that could be executed or render active content
   const DANGEROUS_EXTS = new Set(['exe', 'bat', 'cmd', 'com', 'sh', 'ps1', 'msi', 'dll', 'html', 'htm', 'svg', 'js', 'mjs', 'php', 'py', 'rb', 'jsp', 'cgi', 'htaccess'])
   if (DANGEROUS_EXTS.has(ext)) {
@@ -95,27 +96,40 @@ export const POST = withJsonApi(async function POST(req: NextRequest) {
   }
 
   const id = `${Date.now()}-${randomUUID().slice(0, 8)}`
-  const filename = `${id}.${ext}`
+  let filename = `${id}.${ext}`
   const subdir = isImage ? 'images' : isVoiceUpload ? 'voice' : isVideo ? 'videos' : 'files'
   const uploadDir = path.join(UPLOADS_DIR, subdir)
   await mkdir(uploadDir, { recursive: true })
-  const filepath = path.join(uploadDir, filename)
+  let filepath = path.join(uploadDir, filename)
   const bytes = Buffer.from(await file.arrayBuffer())
   await writeFile(filepath, bytes)
+  let size = file.size
+
+  // Safari/iOS cannot play Opus in WebM/Ogg — transcode voice notes to AAC/M4A.
+  if (isVoiceUpload && needsVoiceTranscode(resolvedMime, filename)) {
+    const converted = await transcodeVoiceToM4a(filepath)
+    if (converted) {
+      filepath = converted.outputPath
+      filename = converted.filename
+      resolvedMime = converted.mimeType
+      size = converted.size
+      ext = 'm4a'
+    }
+  }
 
   const fileUrl = `/uploads/${subdir}/${filename}`
   await trackFileUpload(me.id, {
     filename: file.name,
     url: fileUrl,
     mimeType: resolvedMime,
-    size: file.size,
+    size,
   })
 
   return NextResponse.json({
     url: fileUrl,
-    name: file.name,
+    name: isVoiceUpload && ext === 'm4a' ? filename : file.name,
     type: resolvedMime,
-    size: file.size,
+    size,
     isImage,
     isVoice: isVoiceUpload,
     isVideo,

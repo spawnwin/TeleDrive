@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, useMemo } from 'react'
 import { Play, Pause, Download } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { resolveMediaUrl } from '@/lib/media-url'
 
 const VOICE_PLAY_EVENT = 'aurora:voice-play'
 const SPEEDS = [1, 1.5, 2] as const
@@ -15,6 +16,8 @@ interface VoicePlayerProps {
   mine: boolean
   /** Stable id used to derive a per-message waveform so each message looks different. */
   messageId?: string
+  /** Optional MIME so <source type> matches the server Content-Type. */
+  mimeType?: string | null
   /** Circular Voice Notes 2.0 UI (default). Pass false for classic linear bar. */
   circle?: boolean
   /** Optional reaction callback — long-press / chips under the circle. */
@@ -22,11 +25,30 @@ interface VoicePlayerProps {
   reactions?: Array<{ emoji: string; count: number; mine?: boolean }>
 }
 
+function inferAudioMime(url: string, mimeType?: string | null): string | undefined {
+  const mime = (mimeType || '').toLowerCase().trim()
+  if (mime.startsWith('audio/')) {
+    // Strip codecs=… for the type attribute — browsers are picky.
+    return mime.split(';')[0].trim()
+  }
+  if (mime === 'video/webm') return 'audio/webm'
+  if (mime === 'video/ogg') return 'audio/ogg'
+  const lower = url.toLowerCase()
+  if (lower.includes('.m4a') || lower.includes('.mp4')) return 'audio/mp4'
+  if (lower.includes('.mp3')) return 'audio/mpeg'
+  if (lower.includes('.wav')) return 'audio/wav'
+  if (lower.includes('.ogg') || lower.includes('.oga')) return 'audio/ogg'
+  if (lower.includes('.webm')) return 'audio/webm'
+  if (lower.includes('.aac')) return 'audio/aac'
+  return undefined
+}
+
 export function VoicePlayer({
   url,
   durationSec,
   mine,
   messageId,
+  mimeType,
   circle = true,
   onReact,
   reactions,
@@ -37,15 +59,26 @@ export function VoicePlayer({
   const [currentTime, setCurrentTime] = useState(0)
   const [totalDuration, setTotalDuration] = useState(durationSec || 0)
   const [speedIdx, setSpeedIdx] = useState(0)
+  const [error, setError] = useState(false)
   const playerId = messageId || url
   const speed = SPEEDS[speedIdx]
+  const resolvedUrl = resolveMediaUrl(url) || url
+  const sourceType = inferAudioMime(resolvedUrl, mimeType)
 
   useEffect(() => {
     setPlaying(false)
     setProgress(0)
     setCurrentTime(0)
     setTotalDuration(durationSec || 0)
-  }, [durationSec, url])
+    setError(false)
+    const audio = audioRef.current
+    if (!audio) return
+    audio.pause()
+    audio.currentTime = 0
+    audio.volume = 1
+    audio.muted = false
+    audio.load()
+  }, [durationSec, resolvedUrl])
 
   useEffect(() => {
     const audio = audioRef.current
@@ -78,25 +111,34 @@ export function VoicePlayer({
       setCurrentTime(0)
     }
     const onPause = () => setPlaying(false)
-    const onPlay = () => setPlaying(true)
+    const onPlay = () => {
+      setPlaying(true)
+      setError(false)
+    }
     const onLoadedMetadata = () => {
       if (Number.isFinite(audio.duration) && audio.duration > 0) {
         setTotalDuration(audio.duration)
       }
+    }
+    const onError = () => {
+      setPlaying(false)
+      setError(true)
     }
     audio.addEventListener('timeupdate', onTimeUpdate)
     audio.addEventListener('ended', onEnded)
     audio.addEventListener('pause', onPause)
     audio.addEventListener('play', onPlay)
     audio.addEventListener('loadedmetadata', onLoadedMetadata)
+    audio.addEventListener('error', onError)
     return () => {
       audio.removeEventListener('timeupdate', onTimeUpdate)
       audio.removeEventListener('ended', onEnded)
       audio.removeEventListener('pause', onPause)
       audio.removeEventListener('play', onPlay)
       audio.removeEventListener('loadedmetadata', onLoadedMetadata)
+      audio.removeEventListener('error', onError)
     }
-  }, [totalDuration])
+  }, [totalDuration, resolvedUrl])
 
   useEffect(() => {
     const onOtherVoicePlay = (event: Event) => {
@@ -119,12 +161,16 @@ export function VoicePlayer({
       setPlaying(false)
     } else {
       window.dispatchEvent(new CustomEvent(VOICE_PLAY_EVENT, { detail: { id: playerId } }))
+      audio.volume = 1
+      audio.muted = false
       audio.playbackRate = speed
       try {
         await audio.play()
         setPlaying(true)
+        setError(false)
       } catch {
         setPlaying(false)
+        setError(true)
       }
     }
   }
@@ -201,10 +247,20 @@ export function VoicePlayer({
 
   const ringColor = mine ? '#ffffff' : '#3390ec'
 
+  const audioEl = (
+    <audio ref={audioRef} preload="metadata" playsInline>
+      {sourceType ? (
+        <source src={resolvedUrl} type={sourceType} />
+      ) : (
+        <source src={resolvedUrl} />
+      )}
+    </audio>
+  )
+
   if (circle) {
     return (
       <div className="flex flex-col items-center gap-2 overflow-hidden py-1">
-        <audio ref={audioRef} src={url} preload="metadata" />
+        {audioEl}
         <div className="relative h-[min(11rem,70vw)] w-[min(11rem,70vw)] max-h-44 max-w-44">
           <svg className="absolute inset-0 -rotate-90" viewBox="0 0 100 100">
             <circle cx="50" cy="50" r="48" fill="none" stroke="rgba(0,0,0,0.15)" strokeWidth="1.5" />
@@ -231,8 +287,10 @@ export function VoicePlayer({
                 ? 'bg-gradient-to-br from-[#2b5278] to-[#1a3a56] text-white'
                 : 'bg-gradient-to-br from-[#3390ec]/25 to-[#1a4a7a]/40 text-foreground',
               playing && 'animate-pulse',
+              error && 'ring-2 ring-rose-500/70',
             )}
             aria-label={playing ? 'Pause' : 'Play'}
+            title={error ? 'Не удалось воспроизвести' : undefined}
           >
             {/* Radial faux-waveform */}
             <div className="pointer-events-none absolute inset-4 flex items-end justify-center gap-[2px]">
@@ -310,7 +368,7 @@ export function VoicePlayer({
 
   return (
     <div className="flex items-center gap-2.5 py-1">
-      <audio ref={audioRef} src={url} preload="metadata" />
+      {audioEl}
       <Button
         onClick={togglePlay}
         variant="ghost"
@@ -320,7 +378,9 @@ export function VoicePlayer({
           mine
             ? 'bg-white/20 text-white hover:bg-white/30'
             : 'bg-[#3390ec]/15 text-[#3390ec] hover:bg-[#3390ec]/25',
+          error && 'ring-2 ring-rose-500/70',
         )}
+        title={error ? 'Не удалось воспроизвести' : undefined}
       >
         {playing ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4 translate-x-0.5" />}
       </Button>
@@ -374,7 +434,7 @@ export function VoicePlayer({
       </span>
 
       <a
-        href={url}
+        href={resolvedUrl}
         download
         className={cn(
           'shrink-0 rounded-full p-1.5 transition hover:bg-black/10',

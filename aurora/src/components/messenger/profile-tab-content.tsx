@@ -960,8 +960,9 @@ export function ProfileTabContent({
           >
             {item.attachmentUrl && (
               <VoicePlayer
-                url={item.attachmentUrl}
+                url={resolveMediaUrl(item.attachmentUrl) || item.attachmentUrl}
                 durationSec={item.durationSec}
+                mimeType={item.attachmentMime}
                 mine={false}
               />
             )}
