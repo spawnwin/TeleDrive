@@ -522,10 +522,10 @@ body[data-lightbox-open] [data-slot="sheet-content"] {
 }
 
 .admin-panel [data-slot='card'] {
-  border-radius: 1.5rem;
-  border-color: rgba(255, 255, 255, 0.08);
-  background: linear-gradient(165deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.02));
-  box-shadow: 0 10px 36px rgba(0, 0, 0, 0.28);
+  border-radius: 1.5rem !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+  background: linear-gradient(165deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.02)) !important;
+  box-shadow: 0 10px 36px rgba(0, 0, 0, 0.28) !important;
   backdrop-filter: blur(16px);
 }
 

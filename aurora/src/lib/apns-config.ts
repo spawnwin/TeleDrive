@@ -41,17 +41,29 @@ export function getApnsRuntimeConfig(): ApnsRuntimeConfig | null {
     stored?.bundleId ||
     'com.aurora.messenger'
   ).trim()
-  const keyPath = (
-    process.env.APNS_KEY_PATH ||
-    stored?.keyPath ||
-    DEFAULT_KEY_PATH
-  ).trim()
+  const candidates = [
+    (process.env.APNS_KEY_PATH || '').trim(),
+    (stored?.keyPath || '').trim(),
+    DEFAULT_KEY_PATH,
+  ].filter(Boolean)
+
+  let keyPath = ''
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) {
+      keyPath = candidate
+      break
+    }
+  }
+
+  const productionEnv = process.env.APNS_PRODUCTION
   const production =
-    process.env.APNS_PRODUCTION === 'true' ||
-    (process.env.APNS_PRODUCTION == null && stored?.production === true)
+    productionEnv === 'true'
+      ? true
+      : productionEnv === 'false'
+        ? false
+        : stored?.production === true
 
   if (!keyId || !teamId || !keyPath) return null
-  if (!fs.existsSync(keyPath)) return null
 
   try {
     const key = fs.readFileSync(keyPath, 'utf8')
