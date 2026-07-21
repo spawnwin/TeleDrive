@@ -9,8 +9,8 @@
  *    HTML but fall back to cache when offline
  */
 
-// v14: push open chat URL, search abort, archive errors, i18n polish.
-const CACHE_VERSION = 'aurora-v14'
+// v15: new Aurora app icon (glass A + aurora wisps).
+const CACHE_VERSION = 'aurora-v15'
 const SHELL_CACHE = `${CACHE_VERSION}-shell`
 const ASSET_CACHE = `${CACHE_VERSION}-assets`
 
