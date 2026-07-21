@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, type ReactNode } from 'react'
+import { useCallback, useEffect, useRef, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { X } from 'lucide-react'
@@ -16,6 +16,8 @@ interface MediaLightboxProps {
   footer?: ReactNode
   /** Use fixed bottom bar layout (no «Close» text). */
   hideCloseLabel?: boolean
+  /** Double-tap on the photo (e.g. like). Does not close the lightbox. */
+  onDoubleTap?: () => void
 }
 
 export function MediaLightbox({
@@ -25,11 +27,18 @@ export function MediaLightbox({
   zIndexClass = 'z-[9999]',
   footer,
   hideCloseLabel = false,
+  onDoubleTap,
 }: MediaLightboxProps) {
   const { t } = useI18n()
   const src = resolveMediaUrl(url)
+  const lastTapRef = useRef(0)
+  const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const handleClose = useCallback(() => {
+    if (closeTimerRef.current) {
+      clearTimeout(closeTimerRef.current)
+      closeTimerRef.current = null
+    }
     onClose()
   }, [onClose])
 
@@ -45,6 +54,40 @@ export function MediaLightbox({
     },
     [handleClose],
   )
+
+  const onPhotoPress = useCallback(
+    (e: React.SyntheticEvent) => {
+      e.preventDefault()
+      e.stopPropagation()
+      if (!onDoubleTap) {
+        handleClose()
+        return
+      }
+      const now = Date.now()
+      if (now - lastTapRef.current < 320) {
+        lastTapRef.current = 0
+        if (closeTimerRef.current) {
+          clearTimeout(closeTimerRef.current)
+          closeTimerRef.current = null
+        }
+        onDoubleTap()
+        return
+      }
+      lastTapRef.current = now
+      if (closeTimerRef.current) clearTimeout(closeTimerRef.current)
+      closeTimerRef.current = setTimeout(() => {
+        closeTimerRef.current = null
+        handleClose()
+      }, 320)
+    },
+    [handleClose, onDoubleTap],
+  )
+
+  useEffect(() => {
+    return () => {
+      if (closeTimerRef.current) clearTimeout(closeTimerRef.current)
+    }
+  }, [])
 
   useEffect(() => {
     if (!src) return
@@ -118,8 +161,8 @@ export function MediaLightbox({
               src={src}
               alt={alt}
               className="pointer-events-auto max-h-full max-w-full object-contain"
-              onClick={onClosePress}
-              onTouchEnd={onClosePress}
+              onClick={onPhotoPress}
+              onTouchEnd={onPhotoPress}
               onPointerDown={stopClose}
             />
           </div>

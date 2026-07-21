@@ -17,6 +17,7 @@ import {
   Pencil,
   Trash2,
   Eye,
+  Heart,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { VoicePlayer } from './voice-player'
@@ -56,6 +57,7 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog'
 import { Textarea } from '@/components/ui/textarea'
+import { cn } from '@/lib/utils'
 
 export type ProfileTab = 'profilePhotos' | 'media' | 'files' | 'links' | 'voice' | 'gifs'
 
@@ -137,6 +139,9 @@ export function ProfileTabContent({
   >([])
   const [photoViewersOpen, setPhotoViewersOpen] = useState(false)
   const [viewersPhotoUrl, setViewersPhotoUrl] = useState<string | null>(null)
+  const [photoLiked, setPhotoLiked] = useState(false)
+  const [photoLikeCount, setPhotoLikeCount] = useState(0)
+  const [photoLiking, setPhotoLiking] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<MediaItem | null>(null)
   const [captionTarget, setCaptionTarget] = useState<MediaItem | null>(null)
   const [captionDraft, setCaptionDraft] = useState('')
@@ -155,6 +160,8 @@ export function ProfileTabContent({
       if (!lightboxUrl) {
         setPhotoViewCount(0)
         setPhotoViewerPreviews([])
+        setPhotoLiked(false)
+        setPhotoLikeCount(0)
       }
       return
     }
@@ -180,6 +187,15 @@ export function ProfileTabContent({
           )
         })
         .catch(() => {})
+      fetch(
+        `/api/users/${encodeURIComponent(userId)}/profile/photo/like?url=${encodeURIComponent(photoKey)}`,
+        { credentials: 'include' },
+      )
+        .then((res) => res.json())
+        .then((data) => {
+          if (!cancelled && typeof data.likes === 'number') setPhotoLikeCount(data.likes)
+        })
+        .catch(() => {})
     } else {
       setPhotoViewerPreviews([])
       fetch(`/api/users/${encodeURIComponent(userId)}/profile/photo/view`, {
@@ -193,12 +209,59 @@ export function ProfileTabContent({
           if (!cancelled && typeof data.total === 'number') setPhotoViewCount(data.total)
         })
         .catch(() => {})
+      fetch(
+        `/api/users/${encodeURIComponent(userId)}/profile/photo/like?url=${encodeURIComponent(photoKey)}`,
+        { credentials: 'include' },
+      )
+        .then((res) => res.json())
+        .then((data) => {
+          if (cancelled) return
+          setPhotoLiked(!!data.isLiked)
+          if (typeof data.likes === 'number') setPhotoLikeCount(data.likes)
+        })
+        .catch(() => {})
     }
 
     return () => {
       cancelled = true
     }
   }, [lightboxUrl, lightboxItem?.attachmentUrl, lightboxItem?.source, lightboxItem?.type, isSelf, userId])
+
+  const togglePhotoLike = useCallback(async () => {
+    const photoKey = lightboxItem?.attachmentUrl
+    if (!photoKey || isSelf || photoLiking) return
+    setPhotoLiking(true)
+    const prevLiked = photoLiked
+    const prevCount = photoLikeCount
+    setPhotoLiked(!prevLiked)
+    setPhotoLikeCount(Math.max(0, prevCount + (prevLiked ? -1 : 1)))
+    try {
+      const res = await fetch(`/api/users/${encodeURIComponent(userId)}/profile/photo/like`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: photoKey }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error || t('profile.photoLikeError'))
+      setPhotoLiked(!!data.isLiked)
+      if (typeof data.likes === 'number') setPhotoLikeCount(data.likes)
+    } catch (err) {
+      setPhotoLiked(prevLiked)
+      setPhotoLikeCount(prevCount)
+      toast.error(err instanceof Error ? err.message : t('profile.photoLikeError'))
+    } finally {
+      setPhotoLiking(false)
+    }
+  }, [
+    lightboxItem?.attachmentUrl,
+    isSelf,
+    photoLiking,
+    photoLiked,
+    photoLikeCount,
+    userId,
+    t,
+  ])
 
   const isLightboxProfilePhoto =
     !!lightboxItem &&
@@ -606,7 +669,14 @@ export function ProfileTabContent({
         )}
         <MediaLightbox
           url={lightboxUrl}
-          hideCloseLabel={isSelf && isLightboxProfilePhoto}
+          hideCloseLabel={isLightboxProfilePhoto}
+          onDoubleTap={
+            !isSelf && isLightboxProfilePhoto
+              ? () => {
+                  if (!photoLiked) void togglePhotoLike()
+                }
+              : undefined
+          }
           onClose={() => {
             setLightboxUrl(null)
             setLightboxItem(null)
@@ -614,69 +684,101 @@ export function ProfileTabContent({
             setViewersPhotoUrl(null)
           }}
           footer={
-            isSelf && isLightboxProfilePhoto ? (
-              <div className="flex w-full items-center justify-between gap-3">
-                <button
-                  type="button"
-                  className="flex min-w-0 flex-1 items-center gap-2.5 text-left active:opacity-80"
-                  style={{ WebkitTapHighlightColor: 'transparent' }}
-                  onClick={(e) => {
-                    e.preventDefault()
-                    e.stopPropagation()
-                    setViewersPhotoUrl(lightboxItem?.attachmentUrl ?? null)
-                    setPhotoViewersOpen(true)
-                  }}
-                >
-                  {photoViewerPreviews.length > 0 ? (
-                    <span className="flex shrink-0 items-center pl-1">
-                      {photoViewerPreviews.map((viewer, index) => (
-                        <span
-                          key={viewer.id}
-                          className="relative inline-flex rounded-full ring-2 ring-black"
-                          style={{
-                            marginLeft: index === 0 ? 0 : -10,
-                            zIndex: photoViewerPreviews.length - index,
-                          }}
-                        >
-                          <Avatar
-                            name={viewer.name}
-                            color={viewer.avatarColor}
-                            imageUrl={viewer.avatarUrl}
-                            size="sm"
-                            className="h-8 w-8 [&>div]:!h-8 [&>div]:!w-8 [&>div]:!rounded-full [&>div]:text-[10px]"
-                          />
-                        </span>
-                      ))}
+            isLightboxProfilePhoto ? (
+              isSelf ? (
+                <div className="flex w-full items-center justify-between gap-3">
+                  <button
+                    type="button"
+                    className="flex min-w-0 flex-1 items-center gap-2.5 text-left active:opacity-80"
+                    style={{ WebkitTapHighlightColor: 'transparent' }}
+                    onClick={(e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      setViewersPhotoUrl(lightboxItem?.attachmentUrl ?? null)
+                      setPhotoViewersOpen(true)
+                    }}
+                  >
+                    {photoViewerPreviews.length > 0 ? (
+                      <span className="flex shrink-0 items-center pl-1">
+                        {photoViewerPreviews.map((viewer, index) => (
+                          <span
+                            key={viewer.id}
+                            className="relative inline-flex rounded-full ring-2 ring-black"
+                            style={{
+                              marginLeft: index === 0 ? 0 : -10,
+                              zIndex: photoViewerPreviews.length - index,
+                            }}
+                          >
+                            <Avatar
+                              name={viewer.name}
+                              color={viewer.avatarColor}
+                              imageUrl={viewer.avatarUrl}
+                              size="sm"
+                              className="h-8 w-8 [&>div]:!h-8 [&>div]:!w-8 [&>div]:!rounded-full [&>div]:text-[10px]"
+                            />
+                          </span>
+                        ))}
+                      </span>
+                    ) : (
+                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/15 text-white">
+                        <Eye className="h-4 w-4" />
+                      </span>
+                    )}
+                    <span className="min-w-0 truncate text-[15px] font-medium text-white">
+                      {photoViewCount > 0
+                        ? t('profile.photoViewsCount').replace('{count}', String(photoViewCount))
+                        : t('profile.photoViewsEmpty')}
+                      {photoLikeCount > 0
+                        ? ` · ${t('profile.photoLikesCount').replace('{count}', String(photoLikeCount))}`
+                        : ''}
                     </span>
-                  ) : (
-                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/15 text-white">
-                      <Eye className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
+                    aria-label={t('profile.removePhotoAction')}
+                    className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-white active:bg-white/10"
+                    style={{ WebkitTapHighlightColor: 'transparent' }}
+                    onClick={(e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      if (lightboxItem) {
+                        setDeleteTarget(lightboxItem)
+                        setLightboxUrl(null)
+                        setLightboxItem(null)
+                      }
+                    }}
+                  >
+                    <Trash2 className="h-6 w-6" strokeWidth={1.75} />
+                  </button>
+                </div>
+              ) : (
+                <div className="flex w-full items-center justify-end">
+                  <button
+                    type="button"
+                    disabled={photoLiking}
+                    aria-label={photoLiked ? t('profile.photoLiked') : t('profile.photoLike')}
+                    className={cn(
+                      'flex h-11 items-center gap-2 rounded-full px-4 text-[15px] font-medium text-white active:bg-white/10',
+                      photoLiked && 'text-rose-400',
+                    )}
+                    style={{ WebkitTapHighlightColor: 'transparent' }}
+                    onClick={(e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      void togglePhotoLike()
+                    }}
+                  >
+                    <Heart
+                      className={cn('h-6 w-6', photoLiked && 'fill-rose-400 text-rose-400')}
+                      strokeWidth={1.75}
+                    />
+                    <span>
+                      {photoLiked ? t('profile.photoLiked') : t('profile.photoLike')}
+                      {photoLikeCount > 0 ? ` · ${photoLikeCount}` : ''}
                     </span>
-                  )}
-                  <span className="truncate text-[15px] font-medium text-white">
-                    {photoViewCount > 0
-                      ? t('profile.photoViewsCount').replace('{count}', String(photoViewCount))
-                      : t('profile.photoViewsEmpty')}
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  aria-label={t('profile.removePhotoAction')}
-                  className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-white active:bg-white/10"
-                  style={{ WebkitTapHighlightColor: 'transparent' }}
-                  onClick={(e) => {
-                    e.preventDefault()
-                    e.stopPropagation()
-                    if (lightboxItem) {
-                      setDeleteTarget(lightboxItem)
-                      setLightboxUrl(null)
-                      setLightboxItem(null)
-                    }
-                  }}
-                >
-                  <Trash2 className="h-6 w-6" strokeWidth={1.75} />
-                </button>
-              </div>
+                  </button>
+                </div>
+              )
             ) : null
           }
         />

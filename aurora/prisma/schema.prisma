@@ -99,6 +99,8 @@ model User {
   giftsReceived       GiftSent[] @relation("GiftRecipient")
   profilePhotoViewsReceived ProfilePhotoView[] @relation("ProfilePhotoViewsReceived")
   profilePhotoViewsMade     ProfilePhotoView[] @relation("ProfilePhotoViewsMade")
+  profilePhotoLikesReceived ProfilePhotoLike[] @relation("ProfilePhotoLikesReceived")
+  profilePhotoLikesMade     ProfilePhotoLike[] @relation("ProfilePhotoLikesMade")
 
   // Creator Premium — fan-funded subscriptions
   premiumTiersOwned      CreatorPremiumTier[]  @relation("PremiumTierCreator")
@@ -1160,6 +1162,22 @@ model ProfilePhotoView {
   @@unique([ownerId, viewerId, avatarUrl])
   @@index([ownerId, avatarUrl, viewedAt])
   @@index([viewerId])
+}
+
+// Who liked a profile photo (avatar or gallery) — Telegram-style.
+model ProfilePhotoLike {
+  id        String   @id @default(cuid())
+  ownerId   String
+  likerId   String
+  avatarUrl String
+  createdAt DateTime @default(now())
+
+  owner User @relation("ProfilePhotoLikesReceived", fields: [ownerId], references: [id], onDelete: Cascade)
+  liker User @relation("ProfilePhotoLikesMade", fields: [likerId], references: [id], onDelete: Cascade)
+
+  @@unique([ownerId, likerId, avatarUrl])
+  @@index([ownerId, avatarUrl, createdAt])
+  @@index([likerId])
 }
 
 // One row per (profile, visitor) pair, upserted on each view — naturally
