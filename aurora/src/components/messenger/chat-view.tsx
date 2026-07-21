@@ -106,6 +106,7 @@ import { buildLinkSharePayload, buildMessageSharePayload, parseShareMetadata, sh
 import { openShareTarget } from '@/lib/open-share-target'
 import { MediaLightbox } from './media-lightbox'
 import { isImageUrl, isVideoUrl, resolveMediaUrl } from '@/lib/media-url'
+import { isE2EEPayload } from '@/lib/e2ee-payload'
 import { callPreviewLabel, parseCallMetadata } from '@/lib/call-message'
 import { isVideoFile, CHAT_ATTACHMENT_ACCEPT } from '@/lib/media-type'
 import {
@@ -354,13 +355,26 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
   const onMessageEdited = useCallback(
     (data: EditedMessagePayload) => {
       if (data.chatId !== activeChatId) return
-      setMessages((prev) =>
-        prev.map((m) =>
-          m.id === data.id
-            ? { ...m, content: data.content, editedAt: data.editedAt }
-            : m,
-        ),
-      )
+      void (async () => {
+        let content = data.content
+        if (
+          e2eeRef.current &&
+          isEncryptedRef.current(data.content)
+        ) {
+          try {
+            content = await decryptRef.current(data.content)
+          } catch {
+            // keep ciphertext until keys are ready / decrypt retries
+          }
+        }
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === data.id
+              ? { ...m, content, editedAt: data.editedAt }
+              : m,
+          ),
+        )
+      })()
     },
     [activeChatId],
   )
@@ -685,33 +699,42 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
   // Decrypt messages after any load path: initial load, search, favorites,
   // jump-to-message pagination, gifts, and forwarded messages all replace the
   // message array independently.
-  // Track the last-decrypted message set to break the dependency cycle: without
-  // this guard, setMessages creates a new array reference → messages changes →
-  // effect re-runs → infinite loop when isEncrypted produces a false positive
-  // on valid JSON content.
-  const lastDecryptedIdsRef = useRef<string>('')
+  // Fingerprint still-encrypted bodies (not just ids) so a refetch that brings
+  // the same ids back as ciphertext is decrypted again. Reset the pass marker
+  // when decryptMessage changes (private key finished loading).
+  const lastDecryptPassRef = useRef<string>('')
+  useEffect(() => {
+    lastDecryptPassRef.current = ''
+  }, [decryptMessage, e2eeEnabled])
   useEffect(() => {
     if (!e2eeEnabled || messages.length === 0) return
-    const hasEncryptedText = messages.some((m) => m.type === 'text' && isEncrypted(m.content))
-    if (!hasEncryptedText) return
-    const idsSig = messages.map((m) => m.id).join(',')
-    if (idsSig === lastDecryptedIdsRef.current) return
+    const encrypted = messages.filter((m) => m.type === 'text' && isEncrypted(m.content))
+    if (encrypted.length === 0) return
+    const passSig = encrypted
+      .map((m) => `${m.id}:${m.content.length}:${m.content.slice(0, 24)}`)
+      .join('|')
+    if (passSig === lastDecryptPassRef.current) return
     let cancelled = false
     ;(async () => {
+      let anyChanged = false
       const decrypted = await Promise.all(
         messages.map(async (m) => {
           if (m.type !== 'text' || !isEncrypted(m.content)) return m
           try {
             const plaintext = await decryptMessage(m.content)
+            if (plaintext !== m.content) anyChanged = true
             return { ...m, content: plaintext }
           } catch {
-            return { ...m, content: '🔒 Зашифрованное сообщение' }
+            // Keep ciphertext so a later key load can retry — do not overwrite
+            // with a lock placeholder that can never be decrypted again.
+            return m
           }
         }),
       )
       if (cancelled) return
-      lastDecryptedIdsRef.current = idsSig
-      setMessages(decrypted)
+      // Mark this ciphertext set attempted so permanent failures do not loop.
+      lastDecryptPassRef.current = passSig
+      if (anyChanged) setMessages(decrypted)
     })()
     return () => {
       cancelled = true
@@ -3534,7 +3557,13 @@ function MessageBubble({
             )}
             {msg.content && msg.type !== 'gift' && (
               <ReadMoreText
-                text={msg.content}
+                text={
+                  // Still-encrypted ciphertext is unreadable JSON — show a clear
+                  // label until the decrypt effect replaces it with plaintext.
+                  isE2EEPayload(msg.content)
+                    ? '🔒 Зашифрованное сообщение'
+                    : msg.content
+                }
                 linkClassName={mine ? 'text-white/90' : 'text-[#3390ec]'}
                 readMoreLabel={t('share.readMore')}
                 readLessLabel={t('share.readLess')}

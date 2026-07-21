@@ -52,6 +52,7 @@ import { isUserOnline } from '@/lib/friends-client'
 import { toast } from 'sonner'
 import { formatChatTime } from '@/lib/format'
 import { getChatAvatarImageUrl } from '@/lib/chat-avatar'
+import { isE2EEPayload } from '@/lib/e2ee-payload'
 import { filterChatsByFolder, type ChatFolder } from '@/lib/chat-folders'
 import { EmojiStatusBadge } from './emoji-status-badge'
 import { StoriesRow } from './stories-row'
@@ -1158,6 +1159,9 @@ function SavedChatRow({ chat, selectionMode = false }: { chat: ChatListItem; sel
     if (chat.lastMessage.type === 'file' && !chat.lastMessage.content) {
       return `${t('chat.file')}: ${chat.lastMessage.attachmentName || ''}`
     }
+    if (chat.lastMessage.content && isE2EEPayload(chat.lastMessage.content)) {
+      return '🔒 Зашифрованное сообщение'
+    }
     return chat.lastMessage.content
   }
 
@@ -1302,6 +1306,9 @@ function ChatListItemRow({
     if (chat.lastMessage.type === 'share') return t('chat.share')
     if (isVoice && !chat.lastMessage.content) return t('chat.voice')
     if (isFile && !chat.lastMessage.content) return `${t('chat.file')}: ${chat.lastMessage.attachmentName || ''}`
+    if (chat.lastMessage.content && isE2EEPayload(chat.lastMessage.content)) {
+      return '🔒 Зашифрованное сообщение'
+    }
     return chat.lastMessage.content
   }
 
