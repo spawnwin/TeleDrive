@@ -40,7 +40,7 @@ export function FriendButton({
 
   useEffect(() => {
     setLocal(friendship ?? null)
-  }, [friendship, userId])
+  }, [userId, friendship?.id, friendship?.status])
 
   const state = local ?? friendship ?? { id: null, status: 'none' as FriendshipStatus }
 

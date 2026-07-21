@@ -662,10 +662,10 @@ export function SettingsDialog({ open, onOpenChange, onOpenPremium, onOpenCoins,
         className={cn(
           'max-w-md gap-0 overflow-x-clip p-0 safe-top-min safe-bottom-min',
           // Full-bleed Telegram settings on mobile — MUST reset Dialog's 50%/translate centering
-          'max-md:!inset-0 max-md:!left-0 max-md:!top-0 max-md:!right-0 max-md:!bottom-0',
-          'max-md:!h-[100dvh] max-md:!max-h-[100dvh] max-md:!w-full max-md:!max-w-none',
-          'max-md:!translate-x-0 max-md:!translate-y-0 max-md:!rounded-none max-md:!border-0',
-          'max-md:flex max-md:flex-col max-md:gap-0',
+          'max-xl:!inset-0 max-xl:!left-0 max-xl:!top-0 max-xl:!right-0 max-xl:!bottom-0',
+          'max-xl:!h-[100dvh] max-xl:!max-h-[100dvh] max-xl:!w-full max-xl:!max-w-none',
+          'max-xl:!translate-x-0 max-xl:!translate-y-0 max-xl:!rounded-none max-xl:!border-0',
+          'max-xl:flex max-xl:flex-col max-xl:gap-0',
         )}
       >
         <DialogHeader className="px-4 pt-4">
@@ -743,7 +743,7 @@ export function SettingsDialog({ open, onOpenChange, onOpenPremium, onOpenCoins,
           className="hidden"
         />
 
-        <div className="max-h-[75vh] overflow-y-auto overflow-x-hidden p-4 max-md:max-h-none max-md:min-h-0 max-md:flex-1">
+        <div className="max-h-[75vh] overflow-y-auto overflow-x-hidden p-4 max-xl:max-h-none max-xl:min-h-0 max-xl:flex-1">
           <motion.div
             key={page}
             initial={{ opacity: 0, x: page === 'main' ? -24 : 24 }}

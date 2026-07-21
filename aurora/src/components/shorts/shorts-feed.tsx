@@ -455,7 +455,7 @@ export function ShortsFeed({ onBack }: ShortsFeedProps) {
   const feedHeightClass = 'h-full min-h-0 flex-1'
 
   return (
-    <div className={cn('relative flex w-full flex-col bg-black', feedHeightClass)}>
+    <div className={cn('relative flex w-full flex-col bg-black pb-[calc(4.75rem+env(safe-area-inset-bottom))] xl:pb-0', feedHeightClass)}>
       {/* Top bar. On phones with a safe-area inset (notch/status bar), this
           bar's box grows tall enough to overlap ShortCard's top-right
           mute/three-dot buttons (z-20) underneath — its gradient background
@@ -549,7 +549,7 @@ export function ShortsFeed({ onBack }: ShortsFeedProps) {
               variant="outline"
               className="border-white/30 text-white hover:bg-white/10"
             >
-              {t('misc.back')}
+              {t('misc.retry')}
             </Button>
           </div>
         ) : items.length === 0 ? (
@@ -654,7 +654,7 @@ export function ShortsFeed({ onBack }: ShortsFeedProps) {
             )}
             {!cursorRef.current && items.length > 0 && (
               <div className="flex h-32 items-center justify-center text-white/40">
-                <p className="text-xs">· конец ленты ·</p>
+                <p className="text-xs">{t('shorts.endOfFeed')}</p>
               </div>
             )}
           </>

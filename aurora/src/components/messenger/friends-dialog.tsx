@@ -68,16 +68,20 @@ export function FriendsDialog({
     setLoading(true)
     try {
       const res = await fetch('/api/friends')
-      const data = await res.json()
+      const data = await res.json().catch(() => ({}))
       if (res.ok) {
         setFriends(data.friends || [])
         setIncoming(data.incoming || [])
         setOutgoing(data.outgoing || [])
+      } else {
+        toast.error(data.error || t('friends.errorAction'))
       }
+    } catch {
+      toast.error(t('friends.errorAction'))
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [t])
 
   useEffect(() => {
     if (open) {
@@ -127,7 +131,15 @@ export function FriendsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md gap-0 overflow-hidden p-0">
+      <DialogContent
+        className={cn(
+          'max-w-md gap-0 overflow-hidden p-0',
+          'max-xl:!inset-0 max-xl:!left-0 max-xl:!top-0 max-xl:!right-0 max-xl:!bottom-0',
+          'max-xl:!h-[100dvh] max-xl:!max-h-[100dvh] max-xl:!w-full max-xl:!max-w-none',
+          'max-xl:!translate-x-0 max-xl:!translate-y-0 max-xl:!rounded-none max-xl:!border-0',
+          'max-xl:flex max-xl:flex-col',
+        )}
+      >
         <DialogHeader className="px-5 pt-5">
           <DialogTitle className="flex items-center gap-2">
             <span className="flex-1">{t('friends.title')}</span>
@@ -212,7 +224,7 @@ export function FriendsDialog({
           </div>
         )}
 
-        <ScrollArea className="max-h-[420px] px-3 py-3">
+        <ScrollArea className="max-h-[420px] px-3 py-3 max-xl:max-h-none max-xl:min-h-0 max-xl:flex-1 max-xl:pb-[calc(5.75rem+env(safe-area-inset-bottom))]">
           {loading ? (
             <div className="flex items-center justify-center py-16">
               <Loader2 className="h-6 w-6 animate-spin text-[#3390ec]" />

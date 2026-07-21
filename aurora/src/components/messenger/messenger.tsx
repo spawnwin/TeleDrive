@@ -702,7 +702,7 @@ export function Messenger() {
         <aside
           className={`${
             isShortsMode
-              ? 'hidden md:flex'
+              ? 'hidden xl:flex'
               : activeChatId
                 ? 'hidden xl:flex'
                 : 'flex'
@@ -748,9 +748,7 @@ export function Messenger() {
         )}
 
       {!activeChatId &&
-        !isShortsMode &&
         !showSettings &&
-        !showFriends &&
         !showCoins &&
         !showPremium &&
         !showP2PMarketplace &&
@@ -764,12 +762,12 @@ export function Messenger() {
           labels={{
             chats: translate(lang, 'nav.chats'),
             shorts: translate(lang, 'nav.shorts'),
-            contacts: lang === 'ru' ? 'Контакты' : 'Contacts',
+            contacts: translate(lang, 'nav.contacts'),
           }}
-          settingsLabel={lang === 'ru' ? 'Настройки' : 'Settings'}
-          profileLabel={lang === 'ru' ? 'Профиль' : 'Profile'}
-          searchLabel={lang === 'ru' ? 'Поиск' : 'Search'}
-          cancelLabel={lang === 'ru' ? 'Отмена' : 'Cancel'}
+          settingsLabel={translate(lang, 'nav.settings')}
+          profileLabel={translate(lang, 'nav.profile')}
+          searchLabel={translate(lang, 'nav.search')}
+          cancelLabel={translate(lang, 'nav.cancel')}
           searchPlaceholder={translate(lang, 'sidebar.searchChats')}
           userName={currentUser?.name}
           userAvatarColor={currentUser?.avatarColor}

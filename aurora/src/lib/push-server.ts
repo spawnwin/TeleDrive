@@ -44,10 +44,10 @@ async function ensureVapid() {
 async function sendApnsPush(
   deviceToken: string,
   payload: { title: string; body: string; chatId?: string; [key: string]: unknown },
-): Promise<boolean> {
+): Promise<{ ok: true } | { ok: false; status?: number; reason?: string }> {
   if (!APNS_KEY_ID || !APNS_TEAM_ID || !APNS_KEY_PATH) {
     console.warn('[push] APNs not configured — skipping iOS push')
-    return false
+    return { ok: false, reason: 'not-configured' }
   }
 
   try {
@@ -87,12 +87,18 @@ async function sendApnsPush(
     if (!res.ok) {
       const errBody = await res.text()
       console.error('[push] APNs error:', res.status, errBody)
-      return false
+      let reason: string | undefined
+      try {
+        reason = (JSON.parse(errBody) as { reason?: string }).reason
+      } catch {
+        reason = errBody.slice(0, 80) || undefined
+      }
+      return { ok: false, status: res.status, reason }
     }
-    return true
+    return { ok: true }
   } catch (err) {
     console.error('[push] APNs send failed:', err)
-    return false
+    return { ok: false, reason: err instanceof Error ? err.message : 'send-failed' }
   }
 }
 
@@ -171,13 +177,23 @@ export async function sendPushToUser(
       if (isNativeIos) {
         // Send via APNs
         const deviceToken = sub.endpoint.replace('capacitor://', '')
-        const ok = await sendApnsPush(deviceToken, payload)
-        if (ok) {
+        const apns = await sendApnsPush(deviceToken, payload)
+        if (apns.ok) {
           result.sent++
           console.log('[push] apns ok', { userId, token: deviceToken.slice(0, 16) + '...' })
         } else {
           result.failed++
-          result.errors.push('apns-send-failed')
+          result.errors.push(`apns-${apns.status ?? 'err'}:${apns.reason || 'send-failed'}`)
+          const dead =
+            apns.status === 410 ||
+            apns.reason === 'BadDeviceToken' ||
+            apns.reason === 'Unregistered' ||
+            apns.reason === 'DeviceTokenNotForTopic' ||
+            apns.reason === 'ExpiredToken'
+          if (dead) {
+            await db.pushSubscription.delete({ where: { id: sub.id } }).catch(() => {})
+            result.removed++
+          }
         }
         return
       }

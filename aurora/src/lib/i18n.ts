@@ -422,6 +422,12 @@ const ru: Dict = {
   // Navigation tabs
   'nav.chats': 'Чаты',
   'nav.shorts': 'Шорты',
+  'nav.contacts': 'Контакты',
+  'nav.settings': 'Настройки',
+  'nav.profile': 'Профиль',
+  'nav.search': 'Поиск',
+  'nav.cancel': 'Отмена',
+  'shorts.endOfFeed': '· конец ленты ·',
   'nav.earnings': 'Заработок',
 
   // Shorts feed
@@ -1603,6 +1609,12 @@ const en: Dict = {
   // Navigation tabs
   'nav.chats': 'Chats',
   'nav.shorts': 'Shorts',
+  'nav.contacts': 'Contacts',
+  'nav.settings': 'Settings',
+  'nav.profile': 'Profile',
+  'nav.search': 'Search',
+  'nav.cancel': 'Cancel',
+  'shorts.endOfFeed': '· end of feed ·',
   'nav.earnings': 'Earnings',
 
   // Shorts feed

@@ -3,6 +3,7 @@ import { db } from '@/lib/db'
 import { getCurrentUser } from '@/lib/auth'
 import { withJsonApi } from '@/lib/with-json-api'
 import { normalizeChannelSlug } from '@/lib/channels'
+import { getFriendshipView } from '@/lib/friends'
 
 const USER_LIMIT = 20
 const CHAT_LIMIT = 15
@@ -90,7 +91,7 @@ export const GET = withJsonApi(async function GET(req: NextRequest) {
     }),
   ])
 
-  const users = userCandidates
+  const matchedUsers = userCandidates
     .filter(
       (u) =>
         !blockedIds.has(u.id) &&
@@ -102,6 +103,30 @@ export const GET = withJsonApi(async function GET(req: NextRequest) {
       return ra - rb || a.name.localeCompare(b.name, 'ru')
     })
     .slice(0, USER_LIMIT)
+
+  const userIds = matchedUsers.map((u) => u.id)
+  const friendships =
+    userIds.length > 0
+      ? await db.friendship.findMany({
+          where: {
+            OR: [
+              { requesterId: me.id, addresseeId: { in: userIds } },
+              { addresseeId: me.id, requesterId: { in: userIds } },
+            ],
+          },
+        })
+      : []
+
+  const friendshipByUser = new Map<string, ReturnType<typeof getFriendshipView>>()
+  for (const f of friendships) {
+    const otherId = f.requesterId === me.id ? f.addresseeId : f.requesterId
+    friendshipByUser.set(otherId, getFriendshipView(f, me.id))
+  }
+
+  const users = matchedUsers.map((u) => ({
+    ...u,
+    friendship: friendshipByUser.get(u.id) ?? { id: null, status: 'none' as const },
+  }))
 
   const matchedPublic = publicChats
     .filter((c) => {

@@ -268,6 +268,7 @@ export function ChatSidebar({
     avatarColor: string
     avatarUrl?: string | null
     online: boolean
+    friendship?: { id: string | null; status: import('@/lib/friends').FriendshipStatus }
   }
   type SearchPublicChatHit = {
     id: string
@@ -915,7 +916,11 @@ export function ChatSidebar({
                           >
                             {t('sidebar.openChat')}
                           </Button>
-                          <FriendButton userId={u.id} friendship={{ id: null, status: 'none' }} variant="compact" />
+                          <FriendButton
+                            userId={u.id}
+                            friendship={u.friendship ?? { id: null, status: 'none' }}
+                            variant="compact"
+                          />
                         </div>
                       ))}
                     </div>
@@ -2129,7 +2134,15 @@ function NewChatDialog({
   const [channelDesc, setChannelDesc] = useState('')
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [results, setResults] = useState<
-    Array<{ id: string; name: string; username: string; avatarColor: string; avatarUrl?: string | null; online: boolean }>
+    Array<{
+      id: string
+      name: string
+      username: string
+      avatarColor: string
+      avatarUrl?: string | null
+      online: boolean
+      friendship?: { id: string | null; status: import('@/lib/friends').FriendshipStatus }
+    }>
   >([])
   const [channelHits, setChannelHits] = useState<
     Array<{ id: string; title: string; slug: string; avatarColor: string; avatarUrl: string | null; memberCount: number; isMember: boolean }>
@@ -2139,25 +2152,40 @@ function NewChatDialog({
   >([])
   const [loading, setLoading] = useState(false)
   const [joiningSlug, setJoiningSlug] = useState<string | null>(null)
+  const searchAbortRef = useRef<AbortController | null>(null)
+  const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  const runSearch = async (q: string) => {
+  const runSearch = (q: string) => {
     setSearch(q)
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current)
+    searchAbortRef.current?.abort()
     if (!q.trim()) {
       setResults([])
       setChannelHits([])
       setGroupHits([])
+      setLoading(false)
       return
     }
-    setLoading(true)
-    try {
-      const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`)
-      const data = await res.json()
-      setResults(data.users || [])
-      setChannelHits(data.channels || [])
-      setGroupHits(data.groups || [])
-    } finally {
-      setLoading(false)
-    }
+    searchTimerRef.current = setTimeout(async () => {
+      const ac = new AbortController()
+      searchAbortRef.current = ac
+      setLoading(true)
+      try {
+        const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`, { signal: ac.signal })
+        const data = await res.json().catch(() => ({}))
+        if (ac.signal.aborted) return
+        setResults(data.users || [])
+        setChannelHits(data.channels || [])
+        setGroupHits(data.groups || [])
+      } catch (err) {
+        if (err instanceof DOMException && err.name === 'AbortError') return
+        setResults([])
+        setChannelHits([])
+        setGroupHits([])
+      } finally {
+        if (!ac.signal.aborted) setLoading(false)
+      }
+    }, 300)
   }
 
   const startPrivateChat = async (targetUserId: string) => {
@@ -2340,7 +2368,11 @@ function NewChatDialog({
                       >
                         <UserCircle className="h-4 w-4 text-muted-foreground" />
                       </Button>
-                      <FriendButton userId={u.id} friendship={{ id: null, status: 'none' }} variant="compact" />
+                      <FriendButton
+                        userId={u.id}
+                        friendship={u.friendship ?? { id: null, status: 'none' }}
+                        variant="compact"
+                      />
                     </div>
                   ))}
                   {channelHits.length > 0 && (
