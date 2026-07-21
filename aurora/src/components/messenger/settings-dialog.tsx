@@ -247,7 +247,7 @@ export function SettingsDialog({ open, onOpenChange, onOpenPremium, onOpenCoins 
   const [bio, setBio] = useState(currentUser?.bio || '')
   const [avatarColor, setAvatarColor] = useState(currentUser?.avatarColor || '#3390ec')
   const [avatarUrl, setAvatarUrl] = useState<string | null>(currentUser?.avatarUrl || null)
-  const [premiumTheme, setPremiumTheme] = useState(currentUser?.premiumTheme || 'aurora')
+  const [premiumTheme, setPremiumTheme] = useState(currentUser?.premiumTheme || 'classic')
   const [saving, setSaving] = useState(false)
   const [uploadingAvatar, setUploadingAvatar] = useState(false)
   const [cropSrc, setCropSrc] = useState<string | null>(null)
@@ -266,7 +266,7 @@ export function SettingsDialog({ open, onOpenChange, onOpenPremium, onOpenCoins 
       setBio(currentUser?.bio || '')
       setAvatarColor(currentUser?.avatarColor || '#3390ec')
       setAvatarUrl(currentUser?.avatarUrl || null)
-      setPremiumTheme(currentUser?.premiumTheme || 'aurora')
+      setPremiumTheme(currentUser?.premiumTheme || 'classic')
       setMessageSoundName(loadCustomSound('message')?.name || '')
       setCallSoundName(loadCustomSound('call')?.name || '')
     }
@@ -915,7 +915,7 @@ export function SettingsDialog({ open, onOpenChange, onOpenPremium, onOpenCoins 
                     <Label className="mt-4 mb-2 block text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                       {t('premium.selectTheme')}
                     </Label>
-                    <div className="grid grid-cols-3 gap-2">
+                    <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
                       {PREMIUM_THEMES.map((th) => (
                         <button
                           key={th}

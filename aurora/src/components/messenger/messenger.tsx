@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { flushSync } from 'react-dom'
 import { useAppStore, type User } from '@/lib/store'
-import { isPremiumActive } from '@/lib/coins'
+import { isPremiumActive, PREMIUM_THEMES } from '@/lib/coins'
 import { ChatSidebar } from './chat-sidebar'
 import { ChatView } from './chat-view'
 import { ChatInfoPanel } from './chat-info-panel'
@@ -287,10 +287,12 @@ export function Messenger() {
     return () => navigator.serviceWorker.removeEventListener('message', handler)
   }, [setActiveChat, setView, setProfileUserId])
 
-  // Apply premium theme
+  // Apply premium theme (Telegram-style palettes)
   useEffect(() => {
     const root = document.documentElement
-    root.classList.remove('premium-aurora', 'premium-galaxy', 'premium-sunset')
+    for (const theme of PREMIUM_THEMES) {
+      root.classList.remove(`premium-${theme}`)
+    }
     if (currentUser && isPremiumActive(currentUser) && currentUser.premiumTheme) {
       root.classList.add(`premium-${currentUser.premiumTheme}`)
     }

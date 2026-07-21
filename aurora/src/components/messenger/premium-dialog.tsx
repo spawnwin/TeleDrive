@@ -31,6 +31,19 @@ interface PremiumDialogProps {
 }
 
 const THEME_PREVIEWS: Record<string, string> = {
+  classic: 'linear-gradient(135deg, #0e1621, #3390ec)',
+  night: 'linear-gradient(135deg, #000000, #5eb3f6)',
+  graphite: 'linear-gradient(135deg, #1c1c1e, #64d2ff)',
+  arctic: 'linear-gradient(135deg, #0a1628, #4fc3f7)',
+  mint: 'linear-gradient(135deg, #0b1a16, #2dd4a8)',
+  cherry: 'linear-gradient(135deg, #1a0c12, #ff5a7a)',
+  ocean: 'linear-gradient(135deg, #061820, #00bcd4)',
+  golden: 'linear-gradient(135deg, #16120a, #f5c542)',
+  lavender: 'linear-gradient(135deg, #140f1e, #b388ff)',
+  coffee: 'linear-gradient(135deg, #1a1410, #c4a484)',
+  emerald: 'linear-gradient(135deg, #071712, #34d399)',
+  rose: 'linear-gradient(135deg, #1a0f16, #f472b6)',
+  steel: 'linear-gradient(135deg, #12161a, #90caf9)',
   aurora: 'linear-gradient(135deg, #7c3aed, #06b6d4)',
   galaxy: 'linear-gradient(135deg, #1e1b4b, #7c3aed, #ec4899)',
   sunset: 'linear-gradient(135deg, #f97316, #ec4899, #8b5cf6)',
@@ -39,7 +52,7 @@ const THEME_PREVIEWS: Record<string, string> = {
 export function PremiumDialog({ open, onOpenChange }: PremiumDialogProps) {
   const { t } = useI18n()
   const { currentUser, setCurrentUser } = useAppStore()
-  const [selectedTheme, setSelectedTheme] = useState(currentUser?.premiumTheme || 'aurora')
+  const [selectedTheme, setSelectedTheme] = useState(currentUser?.premiumTheme || 'classic')
   const [purchasing, setPurchasing] = useState(false)
   // Admin-configurable price/duration (src/app/admin/payments); these static
   // imports are just the fallback shown before the fetch resolves.
@@ -161,7 +174,7 @@ export function PremiumDialog({ open, onOpenChange }: PremiumDialogProps) {
           <p className="mb-2 mt-4 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             {t('premium.selectTheme')}
           </p>
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
             {PREMIUM_THEMES.map((theme) => (
               <button
                 key={theme}
