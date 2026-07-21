@@ -294,12 +294,19 @@ export function useE2EE() {
   )
 
   const getPublicKey = useCallback(async (userId: string, publicKeyB64: string): Promise<CryptoKey | null> => {
-    const cached = publicKeyCacheRef.current.get(userId)
+    const cacheKey = `${userId}:${publicKeyB64}`
+    const cached = publicKeyCacheRef.current.get(cacheKey)
     if (cached) return cached
+    // Drop stale entries for this user (key rotation).
+    for (const key of publicKeyCacheRef.current.keys()) {
+      if (key.startsWith(`${userId}:`) && key !== cacheKey) {
+        publicKeyCacheRef.current.delete(key)
+      }
+    }
     try {
-      const key = await importPublicKey(publicKeyB64)
-      publicKeyCacheRef.current.set(userId, key)
-      return key
+      const imported = await importPublicKey(publicKeyB64)
+      publicKeyCacheRef.current.set(cacheKey, imported)
+      return imported
     } catch (e) {
       console.error('[e2ee] failed to import public key', e)
       return null

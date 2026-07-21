@@ -137,7 +137,10 @@ const ru: Dict = {
   'chat.deleteShort': 'Удалить',
   'chat.archived': 'Чат архивирован',
   'chat.archiveError': 'Не удалось архивировать чат',
+  'chat.unarchiveError': 'Не удалось вернуть чат из архива',
   'chat.encrypted': '🔒 Зашифрованное сообщение',
+  'e2ee.encryptFailed': 'Не удалось зашифровать сообщение',
+  'e2ee.peerKeyMissing': 'У собеседника нет ключа шифрования',
   'chat.encryptedUnavailable': '🔒 Не удалось расшифровать',
   'chat.e2eeKeyProblemTitle': 'Ключ шифрования не совпадает',
   'chat.e2eeKeyProblemHint':
@@ -253,6 +256,7 @@ const ru: Dict = {
   'composer.errorMicSecureContext': 'Микрофон доступен только по HTTPS',
   'composer.errorUploadFailed': 'Не удалось загрузить',
   'composer.photo': 'Фото',
+  'composer.captionPlaceholder': 'Добавить подпись...',
   'composer.errorSendFailed': 'Не удалось отправить',
 
   // Search
@@ -362,6 +366,8 @@ const ru: Dict = {
   'info.dismissAdmin': 'Снять администратора',
   'info.leaveGroup': 'Покинуть группу',
   'info.block': 'Заблокировать',
+  'info.blocked': 'Пользователь заблокирован',
+  'info.unblock': 'Разблокировать',
   'info.roleOwner': 'Владелец',
   'info.roleAdmin': 'Администратор',
   'info.roleMember': 'Участник',
@@ -1355,7 +1361,10 @@ const en: Dict = {
   'chat.deleteShort': 'Delete',
   'chat.archived': 'Chat archived',
   'chat.archiveError': 'Failed to archive chat',
+  'chat.unarchiveError': 'Failed to unarchive chat',
   'chat.encrypted': '🔒 Encrypted message',
+  'e2ee.encryptFailed': 'Failed to encrypt message',
+  'e2ee.peerKeyMissing': 'Peer has no encryption key',
   'chat.encryptedUnavailable': '🔒 Unable to decrypt',
   'chat.e2eeKeyProblemTitle': 'Encryption key mismatch',
   'chat.e2eeKeyProblemHint':
@@ -1469,6 +1478,7 @@ const en: Dict = {
   'composer.errorMicSecureContext': 'Microphone requires HTTPS',
   'composer.errorUploadFailed': 'Upload failed',
   'composer.photo': 'Photo',
+  'composer.captionPlaceholder': 'Add a caption...',
   'composer.errorSendFailed': 'Failed to send',
 
   'search.messages': 'Search messages...',
@@ -1575,6 +1585,7 @@ const en: Dict = {
   'info.dismissAdmin': 'Dismiss admin',
   'info.leaveGroup': 'Leave group',
   'info.block': 'Block',
+  'info.blocked': 'User blocked',
   'info.roleOwner': 'Owner',
   'info.roleAdmin': 'Admin',
   'info.roleMember': 'Member',

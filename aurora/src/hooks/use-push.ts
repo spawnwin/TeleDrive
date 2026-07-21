@@ -36,6 +36,8 @@ export function isCapacitorNative(): boolean {
 export async function registerCapacitorPush(): Promise<boolean> {
   try {
     const { PushNotifications } = await import('@capacitor/push-notifications')
+    const Capacitor = (window as Window & { Capacitor?: { getPlatform?: () => string } }).Capacitor
+    const platform = Capacitor?.getPlatform?.() === 'android' ? 'android' : 'ios'
 
     let perm = await PushNotifications.checkPermissions()
     if (perm.receive === 'prompt') {
@@ -46,16 +48,17 @@ export async function registerCapacitorPush(): Promise<boolean> {
       return false
     }
 
-    return await new Promise<boolean>((resolve) => {
-      let regListener: { remove: () => void } | null = null
-      let errListener: { remove: () => void } | null = null
-      let settled = false
+    // Listeners MUST be attached before register() — iOS can fire immediately.
+    let settled = false
+    let regListener: { remove: () => void } | null = null
+    let errListener: { remove: () => void } | null = null
 
-      const cleanup = () => {
-        regListener?.remove()
-        errListener?.remove()
-      }
+    const cleanup = () => {
+      regListener?.remove()
+      errListener?.remove()
+    }
 
+    const result = await new Promise<boolean>((resolve) => {
       const finish = (ok: boolean) => {
         if (settled) return
         settled = true
@@ -63,43 +66,44 @@ export async function registerCapacitorPush(): Promise<boolean> {
         resolve(ok)
       }
 
-      // Listeners MUST be attached before register() — iOS can fire immediately.
-      void PushNotifications.addListener('registration', (token) => {
-        console.log('[push] Capacitor push token:', token.value.substring(0, 20) + '...')
-        fetch('/api/push/subscribe', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify({
-            endpoint: `capacitor://${token.value}`,
-            keys: { p256dh: '', auth: '' },
-            platform: 'ios',
-            deviceToken: token.value,
-          }),
-        })
-          .then((res) => finish(res.ok))
-          .catch((e) => {
-            console.error('[push] failed to save Capacitor token:', e)
+      void (async () => {
+        try {
+          regListener = await PushNotifications.addListener('registration', (token) => {
+            console.log('[push] Capacitor push token:', token.value.substring(0, 20) + '...')
+            fetch('/api/push/subscribe', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              credentials: 'include',
+              body: JSON.stringify({
+                endpoint: `capacitor-${platform}://${token.value}`,
+                keys: { p256dh: '', auth: '' },
+                platform,
+                deviceToken: token.value,
+              }),
+            })
+              .then((res) => finish(res.ok))
+              .catch((e) => {
+                console.error('[push] failed to save Capacitor token:', e)
+                finish(false)
+              })
+          })
+
+          errListener = await PushNotifications.addListener('registrationError', (err) => {
+            console.error('[push] Capacitor registration error:', err)
             finish(false)
           })
-      }).then((l) => {
-        regListener = l
-      })
 
-      void PushNotifications.addListener('registrationError', (err) => {
-        console.error('[push] Capacitor registration error:', err)
-        finish(false)
-      }).then((l) => {
-        errListener = l
-      })
-
-      void PushNotifications.register().catch((e) => {
-        console.error('[push] Capacitor register() failed:', e)
-        finish(false)
-      })
+          await PushNotifications.register()
+        } catch (e) {
+          console.error('[push] Capacitor register() failed:', e)
+          finish(false)
+        }
+      })()
 
       setTimeout(() => finish(false), 15000)
     })
+
+    return result
   } catch (e) {
     console.error('[push] Capacitor push init failed:', e)
     return false

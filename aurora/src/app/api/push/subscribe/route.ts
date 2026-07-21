@@ -63,7 +63,14 @@ export const DELETE = withJsonApi(async function DELETE(req: NextRequest) {
       where: { userId: me.id },
       select: { id: true, endpoint: true },
     })
-    const ids = subs.filter((s) => s.endpoint.startsWith('capacitor://')).map((s) => s.id)
+    const ids = subs
+      .filter(
+        (s) =>
+          s.endpoint.startsWith('capacitor://') ||
+          s.endpoint.startsWith('capacitor-ios://') ||
+          s.endpoint.startsWith('capacitor-android://'),
+      )
+      .map((s) => s.id)
     if (ids.length) {
       await db.pushSubscription.deleteMany({ where: { id: { in: ids } } })
     }

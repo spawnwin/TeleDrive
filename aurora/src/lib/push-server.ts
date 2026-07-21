@@ -176,6 +176,10 @@ async function sendApnsPush(
   }
 }
 
+export function clearApnsJwtCache() {
+  apnsJwtCache = null
+}
+
 export function getVapidPublicKey(): string | null {
   return VAPID_PUBLIC || null
 }
@@ -260,12 +264,26 @@ export async function sendPushToUser(
 
   await Promise.allSettled(
     deliverable.map(async (sub) => {
-      // Detect native iOS subscription (Capacitor)
-      const isNativeIos = sub.endpoint.startsWith('capacitor://')
+      // Native Capacitor tokens: capacitor-ios://… or legacy capacitor://…
+      const isNativeIos =
+        sub.endpoint.startsWith('capacitor-ios://') || sub.endpoint.startsWith('capacitor://')
+      const isNativeAndroid = sub.endpoint.startsWith('capacitor-android://')
+
+      if (isNativeAndroid) {
+        result.failed++
+        result.errors.push('fcm-not-configured')
+        console.warn('[push] Android FCM not configured yet — skipping', {
+          userId,
+          token: sub.endpoint.slice(0, 40),
+        })
+        return
+      }
 
       if (isNativeIos) {
         // Send via APNs
-        const deviceToken = sub.endpoint.replace('capacitor://', '')
+        const deviceToken = sub.endpoint
+          .replace('capacitor-ios://', '')
+          .replace('capacitor://', '')
         const apns = await sendApnsPush(deviceToken, normalized)
         if (apns.ok) {
           result.sent++
@@ -315,7 +333,12 @@ export async function sendPushToUser(
           endpoint: sub.endpoint.slice(0, 48),
           message,
         })
-        if (status === 404 || status === 410) {
+        if (
+          status === 404 ||
+          status === 410 ||
+          // Apple Web Push often returns 400 for permanently dead subscriptions.
+          (status === 400 && sub.endpoint.includes('web.push.apple.com'))
+        ) {
           await db.pushSubscription.delete({ where: { id: sub.id } }).catch(() => {})
           result.removed++
         }

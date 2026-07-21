@@ -581,12 +581,16 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
         return { content: plaintext, encrypted: false }
       }
       const membersRes = await fetch(`/api/chats/${activeChatId}/members`)
+      if (!membersRes.ok) {
+        throw new Error(t('e2ee.encryptFailed'))
+      }
       const membersData = await membersRes.json()
       const recipientWithKey = membersData.chat?.members?.find(
         (m: { id: string; publicKey?: string | null }) => m.id !== currentUser.id,
       )
       if (!recipientWithKey?.publicKey) {
-        return { content: plaintext, encrypted: false }
+        // Chat UI may still show lock from an older peer key — never fall back to plaintext.
+        throw new Error(t('e2ee.peerKeyMissing'))
       }
       const sendContent = await encryptMessage(
         plaintext,
@@ -597,7 +601,7 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
       )
       return { content: sendContent, encrypted: true }
     },
-    [e2eeEnabled, activeChat?.type, activeChatId, currentUser, encryptMessage],
+    [e2eeEnabled, activeChat?.type, activeChatId, currentUser, encryptMessage, t],
   )
 
   const handleStartCall = (type: 'audio' | 'video') => {

@@ -9,8 +9,8 @@
  *    HTML but fall back to cache when offline
  */
 
-// v17: profile photo viewers for all gallery photos (not only avatar).
-const CACHE_VERSION = 'aurora-v17'
+// v18: bugfix pass (e2ee/archive/push/i18n).
+const CACHE_VERSION = 'aurora-v18'
 const SHELL_CACHE = `${CACHE_VERSION}-shell`
 const ASSET_CACHE = `${CACHE_VERSION}-assets`
 

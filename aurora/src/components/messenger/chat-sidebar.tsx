@@ -200,33 +200,34 @@ export function ChatSidebar({
   const bulkArchive = useCallback(async () => {
     if (selectedIds.size === 0) return
     const ids = Array.from(selectedIds)
+    const archive = !showArchived
     let ok = 0
     let fail = 0
     await Promise.all(
       ids.map(async (id) => {
-        setChatArchived(id, true)
+        setChatArchived(id, archive)
         try {
           const res = await fetch(`/api/chats/${id}/archive`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ archived: true }),
+            body: JSON.stringify({ archived: archive }),
           })
           if (!res.ok) {
-            setChatArchived(id, false)
+            setChatArchived(id, !archive)
             fail++
             return
           }
           ok++
         } catch {
-          setChatArchived(id, false)
+          setChatArchived(id, !archive)
           fail++
         }
       }),
     )
     exitSelection()
-    if (ok > 0) toast.success(t('chat.archived'))
-    if (fail > 0) toast.error(t('chat.archiveError'))
-  }, [selectedIds, exitSelection, t, setChatArchived])
+    if (ok > 0) toast.success(archive ? t('chat.archived') : t('chat.unarchived'))
+    if (fail > 0) toast.error(archive ? t('chat.archiveError') : t('chat.unarchiveError'))
+  }, [selectedIds, exitSelection, t, setChatArchived, showArchived])
 
   const bulkMarkRead = useCallback(() => {
     if (selectedIds.size === 0) return
@@ -1288,7 +1289,9 @@ export function ChatSidebar({
               className="flex min-w-0 flex-1 flex-col items-center gap-1 rounded-xl px-2 py-2 text-[#3390ec] transition hover:bg-[#3390ec]/10 disabled:opacity-40"
             >
               <Archive className="h-5 w-5" />
-              <span className="truncate text-[11px] font-medium">{t('chat.archiveShort')}</span>
+              <span className="truncate text-[11px] font-medium">
+                {showArchived ? t('chat.unarchiveShort') : t('chat.archiveShort')}
+              </span>
             </button>
             <button
               type="button"

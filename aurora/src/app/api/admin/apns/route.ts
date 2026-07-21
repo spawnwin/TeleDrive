@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { adminGuard } from '@/lib/admin-api'
 import { withJsonApi } from '@/lib/with-json-api'
 import { getApnsStatus, saveApnsConfig } from '@/lib/apns-config'
-import { isApnsConfigured } from '@/lib/push-server'
+import { isApnsConfigured, clearApnsJwtCache } from '@/lib/push-server'
 
 export const GET = withJsonApi(async function GET() {
   const guard = await adminGuard()
@@ -34,6 +34,7 @@ export const POST = withJsonApi(async function POST(req: NextRequest) {
 
   try {
     const saved = saveApnsConfig({ keyId, teamId, bundleId, production, keyPem })
+    clearApnsJwtCache()
     return NextResponse.json({
       ok: true,
       configured: true,
