@@ -27,6 +27,7 @@ import {
   ArrowLeft,
   Phone,
   Play,
+  Volume2,
   RotateCcw,
   Trash2,
   LogOut,
@@ -57,13 +58,23 @@ import {
   clearCustomSound,
   CUSTOM_SOUND_ACCEPT,
   CUSTOM_SOUND_MAX_SIZE,
+  getResolvedSound,
   loadCustomSound,
+  loadSoundPresetId,
   playCallRingPreview,
   playMessageSoundPreview,
+  playSoundUrlPreview,
   saveCustomSoundFile,
+  saveSoundPresetId,
   unlockNotificationAudio,
   type CustomSoundKind,
 } from '@/lib/notification-sound'
+import {
+  IOS_ALERT_SOUNDS,
+  IOS_RINGTONE_SOUNDS,
+  iosSoundLabel,
+  type IosAlertSound,
+} from '@/lib/ios-alert-sounds'
 import { languages, type Lang } from '@/lib/i18n'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
@@ -95,6 +106,8 @@ type SettingsPage =
   | 'main'
   | 'account'
   | 'notifications'
+  | 'sound-message'
+  | 'sound-call'
   | 'privacy'
   | 'appearance'
   | 'language'
@@ -145,34 +158,26 @@ function SoundSettingRow({
   label,
   hint,
   enabled,
-  soundName,
-  defaultLabel,
+  soundLabel,
+  chooseLabel,
   previewLabel,
-  uploadLabel,
-  resetLabel,
   onEnabledChange,
   onPreview,
-  onUpload,
-  onReset,
+  onChoose,
 }: {
   icon: React.ReactNode
   label: string
   hint: string
   enabled: boolean
-  soundName: string
-  defaultLabel: string
+  soundLabel: string
+  chooseLabel: string
   previewLabel: string
-  uploadLabel: string
-  resetLabel: string
   onEnabledChange: (enabled: boolean) => void
   onPreview: () => void
-  onUpload: () => void
-  onReset: () => void
+  onChoose: () => void
 }) {
-  const hasCustomSound = soundName.length > 0
-
   return (
-    <div className="rounded-xl bg-muted/50 px-3 py-2.5">
+    <div className="rounded-2xl bg-muted/50 px-3 py-3">
       <div className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 items-start gap-2.5 text-sm">
           <span className="mt-0.5 shrink-0">{icon}</span>
@@ -184,44 +189,136 @@ function SoundSettingRow({
         <Switch checked={enabled} onCheckedChange={onEnabledChange} />
       </div>
 
-      <div className="mt-3 flex min-w-0 items-center gap-2">
-        <div className="min-w-0 flex-1 rounded-lg bg-background/70 px-2.5 py-1.5">
-          <p className="truncate text-xs font-medium">
-            {hasCustomSound ? soundName : defaultLabel}
-          </p>
-        </div>
+      <button
+        type="button"
+        onClick={onChoose}
+        disabled={!enabled}
+        className="mt-3 flex w-full items-center gap-3 rounded-xl bg-background/80 px-3 py-2.5 text-left transition hover:bg-background disabled:opacity-50"
+      >
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#3390ec]/15 text-[#3390ec]">
+          <Volume2 className="h-4 w-4" />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-sm font-medium">{soundLabel}</span>
+          <span className="block text-[11px] text-muted-foreground">{chooseLabel}</span>
+        </span>
         <Button
           type="button"
           variant="ghost"
           size="icon"
           className="h-8 w-8 shrink-0"
-          onClick={onPreview}
+          onClick={(e) => {
+            e.stopPropagation()
+            onPreview()
+          }}
           disabled={!enabled}
           title={previewLabel}
         >
           <Play className="h-4 w-4" />
         </Button>
-        <Button
+        <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+      </button>
+    </div>
+  )
+}
+
+function SoundPickerList({
+  kind,
+  lang,
+  selectedId,
+  onSelect,
+  onUpload,
+  uploadLabel,
+  customName,
+}: {
+  kind: CustomSoundKind
+  lang: string
+  selectedId: string
+  onSelect: (id: string) => void
+  onUpload: () => void
+  uploadLabel: string
+  customName: string
+}) {
+  const list: IosAlertSound[] = kind === 'message' ? IOS_ALERT_SOUNDS : IOS_RINGTONE_SOUNDS
+  const isCustom = selectedId === 'custom'
+
+  return (
+    <div className="space-y-3">
+      <div className="overflow-hidden rounded-2xl bg-muted/40">
+        {list.map((sound, idx) => {
+          const active = !isCustom && selectedId === sound.id
+          return (
+            <button
+              key={sound.id}
+              type="button"
+              onClick={() => onSelect(sound.id)}
+              className={cn(
+                'flex w-full items-center gap-3 px-3.5 py-3 text-left transition',
+                active ? 'bg-[#3390ec]/12' : 'hover:bg-muted/60',
+                idx > 0 && 'border-t border-border/50',
+              )}
+            >
+              <span
+                className={cn(
+                  'flex h-10 w-10 shrink-0 items-center justify-center rounded-full',
+                  active ? 'bg-[#3390ec] text-white' : 'bg-background text-[#3390ec]',
+                )}
+              >
+                <Volume2 className="h-4 w-4" />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-[15px] font-medium leading-tight">
+                  {iosSoundLabel(sound, lang)}
+                </span>
+                <span className="block truncate text-[11px] text-muted-foreground">
+                  {sound.nameEn}
+                </span>
+              </span>
+              <button
+                type="button"
+                className={cn(
+                  'flex h-7 w-7 items-center justify-center rounded-full transition',
+                  active ? 'bg-[#3390ec] text-white' : 'bg-muted text-muted-foreground',
+                )}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  playSoundUrlPreview(sound.src, kind === 'call' ? 3500 : 2000)
+                }}
+                title="▶"
+              >
+                <Play className="h-3.5 w-3.5" fill="currentColor" />
+              </button>
+              {active && <Check className="h-5 w-5 shrink-0 text-[#3390ec]" strokeWidth={2.5} />}
+            </button>
+          )
+        })}
+      </div>
+
+      <div className="overflow-hidden rounded-2xl bg-muted/40">
+        <button
           type="button"
-          variant="ghost"
-          size="icon"
-          className="h-8 w-8 shrink-0"
           onClick={onUpload}
-          title={uploadLabel}
+          className={cn(
+            'flex w-full items-center gap-3 px-3.5 py-3 text-left transition hover:bg-muted/60',
+            isCustom && 'bg-[#3390ec]/12',
+          )}
         >
-          <Upload className="h-4 w-4" />
-        </Button>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          className="h-8 w-8 shrink-0"
-          onClick={onReset}
-          disabled={!hasCustomSound}
-          title={resetLabel}
-        >
-          <RotateCcw className="h-4 w-4" />
-        </Button>
+          <span
+            className={cn(
+              'flex h-10 w-10 shrink-0 items-center justify-center rounded-full',
+              isCustom ? 'bg-[#3390ec] text-white' : 'bg-background text-muted-foreground',
+            )}
+          >
+            <Upload className="h-4 w-4" />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-[15px] font-medium">{uploadLabel}</span>
+            <span className="block truncate text-[11px] text-muted-foreground">
+              {isCustom && customName ? customName : 'MP3, WAV, M4A…'}
+            </span>
+          </span>
+          {isCustom && <Check className="h-5 w-5 shrink-0 text-[#3390ec]" strokeWidth={2.5} />}
+        </button>
       </div>
     </div>
   )
@@ -255,6 +352,8 @@ export function SettingsDialog({ open, onOpenChange, onOpenPremium, onOpenCoins 
   const [showCreatorPremium, setShowCreatorPremium] = useState(false)
   const [messageSoundName, setMessageSoundName] = useState('')
   const [callSoundName, setCallSoundName] = useState('')
+  const [messagePresetId, setMessagePresetId] = useState('note')
+  const [callPresetId, setCallPresetId] = useState('ringtone-marimba')
   const fileInputRef = useRef<HTMLInputElement>(null)
   const messageSoundInputRef = useRef<HTMLInputElement>(null)
   const callSoundInputRef = useRef<HTMLInputElement>(null)
@@ -269,6 +368,8 @@ export function SettingsDialog({ open, onOpenChange, onOpenPremium, onOpenCoins 
       setPremiumTheme(currentUser?.premiumTheme || 'classic')
       setMessageSoundName(loadCustomSound('message')?.name || '')
       setCallSoundName(loadCustomSound('call')?.name || '')
+      setMessagePresetId(loadSoundPresetId('message'))
+      setCallPresetId(loadSoundPresetId('call'))
     }
   }, [open, currentUser])
 
@@ -434,10 +535,12 @@ export function SettingsDialog({ open, onOpenChange, onOpenPremium, onOpenCoins 
 
     if (kind === 'message') {
       setMessageSoundName(result.name)
+      setMessagePresetId('custom')
       setMessageSoundEnabled(true)
       playMessageSoundPreview()
     } else {
       setCallSoundName(result.name)
+      setCallPresetId('custom')
       setCallSoundEnabled(true)
       playCallRingPreview()
     }
@@ -458,13 +561,45 @@ export function SettingsDialog({ open, onOpenChange, onOpenPremium, onOpenCoins 
     clearCustomSound(kind)
     if (kind === 'message') {
       setMessageSoundName('')
+      setMessagePresetId(loadSoundPresetId('message'))
       if (messageSoundEnabled) playMessageSoundPreview()
     } else {
       setCallSoundName('')
+      setCallPresetId(loadSoundPresetId('call'))
       if (callSoundEnabled) playCallRingPreview()
     }
     toast.success(t('settings.soundResetDone'))
   }
+
+  const selectPreset = (kind: CustomSoundKind, id: string) => {
+    saveSoundPresetId(kind, id)
+    if (kind === 'message') {
+      setMessageSoundName('')
+      setMessagePresetId(id)
+      setMessageSoundEnabled(true)
+      playMessageSoundPreview()
+    } else {
+      setCallSoundName('')
+      setCallPresetId(id)
+      setCallSoundEnabled(true)
+      playCallRingPreview()
+    }
+    toast.success(t('settings.soundSaved'))
+  }
+
+  const resolvedMessageLabel = (() => {
+    const r = getResolvedSound('message')
+    if (r.mode === 'custom') return r.name
+    if (r.preset) return iosSoundLabel(r.preset, lang)
+    return t('settings.soundDefault')
+  })()
+
+  const resolvedCallLabel = (() => {
+    const r = getResolvedSound('call')
+    if (r.mode === 'custom') return r.name
+    if (r.preset) return iosSoundLabel(r.preset, lang)
+    return t('settings.soundDefault')
+  })()
 
   const pushStatusText = (() => {
     if (!isWebPushSupported()) return t('settings.pushUnsupported')
@@ -480,6 +615,8 @@ export function SettingsDialog({ open, onOpenChange, onOpenPremium, onOpenCoins 
     main: t('settings.title'),
     account: t('settings.account'),
     notifications: t('settings.notifications'),
+    'sound-message': t('settings.messageSound'),
+    'sound-call': t('settings.callRingtone'),
     privacy: t('settings.privacy'),
     appearance: t('settings.appearance'),
     language: t('settings.language'),
@@ -519,7 +656,9 @@ export function SettingsDialog({ open, onOpenChange, onOpenPremium, onOpenCoins 
             {page !== 'main' && (
               <button
                 type="button"
-                onClick={() => setPage('main')}
+                onClick={() =>
+                  setPage(page === 'sound-message' || page === 'sound-call' ? 'notifications' : 'main')
+                }
                 className="-ml-1 flex h-8 w-8 items-center justify-center rounded-full transition hover:bg-muted"
                 title={t('settings.back')}
                 aria-label={t('settings.back')}
@@ -805,36 +944,31 @@ export function SettingsDialog({ open, onOpenChange, onOpenPremium, onOpenCoins 
             )}
 
             {page === 'notifications' && (
-              <div className="space-y-1">
+              <div className="space-y-2">
+                <p className="px-1 pb-1 text-xs text-muted-foreground">{t('settings.iosSoundsHint')}</p>
                 <SoundSettingRow
                   icon={<Bell className="h-4 w-4 text-[#3390ec]" />}
                   label={t('settings.messageSound')}
                   hint={t('settings.messageSoundHint')}
                   enabled={messageSoundEnabled}
-                  soundName={messageSoundName}
-                  defaultLabel={t('settings.soundDefault')}
+                  soundLabel={resolvedMessageLabel}
+                  chooseLabel={t('settings.chooseSound')}
                   previewLabel={t('settings.soundPreview')}
-                  uploadLabel={t('settings.soundUpload')}
-                  resetLabel={t('settings.soundReset')}
                   onEnabledChange={toggleMessageSound}
                   onPreview={playMessageSoundPreview}
-                  onUpload={() => messageSoundInputRef.current?.click()}
-                  onReset={() => resetSound('message')}
+                  onChoose={() => setPage('sound-message')}
                 />
                 <SoundSettingRow
                   icon={<Phone className="h-4 w-4 text-emerald-500" />}
                   label={t('settings.callRingtone')}
                   hint={t('settings.callRingtoneHint')}
                   enabled={callSoundEnabled}
-                  soundName={callSoundName}
-                  defaultLabel={t('settings.soundDefault')}
+                  soundLabel={resolvedCallLabel}
+                  chooseLabel={t('settings.chooseSound')}
                   previewLabel={t('settings.soundPreview')}
-                  uploadLabel={t('settings.soundUpload')}
-                  resetLabel={t('settings.soundReset')}
                   onEnabledChange={toggleCallSound}
                   onPreview={playCallRingPreview}
-                  onUpload={() => callSoundInputRef.current?.click()}
-                  onReset={() => resetSound('call')}
+                  onChoose={() => setPage('sound-call')}
                 />
                 <div className="flex items-center justify-between rounded-xl bg-muted/50 px-3 py-2.5">
                   <div className="flex items-center gap-2.5 text-sm">
@@ -858,6 +992,30 @@ export function SettingsDialog({ open, onOpenChange, onOpenPremium, onOpenCoins 
                   />
                 </div>
               </div>
+            )}
+
+            {page === 'sound-message' && (
+              <SoundPickerList
+                kind="message"
+                lang={lang}
+                selectedId={messagePresetId}
+                customName={messageSoundName}
+                uploadLabel={t('settings.soundUpload')}
+                onSelect={(id) => selectPreset('message', id)}
+                onUpload={() => messageSoundInputRef.current?.click()}
+              />
+            )}
+
+            {page === 'sound-call' && (
+              <SoundPickerList
+                kind="call"
+                lang={lang}
+                selectedId={callPresetId}
+                customName={callSoundName}
+                uploadLabel={t('settings.soundUpload')}
+                onSelect={(id) => selectPreset('call', id)}
+                onUpload={() => callSoundInputRef.current?.click()}
+              />
             )}
 
             {page === 'privacy' && (

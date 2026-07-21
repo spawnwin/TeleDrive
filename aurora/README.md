@@ -3,7 +3,6 @@
 Patches applied on the live Aurora messenger at `135.106.173.99` (`/opt/aurora`).
 
 ## Latest
-- **Новый чат** только через **+** в шапке; из меню **⋯** убран
-- Меню **⋯** как в Telegram: Новая группа, Новый канал, Архив, Маркетплейс, Стримы, Баланс, Выбрать
-- Desktop: убрана широкая кнопка «Новый чат» (остался + в header)
-- Fix Nearby geolocation (`geolocation=(self)`); elite gifts; Premium themes
+- **iPhone-style notification sounds**: 40 alerts + 5 ringtones, pick in Settings → Notifications (preview + select)
+- New chat only via **+**; overflow menu like Telegram
+- Nearby geolocation fix; Premium themes; elite gifts
