@@ -1249,19 +1249,32 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
 
   const sendLocation = () => {
     setShowAttachMenu(false)
+    if (typeof window !== 'undefined' && !window.isSecureContext) {
+      toast.error(t('nearby.geoInsecure'))
+      return
+    }
     if (!navigator.geolocation) {
       toast.error(t('composer.locationUnsupported'))
       return
     }
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        const { latitude, longitude } = pos.coords
-        const link = `https://maps.google.com/?q=${latitude},${longitude}`
-        void sendMessage(link)
-      },
-      () => toast.error(t('composer.locationDenied')),
-      { enableHighAccuracy: true, timeout: 10000 },
-    )
+    const onOk = (pos: GeolocationPosition) => {
+      const { latitude, longitude } = pos.coords
+      const link = `https://maps.google.com/?q=${latitude},${longitude}`
+      void sendMessage(link)
+    }
+    const onErr = (err: GeolocationPositionError) => {
+      if (err?.code === 1) toast.error(t('nearby.geoDenied'))
+      else if (err?.code === 3) toast.error(t('nearby.geoTimeout'))
+      else toast.error(t('composer.locationDenied'))
+    }
+    navigator.geolocation.getCurrentPosition(onOk, (err) => {
+      // Retry without high accuracy before surfacing an error
+      navigator.geolocation.getCurrentPosition(onOk, onErr, {
+        enableHighAccuracy: false,
+        timeout: 15000,
+        maximumAge: 120000,
+      })
+    }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 })
   }
 
   const uploadAndSend = async (file: File) => {

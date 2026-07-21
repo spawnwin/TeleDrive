@@ -27,9 +27,10 @@ function relativeMeters(lat1: number, lng1: number, lat2: number, lng2: number) 
 }
 
 function clampCoord(n: unknown, min: number, max: number): number | null {
-  if (typeof n !== 'number' || !Number.isFinite(n)) return null
-  if (n < min || n > max) return null
-  return n
+  const v = typeof n === 'number' ? n : typeof n === 'string' && n.trim() !== '' ? Number(n) : NaN
+  if (!Number.isFinite(v)) return null
+  if (v < min || v > max) return null
+  return v
 }
 
 async function getOrCreatePrivateChat(meId: string, otherId: string) {

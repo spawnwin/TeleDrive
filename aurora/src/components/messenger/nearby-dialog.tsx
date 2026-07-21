@@ -39,6 +39,33 @@ interface NearbyDialogProps {
   onOpenChange: (v: boolean) => void
 }
 
+/** GeolocationPositionError is often NOT `instanceof Error` — map codes to i18n. */
+function formatGeoError(err: unknown, t: (k: string) => string): string {
+  const code =
+    err && typeof err === 'object' && 'code' in err && typeof (err as { code: unknown }).code === 'number'
+      ? (err as { code: number }).code
+      : null
+  if (code === 1) return t('nearby.geoDenied')
+  if (code === 2) return t('nearby.geoUnavailable')
+  if (code === 3) return t('nearby.geoTimeout')
+  if (err instanceof Error && err.message.trim()) return err.message
+  if (err && typeof err === 'object' && 'message' in err) {
+    const m = String((err as { message: unknown }).message || '').trim()
+    if (m) return m
+  }
+  return t('nearby.noGeo')
+}
+
+function readPositionOnce(options: PositionOptions): Promise<GeolocationPosition> {
+  return new Promise((resolve, reject) => {
+    if (typeof navigator === 'undefined' || !navigator.geolocation) {
+      reject(Object.assign(new Error('no-geo'), { code: 2 }))
+      return
+    }
+    navigator.geolocation.getCurrentPosition(resolve, reject, options)
+  })
+}
+
 export function NearbyDialog({ open, onOpenChange }: NearbyDialogProps) {
   const { t, lang } = useI18n()
   const setProfileUserId = useAppStore((s) => s.setProfileUserId)
@@ -52,18 +79,31 @@ export function NearbyDialog({ open, onOpenChange }: NearbyDialogProps) {
   const [radiusKm, setRadiusKm] = useState(3)
   const [error, setError] = useState<string | null>(null)
 
-  const readPosition = useCallback((): Promise<GeolocationPosition> => {
-    return new Promise((resolve, reject) => {
-      if (!navigator.geolocation) {
-        reject(new Error(t('nearby.noGeo')))
-        return
-      }
-      navigator.geolocation.getCurrentPosition(resolve, reject, {
+  const readPosition = useCallback(async (): Promise<GeolocationPosition> => {
+    if (typeof window !== 'undefined' && !window.isSecureContext) {
+      throw new Error(t('nearby.geoInsecure'))
+    }
+    if (!navigator.geolocation) {
+      throw new Error(t('nearby.noGeo'))
+    }
+    try {
+      return await readPositionOnce({
         enableHighAccuracy: true,
-        timeout: 12000,
-        maximumAge: 30000,
+        timeout: 10000,
+        maximumAge: 60000,
       })
-    })
+    } catch (first) {
+      // Retry with coarse location — many desktops/VPNs time out on high accuracy.
+      try {
+        return await readPositionOnce({
+          enableHighAccuracy: false,
+          timeout: 15000,
+          maximumAge: 120000,
+        })
+      } catch (second) {
+        throw second || first
+      }
+    }
   }, [t])
 
   const refresh = useCallback(async (pos: { lat: number; lng: number }) => {
@@ -71,7 +111,7 @@ export function NearbyDialog({ open, onOpenChange }: NearbyDialogProps) {
     setError(null)
     try {
       const res = await fetch(`/api/nearby?lat=${pos.lat}&lng=${pos.lng}&radiusKm=3`)
-      const data = await res.json()
+      const data = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(data.error || t('misc.error'))
       setPeople(data.people || [])
       if (typeof data.radiusKm === 'number') setRadiusKm(data.radiusKm)
@@ -95,13 +135,13 @@ export function NearbyDialog({ open, onOpenChange }: NearbyDialogProps) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...next, anonymous }),
       })
-      const data = await res.json()
+      const data = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(data.error || t('misc.error'))
       setActive(true)
       toast.success(t('nearby.live'))
       await refresh(next)
     } catch (err) {
-      const msg = err instanceof Error ? err.message : t('misc.error')
+      const msg = formatGeoError(err, t)
       setError(msg)
       toast.error(msg)
     } finally {
@@ -128,12 +168,11 @@ export function NearbyDialog({ open, onOpenChange }: NearbyDialogProps) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'wave', presenceId: person.presenceId }),
       })
-      const data = await res.json()
+      const data = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(data.error || t('misc.error'))
       toast.success(t('nearby.waveSent'))
       if (data.chatId) {
         onOpenChange(false)
-        // Prefer opening chat if we can resolve the user; otherwise keep chat id via store refresh
         if (person.user?.id) {
           await openPrivateChatWithUser(person.user.id)
         } else {
@@ -160,7 +199,8 @@ export function NearbyDialog({ open, onOpenChange }: NearbyDialogProps) {
         await refresh(next)
       } catch (err) {
         if (!cancelled) {
-          setError(err instanceof Error ? err.message : t('nearby.noGeo'))
+          // Soft hint on open — don't toast spam; button "Показать меня" will retry.
+          setError(formatGeoError(err, t))
         }
       }
     })()
@@ -176,7 +216,6 @@ export function NearbyDialog({ open, onOpenChange }: NearbyDialogProps) {
       .map((p) => {
         const ox = p.offsetMeters!.x
         const oy = p.offsetMeters!.y
-        // Map meters → % of radar (center 50/50). North = up.
         const nx = 50 + (ox / maxM) * 42
         const ny = 50 - (oy / maxM) * 42
         return {
