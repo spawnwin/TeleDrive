@@ -597,7 +597,10 @@ export function Messenger() {
           onSearch={() => {
             setShowFriends(false)
             setView('chats')
-            window.dispatchEvent(new CustomEvent('aurora:focus-search'))
+            // Wait for chats panel to mount after shorts/friends switch.
+            window.setTimeout(() => {
+              window.dispatchEvent(new CustomEvent('aurora:focus-search'))
+            }, 80)
           }}
         />
       )}

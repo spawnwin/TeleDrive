@@ -193,13 +193,24 @@ export function ChatSidebar({
   }, [refreshPendingFriendRequests])
 
   useEffect(() => {
-    const onFocusSearch = () => {
-      searchInputRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
-      // Defer focus so the chats view is visible after tab switch.
-      requestAnimationFrame(() => searchInputRef.current?.focus())
+    const focusSearchInput = () => {
+      const tryFocus = (attempt = 0) => {
+        const el =
+          searchInputRef.current ||
+          (document.getElementById('aurora-sidebar-search') as HTMLInputElement | null)
+        if (el) {
+          el.scrollIntoView({ block: 'center', behavior: 'smooth' })
+          el.focus({ preventScroll: true })
+          // Some mobile browsers need a second focus tick after keyboard/layout.
+          setTimeout(() => el.focus(), 50)
+          return
+        }
+        if (attempt < 20) setTimeout(() => tryFocus(attempt + 1), 50)
+      }
+      tryFocus()
     }
-    window.addEventListener('aurora:focus-search', onFocusSearch)
-    return () => window.removeEventListener('aurora:focus-search', onFocusSearch)
+    window.addEventListener('aurora:focus-search', focusSearchInput)
+    return () => window.removeEventListener('aurora:focus-search', focusSearchInput)
   }, [])
 
   useEffect(() => {
@@ -514,6 +525,7 @@ export function ChatSidebar({
             <div className="relative">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
+                id="aurora-sidebar-search"
                 ref={searchInputRef}
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
