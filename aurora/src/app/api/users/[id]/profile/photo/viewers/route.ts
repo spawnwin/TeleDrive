@@ -2,10 +2,13 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/auth'
 import { db } from '@/lib/db'
 import { withJsonApi } from '@/lib/with-json-api'
-import { countProfilePhotoViews } from '@/lib/profile-photo-views'
+import {
+  listProfilePhotoViewers,
+  resolveAllowedProfilePhotoUrl,
+} from '@/lib/profile-photo-views'
 
 export const GET = withJsonApi(async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const me = await getCurrentUser()
@@ -18,41 +21,27 @@ export const GET = withJsonApi(async function GET(
 
   const owner = await db.user.findUnique({
     where: { id: ownerId },
-    select: { id: true, avatarUrl: true },
+    select: { id: true },
   })
   if (!owner) return NextResponse.json({ error: 'Пользователь не найден' }, { status: 404 })
-  if (!owner.avatarUrl) {
+
+  const requestedUrl = req.nextUrl.searchParams.get('url')
+  const photoUrl = await resolveAllowedProfilePhotoUrl(owner.id, requestedUrl)
+  if (!photoUrl) {
     return NextResponse.json({ viewers: [], total: 0 })
   }
 
-  const views = await db.profilePhotoView.findMany({
-    where: { ownerId: owner.id, avatarUrl: owner.avatarUrl },
-    orderBy: { viewedAt: 'desc' },
-    take: 200,
-    include: {
-      viewer: {
-        select: {
-          id: true,
-          name: true,
-          username: true,
-          avatarColor: true,
-          avatarUrl: true,
-        },
-      },
-    },
-  })
-
-  const total = await countProfilePhotoViews(owner.id, owner.avatarUrl)
+  const { total, viewers } = await listProfilePhotoViewers(owner.id, photoUrl)
 
   return NextResponse.json({
     total,
-    viewers: views.map((row) => ({
-      id: row.viewer.id,
-      name: row.viewer.name,
-      username: row.viewer.username,
-      avatarColor: row.viewer.avatarColor,
-      avatarUrl: row.viewer.avatarUrl,
-      viewedAt: row.viewedAt.toISOString(),
+    viewers: viewers.map((v) => ({
+      id: v.id,
+      name: v.name,
+      username: v.username,
+      avatarColor: v.avatarColor,
+      avatarUrl: v.avatarUrl,
+      viewedAt: v.viewedAt.toISOString(),
     })),
   })
 })

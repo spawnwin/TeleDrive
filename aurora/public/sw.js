@@ -9,8 +9,8 @@
  *    HTML but fall back to cache when offline
  */
 
-// v16: Telegram-style profile photo viewers bar (avatars + count + delete).
-const CACHE_VERSION = 'aurora-v16'
+// v17: profile photo viewers for all gallery photos (not only avatar).
+const CACHE_VERSION = 'aurora-v17'
 const SHELL_CACHE = `${CACHE_VERSION}-shell`
 const ASSET_CACHE = `${CACHE_VERSION}-assets`
 

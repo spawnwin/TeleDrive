@@ -23,6 +23,8 @@ interface ProfilePhotoViewersPanelProps {
   open: boolean
   onClose: () => void
   onSelectUser?: (userId: string) => void
+  /** Specific profile photo URL (avatar or gallery). Defaults to current avatar. */
+  photoUrl?: string | null
 }
 
 export function ProfilePhotoViewersPanel({
@@ -30,6 +32,7 @@ export function ProfilePhotoViewersPanel({
   open,
   onClose,
   onSelectUser,
+  photoUrl,
 }: ProfilePhotoViewersPanelProps) {
   const { t, lang } = useI18n()
   const [loading, setLoading] = useState(false)
@@ -40,7 +43,8 @@ export function ProfilePhotoViewersPanel({
     if (!open || !userId) return
     let cancelled = false
     setLoading(true)
-    fetch(`/api/users/${userId}/profile/photo/viewers`, { credentials: 'include' })
+    const qs = photoUrl ? `?url=${encodeURIComponent(photoUrl)}` : ''
+    fetch(`/api/users/${userId}/profile/photo/viewers${qs}`, { credentials: 'include' })
       .then((res) => res.json())
       .then((data) => {
         if (cancelled) return
@@ -59,7 +63,7 @@ export function ProfilePhotoViewersPanel({
     return () => {
       cancelled = true
     }
-  }, [open, userId])
+  }, [open, userId, photoUrl])
 
   if (!open || typeof document === 'undefined') return null
 

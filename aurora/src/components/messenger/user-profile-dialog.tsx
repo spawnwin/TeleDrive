@@ -900,6 +900,7 @@ export function UserProfileDialog({
         <ProfilePhotoViewersPanel
           userId={userId}
           open={photoViewersOpen}
+          photoUrl={profile.avatarUrl}
           onClose={() => setPhotoViewersOpen(false)}
           onSelectUser={(id) => {
             setPhotoOpen(false)

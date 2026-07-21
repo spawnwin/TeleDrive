@@ -136,6 +136,7 @@ export function ProfileTabContent({
     Array<{ id: string; name: string; avatarColor: string; avatarUrl: string | null }>
   >([])
   const [photoViewersOpen, setPhotoViewersOpen] = useState(false)
+  const [viewersPhotoUrl, setViewersPhotoUrl] = useState<string | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<MediaItem | null>(null)
   const [captionTarget, setCaptionTarget] = useState<MediaItem | null>(null)
   const [captionDraft, setCaptionDraft] = useState('')
@@ -144,36 +145,65 @@ export function ProfileTabContent({
   const uploadRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
-    if (!lightboxUrl || !isSelf || lightboxItem?.source !== 'avatar') {
+    const photoKey = lightboxItem?.attachmentUrl || null
+    const isProfilePhoto =
+      !!lightboxItem &&
+      (lightboxItem.source === 'avatar' ||
+        (lightboxItem.source === 'gallery' && lightboxItem.type !== 'video'))
+
+    if (!lightboxUrl || !photoKey || !isProfilePhoto) {
       if (!lightboxUrl) {
         setPhotoViewCount(0)
         setPhotoViewerPreviews([])
       }
       return
     }
+
     let cancelled = false
-    fetch(`/api/users/${encodeURIComponent(userId)}/profile/photo/viewers`, {
-      credentials: 'include',
-    })
-      .then((res) => res.json())
-      .then((data) => {
-        if (cancelled) return
-        if (typeof data.total === 'number') setPhotoViewCount(data.total)
-        const viewers = Array.isArray(data.viewers) ? data.viewers : []
-        setPhotoViewerPreviews(
-          viewers.slice(0, 3).map((v: { id: string; name: string; avatarColor: string; avatarUrl?: string | null }) => ({
-            id: v.id,
-            name: v.name,
-            avatarColor: v.avatarColor,
-            avatarUrl: v.avatarUrl ?? null,
-          })),
-        )
+    if (isSelf) {
+      fetch(
+        `/api/users/${encodeURIComponent(userId)}/profile/photo/viewers?url=${encodeURIComponent(photoKey)}`,
+        { credentials: 'include' },
+      )
+        .then((res) => res.json())
+        .then((data) => {
+          if (cancelled) return
+          if (typeof data.total === 'number') setPhotoViewCount(data.total)
+          const viewers = Array.isArray(data.viewers) ? data.viewers : []
+          setPhotoViewerPreviews(
+            viewers.slice(0, 3).map((v: { id: string; name: string; avatarColor: string; avatarUrl?: string | null }) => ({
+              id: v.id,
+              name: v.name,
+              avatarColor: v.avatarColor,
+              avatarUrl: v.avatarUrl ?? null,
+            })),
+          )
+        })
+        .catch(() => {})
+    } else {
+      setPhotoViewerPreviews([])
+      fetch(`/api/users/${encodeURIComponent(userId)}/profile/photo/view`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: photoKey }),
       })
-      .catch(() => {})
+        .then((res) => res.json())
+        .then((data) => {
+          if (!cancelled && typeof data.total === 'number') setPhotoViewCount(data.total)
+        })
+        .catch(() => {})
+    }
+
     return () => {
       cancelled = true
     }
-  }, [lightboxUrl, lightboxItem?.source, isSelf, userId])
+  }, [lightboxUrl, lightboxItem?.attachmentUrl, lightboxItem?.source, lightboxItem?.type, isSelf, userId])
+
+  const isLightboxProfilePhoto =
+    !!lightboxItem &&
+    (lightboxItem.source === 'avatar' ||
+      (lightboxItem.source === 'gallery' && lightboxItem.type !== 'video'))
 
   /** Gallery item ids come back as `gallery:<realId>` (see galleryItemToMediaItem). */
   const galleryItemId = (item: MediaItem) =>
@@ -576,14 +606,15 @@ export function ProfileTabContent({
         )}
         <MediaLightbox
           url={lightboxUrl}
-          hideCloseLabel={isSelf && lightboxItem?.source === 'avatar'}
+          hideCloseLabel={isSelf && isLightboxProfilePhoto}
           onClose={() => {
             setLightboxUrl(null)
             setLightboxItem(null)
             setPhotoViewersOpen(false)
+            setViewersPhotoUrl(null)
           }}
           footer={
-            isSelf && lightboxItem?.source === 'avatar' ? (
+            isSelf && isLightboxProfilePhoto ? (
               <div className="flex w-full items-center justify-between gap-3">
                 <button
                   type="button"
@@ -592,6 +623,7 @@ export function ProfileTabContent({
                   onClick={(e) => {
                     e.preventDefault()
                     e.stopPropagation()
+                    setViewersPhotoUrl(lightboxItem?.attachmentUrl ?? null)
                     setPhotoViewersOpen(true)
                   }}
                 >
@@ -653,7 +685,11 @@ export function ProfileTabContent({
           <ProfilePhotoViewersPanel
             userId={userId}
             open={photoViewersOpen}
-            onClose={() => setPhotoViewersOpen(false)}
+            photoUrl={viewersPhotoUrl}
+            onClose={() => {
+              setPhotoViewersOpen(false)
+              setViewersPhotoUrl(null)
+            }}
           />
         )}
 
