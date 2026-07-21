@@ -63,6 +63,7 @@ import { StoryViewer } from './story-viewer'
 import { AddStoryDialog } from './add-story-dialog'
 import { FriendsDialog } from './friends-dialog'
 import { FriendButton } from './friend-button'
+import { EXIT_TO_CHATS_EVENT } from '@/hooks/use-swipe-to-back'
 import { joinPublicChatBySlug, openPrivateChatWithUser } from '@/lib/open-private-chat'
 import { UnreadBadge, UnreadLeftMarker } from './unread-indicator'
 import { TypingDots } from './typing-dots'
@@ -297,6 +298,12 @@ export function ChatSidebar({
       // ignore
     }
   }
+
+  useEffect(() => {
+    const onExit = () => setShowArchived(false)
+    window.addEventListener(EXIT_TO_CHATS_EVENT, onExit)
+    return () => window.removeEventListener(EXIT_TO_CHATS_EVENT, onExit)
+  }, [])
 
   useEffect(() => {
     if (currentUser) void refreshStories()

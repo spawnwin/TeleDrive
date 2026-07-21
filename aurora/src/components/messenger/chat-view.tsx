@@ -600,15 +600,13 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
     decided: boolean
     lastDx: number
   } | null>(null)
-  const SWIPE_BACK_EDGE = 96
-  const SWIPE_BACK_THRESHOLD = 90
+  const SWIPE_BACK_THRESHOLD = 72
 
   const handleChatPointerDown = (e: PointerEvent<HTMLDivElement>) => {
     if (swipeBackAnimating || typeof window === 'undefined' || window.innerWidth >= 1024) return
     if (e.pointerType === 'mouse' && e.button !== 0) return
-    if (e.clientX > SWIPE_BACK_EDGE) return
     const target = e.target as HTMLElement
-    if (target.closest('button,a,input,textarea,[role="button"]')) return
+    if (target.closest('button,a,input,textarea,[role="button"],[contenteditable="true"]')) return
 
     swipeTrackingRef.current = {
       startX: e.clientX,
@@ -628,17 +626,18 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
 
     if (!tracking.decided) {
       // Wait for a deliberate move before committing — avoids hijacking taps
-      // and vertical scrolling of the message list.
-      if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return
+      // and vertical scrolling of the message list. Archive-style: anywhere,
+      // as long as the gesture is clearly horizontal-right.
+      if (Math.abs(dx) < 10 && Math.abs(dy) < 10) return
       tracking.decided = true
-      tracking.active = dx > 0 && Math.abs(dx) > Math.abs(dy) * 1.2
+      tracking.active = dx > 0 && Math.abs(dx) > Math.abs(dy) * 1.15
       if (!tracking.active) return
       e.currentTarget.setPointerCapture?.(e.pointerId)
     }
     if (!tracking.active) return
 
     e.preventDefault()
-    const nextOffset = Math.max(0, Math.min(dx, window.innerWidth))
+    const nextOffset = Math.max(0, Math.min(dx * 0.85, 120))
     tracking.lastDx = nextOffset
     setSwipeBackOffset(nextOffset)
   }
@@ -657,7 +656,7 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
     setSwipeBackAnimating(true)
     // Either finish the exit slide or spring back — both via CSS transition,
     // then reset for the next chat (or the one we just left, briefly hidden).
-    setSwipeBackOffset(shouldGoBack ? window.innerWidth : 0)
+    setSwipeBackOffset(shouldGoBack ? Math.min(window.innerWidth * 0.35, 140) : 0)
     window.setTimeout(() => {
       if (shouldGoBack) onBack()
       setSwipeBackOffset(0)
@@ -1920,7 +1919,7 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
     <div
       className="relative flex h-full touch-pan-y flex-col bg-background lg:!translate-x-0"
       style={{
-        transform: swipeBackOffset ? `translateX(${swipeBackOffset}px)` : undefined,
+        transform: swipeBackOffset ? `translateX(${Math.min(56, swipeBackOffset * 0.35)}px)` : undefined,
         transition: swipeBackAnimating ? 'transform 0.22s ease-out' : undefined,
       }}
       onPointerDown={handleChatPointerDown}
@@ -1928,6 +1927,15 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
       onPointerUp={handleChatPointerEnd}
       onPointerCancel={handleChatPointerEnd}
     >
+      {swipeBackOffset > 0 && (
+        <div
+          className="pointer-events-none absolute inset-y-0 left-0 z-30 flex w-14 items-center justify-center bg-gradient-to-r from-[#3390ec]/25 to-transparent lg:hidden"
+          style={{ opacity: Math.min(1, swipeBackOffset / SWIPE_BACK_THRESHOLD) }}
+          aria-hidden
+        >
+          <ArrowLeft className="h-5 w-5 text-[#3390ec]" />
+        </div>
+      )}
       {/* Header */}
       <div className="aurora-chat-safe-top flex items-center justify-between gap-2 border-b border-border/40 bg-background/90 px-2 pb-1.5 pt-1 backdrop-blur-md sm:px-4">
         <div className="flex min-w-0 flex-1 items-center gap-2.5">

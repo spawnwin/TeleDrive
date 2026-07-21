@@ -32,6 +32,8 @@ import { loadPushEnabledPreference } from '@/lib/push-prefs'
 import { unlockNotificationAudio, warmUpCallRing, initCallRingElement, stopIncomingCallRing, startIncomingCallRing } from '@/lib/notification-sound'
 import { CallManager } from './call-manager'
 import { syncPushSubscription, registerServiceWorker, isWebPushSupported, getIosPushBlockReason } from '@/hooks/use-push'
+import { useSwipeToBack } from '@/hooks/use-swipe-to-back'
+import { ArrowLeft } from 'lucide-react'
 
 export function Messenger() {
   const {
@@ -81,6 +83,22 @@ export function Messenger() {
     setMobileSearchOpen(false)
     setSidebarQuery('')
   }, [])
+
+  const exitToChats = useCallback(() => {
+    closeMobileSearch()
+    setShowFriends(false)
+    setShowSettings(false)
+    setShowInfo(false)
+    setShowCoins(false)
+    setShowPremium(false)
+    setShowP2PMarketplace(false)
+    setShowStreams(false)
+    setShowNearby(false)
+    setProfileUserId(null)
+    setInviteToken(null)
+    setActiveChat(null)
+    setView('chats')
+  }, [closeMobileSearch, setActiveChat, setProfileUserId, setView])
 
   useEffect(() => {
     const onOverlay = (event: Event) => {
@@ -539,6 +557,34 @@ export function Messenger() {
   // In shorts mode on desktop: sidebar shows shorts hint, main area shows feed full-screen
   const isShortsMode = view === 'shorts'
 
+  // Swipe-right → chats (archive-style) from shorts, dialogs, profile, search, etc.
+  // Open chat uses ChatView's own gesture; archive uses ChatSidebar's.
+  const swipeBackToChatsEnabled =
+    isShortsMode ||
+    showFriends ||
+    showSettings ||
+    showCoins ||
+    showPremium ||
+    showP2PMarketplace ||
+    showStreams ||
+    showNearby ||
+    !!profileUserId ||
+    mobileSearchOpen ||
+    !!browserUrl ||
+    showInfo ||
+    chromeOverlayOpen ||
+    !!inviteToken
+
+  const {
+    hintVisible: swipeHintVisible,
+    hintOpacity: swipeHintOpacity,
+  } = useSwipeToBack({
+    enabled: swipeBackToChatsEnabled,
+    onBack: exitToChats,
+    attachToWindow: true,
+    threshold: 72,
+  })
+
   const profileScopeChatId = (() => {
     if (!profileUserId || !activeChatId) return null
     const chat = chats.find((c) => c.id === activeChatId)
@@ -563,7 +609,16 @@ export function Messenger() {
       : 'chats'
 
   return (
-    <div className="flex h-[100dvh] w-full overflow-hidden bg-background">
+    <div className="relative flex h-[100dvh] w-full overflow-hidden bg-background">
+      {swipeHintVisible && (
+        <div
+          className="pointer-events-none absolute inset-y-0 left-0 z-[12000] flex w-14 items-center justify-center bg-gradient-to-r from-[#3390ec]/25 to-transparent xl:hidden"
+          style={{ opacity: swipeHintOpacity }}
+          aria-hidden
+        >
+          <ArrowLeft className="h-5 w-5 text-[#3390ec]" />
+        </div>
+      )}
         {/* Sidebar */}
         <aside
           className={`${
@@ -596,12 +651,12 @@ export function Messenger() {
             } min-h-0 min-w-0 flex-1 flex-col`}
           >
             <ChatView
-              onBack={() => setActiveChat(null)}
+              onBack={exitToChats}
               onShowInfo={() => setShowInfo((v) => !v)}
             />
           </div>
           {isShortsMode && (
-            <ShortsFeed onBack={() => useAppStore.getState().setView('chats')} />
+            <ShortsFeed onBack={exitToChats} />
           )}
         </main>
 
