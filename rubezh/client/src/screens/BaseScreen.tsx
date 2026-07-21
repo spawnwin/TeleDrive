@@ -10,13 +10,16 @@ import { colors } from '../theme';
 import type { Building, GameRequest } from '../types';
 
 const LAYOUT: Array<{ type: string; top: number; left: number }> = [
-  { type: 'command', top: 20, left: 120 },
-  { type: 'warehouse', top: 110, left: 20 },
-  { type: 'motorpool', top: 110, left: 220 },
-  { type: 'food_hub', top: 220, left: 40 },
-  { type: 'fuel_depot', top: 220, left: 200 },
-  { type: 'repair', top: 330, left: 30 },
-  { type: 'medical', top: 330, left: 210 },
+  { type: 'command', top: 16, left: 120 },
+  { type: 'warehouse', top: 100, left: 10 },
+  { type: 'motorpool', top: 100, left: 230 },
+  { type: 'food_hub', top: 200, left: 20 },
+  { type: 'fuel_depot', top: 200, left: 220 },
+  { type: 'repair', top: 300, left: 10 },
+  { type: 'medical', top: 300, left: 230 },
+  { type: 'comms', top: 400, left: 20 },
+  { type: 'engineering', top: 400, left: 130 },
+  { type: 'training', top: 400, left: 240 },
 ];
 
 export function BaseScreen() {
@@ -156,9 +159,20 @@ const styles = StyleSheet.create({
   },
   region: { color: colors.sand, fontWeight: '700' },
   stability: { color: colors.info },
+  storyCard: {
+    marginHorizontal: 12,
+    marginBottom: 8,
+    backgroundColor: colors.panel,
+    borderRadius: 10,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  storyTitle: { color: colors.gold, fontWeight: '800', fontSize: 13 },
+  storyText: { color: colors.textDim, marginTop: 4, fontSize: 12, lineHeight: 17 },
   baseYard: {
     marginHorizontal: 12,
-    height: 470,
+    height: 540,
     borderRadius: 16,
     backgroundColor: '#2a3324',
     borderWidth: 1,

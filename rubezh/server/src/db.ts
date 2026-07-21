@@ -12,6 +12,13 @@ export const db = new Database(dbPath);
 db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
 
+function ensureColumn(table: string, column: string, ddl: string): void {
+  const cols = db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;
+  if (!cols.some((c) => c.name === column)) {
+    db.exec(`ALTER TABLE ${table} ADD COLUMN ${ddl}`);
+  }
+}
+
 export function migrate(): void {
   db.exec(`
     CREATE TABLE IF NOT EXISTS users (
@@ -138,5 +145,65 @@ export function migrate(): void {
       created_at TEXT NOT NULL,
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     );
+
+    CREATE TABLE IF NOT EXISTS operations (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      def_id TEXT NOT NULL,
+      title TEXT NOT NULL,
+      status TEXT NOT NULL,
+      score REAL,
+      result_label TEXT,
+      reward_json TEXT NOT NULL,
+      started_at TEXT,
+      ends_at TEXT,
+      claimed INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS achievements (
+      user_id TEXT NOT NULL,
+      achievement_id TEXT NOT NULL,
+      progress INTEGER NOT NULL DEFAULT 0,
+      unlocked INTEGER NOT NULL DEFAULT 0,
+      claimed INTEGER NOT NULL DEFAULT 0,
+      unlocked_at TEXT,
+      PRIMARY KEY (user_id, achievement_id),
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS player_stats (
+      user_id TEXT PRIMARY KEY,
+      requests_total INTEGER NOT NULL DEFAULT 0,
+      collects_total INTEGER NOT NULL DEFAULT 0,
+      operations_total INTEGER NOT NULL DEFAULT 0,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS automation (
+      user_id TEXT PRIMARY KEY,
+      auto_collect INTEGER NOT NULL DEFAULT 0,
+      auto_simple_requests INTEGER NOT NULL DEFAULT 0,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS story_progress (
+      user_id TEXT PRIMARY KEY,
+      chapter INTEGER NOT NULL DEFAULT 1,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS active_effects (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      effect TEXT NOT NULL,
+      ends_at TEXT NOT NULL,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
   `);
+
+  ensureColumn('users', 'story_chapter', 'story_chapter INTEGER NOT NULL DEFAULT 1');
+  ensureColumn('users', 'speed_boost_until', 'speed_boost_until TEXT');
+  ensureColumn('quest_counters', 'operations', 'operations INTEGER NOT NULL DEFAULT 0');
 }

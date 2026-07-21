@@ -8,6 +8,7 @@ import { BaseScreen } from './src/screens/BaseScreen';
 import { MapScreen } from './src/screens/MapScreen';
 import { SpecialistsScreen } from './src/screens/SpecialistsScreen';
 import { QuestsScreen } from './src/screens/QuestsScreen';
+import { ShopScreen } from './src/screens/ShopScreen';
 import { colors } from './src/theme';
 
 const Tab = createBottomTabNavigator();
@@ -52,13 +53,14 @@ function RootTabs() {
         tabBarStyle: styles.tabBar,
         tabBarActiveTintColor: colors.gold,
         tabBarInactiveTintColor: colors.textDim,
-        tabBarLabelStyle: { fontSize: 11, fontWeight: '700' },
+        tabBarLabelStyle: { fontSize: 10, fontWeight: '700' },
       }}
     >
       <Tab.Screen name="База" component={BaseScreen} />
       <Tab.Screen name="Карта" component={MapScreen} />
-      <Tab.Screen name="Специалисты" component={SpecialistsScreen} />
+      <Tab.Screen name="Штаб" component={SpecialistsScreen} />
       <Tab.Screen name="Задания" component={QuestsScreen} />
+      <Tab.Screen name="Склад" component={ShopScreen} />
     </Tab.Navigator>
   );
 }

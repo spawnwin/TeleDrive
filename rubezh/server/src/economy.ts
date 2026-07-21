@@ -1,12 +1,17 @@
 import { randomUUID } from 'node:crypto';
 import {
+  ACHIEVEMENTS,
   BUILDINGS,
   DAILY_QUESTS,
   OFFLINE_CAP_HOURS,
+  OPERATIONS,
   REQUEST_DEFS,
+  SHOP_ITEMS,
   SPECIALIST_TEMPLATES,
+  STORY_CHAPTERS,
   VEHICLE_TEMPLATES,
   capacityFor,
+  operationResultLabel,
   upgradeCost,
   upgradeDurationSec,
   xpToLevel,
@@ -98,10 +103,10 @@ function ensureDailyQuests(userId: string): void {
   const counter = db.prepare('SELECT * FROM quest_counters WHERE user_id = ?').get(userId) as any;
   if (!counter || counter.day_key !== key) {
     db.prepare(
-      `INSERT INTO quest_counters (user_id, requests_completed, upgrades, collects, offline_claims, assignments, day_key)
-       VALUES (?, 0, 0, 0, 0, 0, ?)
+      `INSERT INTO quest_counters (user_id, requests_completed, upgrades, collects, offline_claims, assignments, operations, day_key)
+       VALUES (?, 0, 0, 0, 0, 0, 0, ?)
        ON CONFLICT(user_id) DO UPDATE SET
-         requests_completed=0, upgrades=0, collects=0, offline_claims=0, assignments=0, day_key=excluded.day_key`,
+         requests_completed=0, upgrades=0, collects=0, offline_claims=0, assignments=0, operations=0, day_key=excluded.day_key`,
     ).run(userId, key);
     db.prepare('DELETE FROM quests WHERE user_id = ?').run(userId);
     for (const q of DAILY_QUESTS) {
@@ -121,6 +126,7 @@ function bumpQuest(userId: string, metric: string, by = 1): void {
     collects: 'collects',
     offlineClaims: 'offline_claims',
     assignments: 'assignments',
+    operations: 'operations',
   };
   const col = colMap[metric];
   if (!col) return;
@@ -207,12 +213,129 @@ function spawnRequests(userId: string, forceTutorial = false): void {
     }
   }
 
+  const buildings = db.prepare('SELECT type, level FROM buildings WHERE user_id = ?').all(userId) as any[];
+  const unlocked = new Set(buildings.filter((b) => b.level > 0).map((b) => b.type));
+
   while (open.c < maxOpen) {
-    const pool = REQUEST_DEFS.filter((r) => r.type !== 'tutorial_delivery');
+    const pool = REQUEST_DEFS.filter((r) => {
+      if (r.type === 'tutorial_delivery') return false;
+      if (!r.requiredBuilding) return true;
+      return unlocked.has(r.requiredBuilding);
+    });
+    if (!pool.length) break;
     const pick = pool[Math.floor(Math.random() * pool.length)];
     insertRequest(userId, pick.type);
     open.c += 1;
   }
+}
+
+function ensureMetaRows(userId: string): void {
+  db.prepare(
+    `INSERT OR IGNORE INTO player_stats (user_id, requests_total, collects_total, operations_total) VALUES (?, 0, 0, 0)`,
+  ).run(userId);
+  db.prepare(`INSERT OR IGNORE INTO automation (user_id, auto_collect, auto_simple_requests) VALUES (?, 0, 0)`).run(userId);
+  db.prepare(`INSERT OR IGNORE INTO story_progress (user_id, chapter) VALUES (?, 1)`).run(userId);
+  for (const a of ACHIEVEMENTS) {
+    db.prepare(
+      `INSERT OR IGNORE INTO achievements (user_id, achievement_id, progress, unlocked, claimed) VALUES (?, ?, 0, 0, 0)`,
+    ).run(userId, a.id);
+  }
+}
+
+function grantSpecialist(userId: string, templateId: string): void {
+  const exists = db.prepare(`SELECT id FROM specialists WHERE user_id = ? AND template_id = ?`).get(userId, templateId);
+  if (exists) return;
+  const s = SPECIALIST_TEMPLATES.find((x) => x.templateId === templateId);
+  if (!s) return;
+  db.prepare(
+    `INSERT INTO specialists (id, user_id, template_id, name, role, rarity, level, management, speed, reliability)
+     VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?)`,
+  ).run(randomUUID(), userId, s.templateId, s.name, s.role, s.rarity, s.management, s.speed, s.reliability);
+}
+
+function grantVehicle(userId: string, templateId: string): void {
+  const exists = db.prepare(`SELECT id FROM vehicles WHERE user_id = ? AND template_id = ?`).get(userId, templateId);
+  if (exists) return;
+  const v = VEHICLE_TEMPLATES.find((x) => x.templateId === templateId);
+  if (!v) return;
+  db.prepare(
+    `INSERT INTO vehicles (id, user_id, template_id, name, category, level, condition, capacity, speed, reliability, fuel_use, status)
+     VALUES (?, ?, ?, ?, ?, 1, 100, ?, ?, ?, ?, 'idle')`,
+  ).run(randomUUID(), userId, v.templateId, v.name, v.category, v.capacity, v.speed, v.reliability, v.fuelUse);
+}
+
+function syncAchievements(userId: string): void {
+  ensureMetaRows(userId);
+  const stats = db.prepare('SELECT * FROM player_stats WHERE user_id = ?').get(userId) as any;
+  const buildings = db.prepare('SELECT type, level FROM buildings WHERE user_id = ?').all(userId) as any[];
+  const auto = db.prepare('SELECT * FROM automation WHERE user_id = ?').get(userId) as any;
+  const command = buildings.find((b) => b.type === 'command');
+  const metrics: Record<string, number> = {
+    requestsTotal: stats?.requests_total ?? 0,
+    collectsTotal: stats?.collects_total ?? 0,
+    repairUnlocked: buildings.some((b) => b.type === 'repair' && b.level > 0) ? 1 : 0,
+    commsUnlocked: buildings.some((b) => b.type === 'comms' && b.level > 0) ? 1 : 0,
+    commandLevel: command?.level ?? 1,
+    autoCollect: auto?.auto_collect ? 1 : 0,
+  };
+  for (const op of OPERATIONS) {
+    const done = db
+      .prepare(`SELECT COUNT(*) as c FROM operations WHERE user_id = ? AND def_id = ? AND claimed = 1`)
+      .get(userId, op.id) as { c: number };
+    metrics[op.id] = done.c > 0 ? 1 : 0;
+  }
+
+  for (const a of ACHIEVEMENTS) {
+    const progress = metrics[a.metric] ?? 0;
+    const unlocked = progress >= a.target ? 1 : 0;
+    db.prepare(
+      `UPDATE achievements SET progress = ?, unlocked = CASE WHEN ? = 1 THEN 1 ELSE unlocked END,
+       unlocked_at = CASE WHEN ? = 1 AND unlocked_at IS NULL THEN ? ELSE unlocked_at END
+       WHERE user_id = ? AND achievement_id = ?`,
+    ).run(progress, unlocked, unlocked, nowIso(), userId, a.id);
+  }
+}
+
+function settleOperations(userId: string): void {
+  const now = nowIso();
+  const rows = db
+    .prepare(`SELECT * FROM operations WHERE user_id = ? AND status = 'in_progress' AND ends_at IS NOT NULL AND ends_at <= ?`)
+    .all(userId, now) as any[];
+  for (const row of rows) {
+    db.prepare(`UPDATE operations SET status = 'ready' WHERE id = ?`).run(row.id);
+  }
+}
+
+function runAutomation(userId: string): void {
+  ensureMetaRows(userId);
+  const auto = db.prepare('SELECT * FROM automation WHERE user_id = ?').get(userId) as any;
+  if (!auto?.auto_collect) return;
+
+  const buildings = db.prepare(`SELECT * FROM buildings WHERE user_id = ? AND stored >= 8`).all(userId) as any[];
+  const warehouse = buildings.find((b) => b.type === 'warehouse');
+  const command = buildings.find((b) => b.type === 'command');
+  for (const b of buildings) {
+    const def = BUILDINGS.find((x) => x.type === b.type);
+    if (!def?.produces || b.stored <= 0) continue;
+    const cap = capacityFor(def.produces, warehouse?.level ?? 1, command?.level ?? 1);
+    addResource(userId, def.produces, b.stored, 'auto_collect', b.id, cap);
+    db.prepare('UPDATE buildings SET stored = 0 WHERE id = ?').run(b.id);
+    db.prepare(`UPDATE player_stats SET collects_total = collects_total + 1 WHERE user_id = ?`).run(userId);
+  }
+}
+
+function speedMultiplier(userId: string): number {
+  const user = getUser(userId);
+  if (user.speed_boost_until && new Date(user.speed_boost_until).getTime() > Date.now()) return 0.9;
+  const comms = db.prepare(`SELECT level FROM buildings WHERE user_id = ? AND type = 'comms'`).get(userId) as any;
+  return comms?.level > 0 ? 1 - Math.min(0.2, comms.level * 0.03) : 1;
+}
+
+function storyFor(userId: string) {
+  const row = db.prepare('SELECT chapter FROM story_progress WHERE user_id = ?').get(userId) as any;
+  const chapter = row?.chapter ?? 1;
+  const def = STORY_CHAPTERS.find((c) => c.id === chapter) || STORY_CHAPTERS[0];
+  return { chapter, title: def.title, text: def.text, total: STORY_CHAPTERS.length };
 }
 
 function insertRequest(userId: string, type: RequestType): void {
@@ -302,6 +425,7 @@ export function createGuest(nickname?: string) {
     }
 
     ensureDailyQuests(id);
+    ensureMetaRows(id);
     spawnRequests(id, true);
   });
   tx();
@@ -310,10 +434,25 @@ export function createGuest(nickname?: string) {
 
 export function getBaseState(userId: string) {
   getUser(userId);
+  ensureMetaRows(userId);
   tickProduction(userId);
   settleRequestTimers(userId);
+  settleOperations(userId);
+  runAutomation(userId);
   spawnRequests(userId);
   ensureDailyQuests(userId);
+  syncAchievements(userId);
+
+  // Ensure newly added building types exist for older saves
+  for (const b of BUILDINGS) {
+    const exists = db.prepare('SELECT id FROM buildings WHERE user_id = ? AND type = ?').get(userId, b.type);
+    if (!exists) {
+      db.prepare(
+        `INSERT INTO buildings (id, user_id, type, level, state, stored, last_tick_at)
+         VALUES (?, ?, ?, 0, 'locked', 0, ?)`,
+      ).run(randomUUID(), userId, b.type, nowIso());
+    }
+  }
 
   const user = getUser(userId);
   const resources = getResourcesMap(userId);
@@ -347,6 +486,42 @@ export function getBaseState(userId: string) {
   const lastClaim = new Date(user.last_offline_claim_at).getTime();
   const offlineHours = Math.min(OFFLINE_CAP_HOURS, Math.max(0, (Date.now() - lastClaim) / 3_600_000));
 
+  const operations = db
+    .prepare(`SELECT * FROM operations WHERE user_id = ? AND status != 'claimed' ORDER BY created_at DESC LIMIT 10`)
+    .all(userId)
+    .map((o: any) => ({
+      ...o,
+      reward: parseJson(o.reward_json),
+      claimed: !!o.claimed,
+    }));
+
+  const availableOperations = OPERATIONS.filter((op) => (command?.level ?? 1) >= op.minCommandLevel).map((op) => {
+    const active = (operations as any[]).find((o) => o.def_id === op.id && o.status !== 'claimed');
+    return {
+      ...op,
+      locked: false,
+      active: active || null,
+    };
+  });
+
+  const achievements = ACHIEVEMENTS.map((a) => {
+    const row = db.prepare(`SELECT * FROM achievements WHERE user_id = ? AND achievement_id = ?`).get(userId, a.id) as any;
+    return {
+      ...a,
+      progress: row?.progress ?? 0,
+      unlocked: !!row?.unlocked,
+      claimed: !!row?.claimed,
+    };
+  });
+
+  const automation = db.prepare('SELECT * FROM automation WHERE user_id = ?').get(userId) as any;
+  const shop = SHOP_ITEMS.map((item) => ({
+    id: item.id,
+    title: item.title,
+    description: item.description,
+    costBadges: item.costBadges,
+  }));
+
   return {
     user: {
       id: user.id,
@@ -359,6 +534,7 @@ export function getBaseState(userId: string) {
       tutorialDone: !!user.tutorial_done,
       stateVersion: user.state_version,
       serverNow: nowIso(),
+      speedBoostUntil: user.speed_boost_until,
     },
     resources,
     capacities,
@@ -373,12 +549,24 @@ export function getBaseState(userId: string) {
         nextUpgradeCost: nextCost,
         nextUpgradeDurationSec: upgradeDurationSec(Math.max(b.level, 1)),
         unlocked: b.level > 0,
+        unlockLevel: def.unlockLevel,
       };
     }),
     specialists,
     vehicles,
     requests,
     quests,
+    operations,
+    availableOperations,
+    achievements,
+    shop,
+    automation: {
+      autoCollect: !!automation?.auto_collect,
+      autoSimpleRequests: !!automation?.auto_simple_requests,
+      unlockAutoCollect: (command?.level ?? 1) >= 2,
+      unlockAutoRequests: (command?.level ?? 1) >= 4,
+    },
+    story: storyFor(userId),
     offline: {
       hoursAvailable: Number(offlineHours.toFixed(2)),
       capHours: OFFLINE_CAP_HOURS,
@@ -387,7 +575,14 @@ export function getBaseState(userId: string) {
     region: {
       id: 'training',
       name: 'Учебный район',
-      stability: 62 + Math.min(30, user.level * 3),
+      stability: 62 + Math.min(30, user.level * 3) + Math.min(10, ((specialists as any[])?.length || 0)),
+      nodes: [
+        { id: 'camp', name: 'Базовый лагерь', status: 'active' },
+        { id: 'depot', name: 'Склад', status: (warehouse?.level ?? 0) > 0 ? 'secured' : 'pending' },
+        { id: 'bridge', name: 'Мост снабжения', status: 'watch' },
+        { id: 'comms_node', name: 'Узел связи', status: buildings.some((b: any) => b.type === 'comms' && b.level > 0) ? 'secured' : 'pending' },
+        { id: 'med', name: 'Медпункт', status: buildings.some((b: any) => b.type === 'medical' && b.level > 0) ? 'secured' : 'pending' },
+      ],
     },
   };
 }
@@ -419,34 +614,28 @@ export function upgradeBuilding(userId: string, buildingId: string) {
   bumpQuest(userId, 'upgrades');
   bumpVersion(userId);
 
-  // Unlock mechanic/medical specialists on repair/medical unlock
+  // Unlock specialists / vehicles with buildings
   if (b.level <= 0 && b.type === 'repair') {
-    const exists = db.prepare(`SELECT id FROM specialists WHERE user_id = ? AND template_id = 'mechanic_petr'`).get(userId);
-    if (!exists) {
-      const s = SPECIALIST_TEMPLATES.find((x) => x.templateId === 'mechanic_petr')!;
-      db.prepare(
-        `INSERT INTO specialists (id, user_id, template_id, name, role, rarity, level, management, speed, reliability)
-         VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?)`,
-      ).run(randomUUID(), userId, s.templateId, s.name, s.role, s.rarity, s.management, s.speed, s.reliability);
-    }
+    grantSpecialist(userId, 'mechanic_petr');
+    grantVehicle(userId, 'repair_evac');
   }
   if (b.level <= 0 && b.type === 'medical') {
-    const exists = db.prepare(`SELECT id FROM specialists WHERE user_id = ? AND template_id = 'medic_anna'`).get(userId);
-    if (!exists) {
-      const s = SPECIALIST_TEMPLATES.find((x) => x.templateId === 'medic_anna')!;
-      db.prepare(
-        `INSERT INTO specialists (id, user_id, template_id, name, role, rarity, level, management, speed, reliability)
-         VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?)`,
-      ).run(randomUUID(), userId, s.templateId, s.name, s.role, s.rarity, s.management, s.speed, s.reliability);
-      const v = VEHICLE_TEMPLATES.find((x) => x.templateId === 'ambulance')!;
-      const hasV = db.prepare(`SELECT id FROM vehicles WHERE user_id = ? AND template_id = 'ambulance'`).get(userId);
-      if (!hasV) {
-        db.prepare(
-          `INSERT INTO vehicles (id, user_id, template_id, name, category, level, condition, capacity, speed, reliability, fuel_use, status)
-           VALUES (?, ?, ?, ?, ?, 1, 100, ?, ?, ?, ?, 'idle')`,
-        ).run(randomUUID(), userId, v.templateId, v.name, v.category, v.capacity, v.speed, v.reliability, v.fuelUse);
-      }
-    }
+    grantSpecialist(userId, 'medic_anna');
+    grantVehicle(userId, 'ambulance');
+  }
+  if (b.level <= 0 && b.type === 'comms') {
+    grantSpecialist(userId, 'comms_kirill');
+    grantVehicle(userId, 'comms_van');
+  }
+  if (b.level <= 0 && b.type === 'engineering') {
+    grantSpecialist(userId, 'engineer_mira');
+    grantVehicle(userId, 'eng_dozer');
+  }
+  if (b.level <= 0 && b.type === 'training') {
+    grantSpecialist(userId, 'instructor_vera');
+  }
+  if (b.type === 'command' && targetLevel >= 5) {
+    grantSpecialist(userId, 'commander_nazar');
   }
 
   return getBaseState(userId);
@@ -467,6 +656,7 @@ export function collectBuilding(userId: string, buildingId: string) {
   addResource(userId, def.produces, amount, 'collect', buildingId, cap);
   db.prepare('UPDATE buildings SET stored = 0 WHERE id = ?').run(buildingId);
   bumpQuest(userId, 'collects');
+  db.prepare(`UPDATE player_stats SET collects_total = collects_total + 1 WHERE user_id = ?`).run(userId);
   bumpVersion(userId);
   return getBaseState(userId);
 }
@@ -509,16 +699,15 @@ export function startRequest(userId: string, requestId: string, vehicleId?: stri
     throw Object.assign(new Error('Нет свободного транспорта'), { statusCode: 400 });
   }
 
-  // specialist speed bonus shortens duration
   const assigned = db
     .prepare(
       `SELECT s.* FROM specialists s
        JOIN buildings b ON b.assigned_specialist_id = s.id
-       WHERE b.user_id = ? AND b.type IN ('motorpool','warehouse','repair','medical')
+       WHERE b.user_id = ? AND b.type IN ('motorpool','warehouse','repair','medical','comms','engineering')
        LIMIT 1`,
     )
     .get(userId) as any;
-  const speedBonus = assigned ? 1 - Math.min(0.35, assigned.speed * 0.02) : 1;
+  const speedBonus = (assigned ? 1 - Math.min(0.35, assigned.speed * 0.02) : 1) * speedMultiplier(userId);
   const duration = Math.max(5, Math.round(req.duration_sec * speedBonus));
   const ends = new Date(Date.now() + duration * 1000).toISOString();
 
@@ -562,10 +751,20 @@ export function claimRequest(userId: string, requestId: string) {
 
   db.prepare(`UPDATE requests SET status = 'claimed', quality = ? WHERE id = ?`).run(quality, requestId);
   bumpQuest(userId, 'requestsCompleted');
+  db.prepare(`UPDATE player_stats SET requests_total = requests_total + 1 WHERE user_id = ?`).run(userId);
 
   const user = getUser(userId);
   if (user.tutorial_done === 0 && req.type === 'tutorial_delivery') {
     db.prepare('UPDATE users SET tutorial_step = 7, tutorial_done = 0 WHERE id = ?').run(userId);
+  }
+
+  // Advance story lightly with request milestones
+  const stats = db.prepare('SELECT requests_total FROM player_stats WHERE user_id = ?').get(userId) as any;
+  if (stats?.requests_total >= 5) {
+    db.prepare(`UPDATE story_progress SET chapter = MAX(chapter, 2) WHERE user_id = ?`).run(userId);
+  }
+  if (stats?.requests_total >= 15) {
+    db.prepare(`UPDATE story_progress SET chapter = MAX(chapter, 3) WHERE user_id = ?`).run(userId);
   }
 
   bumpVersion(userId);
@@ -659,23 +858,173 @@ export function advanceTutorial(userId: string, step: number) {
   const done = next >= 8 ? 1 : 0;
   db.prepare('UPDATE users SET tutorial_step = ?, tutorial_done = ? WHERE id = ?').run(next, done, userId);
   if (done) {
-    // Day 1 starter rewards once
     const already = db
       .prepare(`SELECT id FROM resource_transactions WHERE user_id = ? AND reason = 'tutorial_complete' LIMIT 1`)
       .get(userId);
     if (!already) {
       addResource(userId, 'badges', 100, 'tutorial_complete');
       addResource(userId, 'materials', 80, 'tutorial_complete');
-      const hasMechanic = db.prepare(`SELECT id FROM specialists WHERE user_id = ? AND template_id = 'mechanic_petr'`).get(userId);
-      if (!hasMechanic) {
-        const s = SPECIALIST_TEMPLATES.find((x) => x.templateId === 'mechanic_petr')!;
-        db.prepare(
-          `INSERT INTO specialists (id, user_id, template_id, name, role, rarity, level, management, speed, reliability)
-           VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?)`,
-        ).run(randomUUID(), userId, s.templateId, s.name, s.role, s.rarity, s.management, s.speed, s.reliability);
-      }
+      grantSpecialist(userId, 'mechanic_petr');
     }
   }
+  bumpVersion(userId);
+  return getBaseState(userId);
+}
+
+export function startOperation(userId: string, defId: string) {
+  tickProduction(userId);
+  settleOperations(userId);
+  const def = OPERATIONS.find((o) => o.id === defId);
+  if (!def) throw Object.assign(new Error('Операция не найдена'), { statusCode: 404 });
+
+  const command = db.prepare(`SELECT * FROM buildings WHERE user_id = ? AND type = 'command'`).get(userId) as any;
+  if ((command?.level ?? 1) < def.minCommandLevel) {
+    throw Object.assign(new Error('Недостаточный уровень командного пункта'), { statusCode: 400 });
+  }
+
+  const active = db
+    .prepare(`SELECT id FROM operations WHERE user_id = ? AND status IN ('in_progress','ready') LIMIT 1`)
+    .get(userId);
+  if (active) throw Object.assign(new Error('Уже есть активная операция'), { statusCode: 400 });
+
+  spendResources(userId, def.cost, 'operation_start', defId);
+
+  const buildings = db.prepare('SELECT * FROM buildings WHERE user_id = ?').all(userId) as any[];
+  const specialists = db.prepare('SELECT * FROM specialists WHERE user_id = ?').all(userId) as any[];
+  const vehicles = db.prepare('SELECT * FROM vehicles WHERE user_id = ?').all(userId) as any[];
+
+  const supply = Math.min(1, (buildings.find((b) => b.type === 'warehouse')?.level ?? 0) / 6);
+  const mobility = Math.min(
+    1,
+    (buildings.find((b) => b.type === 'motorpool')?.level ?? 0) / 6 + vehicles.filter((v) => v.status === 'idle').length * 0.05,
+  );
+  const comms = Math.min(1, (buildings.find((b) => b.type === 'comms')?.level ?? 0) / 5);
+  const engineering = Math.min(1, (buildings.find((b) => b.type === 'engineering')?.level ?? 0) / 5);
+  const morale = Math.min(
+    1,
+    0.4 + specialists.length * 0.05 + (buildings.find((b) => b.type === 'food_hub')?.level ?? 0) * 0.05,
+  );
+
+  const weighted =
+    supply * def.weights.supply +
+    mobility * def.weights.mobility +
+    comms * def.weights.comms +
+    engineering * def.weights.engineering +
+    morale * def.weights.morale;
+
+  // Base competence so early operations are usually at least partial success.
+  const prep = 0.42 + weighted * 0.58;
+
+  const teamBonus = Math.min(0.25, specialists.reduce((s, x) => s + x.management + x.reliability, 0) * 0.004);
+  const vehicleBonus = Math.min(0.15, vehicles.reduce((s, x) => s + x.reliability, 0) * 0.004);
+  const randomFactor = 0.925 + Math.random() * 0.15;
+  const score = Math.max(0, Math.min(1.2, prep * (1 + teamBonus + vehicleBonus) * randomFactor));
+  const label = operationResultLabel(score);
+  const duration = Math.max(20, Math.round(def.durationSec * speedMultiplier(userId)));
+  const ends = new Date(Date.now() + duration * 1000).toISOString();
+
+  const rewardScale = score < 0.45 ? 0.25 : score < 0.6 ? 0.55 : score < 0.78 ? 0.85 : score < 0.92 ? 1 : 1.2;
+  const reward: Partial<Record<ResourceType, number>> = {};
+  for (const [k, v] of Object.entries(def.reward)) {
+    reward[k as ResourceType] = Math.round((v ?? 0) * rewardScale);
+  }
+
+  const id = randomUUID();
+  db.prepare(
+    `INSERT INTO operations (id, user_id, def_id, title, status, score, result_label, reward_json, started_at, ends_at, claimed, created_at)
+     VALUES (?, ?, ?, ?, 'in_progress', ?, ?, ?, ?, ?, 0, ?)`,
+  ).run(id, userId, def.id, def.title, score, label, JSON.stringify(reward), nowIso(), ends, nowIso());
+
+  bumpVersion(userId);
+  return getBaseState(userId);
+}
+
+export function claimOperation(userId: string, operationId: string) {
+  settleOperations(userId);
+  const op = db.prepare('SELECT * FROM operations WHERE id = ? AND user_id = ?').get(operationId, userId) as any;
+  if (!op) throw Object.assign(new Error('Операция не найдена'), { statusCode: 404 });
+  if (op.status !== 'ready') throw Object.assign(new Error('Операция ещё идёт'), { statusCode: 400 });
+  if (op.claimed) throw Object.assign(new Error('Награда уже получена'), { statusCode: 400 });
+
+  const reward = parseJson<Partial<Record<ResourceType, number>>>(op.reward_json);
+  for (const [k, v] of Object.entries(reward)) {
+    addResource(userId, k as ResourceType, v ?? 0, 'operation_reward', operationId);
+  }
+  const def = OPERATIONS.find((o) => o.id === op.def_id);
+  if (def) addXp(userId, Math.round(def.xp * Math.min(1.2, op.score || 0.7)));
+
+  db.prepare(`UPDATE operations SET claimed = 1, status = 'claimed' WHERE id = ?`).run(operationId);
+  bumpQuest(userId, 'operations');
+  db.prepare(`UPDATE player_stats SET operations_total = operations_total + 1 WHERE user_id = ?`).run(userId);
+
+  if (op.def_id === 'op_first_column') {
+    db.prepare(`UPDATE story_progress SET chapter = MAX(chapter, 5) WHERE user_id = ?`).run(userId);
+  } else if (op.def_id === 'op_broken_route') {
+    db.prepare(`UPDATE story_progress SET chapter = MAX(chapter, 3) WHERE user_id = ?`).run(userId);
+  } else if (op.def_id === 'op_reserve_comms') {
+    db.prepare(`UPDATE story_progress SET chapter = MAX(chapter, 4) WHERE user_id = ?`).run(userId);
+  }
+
+  grantSpecialist(userId, 'coord_leon');
+  bumpVersion(userId);
+  return { ...getBaseState(userId), lastQuality: op.result_label };
+}
+
+export function setAutomation(userId: string, opts: { autoCollect?: boolean; autoSimpleRequests?: boolean }) {
+  ensureMetaRows(userId);
+  const command = db.prepare(`SELECT level FROM buildings WHERE user_id = ? AND type = 'command'`).get(userId) as any;
+  const level = command?.level ?? 1;
+  if (opts.autoCollect && level < 2) {
+    throw Object.assign(new Error('Автосбор открывается с КП 2'), { statusCode: 400 });
+  }
+  if (opts.autoSimpleRequests && level < 4) {
+    throw Object.assign(new Error('Автозаявки открываются с КП 4'), { statusCode: 400 });
+  }
+  const current = db.prepare('SELECT * FROM automation WHERE user_id = ?').get(userId) as any;
+  const autoCollect = opts.autoCollect === undefined ? current.auto_collect : opts.autoCollect ? 1 : 0;
+  const autoReq = opts.autoSimpleRequests === undefined ? current.auto_simple_requests : opts.autoSimpleRequests ? 1 : 0;
+  db.prepare(`UPDATE automation SET auto_collect = ?, auto_simple_requests = ? WHERE user_id = ?`).run(autoCollect, autoReq, userId);
+  bumpVersion(userId);
+  return getBaseState(userId);
+}
+
+export function claimAchievement(userId: string, achievementId: string) {
+  syncAchievements(userId);
+  const row = db.prepare(`SELECT * FROM achievements WHERE user_id = ? AND achievement_id = ?`).get(userId, achievementId) as any;
+  if (!row) throw Object.assign(new Error('Достижение не найдено'), { statusCode: 404 });
+  if (!row.unlocked) throw Object.assign(new Error('Ещё не открыто'), { statusCode: 400 });
+  if (row.claimed) throw Object.assign(new Error('Уже получено'), { statusCode: 400 });
+  const def = ACHIEVEMENTS.find((a) => a.id === achievementId);
+  if (!def) throw Object.assign(new Error('Нет описания достижения'), { statusCode: 404 });
+  for (const [k, v] of Object.entries(def.reward)) {
+    addResource(userId, k as ResourceType, v ?? 0, 'achievement', achievementId);
+  }
+  db.prepare(`UPDATE achievements SET claimed = 1 WHERE user_id = ? AND achievement_id = ?`).run(userId, achievementId);
+  bumpVersion(userId);
+  return getBaseState(userId);
+}
+
+export function buyShopItem(userId: string, itemId: string) {
+  const item = SHOP_ITEMS.find((i) => i.id === itemId);
+  if (!item) throw Object.assign(new Error('Товар не найден'), { statusCode: 404 });
+  spendResources(userId, { badges: item.costBadges }, 'shop', itemId);
+  for (const [k, v] of Object.entries(item.reward || {})) {
+    addResource(userId, k as ResourceType, v ?? 0, 'shop', itemId);
+  }
+  if (item.unlockSpecialist) grantSpecialist(userId, item.unlockSpecialist);
+  if (item.effect === 'speed_boost_30m') {
+    const until = new Date(Date.now() + 30 * 60 * 1000).toISOString();
+    db.prepare(`UPDATE users SET speed_boost_until = ? WHERE id = ?`).run(until, userId);
+  }
+  bumpVersion(userId);
+  return getBaseState(userId);
+}
+
+export function advanceStory(userId: string) {
+  ensureMetaRows(userId);
+  const row = db.prepare('SELECT chapter FROM story_progress WHERE user_id = ?').get(userId) as any;
+  const next = Math.min(STORY_CHAPTERS.length, (row?.chapter ?? 1) + 1);
+  db.prepare(`UPDATE story_progress SET chapter = ? WHERE user_id = ?`).run(next, userId);
   bumpVersion(userId);
   return getBaseState(userId);
 }

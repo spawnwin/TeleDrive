@@ -12,7 +12,7 @@ export function QuestsScreen() {
   return (
     <ScrollView style={styles.root} contentContainerStyle={{ padding: 14, paddingBottom: 40 }}>
       <Text style={styles.title}>Задания дня</Text>
-      <Text style={styles.sub}>Выполняйте ежедневные задачи снабжения и получайте награды.</Text>
+      <Text style={styles.sub}>Ежедневные задачи снабжения и награды штаба.</Text>
 
       {state.quests.map((q) => (
         <View key={q.id} style={styles.card}>
@@ -35,6 +35,24 @@ export function QuestsScreen() {
             onPress={() => act(() => api.claimQuest(q.id))}
           >
             <Text style={styles.btnText}>{q.claimed ? 'Получено' : 'Забрать'}</Text>
+          </Pressable>
+        </View>
+      ))}
+
+      <Text style={[styles.title, { marginTop: 18 }]}>Достижения</Text>
+      {state.achievements.map((a) => (
+        <View key={a.id} style={styles.card}>
+          <Text style={styles.name}>{a.title}</Text>
+          <Text style={styles.meta}>{a.description}</Text>
+          <Text style={styles.meta}>
+            {a.progress}/{a.target}
+          </Text>
+          <Pressable
+            style={[styles.btn, (!a.unlocked || a.claimed) && styles.btnDisabled]}
+            disabled={!a.unlocked || a.claimed}
+            onPress={() => act(() => api.claimAchievement(a.id))}
+          >
+            <Text style={styles.btnText}>{a.claimed ? 'Получено' : a.unlocked ? 'Забрать' : 'Закрыто'}</Text>
           </Pressable>
         </View>
       ))}

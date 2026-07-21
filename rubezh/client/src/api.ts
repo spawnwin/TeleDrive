@@ -91,4 +91,13 @@ export const api = {
   claimQuest: (id: string) => request<GameState>(`/v1/quests/${id}/claim`, { method: 'POST', body: '{}' }),
   advanceTutorial: (step: number) =>
     request<GameState>('/v1/tutorial/advance', { method: 'POST', body: JSON.stringify({ step }) }),
+  startOperation: (defId: string) =>
+    request<GameState>(`/v1/operations/${defId}/start`, { method: 'POST', body: '{}' }),
+  claimOperation: (id: string) => request<GameState>(`/v1/operations/${id}/claim`, { method: 'POST', body: '{}' }),
+  setAutomation: (opts: { autoCollect?: boolean; autoSimpleRequests?: boolean }) =>
+    request<GameState>('/v1/automation', { method: 'POST', body: JSON.stringify(opts) }),
+  claimAchievement: (id: string) =>
+    request<GameState>(`/v1/achievements/${id}/claim`, { method: 'POST', body: '{}' }),
+  buyShop: (id: string) => request<GameState>(`/v1/shop/${id}/buy`, { method: 'POST', body: '{}' }),
+  advanceStory: () => request<GameState>('/v1/story/advance', { method: 'POST', body: '{}' }),
 };

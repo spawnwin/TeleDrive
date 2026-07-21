@@ -19,6 +19,7 @@ export interface GameState {
     tutorialDone: boolean;
     stateVersion: number;
     serverNow: string;
+    speedBoostUntil?: string | null;
   };
   resources: Record<ResourceType, number>;
   capacities: Record<string, number>;
@@ -27,6 +28,22 @@ export interface GameState {
   vehicles: Vehicle[];
   requests: GameRequest[];
   quests: Quest[];
+  operations: Operation[];
+  availableOperations: AvailableOperation[];
+  achievements: Achievement[];
+  shop: ShopItem[];
+  automation: {
+    autoCollect: boolean;
+    autoSimpleRequests: boolean;
+    unlockAutoCollect: boolean;
+    unlockAutoRequests: boolean;
+  };
+  story: {
+    chapter: number;
+    title: string;
+    text: string;
+    total: number;
+  };
   offline: {
     hoursAvailable: number;
     capHours: number;
@@ -36,6 +53,7 @@ export interface GameState {
     id: string;
     name: string;
     stability: number;
+    nodes: Array<{ id: string; name: string; status: string }>;
   };
   lastQuality?: string;
   offlineGained?: Partial<Record<ResourceType, number>>;
@@ -55,6 +73,7 @@ export interface Building {
   nextUpgradeCost: number;
   nextUpgradeDurationSec: number;
   unlocked: boolean;
+  unlockLevel?: number;
   assigned_specialist_id: string | null;
 }
 
@@ -111,6 +130,49 @@ export interface Quest {
   reward: Partial<Record<ResourceType, number>>;
 }
 
+export interface Operation {
+  id: string;
+  def_id: string;
+  title: string;
+  status: string;
+  score: number | null;
+  result_label: string | null;
+  reward: Partial<Record<ResourceType, number>>;
+  ends_at: string | null;
+  claimed: boolean;
+}
+
+export interface AvailableOperation {
+  id: string;
+  title: string;
+  description: string;
+  durationSec: number;
+  difficulty: number;
+  cost: Partial<Record<ResourceType, number>>;
+  reward: Partial<Record<ResourceType, number>>;
+  xp: number;
+  minCommandLevel: number;
+  active: Operation | null;
+}
+
+export interface Achievement {
+  id: string;
+  title: string;
+  description: string;
+  target: number;
+  progress: number;
+  unlocked: boolean;
+  claimed: boolean;
+  reward: Partial<Record<ResourceType, number>>;
+}
+
+export interface ShopItem {
+  id: string;
+  title: string;
+  description: string;
+  costBadges: number;
+}
+
 export const RESOURCE_LABELS: Record<ResourceType, string> = {
   materials: 'Материалы',
   fuel: 'Топливо',
@@ -129,4 +191,7 @@ export const BUILDING_COLORS: Record<string, string> = {
   fuel_depot: '#5a5030',
   food_hub: '#4a5a3a',
   medical: '#3a5a6a',
+  comms: '#2f4f6a',
+  engineering: '#5a4a35',
+  training: '#3f4a3a',
 };

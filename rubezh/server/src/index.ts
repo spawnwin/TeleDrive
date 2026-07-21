@@ -3,15 +3,21 @@ import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import { migrate } from './db.js';
 import {
+  advanceStory,
   advanceTutorial,
   assignSpecialist,
+  buyShopItem,
+  claimAchievement,
   claimOffline,
+  claimOperation,
   claimQuest,
   claimRequest,
   collectAll,
   collectBuilding,
   createGuest,
   getBaseState,
+  setAutomation,
+  startOperation,
   startRequest,
   upgradeBuilding,
 } from './economy.js';
@@ -139,6 +145,59 @@ app.post('/v1/tutorial/advance', async (req, reply) => {
   try {
     const body = (req.body || {}) as { step?: number };
     return advanceTutorial(userId(req as any), body.step ?? 1);
+  } catch (err) {
+    sendError(reply, err);
+  }
+});
+
+app.post('/v1/operations/:defId/start', async (req, reply) => {
+  try {
+    const { defId } = req.params as { defId: string };
+    return startOperation(userId(req as any), defId);
+  } catch (err) {
+    sendError(reply, err);
+  }
+});
+
+app.post('/v1/operations/:id/claim', async (req, reply) => {
+  try {
+    const { id } = req.params as { id: string };
+    return claimOperation(userId(req as any), id);
+  } catch (err) {
+    sendError(reply, err);
+  }
+});
+
+app.post('/v1/automation', async (req, reply) => {
+  try {
+    const body = (req.body || {}) as { autoCollect?: boolean; autoSimpleRequests?: boolean };
+    return setAutomation(userId(req as any), body);
+  } catch (err) {
+    sendError(reply, err);
+  }
+});
+
+app.post('/v1/achievements/:id/claim', async (req, reply) => {
+  try {
+    const { id } = req.params as { id: string };
+    return claimAchievement(userId(req as any), id);
+  } catch (err) {
+    sendError(reply, err);
+  }
+});
+
+app.post('/v1/shop/:id/buy', async (req, reply) => {
+  try {
+    const { id } = req.params as { id: string };
+    return buyShopItem(userId(req as any), id);
+  } catch (err) {
+    sendError(reply, err);
+  }
+});
+
+app.post('/v1/story/advance', async (req, reply) => {
+  try {
+    return advanceStory(userId(req as any));
   } catch (err) {
     sendError(reply, err);
   }
