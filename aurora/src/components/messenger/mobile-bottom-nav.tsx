@@ -133,7 +133,7 @@ export function MobileBottomNav({
                 type="button"
                 onClick={onSearchClose}
                 className={cn(
-                  'h-[52px] shrink-0 touch-manipulation rounded-full px-4 text-[15px] font-medium text-[#3390ec] active:opacity-70',
+                  'h-[52px] shrink-0 touch-manipulation rounded-full px-4 text-[15px] font-medium text-primary active:opacity-70',
                   glass,
                 )}
               >
@@ -178,7 +178,7 @@ export function MobileBottomNav({
                         {id === 'chats' && unreadCount > 0 && (
                           <UnreadBadge
                             count={unreadCount}
-                            className="absolute -right-2.5 -top-1.5 h-[15px] min-w-[15px] border-[1.5px] border-[#1c1c1e] bg-[#3390ec] px-0.5 text-[8px] leading-none shadow-none"
+                            className="absolute -right-2.5 -top-1.5 h-[15px] min-w-[15px] border-[1.5px] border-[#1c1c1e] bg-primary px-0.5 text-[8px] leading-none shadow-none"
                           />
                         )}
                       </span>
@@ -202,10 +202,10 @@ export function MobileBottomNav({
                     aria-current={undefined}
                     className="relative flex min-w-0 flex-1 touch-manipulation flex-col items-center justify-center gap-0.5 rounded-full px-1 py-0.5 transition-opacity active:opacity-60"
                   >
-                    <span className="flex h-[22px] w-[22px] items-center justify-center overflow-hidden rounded-full ring-2 ring-[#3390ec]/40">
+                    <span className="flex h-[22px] w-[22px] items-center justify-center overflow-hidden rounded-full ring-2 ring-primary/40">
                       <Avatar
                         name={userName || 'U'}
-                        color={userAvatarColor || '#3390ec'}
+                        color={userAvatarColor || 'var(--primary)'}
                         imageUrl={userAvatarUrl}
                         size="sm"
                         className="h-[22px] w-[22px] overflow-hidden rounded-full [&>div]:!h-[22px] [&>div]:!w-[22px] [&>div]:!rounded-full [&>div]:text-[8px] [&>div]:shadow-none"

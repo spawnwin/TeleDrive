@@ -2722,7 +2722,12 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
       <div
         className="shrink-0 overflow-hidden bg-background/90 px-2 pt-1.5 sm:px-3"
         style={{
-          paddingBottom: `max(0.5rem, calc(env(safe-area-inset-bottom) + ${keyboardPad}px))`,
+          // When the soft keyboard is open, visualViewport already accounts for
+          // the bottom inset — don't double-add safe-area.
+          paddingBottom:
+            keyboardPad > 0
+              ? `${keyboardPad}px`
+              : 'max(0.5rem, env(safe-area-inset-bottom))',
         }}
       >
         {/* Hidden file pickers used by attach sheet */}
