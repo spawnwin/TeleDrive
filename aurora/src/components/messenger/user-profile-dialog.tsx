@@ -9,8 +9,6 @@ import {
   Loader2,
   Edit3,
   X,
-  BellOff,
-  Bell,
   Images,
   ImageIcon,
   FileIcon,
@@ -22,7 +20,6 @@ import {
   UserX,
   ChevronLeft,
   ChevronRight,
-  Share2,
   Gift,
   Info,
   AtSign,
@@ -38,7 +35,6 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
 import { Sheet, SheetContent } from '@/components/ui/sheet'
 import { useAppStore } from '@/lib/store'
-import { buildProfileSharePayload } from '@/lib/share-payload'
 import { useI18n } from '@/hooks/use-i18n'
 import { useIsMobile } from '@/hooks/use-mobile'
 import { translate } from '@/lib/i18n'
@@ -112,13 +108,12 @@ export function UserProfileDialog({
 }: UserProfileDialogProps) {
   const { t, lang } = useI18n()
   const isMobile = useIsMobile()
-  const { onlineUserIds, presenceSynced, setActiveChat, setChatMuted, openBrowser, openVideoPlayer, openShareToChat, setProfileUserId } = useAppStore()
+  const { onlineUserIds, presenceSynced, setActiveChat, openBrowser, openVideoPlayer, setProfileUserId } = useAppStore()
   const [profile, setProfile] = useState<ProfileData | null>(null)
   const [loading, setLoading] = useState(false)
   const [loadError, setLoadError] = useState<'not_found' | 'error' | null>(null)
   const [activeTab, setActiveTab] = useState<ProfileTab>('profilePhotos')
   const [photoOpen, setPhotoOpen] = useState(false)
-  const [muted, setMuted] = useState(false)
   const [profileStories, setProfileStories] = useState<StoryFeedUser | null>(null)
   const [showStoryViewer, setShowStoryViewer] = useState(false)
   const [showAddStory, setShowAddStory] = useState(false)
@@ -172,7 +167,6 @@ export function UserProfileDialog({
       .then((data) => {
         if (!data || cancelled) return
         setProfile(data.profile ?? null)
-        setMuted(data.profile?.isMuted ?? false)
         setBlocked(data.profile?.isBlocked ?? false)
         setFriendship(data.profile?.friendship ?? null)
         if (!data.profile) setLoadError('not_found')
@@ -300,26 +294,6 @@ export function UserProfileDialog({
     })
   }
 
-  const toggleMute = async () => {
-    if (!profile?.privateChatId) return
-    const next = !muted
-    setMuted(next)
-    setChatMuted(profile.privateChatId, next)
-    try {
-      const res = await fetch(`/api/chats/${profile.privateChatId}/mute`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ muted: next }),
-      })
-      if (!res.ok) throw new Error()
-      toast.success(next ? t('chat.muted') : t('chat.unmuted'))
-    } catch {
-      setMuted(!next)
-      setChatMuted(profile.privateChatId, !next)
-      toast.error(t('misc.error'))
-    }
-  }
-
   const handleBlock = async () => {
     if (!profile || profile.isSelf) return
     try {
@@ -416,15 +390,16 @@ export function UserProfileDialog({
                 hasStory={!!profileStories?.stories.length}
                 hasUnviewed={profileStories?.hasUnviewed}
                 size="lg"
+                className="rounded-full"
               >
                 <Avatar
                   name={profile.name}
                   color={profile.avatarColor}
                   imageUrl={profile.avatarUrl}
-                  size="xl"
+                  size="2xl"
                   showStatus
                   online={isOnline}
-                  className="shadow-xl ring-4 ring-background"
+                  className="rounded-full shadow-xl ring-4 ring-background [&_>div]:!rounded-full"
                 />
               </StoryRing>
               {profile.isPremium && (
@@ -455,10 +430,64 @@ export function UserProfileDialog({
                 {formatLastSeen(profile.lastSeen, isOnline, lang)}
               </p>
             </div>
+
+            {/* Actions — only under avatar (Telegram-style) */}
+            <div className="w-full max-w-sm px-1 pt-1">
+              {!profile.isSelf ? (
+                <div className="grid grid-cols-4 gap-2 rounded-3xl bg-muted/40 p-2">
+                  <button
+                    type="button"
+                    onClick={handleMessage}
+                    className="flex min-h-[4.25rem] flex-col items-center justify-center gap-1 rounded-2xl text-[#3390ec] transition hover:bg-background active:scale-[0.98]"
+                  >
+                    <MessageCircle className="h-6 w-6" strokeWidth={1.75} />
+                    <span className="max-w-full truncate px-1 text-[11px] font-medium">{t('profile.message')}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleCall('audio')}
+                    className="flex min-h-[4.25rem] flex-col items-center justify-center gap-1 rounded-2xl text-[#3390ec] transition hover:bg-background active:scale-[0.98]"
+                  >
+                    <Phone className="h-6 w-6" strokeWidth={1.75} />
+                    <span className="max-w-full truncate px-1 text-[11px] font-medium">{t('profile.call')}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleCall('video')}
+                    className="flex min-h-[4.25rem] flex-col items-center justify-center gap-1 rounded-2xl text-[#3390ec] transition hover:bg-background active:scale-[0.98]"
+                  >
+                    <Video className="h-6 w-6" strokeWidth={1.75} />
+                    <span className="max-w-full truncate px-1 text-[11px] font-medium">{t('profile.video')}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowGiftPicker(true)}
+                    className="flex min-h-[4.25rem] flex-col items-center justify-center gap-1 rounded-2xl text-[#3390ec] transition hover:bg-background active:scale-[0.98]"
+                  >
+                    <Gift className="h-6 w-6" strokeWidth={1.75} />
+                    <span className="max-w-full truncate px-1 text-[11px] font-medium">{t('gifts.sendGift')}</span>
+                  </button>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 gap-2 rounded-3xl bg-muted/40 p-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onClose()
+                      onEditProfile?.()
+                    }}
+                    className="flex min-h-[3.5rem] flex-col items-center justify-center gap-1 rounded-2xl text-[#3390ec] transition hover:bg-background active:scale-[0.98]"
+                  >
+                    <Edit3 className="h-6 w-6" strokeWidth={1.75} />
+                    <span className="max-w-full truncate px-1 text-[11px] font-medium">{t('profile.editProfile')}</span>
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Info rows — settings style muted boxes */}
-          <div className="space-y-1.5 safe-x px-4 pb-3">
+          <div className="space-y-1.5 safe-x px-4 pb-3 pt-2">
             {profile.bio && (
               <InfoRow
                 icon={<Info className="h-4 w-4" />}
@@ -509,107 +538,6 @@ export function UserProfileDialog({
               />
             </div>
           )}
-
-          {/* Actions — Telegram-style primary row + secondary menu */}
-          <div className="safe-x space-y-2 px-4 pb-2">
-            {!profile.isSelf ? (
-              <>
-                <div className="grid grid-cols-4 gap-2 rounded-3xl bg-muted/40 p-2">
-                  <button
-                    type="button"
-                    onClick={handleMessage}
-                    className="flex min-h-[4.25rem] flex-col items-center justify-center gap-1 rounded-2xl text-[#3390ec] transition hover:bg-background active:scale-[0.98]"
-                  >
-                    <MessageCircle className="h-6 w-6" strokeWidth={1.75} />
-                    <span className="max-w-full truncate px-1 text-[11px] font-medium">{t('profile.message')}</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleCall('audio')}
-                    className="flex min-h-[4.25rem] flex-col items-center justify-center gap-1 rounded-2xl text-[#3390ec] transition hover:bg-background active:scale-[0.98]"
-                  >
-                    <Phone className="h-6 w-6" strokeWidth={1.75} />
-                    <span className="max-w-full truncate px-1 text-[11px] font-medium">{t('profile.call')}</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleCall('video')}
-                    className="flex min-h-[4.25rem] flex-col items-center justify-center gap-1 rounded-2xl text-[#3390ec] transition hover:bg-background active:scale-[0.98]"
-                  >
-                    <Video className="h-6 w-6" strokeWidth={1.75} />
-                    <span className="max-w-full truncate px-1 text-[11px] font-medium">{t('profile.video')}</span>
-                  </button>
-                  {profile.privateChatId ? (
-                    <button
-                      type="button"
-                      onClick={toggleMute}
-                      className="flex min-h-[4.25rem] flex-col items-center justify-center gap-1 rounded-2xl text-[#3390ec] transition hover:bg-background active:scale-[0.98]"
-                    >
-                      {muted ? <BellOff className="h-6 w-6" strokeWidth={1.75} /> : <Bell className="h-6 w-6" strokeWidth={1.75} />}
-                      <span className="max-w-full truncate px-1 text-[11px] font-medium">
-                        {muted ? t('profile.unmute') : t('profile.mute')}
-                      </span>
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() =>
-                        openShareToChat(
-                          buildProfileSharePayload({
-                            id: profile.id,
-                            name: profile.name,
-                            username: profile.username,
-                            avatarUrl: profile.avatarUrl,
-                          }),
-                        )
-                      }
-                      className="flex min-h-[4.25rem] flex-col items-center justify-center gap-1 rounded-2xl text-[#3390ec] transition hover:bg-background active:scale-[0.98]"
-                    >
-                      <Share2 className="h-6 w-6" strokeWidth={1.75} />
-                      <span className="max-w-full truncate px-1 text-[11px] font-medium">{t('share.title')}</span>
-                    </button>
-                  )}
-                </div>
-                <div className="space-y-0.5">
-                  <MenuRow
-                    icon={<Gift className="h-5 w-5" />}
-                    color="#ec4899"
-                    label={t('gifts.sendGift')}
-                    onClick={() => setShowGiftPicker(true)}
-                  />
-                  {profile.privateChatId && (
-                    <MenuRow
-                      icon={<Share2 className="h-5 w-5" />}
-                      color="#fb8c00"
-                      label={t('share.title')}
-                      onClick={() =>
-                        openShareToChat(
-                          buildProfileSharePayload({
-                            id: profile.id,
-                            name: profile.name,
-                            username: profile.username,
-                            avatarUrl: profile.avatarUrl,
-                          }),
-                        )
-                      }
-                    />
-                  )}
-                </div>
-              </>
-            ) : (
-              <div className="space-y-0.5">
-                <MenuRow
-                  icon={<Edit3 className="h-5 w-5" />}
-                  color="#3390ec"
-                  label={t('profile.editProfile')}
-                  onClick={() => {
-                    onClose()
-                    onEditProfile?.()
-                  }}
-                />
-              </div>
-            )}
-          </div>
 
           <Separator />
 

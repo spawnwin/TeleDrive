@@ -50,13 +50,13 @@ export function MobileBottomNav({
   return (
     <nav
       aria-label="Мобильная навигация"
-      className="pointer-events-none fixed inset-x-0 bottom-0 z-50 xl:hidden"
+      className="pointer-events-none fixed inset-x-0 bottom-0 z-[200] xl:hidden"
     >
-      <div className="pointer-events-auto mx-auto flex max-w-lg items-end gap-2 px-3 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-1">
+      <div className="pointer-events-none mx-auto flex max-w-lg items-end gap-2 px-3 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-1">
         {/* Floating pill — Telegram style */}
         <div
           className={cn(
-            'flex min-w-0 flex-1 items-stretch justify-between rounded-full px-1.5 py-1',
+            'pointer-events-auto flex min-w-0 flex-1 items-stretch justify-between rounded-full px-1.5 py-1',
             glass,
           )}
         >
@@ -106,13 +106,13 @@ export function MobileBottomNav({
               aria-label={settingsLabel}
               className="relative flex min-w-0 flex-1 touch-manipulation flex-col items-center justify-center gap-0.5 rounded-full px-1 py-0.5 transition-opacity active:opacity-60"
             >
-              <span className="flex h-[22px] w-[22px] items-center justify-center">
+              <span className="flex h-[22px] w-[22px] items-center justify-center overflow-hidden rounded-full">
                 <Avatar
                   name={userName || 'U'}
                   color={userAvatarColor || '#7c3aed'}
                   imageUrl={userAvatarUrl}
                   size="sm"
-                  className="[&>div]:h-[22px] [&>div]:w-[22px] [&>div]:text-[8px] [&>div]:ring-1 [&>div]:ring-white/20 [&>div]:shadow-none"
+                  className="h-[22px] w-[22px] overflow-hidden rounded-full [&>div]:!h-[22px] [&>div]:!w-[22px] [&>div]:!rounded-full [&>div]:text-[8px] [&>div]:ring-1 [&>div]:ring-white/20 [&>div]:shadow-none"
                 />
               </span>
               <span className="max-w-full truncate text-[9px] font-normal leading-none tracking-tight text-white/50">
@@ -122,18 +122,22 @@ export function MobileBottomNav({
           )}
         </div>
 
-        {/* Separate search island */}
+        {/* Separate search island — own hit target (not blocked by list under nav) */}
         {onSearch && (
           <button
             type="button"
-            onClick={onSearch}
+            onClick={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              onSearch()
+            }}
             aria-label={searchLabel}
             className={cn(
-              'flex h-[52px] w-[52px] shrink-0 touch-manipulation items-center justify-center rounded-full transition-opacity active:opacity-60',
+              'pointer-events-auto relative z-[1] flex h-[52px] w-[52px] shrink-0 touch-manipulation items-center justify-center rounded-full transition-opacity active:opacity-60',
               glass,
             )}
           >
-            <Search strokeWidth={1.75} absoluteStrokeWidth className="h-[22px] w-[22px] text-white" />
+            <Search strokeWidth={1.75} absoluteStrokeWidth className="pointer-events-none h-[22px] w-[22px] text-white" />
           </button>
         )}
       </div>

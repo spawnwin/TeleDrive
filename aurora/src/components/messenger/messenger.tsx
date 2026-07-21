@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback, useRef } from 'react'
+import { flushSync } from 'react-dom'
 import { useAppStore, type User } from '@/lib/store'
 import { isPremiumActive } from '@/lib/coins'
 import { ChatSidebar } from './chat-sidebar'
@@ -595,12 +596,15 @@ export function Messenger() {
           onContacts={() => { setView('chats'); setShowFriends(true) }}
           onSettings={() => setShowSettings(true)}
           onSearch={() => {
-            setShowFriends(false)
-            setView('chats')
-            // Wait for chats panel to mount after shorts/friends switch.
-            window.setTimeout(() => {
+            // Keep focus inside the same user gesture (iOS won't open keyboard after setTimeout).
+            flushSync(() => {
+              setShowFriends(false)
+              setView('chats')
+            })
+            window.dispatchEvent(new CustomEvent('aurora:focus-search'))
+            requestAnimationFrame(() => {
               window.dispatchEvent(new CustomEvent('aurora:focus-search'))
-            }, 80)
+            })
           }}
         />
       )}

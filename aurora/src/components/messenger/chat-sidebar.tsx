@@ -198,14 +198,15 @@ export function ChatSidebar({
         const el =
           searchInputRef.current ||
           (document.getElementById('aurora-sidebar-search') as HTMLInputElement | null)
-        if (el) {
-          el.scrollIntoView({ block: 'center', behavior: 'smooth' })
-          el.focus({ preventScroll: true })
-          // Some mobile browsers need a second focus tick after keyboard/layout.
-          setTimeout(() => el.focus(), 50)
+        if (el && el.offsetParent !== null) {
+          el.focus({ preventScroll: attempt === 0 })
+          if (attempt === 0) {
+            // Defer scroll so focus stays tied to the tap gesture on mobile.
+            requestAnimationFrame(() => el.scrollIntoView({ block: 'nearest', behavior: 'smooth' }))
+          }
           return
         }
-        if (attempt < 20) setTimeout(() => tryFocus(attempt + 1), 50)
+        if (attempt < 30) requestAnimationFrame(() => tryFocus(attempt + 1))
       }
       tryFocus()
     }
@@ -582,8 +583,9 @@ export function ChatSidebar({
 
           {/* Chat list — h-0 + flex-1 required for scroll inside flex column on desktop */}
           <div className="mt-1 flex h-0 min-h-0 flex-1 flex-col overflow-hidden">
-            <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-0 [-webkit-overflow-scrolling:touch]">
-            <div className="pb-[calc(4.75rem+env(safe-area-inset-bottom))] xl:pb-4">
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-0 [-webkit-overflow-scrolling:touch] [scrollbar-gutter:stable] scroll-pb-[5.5rem]">
+            {/* Small pad only — list paints under floating nav to screen bottom */}
+            <div className="pb-[max(0.5rem,env(safe-area-inset-bottom))] xl:pb-4">
               {query.trim() && (
                 <div className="mb-3">
                   <p className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
