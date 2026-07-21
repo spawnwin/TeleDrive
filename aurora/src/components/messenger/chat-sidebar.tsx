@@ -92,6 +92,9 @@ interface SidebarProps {
   onOpenCoins: () => void
   onOpenP2PMarketplace: () => void
   onOpenStreams: () => void
+  /** Shared with mobile bottom search (Telegram-style). */
+  query?: string
+  onQueryChange?: (query: string) => void
 }
 
 export function ChatSidebar({
@@ -99,11 +102,15 @@ export function ChatSidebar({
   onOpenCoins,
   onOpenP2PMarketplace,
   onOpenStreams,
+  query: queryProp,
+  onQueryChange,
 }: SidebarProps) {
   const { t, lang } = useI18n()
   const router = useRouter()
   const { currentUser, chats, activeChatId, onlineUserIds, presenceSynced, view, setView, setProfileUserId, setChatPinned, chatFolders, activeFolderId, setActiveFolderId, removeChat } = useAppStore()
-  const [query, setQuery] = useState('')
+  const [localQuery, setLocalQuery] = useState('')
+  const query = queryProp !== undefined ? queryProp : localQuery
+  const setQuery = onQueryChange ?? setLocalQuery
   const [showNewChat, setShowNewChat] = useState(false)
   const searchInputRef = useRef<HTMLInputElement>(null)
   const [showArchived, setShowArchived] = useState(false)
@@ -191,28 +198,6 @@ export function ChatSidebar({
       document.removeEventListener('visibilitychange', onVisible)
     }
   }, [refreshPendingFriendRequests])
-
-  useEffect(() => {
-    const focusSearchInput = () => {
-      const tryFocus = (attempt = 0) => {
-        const el =
-          searchInputRef.current ||
-          (document.getElementById('aurora-sidebar-search') as HTMLInputElement | null)
-        if (el && el.offsetParent !== null) {
-          el.focus({ preventScroll: attempt === 0 })
-          if (attempt === 0) {
-            // Defer scroll so focus stays tied to the tap gesture on mobile.
-            requestAnimationFrame(() => el.scrollIntoView({ block: 'nearest', behavior: 'smooth' }))
-          }
-          return
-        }
-        if (attempt < 30) requestAnimationFrame(() => tryFocus(attempt + 1))
-      }
-      tryFocus()
-    }
-    window.addEventListener('aurora:focus-search', focusSearchInput)
-    return () => window.removeEventListener('aurora:focus-search', focusSearchInput)
-  }, [])
 
   useEffect(() => {
     if (view === 'shorts' && selectionMode) exitSelection()
@@ -521,8 +506,8 @@ export function ChatSidebar({
             transition={{ duration: 0.18, ease: 'easeOut' }}
             className="flex min-h-0 flex-1 flex-col overflow-hidden"
           >
-          {/* Search */}
-          <div className="px-4 pt-2">
+          {/* Search — desktop only; on mobile it slides up from the bottom nav */}
+          <div className="hidden px-4 pt-2 xl:block">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input

@@ -69,8 +69,19 @@ export function Messenger() {
   const [showStreams, setShowStreams] = useState(false)
   const [showFriends, setShowFriends] = useState(false)
   const [inviteToken, setInviteToken] = useState<string | null>(null)
+  const [mobileSearchOpen, setMobileSearchOpen] = useState(false)
+  const [sidebarQuery, setSidebarQuery] = useState('')
   const historyStateRef = useRef<{ chatId: string | null; view: string; profileUserId: string | null }>({ chatId: null, view: 'chats', profileUserId: null })
   const poppingStateRef = useRef(false)
+
+  const closeMobileSearch = useCallback(() => {
+    setMobileSearchOpen(false)
+    setSidebarQuery('')
+  }, [])
+
+  useEffect(() => {
+    if (activeChatId) closeMobileSearch()
+  }, [activeChatId, closeMobileSearch])
 
   useEffect(() => {
     if (!currentUser) return
@@ -542,6 +553,8 @@ export function Messenger() {
             onOpenCoins={() => setShowCoins(true)}
             onOpenP2PMarketplace={() => setShowP2PMarketplace(true)}
             onOpenStreams={() => setShowStreams(true)}
+            query={sidebarQuery}
+            onQueryChange={setSidebarQuery}
           />
         </aside>
 
@@ -582,30 +595,42 @@ export function Messenger() {
           }}
           settingsLabel={lang === 'ru' ? 'Настройки' : 'Settings'}
           searchLabel={lang === 'ru' ? 'Поиск' : 'Search'}
+          cancelLabel={lang === 'ru' ? 'Отмена' : 'Cancel'}
+          searchPlaceholder={translate(lang, 'sidebar.searchChats')}
           userName={currentUser?.name}
           userAvatarColor={currentUser?.avatarColor}
           userAvatarUrl={currentUser?.avatarUrl}
+          searchOpen={mobileSearchOpen}
+          searchQuery={sidebarQuery}
+          onSearchQueryChange={setSidebarQuery}
           onChats={() => {
+            closeMobileSearch()
             setShowFriends(false)
             setView('chats')
           }}
           onShorts={() => {
+            closeMobileSearch()
             setShowFriends(false)
             setView('shorts')
           }}
-          onContacts={() => { setView('chats'); setShowFriends(true) }}
-          onSettings={() => setShowSettings(true)}
+          onContacts={() => {
+            closeMobileSearch()
+            setView('chats')
+            setShowFriends(true)
+          }}
+          onSettings={() => {
+            closeMobileSearch()
+            setShowSettings(true)
+          }}
           onSearch={() => {
-            // Keep focus inside the same user gesture (iOS won't open keyboard after setTimeout).
+            // Open bottom search sheet in the same tap gesture (Telegram-style).
             flushSync(() => {
               setShowFriends(false)
               setView('chats')
-            })
-            window.dispatchEvent(new CustomEvent('aurora:focus-search'))
-            requestAnimationFrame(() => {
-              window.dispatchEvent(new CustomEvent('aurora:focus-search'))
+              setMobileSearchOpen(true)
             })
           }}
+          onSearchClose={closeMobileSearch}
         />
       )}
 
