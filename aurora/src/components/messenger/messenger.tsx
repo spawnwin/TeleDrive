@@ -712,7 +712,7 @@ export function Messenger() {
               : activeChatId
                 ? 'hidden xl:flex'
                 : 'flex'
-          } w-full shrink-0 flex-col border-r border-border xl:w-[340px] 2xl:w-[380px]`}
+          } w-full shrink-0 flex-col border-r border-border xl:w-[360px] 2xl:w-[400px]`}
         >
           <ChatSidebar
             onOpenSettings={() => setShowSettings(true)}

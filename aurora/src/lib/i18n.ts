@@ -71,6 +71,7 @@ const ru: Dict = {
   'sidebar.allChats': 'Все чаты',
   'sidebar.archived': 'Архив',
   'sidebar.archivedChats': 'Архивированные чаты',
+  'sidebar.archivedCount': '{count} чатов',
   'sidebar.noArchived': 'Нет архивированных чатов',
   'sidebar.pullArchive': 'Потяните, чтобы открыть архив',
   'sidebar.releaseArchive': 'Отпустите, чтобы открыть архив',
@@ -107,6 +108,8 @@ const ru: Dict = {
   'newChat.errorCreateGroup': 'Не удалось создать группу',
   'newChat.errorSpecifyUser': 'Укажите собеседника',
   'newChat.errorUnknownType': 'Неизвестный тип чата',
+  'newChat.forumMode': 'Режим форума',
+  'newChat.forumModeHint': 'Темы как в Telegram',
 
   // Chat header
   'chat.call': 'Звонок',
@@ -1303,6 +1306,7 @@ const en: Dict = {
   'sidebar.allChats': 'All chats',
   'sidebar.archived': 'Archive',
   'sidebar.archivedChats': 'Archived chats',
+  'sidebar.archivedCount': '{count} chats',
   'sidebar.noArchived': 'No archived chats',
   'sidebar.pullArchive': 'Pull to open archive',
   'sidebar.releaseArchive': 'Release to open archive',
@@ -1338,6 +1342,8 @@ const en: Dict = {
   'newChat.errorCreateGroup': 'Failed to create group',
   'newChat.errorSpecifyUser': 'Specify a user',
   'newChat.errorUnknownType': 'Unknown chat type',
+  'newChat.forumMode': 'Forum mode',
+  'newChat.forumModeHint': 'Topics like in Telegram',
 
   'chat.call': 'Call',
   'chat.video': 'Video',

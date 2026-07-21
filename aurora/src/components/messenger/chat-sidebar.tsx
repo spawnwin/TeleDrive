@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { AnimatePresence, motion } from 'framer-motion'
+import { motion } from 'framer-motion'
 import { readJsonResponse } from '@/lib/fetch-json'
 import {
   Search,
@@ -588,13 +588,13 @@ export function ChatSidebar({
   return (
     <div className="flex h-full flex-col bg-sidebar text-sidebar-foreground">
       {/* Header */}
-      <div className="aurora-sidebar-safe-top flex items-center justify-between gap-2 border-b border-sidebar-border bg-sidebar px-4 pb-2.5">
+      <div className="aurora-sidebar-safe-top flex items-center justify-between gap-2 border-b border-sidebar-border/80 bg-sidebar/95 px-4 pb-2.5 backdrop-blur-md">
         {selectionMode ? (
           <>
             <button
               type="button"
               onClick={exitSelection}
-              className="text-sm font-medium text-[#3390ec]"
+              className="text-sm font-medium text-primary"
             >
               {t('misc.cancel')}
             </button>
@@ -612,29 +612,41 @@ export function ChatSidebar({
           </>
         ) : (
           <>
-        {/* Telegram-style: large "Chats" title + compose / menu */}
         <div className="flex min-w-0 flex-1 items-center gap-2">
-          <h1 className="truncate text-[26px] font-bold leading-none tracking-tight xl:text-lg">
-            {t('nav.chats')}
-          </h1>
+          {showArchived ? (
+            <button
+              type="button"
+              onClick={() => setShowArchived(false)}
+              className="flex min-w-0 items-center gap-2 text-left"
+            >
+              <ArrowLeft className="h-5 w-5 shrink-0 text-primary" />
+              <h1 className="truncate text-[26px] font-bold leading-none tracking-tight xl:text-lg">
+                {t('sidebar.archived')}
+              </h1>
+            </button>
+          ) : (
+            <h1 className="truncate text-[26px] font-bold leading-none tracking-tight xl:text-lg">
+              {t('nav.chats')}
+            </h1>
+          )}
         </div>
         <div className="flex items-center gap-0.5">
           <Button
             variant="ghost"
             size="icon"
-            className="h-9 w-9 rounded-full text-[#3390ec] xl:hidden"
+            className="h-9 w-9 rounded-full text-primary"
             onClick={() => openNewChat('search')}
             title={t('sidebar.newChat')}
             aria-label={t('sidebar.newChat')}
           >
-            <Plus className="h-5 w-5" strokeWidth={2.25} />
+            <Plus className="h-5 w-5 xl:h-4 xl:w-4" strokeWidth={2.25} />
           </Button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-9 w-9 rounded-full xl:hidden"
+                className="h-9 w-9 rounded-full"
                 title={t('chat.more')}
               >
                 <MoreVertical className="h-5 w-5" />
@@ -646,6 +658,12 @@ export function ChatSidebar({
                 {showArchived ? t('sidebar.allChats') : t('sidebar.archived')}
                 {archivedCount > 0 && !showArchived ? ` (${archivedCount})` : ''}
               </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => enterSelectionMode()}>
+                <Check className="mr-2 h-4 w-4" /> {t('msg.select')}
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setShowEditFolders(true)}>
+                <FolderPlus className="mr-2 h-4 w-4" /> {t('folders.edit')}
+              </DropdownMenuItem>
               <DropdownMenuItem onClick={onOpenP2PMarketplace}>
                 <Store className="mr-2 h-4 w-4 text-emerald-500" /> {t('marketplace.title')}
               </DropdownMenuItem>
@@ -655,6 +673,9 @@ export function ChatSidebar({
               <DropdownMenuItem onClick={onOpenCoins}>
                 <Coins className="mr-2 h-4 w-4" /> {t('coins.title')}
               </DropdownMenuItem>
+              <DropdownMenuItem onClick={onOpenSettings}>
+                <Settings className="mr-2 h-4 w-4" /> {t('sidebar.settings')}
+              </DropdownMenuItem>
               {currentUser?.isAdmin && (
                 <DropdownMenuItem onClick={() => router.push('/admin')}>
                   <Shield className="mr-2 h-4 w-4 text-slate-500" /> {t('sidebar.admin')}
@@ -662,85 +683,21 @@ export function ChatSidebar({
               )}
             </DropdownMenuContent>
           </DropdownMenu>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="hidden h-9 w-9 rounded-lg xl:inline-flex"
-            onClick={() => openNewChat('search')}
-            title={t('sidebar.newChat')}
-            aria-label={t('sidebar.newChat')}
-          >
-            <Plus className="h-4 w-4" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="hidden h-9 w-9 rounded-lg xl:inline-flex"
-            onClick={onOpenP2PMarketplace}
-            title={t('marketplace.title')}
-          >
-            <Store className="h-4 w-4 text-emerald-500" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="hidden h-9 w-9 rounded-lg xl:inline-flex"
-            onClick={onOpenStreams}
-            title={t('streams.title')}
-          >
-            <Radio className="h-4 w-4 text-rose-500" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="hidden h-9 w-9 rounded-lg xl:inline-flex"
-            onClick={onOpenCoins}
-            title={t('coins.title')}
-          >
-            <Coins className="h-4 w-4" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="hidden h-9 w-9 rounded-lg xl:inline-flex"
-            onClick={() => enterSelectionMode()}
-            title={t('msg.select')}
-          >
-            <Check className="h-4 w-4" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="hidden h-9 w-9 rounded-lg xl:inline-flex"
-            onClick={onOpenSettings}
-            title={t('sidebar.settings')}
-          >
-            <Settings className="h-4 w-4" />
-          </Button>
-          {currentUser?.isAdmin && (
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-9 w-9 rounded-lg"
-              onClick={() => router.push('/admin')}
-              title={t('sidebar.admin')}
-            >
-              <Shield className="h-4 w-4" />
-            </Button>
-          )}
         </div>
           </>
         )}
       </div>
 
-      {/* Mode toggle: Чаты / Шорты */}
+      {/* Mode toggle: Чаты / Шорты — desktop */}
       <div className="hidden px-3 pt-3 xl:block">
-        <div className="flex rounded-xl bg-muted p-1">
+        <div className="flex rounded-2xl bg-muted/70 p-1">
           <button
             onClick={() => setView('chats')}
             className={cn(
-              'flex flex-1 items-center justify-center gap-1.5 rounded-lg py-2 text-sm font-medium transition',
-              view === 'chats' ? 'bg-background shadow text-foreground' : 'text-muted-foreground',
+              'flex flex-1 items-center justify-center gap-1.5 rounded-xl py-2 text-sm font-medium transition',
+              view === 'chats'
+                ? 'bg-background text-foreground shadow-sm'
+                : 'text-muted-foreground hover:text-foreground',
             )}
           >
             <MessageSquare className="h-3.5 w-3.5" />
@@ -749,10 +706,10 @@ export function ChatSidebar({
           <button
             onClick={() => setView('shorts')}
             className={cn(
-              'flex flex-1 items-center justify-center gap-1.5 rounded-lg py-2 text-sm font-medium transition',
+              'flex flex-1 items-center justify-center gap-1.5 rounded-xl py-2 text-sm font-medium transition',
               view === 'shorts'
-                ? 'bg-[#3390ec] text-white shadow'
-                : 'text-muted-foreground',
+                ? 'bg-primary text-primary-foreground shadow-sm'
+                : 'text-muted-foreground hover:text-foreground',
             )}
           >
             <Clapperboard className="h-3.5 w-3.5" />
@@ -761,16 +718,7 @@ export function ChatSidebar({
         </div>
       </div>
 
-      <AnimatePresence initial={false} mode="wait">
-        {view === 'chats' ? (
-          <motion.div
-            key="chats"
-            initial={{ opacity: 0, x: -16 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -16 }}
-            transition={{ duration: 0.18, ease: 'easeOut' }}
-            className="flex min-h-0 flex-1 flex-col overflow-hidden"
-          >
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
           {/* Search — desktop only; on mobile it slides up from the bottom nav */}
           <div className="hidden px-4 pt-2 xl:block">
             <div className="relative">
@@ -781,13 +729,13 @@ export function ChatSidebar({
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder={t('sidebar.searchChats')}
-                className="h-9 rounded-lg border-none bg-muted pl-10 text-sm shadow-none focus-visible:ring-0"
+                className="h-10 rounded-xl border-none bg-muted/80 pl-10 text-sm shadow-none focus-visible:ring-1 focus-visible:ring-primary/30"
               />
             </div>
           </div>
 
-          {/* Folder tabs */}
-          {chatFolders.length > 0 && !query.trim() && (
+          {/* Folder tabs — always visible so users can discover folders */}
+          {!query.trim() && !showArchived && (
             <FolderTabs
               folders={chatFolders}
               activeFolderId={activeFolderId}
@@ -795,27 +743,6 @@ export function ChatSidebar({
               onEdit={() => setShowEditFolders(true)}
             />
           )}
-
-          {/* Desktop-only: archive toggle (compose stays as + in header — Telegram-style) */}
-          <div className="hidden items-center gap-2 px-4 pt-2 xl:flex">
-            <Button
-              variant="outline"
-              size="icon"
-              className={cn(
-                'relative h-10 w-10 rounded-lg border-transparent bg-transparent text-muted-foreground shadow-none hover:bg-sidebar-accent',
-                showArchived && 'bg-sidebar-accent text-[#3390ec]',
-              )}
-              onClick={() => setShowArchived((v) => !v)}
-              title={t('sidebar.archived')}
-            >
-              <Archive className="h-4 w-4" />
-              {archivedCount > 0 && (
-                <span className="absolute -right-1 -top-1 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-[#3390ec] px-1 text-[9px] font-bold text-white">
-                  {archivedCount}
-                </span>
-              )}
-            </Button>
-          </div>
 
           {/* Chat list — h-0 + flex-1 required for scroll inside flex column on desktop */}
           <div className="mt-1 flex h-0 min-h-0 flex-1 flex-col overflow-hidden">
@@ -1015,7 +942,7 @@ export function ChatSidebar({
                     </div>
                   )}
                   {!searchingUsers && !hasGlobalHits && !hasLocalHits && (
-                    <p className="px-3 py-2 text-center text-xs text-muted-foreground">{t('newChat.nothingFound')}</p>
+                    <p className="px-3 py-2 text-center text-xs text-muted-foreground">{t('sidebar.noChatsFound')}</p>
                   )}
                   {hasLocalHits && (
                     <>
@@ -1028,23 +955,29 @@ export function ChatSidebar({
                 </div>
               )}
               {filtered.length === 0 && !query.trim() && !savedChat ? (
-                <div className="flex flex-col items-center justify-center gap-2 py-16 text-center">
-                  <MessageCirclePlus className="h-8 w-8 text-muted-foreground/60" />
-                  <p className="text-sm text-muted-foreground">
-                    {showArchived
-                      ? t('sidebar.noArchived')
-                      : activeFolder
-                        ? t('folders.emptyChats')
-                        : t('sidebar.noChats')}
-                  </p>
+                <div className="mx-4 my-10 flex flex-col items-center justify-center gap-3 rounded-3xl bg-gradient-to-b from-primary/10 via-muted/40 to-transparent px-6 py-12 text-center">
+                  <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/15 text-primary shadow-sm">
+                    <MessageCirclePlus className="h-8 w-8" />
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-[15px] font-semibold text-foreground">
+                      {showArchived
+                        ? t('sidebar.noArchived')
+                        : activeFolder
+                          ? t('folders.emptyChats')
+                          : t('sidebar.noChats')}
+                    </p>
                     {!showArchived && !activeFolder && (
+                      <p className="text-xs text-muted-foreground">{t('sidebar.startChatting')}</p>
+                    )}
+                  </div>
+                  {!showArchived && !activeFolder && (
                     <Button
-                      variant="outline"
                       size="sm"
-                      className="mt-2"
+                      className="mt-1 rounded-full bg-primary px-5 text-primary-foreground hover:bg-primary/90"
                       onClick={() => openNewChat('search')}
                     >
-                      {t('sidebar.startChatting')}
+                      {t('sidebar.newChat')}
                     </Button>
                   )}
                 </div>
@@ -1052,16 +985,25 @@ export function ChatSidebar({
                 null
               ) : (
                 <>
+                  {!showArchived && !query.trim() && archivedCount > 0 && (
+                    <ArchiveFolderRow
+                      count={archivedCount}
+                      onOpen={() => setShowArchived(true)}
+                    />
+                  )}
                   {savedChat && savedMatchesQuery && !showArchived && (
                     <>
                       <SavedChatRow chat={savedChat} selectionMode={selectionMode} />
                       {(pinned.length > 0 || unpinned.length > 0) && (
-                        <div className="my-2 ml-3 mr-3 border-t border-sidebar-border/50" />
+                        <div className="my-1.5 ml-3 mr-3 border-t border-sidebar-border/40" />
                       )}
                     </>
                   )}
                   {pinned.length > 0 && !showArchived && (
                     <>
+                      <p className="px-4 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                        {t('sidebar.pinned')}
+                      </p>
                       {pinned.map((chat) => (
                         <ChatListItemRow
                           key={chat.id}
@@ -1077,6 +1019,9 @@ export function ChatSidebar({
                           onEnterSelection={() => enterSelectionMode(chat.id)}
                         />
                       ))}
+                      {unpinned.length > 0 && (
+                        <div className="my-1.5 ml-3 mr-3 border-t border-sidebar-border/40" />
+                      )}
                     </>
                   )}
                   {unpinned.map((chat) => (
@@ -1114,55 +1059,6 @@ export function ChatSidebar({
             </div>
             </div>
           </div>
-        </motion.div>
-        ) : (
-          <motion.div
-            key="shorts"
-            initial={{ opacity: 0, x: 16 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: 16 }}
-            transition={{ duration: 0.18, ease: 'easeOut' }}
-            className="flex min-h-0 flex-1 flex-col overflow-hidden"
-          >
-            <ShortsModeHint onOpenUpload={() => {}} />
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Mode toggle: Чаты / Шорты — две отдельные кнопки внизу сайдбара */}
-      <div className="hidden shrink-0 px-3 pt-3">
-        <div className="grid grid-cols-2 gap-2">
-          <button
-            onClick={() => setView('chats')}
-            className={cn(
-              'relative flex items-center justify-center gap-1.5 rounded-xl border py-2.5 text-sm font-medium transition',
-              view === 'chats'
-                ? 'border-transparent bg-background text-foreground shadow'
-                : 'border-border bg-transparent text-muted-foreground hover:bg-muted/60',
-            )}
-          >
-            <MessageSquare className="h-4 w-4" />
-            {t('nav.chats')}
-            {totalUnread > 0 && view !== 'chats' && (
-              <UnreadBadge
-                count={totalUnread}
-                className="absolute -right-1 -top-1 h-4 min-w-[16px] px-1 text-[9px]"
-              />
-            )}
-          </button>
-          <button
-            onClick={() => setView('shorts')}
-            className={cn(
-              'flex items-center justify-center gap-1.5 rounded-xl border py-2.5 text-sm font-medium transition',
-              view === 'shorts'
-                ? 'border-transparent bg-[#3390ec] text-white shadow'
-                : 'border-border bg-transparent text-muted-foreground hover:bg-muted/60',
-            )}
-          >
-            <Clapperboard className="h-4 w-4" />
-            {t('nav.shorts')}
-          </button>
-        </div>
       </div>
 
       {/* Current user footer */}
@@ -1336,21 +1232,27 @@ export function ChatSidebar({
   )
 }
 
-function ShortsModeHint({ onOpenUpload }: { onOpenUpload: () => void }) {
+function ArchiveFolderRow({ count, onOpen }: { count: number; onOpen: () => void }) {
   const { t } = useI18n()
   return (
-    <div className="flex flex-1 flex-col items-center justify-center gap-4 px-6 text-center">
-      <div className="flex h-20 w-20 items-center justify-center rounded-3xl bg-gradient-to-br from-[#3390ec]/20 to-[#3390ec]/5">
-        <Clapperboard className="h-10 w-10 text-[#3390ec]" />
+    <button
+      type="button"
+      onClick={onOpen}
+      className="group flex w-full items-center gap-3 border-b border-sidebar-border/40 px-3 py-2.5 text-left transition-colors hover:bg-sidebar-accent/70 sm:px-4"
+    >
+      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-primary/15 text-primary">
+        <Archive className="h-5 w-5" strokeWidth={2} />
       </div>
-      <div>
-        <p className="text-base font-semibold">{t('shorts.title')}</p>
-        <p className="mt-1 text-xs text-muted-foreground">{t('shorts.subtitle')}</p>
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-[15px] font-semibold leading-tight">{t('sidebar.archived')}</p>
+        <p className="mt-0.5 truncate text-[13px] text-muted-foreground">
+          {t('sidebar.archivedCount').replace('{count}', String(count))}
+        </p>
       </div>
-      <p className="max-w-[260px] text-xs text-muted-foreground">
-        {t('shorts.uploadHint')}
-      </p>
-    </div>
+      <span className="flex h-5 min-w-[20px] items-center justify-center rounded-full bg-primary px-1.5 text-[10px] font-bold text-primary-foreground">
+        {count > 99 ? '99+' : count}
+      </span>
+    </button>
   )
 }
 
@@ -1469,7 +1371,7 @@ function FolderTab({
       className={cn(
         'flex h-9 shrink-0 items-center gap-1.5 border-b-2 border-transparent px-3 text-sm whitespace-nowrap transition',
         active
-          ? 'border-[#3390ec] font-semibold text-[#3390ec]'
+          ? 'border-primary font-semibold text-primary'
           : 'font-medium text-muted-foreground hover:text-foreground',
       )}
       title={label}
@@ -1477,7 +1379,7 @@ function FolderTab({
       {emoji && <span className="text-sm leading-none">{emoji}</span>}
       <span className="max-w-[120px] truncate">{label}</span>
       {unread > 0 && (
-        <span className="ml-0.5 inline-flex h-4 min-w-[16px] items-center justify-center rounded-full bg-[#3390ec] px-1 text-[9px] font-bold leading-none text-white">
+        <span className="ml-0.5 inline-flex h-4 min-w-[16px] items-center justify-center rounded-full bg-primary px-1 text-[9px] font-bold leading-none text-primary-foreground">
           {unread > 99 ? '99+' : unread}
         </span>
       )}
@@ -1536,20 +1438,15 @@ function SavedChatRow({ chat, selectionMode = false }: { chat: ChatListItem; sel
           : 'hover:bg-sidebar-accent/70',
       )}
     >
-      <UnreadBadge
-        count={chat.unread}
-        title={unreadLabel(chat.unread, t)}
-        className="hidden"
-      />
-      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[#3390ec]">
-        <Bookmark className="h-5 w-5 text-white" fill="currentColor" />
+      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-primary shadow-sm">
+        <Bookmark className="h-5 w-5 text-primary-foreground" fill="currentColor" />
       </div>
       <div className="min-w-0 flex-1">
         <div className="flex items-center justify-between gap-2">
           <p
             className={cn(
-              'truncate text-sm',
-              chat.unread > 0 ? 'font-bold text-foreground' : 'font-semibold text-foreground',
+              'truncate text-[15px] leading-tight',
+              chat.unread > 0 ? 'font-semibold' : 'font-medium',
             )}
           >
             {t('sidebar.savedMessages')}
@@ -1557,8 +1454,8 @@ function SavedChatRow({ chat, selectionMode = false }: { chat: ChatListItem; sel
           {chat.lastMessage && (
             <span
               className={cn(
-                'shrink-0 text-[11px] tabular-nums',
-                chat.unread > 0 ? 'font-semibold text-[#3390ec]' : 'text-muted-foreground',
+                'shrink-0 text-[12px] tabular-nums',
+                chat.unread > 0 ? 'font-semibold text-primary' : 'text-muted-foreground',
               )}
             >
               {formatChatTime(chat.lastMessage.createdAt, lang)}
@@ -1567,7 +1464,7 @@ function SavedChatRow({ chat, selectionMode = false }: { chat: ChatListItem; sel
         </div>
         <p
           className={cn(
-            'mt-0.5 truncate text-xs',
+            'mt-0.5 truncate text-[13px] leading-snug',
             draftText ? 'text-rose-500' : 'text-muted-foreground',
           )}
         >
@@ -1581,6 +1478,11 @@ function SavedChatRow({ chat, selectionMode = false }: { chat: ChatListItem; sel
           )}
         </p>
       </div>
+      <UnreadBadge
+        count={chat.unread}
+        title={unreadLabel(chat.unread, t)}
+        className="h-5 min-w-[20px] px-1.5 text-[10px]"
+      />
     </motion.div>
   )
 }
@@ -1805,7 +1707,7 @@ function ChatListItemRow({
       className={cn(
         'group relative flex w-full min-w-0 items-center gap-3 rounded-none border-b border-sidebar-border/40 px-3 py-2.5 text-left transition-colors sm:px-4',
         selectionMode && selected
-          ? 'bg-[#3390ec]/10'
+          ? 'bg-primary/10'
           : isActive
             ? 'bg-sidebar-accent'
             : 'hover:bg-sidebar-accent/70',
@@ -1816,7 +1718,7 @@ function ChatListItemRow({
           className={cn(
             'flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 transition-colors',
             selected
-              ? 'border-[#3390ec] bg-[#3390ec] text-white'
+              ? 'border-primary bg-primary text-primary-foreground'
               : 'border-muted-foreground/40 bg-transparent',
           )}
           aria-hidden
@@ -1824,13 +1726,7 @@ function ChatListItemRow({
           {selected && <Check className="h-3 w-3" strokeWidth={3} />}
         </span>
       )}
-      <UnreadLeftMarker show={false} />
-      <UnreadBadge
-        count={chat.unread}
-        muted={chat.isMuted}
-        title={unreadLabel(chat.unread, t)}
-        className="hidden"
-      />
+      <UnreadLeftMarker show={chat.unread > 0 && !selectionMode} />
       <StoryRing
         hasStory={hasStories}
         hasUnviewed={storyUser?.hasUnviewed}
@@ -1886,18 +1782,11 @@ function ChatListItemRow({
           <div className="flex min-w-0 items-center gap-1">
             <p
               className={cn(
-                'truncate text-[16px] leading-tight',
-                chat.unread > 0 ? 'font-semibold' : 'font-medium',
-                chat.unread > 0 && 'text-foreground',
+                'truncate text-[15px] leading-tight',
+                chat.unread > 0 ? 'font-semibold text-foreground' : 'font-medium',
               )}
             >
               <span className="inline-flex max-w-full items-center gap-1">
-                {chat.type === 'channel' && (
-                  <Megaphone className="h-3.5 w-3.5 shrink-0 text-[#8b5cf6]" aria-hidden />
-                )}
-                {chat.type === 'group' && (
-                  <Users className="h-3.5 w-3.5 shrink-0 text-[#2aabee]" aria-hidden />
-                )}
                 <span className="truncate">{chat.title}</span>
                 {displayEmojiStatus && (
                   <EmojiStatusBadge emojiStatus={displayEmojiStatus} size="sm" />
@@ -1915,8 +1804,8 @@ function ChatListItemRow({
             {chat.lastMessage && (
               <span
                 className={cn(
-                  'text-[11px] tabular-nums',
-                  chat.unread > 0 ? 'font-semibold text-[#3390ec]' : 'text-muted-foreground',
+                  'text-[12px] tabular-nums',
+                  chat.unread > 0 ? 'font-semibold text-primary' : 'text-muted-foreground',
                 )}
               >
                 {formatChatTime(chat.lastMessage.createdAt, lang)}
@@ -1927,18 +1816,18 @@ function ChatListItemRow({
         <div className="mt-0.5 flex items-center justify-between gap-2">
           <p
             className={cn(
-              'flex min-w-0 items-center gap-1 truncate text-[14px] leading-snug',
+              'flex min-w-0 items-center gap-1 truncate text-[13px] leading-snug',
               showTyping
-                ? 'text-[#3390ec]'
+                ? 'text-primary'
                 : showDraft
                   ? 'text-rose-500'
                   : 'text-muted-foreground',
             )}
           >
             {showTyping ? (
-              <span className="inline-flex items-center gap-1 truncate text-[#3390ec]" title={t('chat.typing')} aria-label={t('chat.typing')}>
+              <span className="inline-flex items-center gap-1 truncate text-primary" title={t('chat.typing')} aria-label={t('chat.typing')}>
                 <span className="truncate">{typingNames.join(', ')}</span>
-                <TypingDots className="text-[#3390ec]" size={3} gap={1.5} />
+                <TypingDots className="text-primary" size={3} gap={1.5} />
               </span>
             ) : showDraft ? (
               <>
@@ -2483,16 +2372,16 @@ function NewChatDialog({
                 onClick={() => setGroupIsForum(!groupIsForum)}
                 className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left transition hover:bg-muted/60 active:bg-muted"
               >
-                <div className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-lg border-2 transition ${groupIsForum ? 'border-[#3390ec] bg-[#3390ec]' : 'border-muted-foreground/40'}`}>
+                <div className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-lg border-2 transition ${groupIsForum ? 'border-primary bg-primary' : 'border-muted-foreground/40'}`}>
                   {groupIsForum && (
-                    <svg className="h-3.5 w-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                    <svg className="h-3.5 w-3.5 text-primary-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                     </svg>
                   )}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium">Режим форума</p>
-                  <p className="text-xs text-muted-foreground">Темы как в Telegram</p>
+                  <p className="text-sm font-medium">{t('newChat.forumMode')}</p>
+                  <p className="text-xs text-muted-foreground">{t('newChat.forumModeHint')}</p>
                 </div>
               </button>
             </div>
