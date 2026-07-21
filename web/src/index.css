@@ -126,3 +126,185 @@ html, body {
 .ant-list-split .ant-list-item {
   border-bottom: none !important;
 }
+
+/* Admin panel */
+.admin-page__row {
+  min-height: 100vh;
+  margin: 50px 0 100px;
+  padding: 0 12px;
+}
+
+.admin-page__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+}
+
+.admin-page__title {
+  margin-bottom: 4px !important;
+}
+
+.admin-page__subtitle {
+  margin-bottom: 0 !important;
+}
+
+.admin-page__status-tag {
+  border-radius: 999px !important;
+  padding: 2px 12px !important;
+  font-weight: 500;
+  margin: 8px 0 0 !important;
+}
+
+.admin-card {
+  border-radius: 16px !important;
+  overflow: hidden;
+  margin-bottom: 20px;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+  border: 1px solid rgba(0, 0, 0, 0.06) !important;
+}
+
+.admin-card .ant-card-head {
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  border-radius: 16px 16px 0 0 !important;
+  min-height: 56px;
+  padding: 0 20px;
+}
+
+.admin-card .ant-card-head-title {
+  font-weight: 600;
+  padding: 16px 0;
+}
+
+.admin-card .ant-card-extra {
+  padding: 12px 0;
+}
+
+.admin-card .ant-card-body {
+  padding: 20px;
+}
+
+.admin-card__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  background: rgba(0, 136, 204, 0.12);
+  color: #0088CC;
+  font-size: 16px;
+}
+
+.admin-setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.02);
+  margin-bottom: 8px;
+}
+
+.admin-setting-row__hint {
+  margin: 2px 0 0 !important;
+  font-size: 13px;
+}
+
+.admin-setting-row__control {
+  margin-bottom: 0 !important;
+}
+
+.admin-invitation-field {
+  margin-top: 16px;
+  margin-bottom: 0 !important;
+}
+
+.admin-invitation-input .ant-input-affix-wrapper,
+.admin-invitation-input .ant-input-group > .ant-input:first-child {
+  border-radius: 10px 0 0 10px !important;
+}
+
+.admin-invitation-input .ant-input-search-button,
+.admin-invitation-input .ant-input-group-addon:last-child {
+  border-radius: 0 10px 10px 0 !important;
+}
+
+.admin-users-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  margin-bottom: 16px;
+}
+
+.admin-users-search {
+  width: 260px;
+  max-width: 100%;
+}
+
+.admin-users-search .ant-input-affix-wrapper,
+.admin-users-search .ant-input-group > .ant-input:first-child {
+  border-radius: 999px 0 0 999px !important;
+}
+
+.admin-users-search .ant-input-search-button,
+.admin-users-search .ant-input-group-addon:last-child {
+  border-radius: 0 999px 999px 0 !important;
+}
+
+.admin-users-count {
+  border-radius: 999px !important;
+  margin: 0 !important;
+}
+
+.admin-role-tag {
+  border-radius: 999px !important;
+  text-transform: capitalize;
+}
+
+.admin-users-table .ant-table {
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.admin-users-table .ant-table-thead > tr > th {
+  background: rgba(0, 0, 0, 0.02) !important;
+  font-weight: 600;
+}
+
+.admin-users-table .ant-table-tbody > tr > td {
+  border-bottom: 1px solid rgba(0, 0, 0, 0.04);
+}
+
+.admin-users-table .ant-pagination {
+  margin: 16px 0 0 !important;
+}
+
+.admin-action-btn {
+  border-radius: 8px !important;
+}
+
+.admin-action-btn--danger:hover {
+  background: rgba(255, 77, 79, 0.08) !important;
+}
+
+@media (max-width: 768px) {
+  .admin-users-toolbar {
+    width: 100%;
+  }
+
+  .admin-users-search {
+    width: 100%;
+    flex: 1 1 100%;
+  }
+
+  .admin-setting-row {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}

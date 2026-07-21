@@ -41,3 +41,30 @@
 .ant-menu.ant-menu-sub.ant-menu-vertical {
   background: #141414 !important;
 }
+
+.admin-card {
+  background: #1f1f1f !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.35);
+}
+
+.admin-card .ant-card-head {
+  background: #1f1f1f;
+  border-bottom-color: rgba(255, 255, 255, 0.08);
+}
+
+.admin-card__icon {
+  background: rgba(0, 136, 204, 0.2);
+}
+
+.admin-setting-row {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.admin-users-table .ant-table-thead > tr > th {
+  background: rgba(255, 255, 255, 0.04) !important;
+}
+
+.admin-users-table .ant-table-tbody > tr > td {
+  border-bottom-color: rgba(255, 255, 255, 0.06);
+}
