@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState, useEffect, useCallback } from 'react'
+import { useMemo, useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { AnimatePresence, motion } from 'framer-motion'
 import { readJsonResponse } from '@/lib/fetch-json'
@@ -105,6 +105,7 @@ export function ChatSidebar({
   const { currentUser, chats, activeChatId, onlineUserIds, presenceSynced, view, setView, setProfileUserId, setChatPinned, chatFolders, activeFolderId, setActiveFolderId } = useAppStore()
   const [query, setQuery] = useState('')
   const [showNewChat, setShowNewChat] = useState(false)
+  const searchInputRef = useRef<HTMLInputElement>(null)
   const [showArchived, setShowArchived] = useState(false)
   const [showEditFolders, setShowEditFolders] = useState(false)
   const [showFriends, setShowFriends] = useState(false)
@@ -134,6 +135,16 @@ export function ChatSidebar({
       document.removeEventListener('visibilitychange', onVisible)
     }
   }, [refreshPendingFriendRequests])
+
+  useEffect(() => {
+    const onFocusSearch = () => {
+      searchInputRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+      // Defer focus so the chats view is visible after tab switch.
+      requestAnimationFrame(() => searchInputRef.current?.focus())
+    }
+    window.addEventListener('aurora:focus-search', onFocusSearch)
+    return () => window.removeEventListener('aurora:focus-search', onFocusSearch)
+  }, [])
 
   const openFriendsDialog = (tab: 'friends' | 'incoming' | 'outgoing' = 'friends') => {
     setFriendsInitialTab(tab)
@@ -399,6 +410,7 @@ export function ChatSidebar({
             <div className="relative">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
+                ref={searchInputRef}
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder={t('sidebar.searchChats')}
@@ -455,7 +467,7 @@ export function ChatSidebar({
           {/* Chat list — h-0 + flex-1 required for scroll inside flex column on desktop */}
           <div className="mt-1 flex h-0 min-h-0 flex-1 flex-col overflow-hidden">
             <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-0 [-webkit-overflow-scrolling:touch]">
-            <div className="pb-[calc(2.75rem+env(safe-area-inset-bottom))] xl:pb-4">
+            <div className="pb-[calc(4.75rem+env(safe-area-inset-bottom))] xl:pb-4">
               {query.trim() && (
                 <div className="mb-3">
                   <p className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">

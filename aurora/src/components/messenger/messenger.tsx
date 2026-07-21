@@ -579,6 +579,11 @@ export function Messenger() {
             shorts: translate(lang, 'nav.shorts'),
             contacts: lang === 'ru' ? 'Контакты' : 'Contacts',
           }}
+          settingsLabel={lang === 'ru' ? 'Настройки' : 'Settings'}
+          searchLabel={lang === 'ru' ? 'Поиск' : 'Search'}
+          userName={currentUser?.name}
+          userAvatarColor={currentUser?.avatarColor}
+          userAvatarUrl={currentUser?.avatarUrl}
           onChats={() => {
             setShowFriends(false)
             setView('chats')
@@ -588,6 +593,12 @@ export function Messenger() {
             setView('shorts')
           }}
           onContacts={() => { setView('chats'); setShowFriends(true) }}
+          onSettings={() => setShowSettings(true)}
+          onSearch={() => {
+            setShowFriends(false)
+            setView('chats')
+            window.dispatchEvent(new CustomEvent('aurora:focus-search'))
+          }}
         />
       )}
 
