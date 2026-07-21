@@ -54,6 +54,8 @@ const ru: Dict = {
   // Sidebar
   'sidebar.searchChats': 'Поиск чатов...',
   'sidebar.newChat': 'Новый чат',
+  'sidebar.newGroup': 'Новая группа',
+  'sidebar.newChannel': 'Новый канал',
   'sidebar.startChatting': 'Начать общение',
   'sidebar.noChats': 'Пока нет чатов',
   'sidebar.noChatsFound': 'Чаты не найдены',
@@ -1210,6 +1212,8 @@ const en: Dict = {
 
   'sidebar.searchChats': 'Search chats...',
   'sidebar.newChat': 'New chat',
+  'sidebar.newGroup': 'New group',
+  'sidebar.newChannel': 'New channel',
   'sidebar.startChatting': 'Start chatting',
   'sidebar.noChats': 'No chats yet',
   'sidebar.noChatsFound': 'No chats found',

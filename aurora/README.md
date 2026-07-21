@@ -3,6 +3,7 @@
 Patches applied on the live Aurora messenger at `135.106.173.99` (`/opt/aurora`).
 
 ## Latest
-- **Fix «Показать меня» on Nearby map**: root cause was `Permissions-Policy: geolocation=()` which blocked all geo; now `geolocation=(self)`. Clear geo error messages + coarse-location retry.
-- Chat location attach: same geo retry / clear errors
-- Browser smoke: Nearby go-live OK, voice mic recording OK, private call overlay «Звоним...» OK
+- **Новый чат** только через **+** в шапке; из меню **⋯** убран
+- Меню **⋯** как в Telegram: Новая группа, Новый канал, Архив, Маркетплейс, Стримы, Баланс, Выбрать
+- Desktop: убрана широкая кнопка «Новый чат» (остался + в header)
+- Fix Nearby geolocation (`geolocation=(self)`); elite gifts; Premium themes

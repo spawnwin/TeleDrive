@@ -32,7 +32,8 @@ import {
   Shield,
   Store,
   Radio,
-  MoreHorizontal,
+  Megaphone,
+  MoreVertical,
   ArrowLeft,
 } from 'lucide-react'
 import { Avatar } from './avatar'
@@ -113,6 +114,11 @@ export function ChatSidebar({
   const query = queryProp !== undefined ? queryProp : localQuery
   const setQuery = onQueryChange ?? setLocalQuery
   const [showNewChat, setShowNewChat] = useState(false)
+  const [newChatTab, setNewChatTab] = useState<'search' | 'group' | 'channel'>('search')
+  const openNewChat = useCallback((tab: 'search' | 'group' | 'channel' = 'search') => {
+    setNewChatTab(tab)
+    setShowNewChat(true)
+  }, [])
   const searchInputRef = useRef<HTMLInputElement>(null)
   const [showArchived, setShowArchived] = useState(false)
   const [showEditFolders, setShowEditFolders] = useState(false)
@@ -239,10 +245,10 @@ export function ChatSidebar({
 
   // PWA shortcut "Новый чат" → ?action=new_chat posts this event.
   useEffect(() => {
-    const handler = () => setShowNewChat(true)
+    const handler = () => openNewChat('search')
     window.addEventListener('aurora:new-chat', handler)
     return () => window.removeEventListener('aurora:new-chat', handler)
-  }, [])
+  }, [openNewChat])
   const [userResults, setUserResults] = useState<
     Array<{ id: string; name: string; username: string; avatarColor: string; avatarUrl?: string | null; online: boolean }>
   >([])
@@ -409,8 +415,9 @@ export function ChatSidebar({
             variant="ghost"
             size="icon"
             className="h-9 w-9 rounded-full text-[#3390ec] xl:hidden"
-            onClick={() => setShowNewChat(true)}
+            onClick={() => openNewChat('search')}
             title={t('sidebar.newChat')}
+            aria-label={t('sidebar.newChat')}
           >
             <Plus className="h-5 w-5" strokeWidth={2.25} />
           </Button>
@@ -422,12 +429,15 @@ export function ChatSidebar({
                 className="h-9 w-9 rounded-full xl:hidden"
                 title={t('chat.more')}
               >
-                <MoreHorizontal className="h-5 w-5" />
+                <MoreVertical className="h-5 w-5" />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => setShowNewChat(true)}>
-                <Plus className="mr-2 h-4 w-4" /> {t('sidebar.newChat')}
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuItem onClick={() => openNewChat('group')}>
+                <Users className="mr-2 h-4 w-4" /> {t('sidebar.newGroup')}
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => openNewChat('channel')}>
+                <Megaphone className="mr-2 h-4 w-4" /> {t('sidebar.newChannel')}
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => setShowArchived((v) => !v)}>
                 <Archive className="mr-2 h-4 w-4" />
@@ -452,8 +462,9 @@ export function ChatSidebar({
             variant="ghost"
             size="icon"
             className="hidden h-9 w-9 rounded-lg xl:inline-flex"
-            onClick={() => setShowNewChat(true)}
+            onClick={() => openNewChat('search')}
             title={t('sidebar.newChat')}
+            aria-label={t('sidebar.newChat')}
           >
             <Plus className="h-4 w-4" />
           </Button>
@@ -570,15 +581,8 @@ export function ChatSidebar({
             />
           )}
 
-          {/* Desktop-only: new chat + archive toggle (mobile uses header compose + menu) */}
+          {/* Desktop-only: archive toggle (compose stays as + in header — Telegram-style) */}
           <div className="hidden items-center gap-2 px-4 pt-2 xl:flex">
-            <Button
-              onClick={() => setShowNewChat(true)}
-              className="flex-1 justify-start gap-2 rounded-lg bg-sidebar-accent text-foreground shadow-none hover:bg-sidebar-accent/80"
-            >
-              <Plus className="h-4 w-4" />
-              {t('sidebar.newChat')}
-            </Button>
             <Button
               variant="outline"
               size="icon"
@@ -704,7 +708,7 @@ export function ChatSidebar({
                       variant="outline"
                       size="sm"
                       className="mt-2"
-                      onClick={() => setShowNewChat(true)}
+                      onClick={() => openNewChat('search')}
                     >
                       {t('sidebar.startChatting')}
                     </Button>
@@ -902,7 +906,7 @@ export function ChatSidebar({
         </Button>
       </div>
 
-      <NewChatDialog open={showNewChat} onOpenChange={setShowNewChat} onViewProfile={setProfileUserId} />
+      <NewChatDialog open={showNewChat} onOpenChange={setShowNewChat} initialTab={newChatTab} onViewProfile={setProfileUserId} />
 
       <FriendsDialog
         open={showFriends}
@@ -1755,14 +1759,19 @@ function NewChatDialog({
   open,
   onOpenChange,
   onViewProfile,
+  initialTab = 'search',
 }: {
   open: boolean
   onOpenChange: (v: boolean) => void
   onViewProfile?: (userId: string) => void
+  initialTab?: 'search' | 'group' | 'channel'
 }) {
   const { t } = useI18n()
   const { setActiveChat } = useAppStore()
-  const [tab, setTab] = useState<'search' | 'group' | 'channel'>('search')
+  const [tab, setTab] = useState<'search' | 'group' | 'channel'>(initialTab)
+  useEffect(() => {
+    if (open) setTab(initialTab)
+  }, [open, initialTab])
   const [search, setSearch] = useState('')
   const [groupTitle, setGroupTitle] = useState('')
   const [groupIsForum, setGroupIsForum] = useState(false)
