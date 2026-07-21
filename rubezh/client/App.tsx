@@ -7,8 +7,8 @@ import { GameProvider, useGame } from './src/state/GameContext';
 import { BaseScreen } from './src/screens/BaseScreen';
 import { MapScreen } from './src/screens/MapScreen';
 import { SpecialistsScreen } from './src/screens/SpecialistsScreen';
-import { QuestsScreen } from './src/screens/QuestsScreen';
-import { ShopScreen } from './src/screens/ShopScreen';
+import { ClanScreen } from './src/screens/ClanScreen';
+import { MoreScreen } from './src/screens/MoreScreen';
 import { colors } from './src/theme';
 
 const Tab = createBottomTabNavigator();
@@ -58,9 +58,9 @@ function RootTabs() {
     >
       <Tab.Screen name="База" component={BaseScreen} />
       <Tab.Screen name="Карта" component={MapScreen} />
+      <Tab.Screen name="Союз" component={ClanScreen} />
       <Tab.Screen name="Штаб" component={SpecialistsScreen} />
-      <Tab.Screen name="Задания" component={QuestsScreen} />
-      <Tab.Screen name="Склад" component={ShopScreen} />
+      <Tab.Screen name="Ещё" component={MoreScreen} />
     </Tab.Navigator>
   );
 }

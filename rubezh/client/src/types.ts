@@ -44,6 +44,7 @@ export interface GameState {
     text: string;
     total: number;
   };
+  social?: SocialState;
   offline: {
     hoursAvailable: number;
     capHours: number;
@@ -171,6 +172,68 @@ export interface ShopItem {
   title: string;
   description: string;
   costBadges: number;
+}
+
+export interface SocialState {
+  clan: ClanInfo | null;
+  openClans: Array<{
+    id: string;
+    name: string;
+    tag: string;
+    motto: string;
+    level: number;
+    weekly_progress: number;
+    weekly_goal: number;
+    member_count: number;
+  }>;
+  leaderboard: Array<{
+    id: string;
+    callsign: string;
+    level: number;
+    requests_total: number;
+    operations_total: number;
+    helps_sent: number;
+    clan_tag: string | null;
+  }>;
+  race: {
+    dayKey: string;
+    myScore: number;
+    title: string;
+    description: string;
+    top: Array<{ user_id: string; requests: number; callsign: string; clan_tag: string | null }>;
+  };
+}
+
+export interface ClanInfo {
+  id: string;
+  name: string;
+  tag: string;
+  motto: string;
+  level: number;
+  xp: number;
+  xpToNext: number;
+  memberCount: number;
+  maxMembers: number;
+  weeklyGoal: number;
+  weeklyProgress: number;
+  weekKey: string;
+  myRole: string | null;
+  members: Array<{
+    userId: string;
+    callsign: string;
+    role: string;
+    contribution: number;
+    level: number;
+    requestsTotal: number;
+  }>;
+  messages: Array<{ id: string; user_id: string; callsign: string; body: string; created_at: string }>;
+  helpTargets: Array<{
+    userId: string;
+    callsign: string;
+    role: string;
+    canHelp: boolean;
+    upgradingBuilding: { id: string; type: string; endsAt: string } | null;
+  }>;
 }
 
 export const RESOURCE_LABELS: Record<ResourceType, string> = {

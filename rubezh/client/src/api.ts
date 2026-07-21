@@ -100,4 +100,17 @@ export const api = {
     request<GameState>(`/v1/achievements/${id}/claim`, { method: 'POST', body: '{}' }),
   buyShop: (id: string) => request<GameState>(`/v1/shop/${id}/buy`, { method: 'POST', body: '{}' }),
   advanceStory: () => request<GameState>('/v1/story/advance', { method: 'POST', body: '{}' }),
+  social: () => request<import('./types').SocialState>('/v1/social'),
+  createClan: (name: string, tag: string, motto?: string) =>
+    request<GameState>('/v1/clans', { method: 'POST', body: JSON.stringify({ name, tag, motto }) }),
+  joinClan: (id: string) => request<GameState>(`/v1/clans/${id}/join`, { method: 'POST', body: '{}' }),
+  leaveClan: () => request<GameState>('/v1/clans/leave', { method: 'POST', body: '{}' }),
+  clanChat: (message: string) =>
+    request<{ social: import('./types').SocialState }>('/v1/clans/chat', {
+      method: 'POST',
+      body: JSON.stringify({ message }),
+    }),
+  clanHelp: (targetUserId: string) =>
+    request<GameState>(`/v1/clans/help/${targetUserId}`, { method: 'POST', body: '{}' }),
+  clanWeeklyClaim: () => request<GameState>('/v1/clans/weekly-claim', { method: 'POST', body: '{}' }),
 };

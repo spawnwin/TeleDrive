@@ -21,6 +21,15 @@ import {
   startRequest,
   upgradeBuilding,
 } from './economy.js';
+import {
+  claimWeeklyClanReward,
+  createClan,
+  getSocialState,
+  helpClanMember,
+  joinClan,
+  leaveClan,
+  postClanMessage,
+} from './social.js';
 
 migrate();
 
@@ -40,13 +49,17 @@ function sendError(reply: any, err: any) {
   reply.code(status).send({ error: err.message || 'Ошибка сервера' });
 }
 
+function withSocial(uid: string, state: any) {
+  return { ...state, social: getSocialState(uid) };
+}
+
 app.get('/health', async () => ({ ok: true, service: 'rubezh-server' }));
 
 app.post('/v1/auth/guest', async (req, reply) => {
   try {
     const body = (req.body || {}) as { nickname?: string };
     const state = createGuest(body.nickname);
-    return { token: state.user.id, userId: state.user.id, state };
+    return { token: state.user.id, userId: state.user.id, state: withSocial(state.user.id, state) };
   } catch (err) {
     sendError(reply, err);
   }
@@ -54,7 +67,8 @@ app.post('/v1/auth/guest', async (req, reply) => {
 
 app.get('/v1/base', async (req, reply) => {
   try {
-    return getBaseState(userId(req as any));
+    const uid = userId(req as any);
+    return withSocial(uid, getBaseState(uid));
   } catch (err) {
     sendError(reply, err);
   }
@@ -198,6 +212,67 @@ app.post('/v1/shop/:id/buy', async (req, reply) => {
 app.post('/v1/story/advance', async (req, reply) => {
   try {
     return advanceStory(userId(req as any));
+  } catch (err) {
+    sendError(reply, err);
+  }
+});
+
+app.get('/v1/social', async (req, reply) => {
+  try {
+    return getSocialState(userId(req as any));
+  } catch (err) {
+    sendError(reply, err);
+  }
+});
+
+app.post('/v1/clans', async (req, reply) => {
+  try {
+    const body = (req.body || {}) as { name?: string; tag?: string; motto?: string };
+    return createClan(userId(req as any), body.name || '', body.tag || '', body.motto || '');
+  } catch (err) {
+    sendError(reply, err);
+  }
+});
+
+app.post('/v1/clans/:id/join', async (req, reply) => {
+  try {
+    const { id } = req.params as { id: string };
+    return joinClan(userId(req as any), id);
+  } catch (err) {
+    sendError(reply, err);
+  }
+});
+
+app.post('/v1/clans/leave', async (req, reply) => {
+  try {
+    return leaveClan(userId(req as any));
+  } catch (err) {
+    sendError(reply, err);
+  }
+});
+
+app.post('/v1/clans/chat', async (req, reply) => {
+  try {
+    const body = (req.body || {}) as { message?: string };
+    const social = postClanMessage(userId(req as any), body.message || '');
+    return { social };
+  } catch (err) {
+    sendError(reply, err);
+  }
+});
+
+app.post('/v1/clans/help/:targetUserId', async (req, reply) => {
+  try {
+    const { targetUserId } = req.params as { targetUserId: string };
+    return helpClanMember(userId(req as any), targetUserId);
+  } catch (err) {
+    sendError(reply, err);
+  }
+});
+
+app.post('/v1/clans/weekly-claim', async (req, reply) => {
+  try {
+    return claimWeeklyClanReward(userId(req as any));
   } catch (err) {
     sendError(reply, err);
   }

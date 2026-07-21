@@ -753,6 +753,18 @@ export function claimRequest(userId: string, requestId: string) {
   bumpQuest(userId, 'requestsCompleted');
   db.prepare(`UPDATE player_stats SET requests_total = requests_total + 1 WHERE user_id = ?`).run(userId);
 
+  // Online race + clan weekly contribution
+  const raceDay = new Date().toISOString().slice(0, 10);
+  db.prepare(
+    `INSERT INTO race_scores (user_id, day_key, requests) VALUES (?, ?, 1)
+     ON CONFLICT(user_id, day_key) DO UPDATE SET requests = requests + 1`,
+  ).run(userId, raceDay);
+  const membership = db.prepare('SELECT * FROM clan_members WHERE user_id = ?').get(userId) as any;
+  if (membership) {
+    db.prepare(`UPDATE clan_members SET contribution = contribution + 1 WHERE user_id = ?`).run(userId);
+    db.prepare(`UPDATE clans SET weekly_progress = weekly_progress + 1, xp = xp + 2 WHERE id = ?`).run(membership.clan_id);
+  }
+
   const user = getUser(userId);
   if (user.tutorial_done === 0 && req.type === 'tutorial_delivery') {
     db.prepare('UPDATE users SET tutorial_step = 7, tutorial_done = 0 WHERE id = ?').run(userId);

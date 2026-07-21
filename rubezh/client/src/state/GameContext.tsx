@@ -61,6 +61,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       setState(next);
       setError(null);
       if (next.lastQuality) setToast(next.lastQuality);
+      if ((next as any).helpResult) setToast((next as any).helpResult);
       if (next.offlineGained) setToast('Офлайн-доход получен');
       return next;
     } catch (err: any) {

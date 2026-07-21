@@ -201,9 +201,65 @@ export function migrate(): void {
       ends_at TEXT NOT NULL,
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     );
+
+    CREATE TABLE IF NOT EXISTS clans (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL UNIQUE,
+      tag TEXT NOT NULL UNIQUE,
+      motto TEXT NOT NULL DEFAULT '',
+      commander_id TEXT NOT NULL,
+      level INTEGER NOT NULL DEFAULT 1,
+      xp INTEGER NOT NULL DEFAULT 0,
+      weekly_goal INTEGER NOT NULL DEFAULT 200,
+      weekly_progress INTEGER NOT NULL DEFAULT 0,
+      week_key TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS clan_members (
+      clan_id TEXT NOT NULL,
+      user_id TEXT NOT NULL UNIQUE,
+      role TEXT NOT NULL,
+      contribution INTEGER NOT NULL DEFAULT 0,
+      joined_at TEXT NOT NULL,
+      PRIMARY KEY (clan_id, user_id),
+      FOREIGN KEY (clan_id) REFERENCES clans(id) ON DELETE CASCADE,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS clan_messages (
+      id TEXT PRIMARY KEY,
+      clan_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      callsign TEXT NOT NULL,
+      body TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (clan_id) REFERENCES clans(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS clan_helps (
+      id TEXT PRIMARY KEY,
+      from_user_id TEXT NOT NULL,
+      to_user_id TEXT NOT NULL,
+      building_id TEXT,
+      day_key TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      UNIQUE(from_user_id, to_user_id, day_key)
+    );
+
+    CREATE TABLE IF NOT EXISTS race_scores (
+      user_id TEXT NOT NULL,
+      day_key TEXT NOT NULL,
+      requests INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY (user_id, day_key),
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
   `);
 
   ensureColumn('users', 'story_chapter', 'story_chapter INTEGER NOT NULL DEFAULT 1');
   ensureColumn('users', 'speed_boost_until', 'speed_boost_until TEXT');
+  ensureColumn('users', 'clan_id', 'clan_id TEXT');
   ensureColumn('quest_counters', 'operations', 'operations INTEGER NOT NULL DEFAULT 0');
+  ensureColumn('quest_counters', 'clan_helps', 'clan_helps INTEGER NOT NULL DEFAULT 0');
+  ensureColumn('player_stats', 'helps_sent', 'helps_sent INTEGER NOT NULL DEFAULT 0');
 }

@@ -48,6 +48,14 @@ export function BaseScreen() {
           <Text style={styles.region}>{state.region.name}</Text>
           <Text style={styles.stability}>Устойчивость {state.region.stability}%</Text>
         </View>
+        <View style={styles.storyCard}>
+          <Text style={styles.storyTitle}>
+            Глава {state.story.chapter}: {state.story.title}
+          </Text>
+          <Text style={styles.storyText} numberOfLines={2}>
+            {state.story.text}
+          </Text>
+        </View>
 
         <View style={styles.baseYard}>
           <View style={styles.road} />
