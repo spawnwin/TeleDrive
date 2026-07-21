@@ -119,6 +119,7 @@ export function UserProfileDialog({
   const [blocked, setBlocked] = useState(false)
   const [friendship, setFriendship] = useState<FriendshipState | null>(null)
   const [profileGifts, setProfileGifts] = useState<ProfileGiftItem[]>([])
+  const [giftCollectibles, setGiftCollectibles] = useState<any[]>([])
   const [giftsLoading, setGiftsLoading] = useState(false)
   const [showGiftPicker, setShowGiftPicker] = useState(false)
   const [creatorTiersCount, setCreatorTiersCount] = useState(0)
@@ -134,6 +135,7 @@ export function UserProfileDialog({
       setProfileStories(null)
       setShowStoryViewer(false)
       setProfileGifts([])
+      setGiftCollectibles([])
       setGiftsLoading(false)
       return
     }
@@ -214,6 +216,7 @@ export function UserProfileDialog({
   useEffect(() => {
     if (!userId) {
       setProfileGifts([])
+      setGiftCollectibles([])
       setGiftsLoading(false)
       return
     }
@@ -224,10 +227,16 @@ export function UserProfileDialog({
     fetch(`/api/users/${encodeURIComponent(userId)}/gifts`)
       .then((res) => (res.ok ? res.json() : Promise.reject()))
       .then((data) => {
-        if (!cancelled) setProfileGifts(data.gifts || [])
+        if (!cancelled) {
+          setProfileGifts(data.gifts || [])
+          setGiftCollectibles(data.collectibles || [])
+        }
       })
       .catch(() => {
-        if (!cancelled) setProfileGifts([])
+        if (!cancelled) {
+          setProfileGifts([])
+          setGiftCollectibles([])
+        }
       })
       .finally(() => {
         if (!cancelled) setGiftsLoading(false)
@@ -510,8 +519,10 @@ export function UserProfileDialog({
             <div className="min-w-0 max-w-full overflow-x-clip">
               <ProfileGiftsSection
                 gifts={profileGifts}
+                collectibles={giftCollectibles}
                 isSelf={profile.isSelf}
                 loading={giftsLoading}
+                showRecentFeed={profile.isSelf}
               />
             </div>
 

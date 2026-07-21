@@ -19,6 +19,7 @@ import { MarketplaceDialog } from './marketplace-dialog'
 import { StreamsDialog } from './streams-dialog'
 import { FriendsDialog } from './friends-dialog'
 import { MobileBottomNav } from './mobile-bottom-nav'
+import { NearbyDialog } from './nearby-dialog'
 import { PwaInstallPrompt, EnablePushBanner } from './pwa-install-prompt'
 import { InviteJoinDialog } from './invite-join-dialog'
 import { ShareToChatDialog } from './share-to-chat-dialog'
@@ -68,6 +69,8 @@ export function Messenger() {
   const [showP2PMarketplace, setShowP2PMarketplace] = useState(false)
   const [showStreams, setShowStreams] = useState(false)
   const [showFriends, setShowFriends] = useState(false)
+  const [showNearby, setShowNearby] = useState(false)
+  const [chromeOverlayOpen, setChromeOverlayOpen] = useState(false)
   const [inviteToken, setInviteToken] = useState<string | null>(null)
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false)
   const [sidebarQuery, setSidebarQuery] = useState('')
@@ -77,6 +80,21 @@ export function Messenger() {
   const closeMobileSearch = useCallback(() => {
     setMobileSearchOpen(false)
     setSidebarQuery('')
+  }, [])
+
+  useEffect(() => {
+    const onOverlay = (event: Event) => {
+      const detail = (event as CustomEvent<{ open?: boolean }>).detail
+      setChromeOverlayOpen(Boolean(detail?.open))
+    }
+    window.addEventListener('aurora:overlay', onOverlay)
+    return () => window.removeEventListener('aurora:overlay', onOverlay)
+  }, [])
+
+  useEffect(() => {
+    const onNearby = () => setShowNearby(true)
+    window.addEventListener('aurora:nearby', onNearby)
+    return () => window.removeEventListener('aurora:nearby', onNearby)
   }, [])
 
   useEffect(() => {
@@ -597,7 +615,9 @@ export function Messenger() {
         !showPremium &&
         !showP2PMarketplace &&
         !showStreams &&
-        !profileUserId && (
+        !profileUserId &&
+        !chromeOverlayOpen &&
+        !showNearby && (
         <MobileBottomNav
           activeTab={mobileTab}
           unreadCount={mobileUnreadCount}
@@ -673,6 +693,7 @@ export function Messenger() {
       <EnhancedVideoPlayer />
       <MarketplaceDialog open={showP2PMarketplace} onOpenChange={setShowP2PMarketplace} />
       <StreamsDialog open={showStreams} onOpenChange={setShowStreams} />
+      <NearbyDialog open={showNearby} onOpenChange={setShowNearby} />
       <FriendsDialog open={showFriends} onOpenChange={setShowFriends} />
       <PwaInstallPrompt />
       <EnablePushBanner />

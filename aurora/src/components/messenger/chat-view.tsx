@@ -3397,7 +3397,7 @@ function MessageBubble({
               msg.type === 'image' && !msg.content && 'p-1.5',
               showAsCircleVideo && !msg.content && 'p-1.5 bg-transparent shadow-none',
               showAsVideoAttachment && !msg.content && 'p-1.5',
-              msg.type === 'voice' && 'min-w-[200px] sm:min-w-[240px]',
+              msg.type === 'voice' && 'min-w-0 bg-transparent shadow-none p-1.5',
               msg.type === 'file' && !showAsVideoAttachment && 'min-w-[180px] sm:min-w-[220px]',
               msg.type === 'share' && 'min-w-[180px] sm:min-w-[220px]',
               msg.type === 'gift' && 'min-w-[200px] bg-transparent shadow-none',
@@ -3503,6 +3503,8 @@ function MessageBubble({
                 durationSec={msg.durationSec}
                 mine={mine}
                 messageId={msg.id}
+                circle
+                onReact={(emoji) => onReact(emoji)}
               />
             )}
             {msg.attachmentUrl && msg.type === 'file' && !showAsImage && !showAsVideoAttachment && (

@@ -18,17 +18,31 @@ export interface ProfileGiftItem {
     starPrice?: number
     isPremium?: boolean
     isLimited?: boolean
+    totalSupply?: number | null
+    issuedCount?: number
   }
   count: number
+  serialLabels?: string[]
+}
+
+export interface ProfileCollectibleItem {
+  id: string
+  serialNumber: number
+  serialLabel: string
+  createdAt: string
+  gift: ProfileGiftItem['gift']
+  sender?: { id: string; name: string; avatarColor: string; avatarUrl?: string | null }
 }
 
 interface ProfileGiftsSectionProps {
   gifts: ProfileGiftItem[]
+  collectibles?: ProfileCollectibleItem[]
   isSelf?: boolean
   loading?: boolean
+  showRecentFeed?: boolean
 }
 
-export function ProfileGiftsSection({ gifts, isSelf, loading }: ProfileGiftsSectionProps) {
+export function ProfileGiftsSection({ gifts, collectibles = [], isSelf, loading, showRecentFeed }: ProfileGiftsSectionProps) {
   const { t } = useI18n()
   const [selected, setSelected] = useState<ProfileGiftItem | null>(null)
 
@@ -66,6 +80,8 @@ export function ProfileGiftsSection({ gifts, isSelf, loading }: ProfileGiftsSect
   }
 
   const total = gifts.reduce((sum, g) => sum + g.count, 0)
+
+  const limitedShowcase = collectibles.slice(0, 8)
 
   return (
     <>
@@ -110,11 +126,45 @@ export function ProfileGiftsSection({ gifts, isSelf, loading }: ProfileGiftsSect
                     ×{g.count}
                   </span>
                 )}
+                {g.gift.isLimited && (g.serialLabels?.[0] || g.gift.totalSupply) && (
+                  <span className="absolute bottom-1 left-1 rounded bg-black/55 px-1 py-px text-[9px] font-bold tabular-nums text-amber-300">
+                    {g.serialLabels?.[0] ||
+                      `#001–#${String(g.gift.totalSupply || 999).padStart(3, '0')}`}
+                  </span>
+                )}
               </button>
             )
           })}
         </div>
       </div>
+
+      {limitedShowcase.length > 0 && (
+        <div className="min-w-0 pb-4">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-amber-600/90">
+            {t('gifts.collectiblesTitle')}
+          </p>
+          <div className="flex gap-2 overflow-x-auto pb-1">
+            {limitedShowcase.map((c) => (
+              <div
+                key={c.id}
+                className="relative flex h-[72px] w-[72px] shrink-0 flex-col items-center justify-center rounded-xl border border-amber-400/40 bg-gradient-to-br from-amber-400/15 to-transparent"
+                title={`${c.gift.title} ${c.serialLabel}`}
+              >
+                <img
+                  src={resolveMediaUrl(c.gift.thumbnailUrl)}
+                  alt=""
+                  className="h-10 w-10 object-contain"
+                />
+                <span className="mt-0.5 text-[10px] font-bold tabular-nums text-amber-600">
+                  {c.serialLabel}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {showRecentFeed && <CollectiblesRecentFeed />}
 
       <ProfileGiftPreview gift={selected} onClose={() => setSelected(null)} />
     </>
@@ -173,7 +223,7 @@ function ProfileGiftPreview({
           className="fixed inset-0 z-[10000] isolate touch-manipulation"
           style={{
             paddingTop: 'env(safe-area-inset-top)',
-            paddingBottom: 'env(safe-area-inset-bottom)',
+            paddingBottom: 'calc(5.75rem + env(safe-area-inset-bottom))',
           }}
         >
           <button
@@ -226,6 +276,11 @@ function ProfileGiftPreview({
                     {t('gifts.receivedCount').replace('{count}', String(gift.count))}
                   </p>
                 )}
+                {gift.serialLabels && gift.serialLabels.length > 0 && (
+                  <p className="mt-1 text-xs font-semibold tabular-nums text-amber-300">
+                    {gift.serialLabels.join(' · ')}
+                  </p>
+                )}
               </div>
             </div>
 
@@ -243,5 +298,53 @@ function ProfileGiftPreview({
       )}
     </AnimatePresence>,
     document.body,
+  )
+}
+
+function CollectiblesRecentFeed() {
+  const { t } = useI18n()
+  const [items, setItems] = useState<
+    Array<{
+      id: string
+      serialLabel: string | null
+      gift: { title: string; thumbnailUrl: string }
+      recipient: { name: string; username: string }
+    }>
+  >([])
+
+  useEffect(() => {
+    let cancelled = false
+    fetch('/api/gifts/recent')
+      .then((r) => r.json())
+      .then((data) => {
+        if (!cancelled) setItems(data.items || [])
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  if (items.length === 0) return null
+
+  return (
+    <div className="min-w-0 pb-4">
+      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        {t('gifts.recentFeed')}
+      </p>
+      <ul className="space-y-2">
+        {items.slice(0, 8).map((item) => (
+          <li key={item.id} className="flex items-center gap-2 rounded-lg bg-muted/30 px-2 py-1.5 text-xs">
+            <img src={item.gift.thumbnailUrl} alt="" className="h-8 w-8 object-contain" />
+            <div className="min-w-0 flex-1">
+              <p className="truncate font-medium">{item.recipient.name}</p>
+              <p className="truncate text-muted-foreground">
+                {item.gift.title} {item.serialLabel}
+              </p>
+            </div>
+          </li>
+        ))}
+      </ul>
+    </div>
   )
 }

@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Search, MessageCircle, Loader2, QrCode } from 'lucide-react'
+import { Search, MessageCircle, Loader2, QrCode, Radar } from 'lucide-react'
 import { Avatar } from './avatar'
 import { FriendButton } from './friend-button'
 import { QrDialog } from './qr-dialog'
@@ -143,6 +143,21 @@ export function FriendsDialog({
           </DialogTitle>
         </DialogHeader>
         <QrDialog open={showQr} onOpenChange={setShowQr} />
+
+        <div className="px-5 pt-2">
+          <Button
+            type="button"
+            variant="outline"
+            className="mb-2 w-full justify-start gap-2"
+            onClick={() => {
+              onOpenChange(false)
+              window.dispatchEvent(new Event('aurora:nearby'))
+            }}
+          >
+            <Radar className="h-4 w-4 text-[#3390ec]" />
+            {t('nearby.title')}
+          </Button>
+        </div>
 
         <div className="px-5 pt-3">
           <div className="flex rounded-xl bg-muted p-1">
