@@ -9,8 +9,8 @@
  *    HTML but fall back to cache when offline
  */
 
-// v15: new Aurora app icon (glass A + aurora wisps).
-const CACHE_VERSION = 'aurora-v15'
+// v16: Telegram-style profile photo viewers bar (avatars + count + delete).
+const CACHE_VERSION = 'aurora-v16'
 const SHELL_CACHE = `${CACHE_VERSION}-shell`
 const ASSET_CACHE = `${CACHE_VERSION}-assets`
 

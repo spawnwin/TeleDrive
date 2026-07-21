@@ -444,6 +444,12 @@ export function UserProfileDialog({
               <button
                 type="button"
                 onClick={() => {
+                  // Own avatar: always open photo lightbox (Telegram viewers + delete).
+                  // Stories stay available via the story ring / dedicated control below.
+                  if (profile.isSelf && profile.avatarUrl) {
+                    setPhotoOpen(true)
+                    return
+                  }
                   if (profileStories?.stories.length) {
                     setShowStoryViewer(true)
                   } else if (profile.avatarUrl) {
@@ -457,13 +463,15 @@ export function UserProfileDialog({
                   (profileStories?.stories.length || profile.avatarUrl) && 'cursor-pointer hover:opacity-90',
                 )}
                 title={
-                  profileStories?.stories.length
-                    ? t('stories.viewStories')
-                    : profile.avatarUrl
-                      ? t('profile.openFullPhoto')
-                      : profile.isSelf
-                        ? t('stories.addStory')
-                        : undefined
+                  profile.isSelf && profile.avatarUrl
+                    ? t('profile.openFullPhoto')
+                    : profileStories?.stories.length
+                      ? t('stories.viewStories')
+                      : profile.avatarUrl
+                        ? t('profile.openFullPhoto')
+                        : profile.isSelf
+                          ? t('stories.addStory')
+                          : undefined
                 }
               >
                 <StoryRing
@@ -552,6 +560,17 @@ export function UserProfileDialog({
                 ) : null}
 
                 <div className="flex flex-wrap items-center justify-center gap-2">
+                  {profile.isSelf && !!profileStories?.stories.length && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-8 rounded-full px-3 text-xs font-medium"
+                      onClick={() => setShowStoryViewer(true)}
+                    >
+                      {t('stories.viewStories')}
+                    </Button>
+                  )}
                   {profile.isSelf && (
                     <Button
                       type="button"

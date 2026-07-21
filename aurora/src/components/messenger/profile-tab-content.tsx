@@ -16,10 +16,13 @@ import {
   MoreVertical,
   Pencil,
   Trash2,
+  Eye,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { VoicePlayer } from './voice-player'
 import { MediaLightbox } from './media-lightbox'
+import { Avatar } from './avatar'
+import { ProfilePhotoViewersPanel } from './profile-photo-viewers-panel'
 import { isImageUrl, isVideoUrl, resolveMediaUrl } from '@/lib/media-url'
 import { useI18n } from '@/hooks/use-i18n'
 import { formatMessageTime } from '@/lib/format'
@@ -127,12 +130,50 @@ export function ProfileTabContent({
   const [uploading, setUploading] = useState(false)
   const [nextCursor, setNextCursor] = useState<string | null>(null)
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
+  const [lightboxItem, setLightboxItem] = useState<MediaItem | null>(null)
+  const [photoViewCount, setPhotoViewCount] = useState(0)
+  const [photoViewerPreviews, setPhotoViewerPreviews] = useState<
+    Array<{ id: string; name: string; avatarColor: string; avatarUrl: string | null }>
+  >([])
+  const [photoViewersOpen, setPhotoViewersOpen] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<MediaItem | null>(null)
   const [captionTarget, setCaptionTarget] = useState<MediaItem | null>(null)
   const [captionDraft, setCaptionDraft] = useState('')
   const [galleryActionLoading, setGalleryActionLoading] = useState(false)
   const loadedTabs = useRef(new Set<string>())
   const uploadRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    if (!lightboxUrl || !isSelf || lightboxItem?.source !== 'avatar') {
+      if (!lightboxUrl) {
+        setPhotoViewCount(0)
+        setPhotoViewerPreviews([])
+      }
+      return
+    }
+    let cancelled = false
+    fetch(`/api/users/${encodeURIComponent(userId)}/profile/photo/viewers`, {
+      credentials: 'include',
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        if (cancelled) return
+        if (typeof data.total === 'number') setPhotoViewCount(data.total)
+        const viewers = Array.isArray(data.viewers) ? data.viewers : []
+        setPhotoViewerPreviews(
+          viewers.slice(0, 3).map((v: { id: string; name: string; avatarColor: string; avatarUrl?: string | null }) => ({
+            id: v.id,
+            name: v.name,
+            avatarColor: v.avatarColor,
+            avatarUrl: v.avatarUrl ?? null,
+          })),
+        )
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [lightboxUrl, lightboxItem?.source, isSelf, userId])
 
   /** Gallery item ids come back as `gallery:<realId>` (see galleryItemToMediaItem). */
   const galleryItemId = (item: MediaItem) =>
@@ -399,6 +440,7 @@ export function ProfileTabContent({
                       onOpenBrowser(url)
                     } else {
                       setLightboxUrl(url)
+                      setLightboxItem(item)
                     }
                   }}
                   className="absolute inset-0 z-0 flex items-center justify-center"
@@ -532,7 +574,88 @@ export function ProfileTabContent({
         {nextCursor && (
           <LoadMoreButton loading={loadingMore} onClick={loadMore} label={t('profile.loadMore')} />
         )}
-        <MediaLightbox url={lightboxUrl} onClose={() => setLightboxUrl(null)} />
+        <MediaLightbox
+          url={lightboxUrl}
+          hideCloseLabel={isSelf && lightboxItem?.source === 'avatar'}
+          onClose={() => {
+            setLightboxUrl(null)
+            setLightboxItem(null)
+            setPhotoViewersOpen(false)
+          }}
+          footer={
+            isSelf && lightboxItem?.source === 'avatar' ? (
+              <div className="flex w-full items-center justify-between gap-3">
+                <button
+                  type="button"
+                  className="flex min-w-0 flex-1 items-center gap-2.5 text-left active:opacity-80"
+                  style={{ WebkitTapHighlightColor: 'transparent' }}
+                  onClick={(e) => {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    setPhotoViewersOpen(true)
+                  }}
+                >
+                  {photoViewerPreviews.length > 0 ? (
+                    <span className="flex shrink-0 items-center pl-1">
+                      {photoViewerPreviews.map((viewer, index) => (
+                        <span
+                          key={viewer.id}
+                          className="relative inline-flex rounded-full ring-2 ring-black"
+                          style={{
+                            marginLeft: index === 0 ? 0 : -10,
+                            zIndex: photoViewerPreviews.length - index,
+                          }}
+                        >
+                          <Avatar
+                            name={viewer.name}
+                            color={viewer.avatarColor}
+                            imageUrl={viewer.avatarUrl}
+                            size="sm"
+                            className="h-8 w-8 [&>div]:!h-8 [&>div]:!w-8 [&>div]:!rounded-full [&>div]:text-[10px]"
+                          />
+                        </span>
+                      ))}
+                    </span>
+                  ) : (
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/15 text-white">
+                      <Eye className="h-4 w-4" />
+                    </span>
+                  )}
+                  <span className="truncate text-[15px] font-medium text-white">
+                    {photoViewCount > 0
+                      ? t('profile.photoViewsCount').replace('{count}', String(photoViewCount))
+                      : t('profile.photoViewsEmpty')}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  aria-label={t('profile.removePhotoAction')}
+                  className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-white active:bg-white/10"
+                  style={{ WebkitTapHighlightColor: 'transparent' }}
+                  onClick={(e) => {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    if (lightboxItem) {
+                      setDeleteTarget(lightboxItem)
+                      setLightboxUrl(null)
+                      setLightboxItem(null)
+                    }
+                  }}
+                >
+                  <Trash2 className="h-6 w-6" strokeWidth={1.75} />
+                </button>
+              </div>
+            ) : null
+          }
+        />
+
+        {isSelf && (
+          <ProfilePhotoViewersPanel
+            userId={userId}
+            open={photoViewersOpen}
+            onClose={() => setPhotoViewersOpen(false)}
+          />
+        )}
 
         <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
           <AlertDialogContent className="max-w-sm gap-0 overflow-hidden p-0 sm:max-w-md">

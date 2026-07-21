@@ -12,9 +12,9 @@ interface MediaLightboxProps {
   alt?: string
   onClose: () => void
   zIndexClass?: string
-  /** Extra actions under the photo (e.g. delete profile photo). */
+  /** Bottom chrome (Telegram-style viewers + delete). */
   footer?: ReactNode
-  /** Hide the default «Close» text under the footer (Telegram-style chrome). */
+  /** Use fixed bottom bar layout (no «Close» text). */
   hideCloseLabel?: boolean
 }
 
@@ -75,71 +75,78 @@ export function MediaLightbox({
           aria-modal="true"
           aria-label={alt || t('misc.close')}
           className={`fixed inset-0 ${zIndexClass} isolate touch-manipulation`}
-          style={{
-            paddingTop: 'env(safe-area-inset-top)',
-            paddingBottom: hideCloseLabel
-              ? 'env(safe-area-inset-bottom)'
-              : 'calc(5.75rem + env(safe-area-inset-bottom))',
-          }}
         >
           <button
             type="button"
             aria-label={t('misc.close')}
-            className="absolute inset-0 bg-black/90"
+            className="absolute inset-0 bg-black"
             onClick={handleClose}
             onPointerUp={(e) => {
               if (e.pointerType === 'touch') handleClose()
             }}
           />
 
-          <div className="pointer-events-none relative flex h-full flex-col">
-            <div className="pointer-events-auto flex shrink-0 items-center justify-end p-3">
-              <button
-                type="button"
-                aria-label={t('misc.close')}
-                className="flex h-12 w-12 items-center justify-center rounded-full bg-black/60 text-white active:bg-black/80"
-                style={{ WebkitTapHighlightColor: 'transparent' }}
-                onClick={onClosePress}
-                onPointerUp={onClosePress}
-                onTouchEnd={onClosePress}
-              >
-                <X className="h-6 w-6" />
-              </button>
-            </div>
-
-            <div className="flex min-h-0 flex-1 items-center justify-center px-4 pb-2">
-              <img
-                src={src}
-                alt={alt}
-                className="pointer-events-auto max-h-full max-w-full object-contain"
-                onClick={onClosePress}
-                onTouchEnd={onClosePress}
-                onPointerDown={stopClose}
-              />
-            </div>
-
-            <div
-              className={
-                hideCloseLabel
-                  ? 'pointer-events-auto shrink-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-10'
-                  : 'pointer-events-auto shrink-0 space-y-2 px-4 pb-4 text-center'
-              }
-              onClick={stopClose}
-              onPointerDown={stopClose}
+          {/* Top close */}
+          <div
+            className="pointer-events-none absolute inset-x-0 top-0 z-20 flex justify-end p-3"
+            style={{ paddingTop: 'max(0.75rem, env(safe-area-inset-top))' }}
+          >
+            <button
+              type="button"
+              aria-label={t('misc.close')}
+              className="pointer-events-auto flex h-11 w-11 items-center justify-center rounded-full bg-black/50 text-white active:bg-black/70"
+              style={{ WebkitTapHighlightColor: 'transparent' }}
+              onClick={onClosePress}
+              onPointerUp={onClosePress}
+              onTouchEnd={onClosePress}
             >
-              {footer}
-              {!hideCloseLabel && (
-                <button
-                  type="button"
-                  className="min-h-11 px-4 text-sm text-white/80 active:text-white"
-                  style={{ WebkitTapHighlightColor: 'transparent' }}
-                  onClick={onClosePress}
-                  onPointerUp={onClosePress}
-                  onTouchEnd={onClosePress}
-                >
-                  {t('misc.close')}
-                </button>
-              )}
+              <X className="h-6 w-6" />
+            </button>
+          </div>
+
+          {/* Photo */}
+          <div
+            className="pointer-events-none absolute inset-0 flex items-center justify-center px-2"
+            style={{
+              paddingTop: 'max(3.5rem, calc(env(safe-area-inset-top) + 3rem))',
+              paddingBottom: hideCloseLabel
+                ? 'max(5.5rem, calc(env(safe-area-inset-bottom) + 4.5rem))'
+                : 'max(4rem, calc(env(safe-area-inset-bottom) + 3rem))',
+            }}
+          >
+            <img
+              src={src}
+              alt={alt}
+              className="pointer-events-auto max-h-full max-w-full object-contain"
+              onClick={onClosePress}
+              onTouchEnd={onClosePress}
+              onPointerDown={stopClose}
+            />
+          </div>
+
+          {/* Bottom chrome — fixed like Telegram */}
+          <div
+            className="pointer-events-none absolute inset-x-0 bottom-0 z-30"
+            style={{
+              paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))',
+            }}
+          >
+            <div className="bg-gradient-to-t from-black via-black/70 to-transparent px-4 pb-3 pt-16">
+              <div className="pointer-events-auto" onClick={stopClose} onPointerDown={stopClose}>
+                {footer}
+                {!hideCloseLabel && !footer && (
+                  <button
+                    type="button"
+                    className="mx-auto block min-h-11 px-4 text-sm text-white/80 active:text-white"
+                    style={{ WebkitTapHighlightColor: 'transparent' }}
+                    onClick={onClosePress}
+                    onPointerUp={onClosePress}
+                    onTouchEnd={onClosePress}
+                  >
+                    {t('misc.close')}
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         </motion.div>
