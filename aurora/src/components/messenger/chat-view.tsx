@@ -1906,7 +1906,7 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
       onPointerCancel={handleChatPointerEnd}
     >
       {/* Header */}
-      <div className="aurora-chat-safe-top flex items-center justify-between gap-2 border-b border-border/70 bg-background/95 px-3 pb-2 pt-1 sm:px-4">
+      <div className="aurora-chat-safe-top flex items-center justify-between gap-2 border-b border-border/40 bg-background/90 px-2 pb-1.5 pt-1 backdrop-blur-md sm:px-4">
         <div className="flex min-w-0 flex-1 items-center gap-2.5">
           <Button
             variant="ghost"

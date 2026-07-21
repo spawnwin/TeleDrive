@@ -352,7 +352,7 @@ export function ChatSidebar({
             <button
               type="button"
               onClick={exitSelection}
-              className="text-sm font-medium text-primary"
+              className="text-sm font-medium text-[#3390ec]"
             >
               {t('misc.cancel')}
             </button>
@@ -497,7 +497,7 @@ export function ChatSidebar({
             className={cn(
               'flex flex-1 items-center justify-center gap-1.5 rounded-lg py-2 text-sm font-medium transition',
               view === 'shorts'
-                ? 'bg-primary text-primary-foreground shadow'
+                ? 'bg-[#3390ec] text-white shadow'
                 : 'text-muted-foreground',
             )}
           >
@@ -786,7 +786,7 @@ export function ChatSidebar({
             className={cn(
               'flex items-center justify-center gap-1.5 rounded-xl border py-2.5 text-sm font-medium transition',
               view === 'shorts'
-                ? 'border-transparent bg-gradient-to-r from-violet-500 to-cyan-400 text-white shadow'
+                ? 'border-transparent bg-[#3390ec] text-white shadow'
                 : 'border-border bg-transparent text-muted-foreground hover:bg-muted/60',
             )}
           >
@@ -1066,15 +1066,15 @@ function FolderTab({
       className={cn(
         'flex h-9 shrink-0 items-center gap-1.5 border-b-2 border-transparent px-3 text-sm whitespace-nowrap transition',
         active
-          ? 'border-primary text-primary font-semibold'
-          : 'text-muted-foreground font-medium hover:text-foreground',
+          ? 'border-[#3390ec] font-semibold text-[#3390ec]'
+          : 'font-medium text-muted-foreground hover:text-foreground',
       )}
       title={label}
     >
       {emoji && <span className="text-sm leading-none">{emoji}</span>}
       <span className="max-w-[120px] truncate">{label}</span>
       {unread > 0 && (
-        <span className="ml-0.5 inline-flex h-4 min-w-[16px] items-center justify-center rounded-full bg-primary px-1 text-[9px] font-bold leading-none text-primary-foreground">
+        <span className="ml-0.5 inline-flex h-4 min-w-[16px] items-center justify-center rounded-full bg-[#3390ec] px-1 text-[9px] font-bold leading-none text-white">
           {unread > 99 ? '99+' : unread}
         </span>
       )}
@@ -1132,8 +1132,8 @@ function SavedChatRow({ chat }: { chat: ChatListItem }) {
         title={unreadLabel(chat.unread, t)}
         className="hidden"
       />
-      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-primary shadow-sm">
-        <Bookmark className="h-5 w-5 text-primary-foreground" fill="currentColor" />
+      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[#3390ec]">
+        <Bookmark className="h-5 w-5 text-white" fill="currentColor" />
       </div>
       <div className="min-w-0 flex-1">
         <div className="flex items-center justify-between gap-2">
@@ -1149,7 +1149,7 @@ function SavedChatRow({ chat }: { chat: ChatListItem }) {
             <span
               className={cn(
                 'shrink-0 text-[11px] tabular-nums',
-                chat.unread > 0 ? 'font-semibold text-primary' : 'text-muted-foreground',
+                chat.unread > 0 ? 'font-semibold text-[#3390ec]' : 'text-muted-foreground',
               )}
             >
               {formatChatTime(chat.lastMessage.createdAt, lang)}
@@ -1385,9 +1385,9 @@ function ChatListItemRow({
         }
       }}
       className={cn(
-        'group relative flex w-full items-center gap-3 rounded-none px-4 py-2.5 text-left transition-colors',
+        'group relative flex w-full min-w-0 items-center gap-3 rounded-none px-3 py-2 text-left transition-colors sm:px-4 sm:py-2.5',
         selectionMode && selected
-          ? 'bg-primary/10'
+          ? 'bg-[#3390ec]/10'
           : isActive
             ? 'bg-sidebar-accent'
             : 'hover:bg-sidebar-accent/70',
@@ -1398,7 +1398,7 @@ function ChatListItemRow({
           className={cn(
             'flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 transition-colors',
             selected
-              ? 'border-primary bg-primary text-primary-foreground'
+              ? 'border-[#3390ec] bg-[#3390ec] text-white'
               : 'border-muted-foreground/40 bg-transparent',
           )}
           aria-hidden

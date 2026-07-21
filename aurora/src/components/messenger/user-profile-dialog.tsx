@@ -355,12 +355,13 @@ export function UserProfileDialog({
     <>
       {loading ? (
         <div className="flex flex-1 items-center justify-center py-24">
-          <Loader2 className="h-8 w-8 animate-spin text-violet-500" />
+          <Loader2 className="h-8 w-8 animate-spin text-[#3390ec]" />
         </div>
       ) : profile ? (
-        <ScrollArea className="flex-1">
+        <ScrollArea className="min-h-0 min-w-0 flex-1 overflow-x-hidden">
+          <div className="w-full min-w-0 max-w-full box-border pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))]">
           {/* Profile header — Telegram style */}
-          <div className="relative flex flex-col items-center gap-3 safe-x bg-gradient-to-b from-[#3390ec]/12 via-background to-background px-4 pb-5 pt-8">
+          <div className="relative flex w-full min-w-0 flex-col items-center gap-3 bg-gradient-to-b from-[#3390ec]/12 via-background to-background px-1 pb-5 pt-4">
             <button
               type="button"
               onClick={() => {
@@ -373,7 +374,7 @@ export function UserProfileDialog({
                 }
               }}
               className={cn(
-                'relative rounded-full transition',
+                'relative overflow-visible rounded-full transition',
                 (profileStories?.stories.length || profile.avatarUrl) && 'cursor-pointer hover:opacity-90',
               )}
               title={
@@ -399,22 +400,22 @@ export function UserProfileDialog({
                   size="2xl"
                   showStatus
                   online={isOnline}
-                  className="rounded-full shadow-xl ring-4 ring-background [&_>div]:!rounded-full"
+                  className="rounded-full ring-4 ring-background [&_>div]:!rounded-full"
                 />
               </StoryRing>
               {profile.isPremium && (
-                <span className="absolute -bottom-1 -right-1 flex h-7 w-7 items-center justify-center rounded-full bg-gradient-to-br from-amber-400 to-violet-500 shadow-lg ring-2 ring-background">
+                <span className="absolute bottom-0 right-0 flex h-7 w-7 items-center justify-center rounded-full bg-gradient-to-br from-amber-400 to-[#3390ec] shadow-lg ring-2 ring-background">
                   <Crown className="h-3.5 w-3.5 text-white" />
                 </span>
               )}
             </button>
 
-            <div className="text-center">
-              <p className="flex items-center justify-center gap-1.5 text-xl font-semibold tracking-tight">
-                {profile.name}
+            <div className="w-full min-w-0 px-2 text-center">
+              <p className="flex flex-wrap items-center justify-center gap-1.5 text-xl font-semibold tracking-tight">
+                <span className="max-w-full break-words">{profile.name}</span>
                 <EmojiStatusBadge emojiStatus={profile.emojiStatus} size="lg" />
                 {profile.isPremium && (
-                  <span className="rounded-full bg-gradient-to-r from-amber-500/20 to-violet-500/20 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-amber-500">
+                  <span className="rounded-full bg-[#3390ec]/15 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-[#3390ec]">
                     Premium
                   </span>
                 )}
@@ -422,7 +423,7 @@ export function UserProfileDialog({
               <button
                 type="button"
                 onClick={copyUsername}
-                className="mt-1 text-sm text-[#3390ec] transition hover:text-[#1677d2]"
+                className="mt-1 max-w-full truncate text-sm text-[#3390ec] transition hover:text-[#1677d2]"
               >
                 @{profile.username}
               </button>
@@ -432,62 +433,64 @@ export function UserProfileDialog({
             </div>
 
             {/* Actions — only under avatar (Telegram-style) */}
-            <div className="w-full max-w-sm px-1 pt-1">
+            <div className="w-full min-w-0 pt-1">
               {!profile.isSelf ? (
-                <div className="grid grid-cols-4 gap-2 rounded-3xl bg-muted/40 p-2">
+                <div className="grid w-full min-w-0 grid-cols-4 gap-1 rounded-2xl bg-muted/40 p-1.5">
                   <button
                     type="button"
                     onClick={handleMessage}
-                    className="flex min-h-[4.25rem] flex-col items-center justify-center gap-1 rounded-2xl text-[#3390ec] transition hover:bg-background active:scale-[0.98]"
+                    className="flex min-h-[4rem] min-w-0 flex-col items-center justify-center gap-1 rounded-xl text-[#3390ec] transition hover:bg-background active:scale-[0.98]"
                   >
-                    <MessageCircle className="h-6 w-6" strokeWidth={1.75} />
-                    <span className="max-w-full truncate px-1 text-[11px] font-medium">{t('profile.message')}</span>
+                    <MessageCircle className="h-6 w-6 shrink-0" strokeWidth={1.75} />
+                    <span className="w-full truncate px-0.5 text-center text-[10px] font-medium leading-tight">{t('profile.message')}</span>
                   </button>
                   <button
                     type="button"
                     onClick={() => handleCall('audio')}
-                    className="flex min-h-[4.25rem] flex-col items-center justify-center gap-1 rounded-2xl text-[#3390ec] transition hover:bg-background active:scale-[0.98]"
+                    className="flex min-h-[4rem] min-w-0 flex-col items-center justify-center gap-1 rounded-xl text-[#3390ec] transition hover:bg-background active:scale-[0.98]"
                   >
-                    <Phone className="h-6 w-6" strokeWidth={1.75} />
-                    <span className="max-w-full truncate px-1 text-[11px] font-medium">{t('profile.call')}</span>
+                    <Phone className="h-6 w-6 shrink-0" strokeWidth={1.75} />
+                    <span className="w-full truncate px-0.5 text-center text-[10px] font-medium leading-tight">{t('profile.call')}</span>
                   </button>
                   <button
                     type="button"
                     onClick={() => handleCall('video')}
-                    className="flex min-h-[4.25rem] flex-col items-center justify-center gap-1 rounded-2xl text-[#3390ec] transition hover:bg-background active:scale-[0.98]"
+                    className="flex min-h-[4rem] min-w-0 flex-col items-center justify-center gap-1 rounded-xl text-[#3390ec] transition hover:bg-background active:scale-[0.98]"
                   >
-                    <Video className="h-6 w-6" strokeWidth={1.75} />
-                    <span className="max-w-full truncate px-1 text-[11px] font-medium">{t('profile.video')}</span>
+                    <Video className="h-6 w-6 shrink-0" strokeWidth={1.75} />
+                    <span className="w-full truncate px-0.5 text-center text-[10px] font-medium leading-tight">{t('profile.video')}</span>
                   </button>
                   <button
                     type="button"
                     onClick={() => setShowGiftPicker(true)}
-                    className="flex min-h-[4.25rem] flex-col items-center justify-center gap-1 rounded-2xl text-[#3390ec] transition hover:bg-background active:scale-[0.98]"
+                    className="flex min-h-[4rem] min-w-0 flex-col items-center justify-center gap-1 rounded-xl text-[#3390ec] transition hover:bg-background active:scale-[0.98]"
                   >
-                    <Gift className="h-6 w-6" strokeWidth={1.75} />
-                    <span className="max-w-full truncate px-1 text-[11px] font-medium">{t('gifts.sendGift')}</span>
+                    <Gift className="h-6 w-6 shrink-0" strokeWidth={1.75} />
+                    <span className="w-full truncate px-0.5 text-center text-[10px] font-medium leading-tight">
+                      {lang === 'ru' ? 'Подарок' : 'Gift'}
+                    </span>
                   </button>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 gap-2 rounded-3xl bg-muted/40 p-2">
+                <div className="grid w-full min-w-0 grid-cols-1 gap-1 rounded-2xl bg-muted/40 p-1.5">
                   <button
                     type="button"
                     onClick={() => {
                       onClose()
                       onEditProfile?.()
                     }}
-                    className="flex min-h-[3.5rem] flex-col items-center justify-center gap-1 rounded-2xl text-[#3390ec] transition hover:bg-background active:scale-[0.98]"
+                    className="flex min-h-[3.25rem] min-w-0 flex-col items-center justify-center gap-1 rounded-xl text-[#3390ec] transition hover:bg-background active:scale-[0.98]"
                   >
-                    <Edit3 className="h-6 w-6" strokeWidth={1.75} />
-                    <span className="max-w-full truncate px-1 text-[11px] font-medium">{t('profile.editProfile')}</span>
+                    <Edit3 className="h-6 w-6 shrink-0" strokeWidth={1.75} />
+                    <span className="w-full truncate px-0.5 text-center text-[10px] font-medium">{t('profile.editProfile')}</span>
                   </button>
                 </div>
               )}
             </div>
           </div>
 
-          {/* Info rows — settings style muted boxes */}
-          <div className="space-y-1.5 safe-x px-4 pb-3 pt-2">
+          {/* Info rows */}
+          <div className="min-w-0 space-y-1.5 pb-3 pt-2">
             {profile.bio && (
               <InfoRow
                 icon={<Info className="h-4 w-4" />}
@@ -510,9 +513,9 @@ export function UserProfileDialog({
             loading={giftsLoading}
           />
 
-          {/* Creator Premium — settings-style menu row */}
+          {/* Creator Premium */}
           {(creatorTiersCount > 0 || profile.isSelf) && (
-            <div className="safe-x px-4 pb-2">
+            <div className="min-w-0 pb-2">
               <MenuRow
                 icon={<Crown className="h-5 w-5" />}
                 color="#f4a12e"
@@ -530,7 +533,7 @@ export function UserProfileDialog({
 
           {/* Friend request button */}
           {!profile.isSelf && !blocked && (
-            <div className="safe-x px-4 pb-2">
+            <div className="min-w-0 pb-2">
               <FriendButton
                 userId={profile.id}
                 friendship={friendship}
@@ -542,8 +545,8 @@ export function UserProfileDialog({
           <Separator />
 
           {/* Media tabs — Telegram underline style */}
-          <div className="safe-x px-0 py-1">
-            <div className="flex gap-0 overflow-x-auto border-b border-border px-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <div className="min-w-0 py-1">
+            <div className="-mx-[max(1rem,env(safe-area-inset-left))] flex gap-0 overflow-x-auto border-b border-border pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
               {tabs.map((tab) => (
                 <button
                   key={tab.id}
@@ -565,7 +568,7 @@ export function UserProfileDialog({
               ))}
             </div>
 
-            <div className="px-4">
+            <div className="min-w-0">
             {userId ? (
               <ProfileTabContent
                 key={`${userId}:${activeTab}:${scopeChatId || 'all'}`}
@@ -599,7 +602,7 @@ export function UserProfileDialog({
           {!profile.isSelf && (
             <>
               <Separator />
-              <div className="safe-x px-4 py-3">
+              <div className="min-w-0 py-3">
                 <p className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   <Users className="h-3.5 w-3.5" />
                   {t('profile.sharedChats')}
@@ -614,7 +617,7 @@ export function UserProfileDialog({
                         key={chat.id}
                         type="button"
                         onClick={() => openGroup(chat.id)}
-                        className="flex w-full items-center gap-3 rounded-xl px-2 py-2.5 text-left transition hover:bg-muted"
+                        className="flex w-full min-w-0 items-center gap-3 rounded-xl px-2 py-2.5 text-left transition hover:bg-muted"
                       >
                         <Avatar name={chat.title} color={chat.avatarColor} size="sm" />
                         <span className="min-w-0 flex-1 truncate text-sm font-medium">{chat.title}</span>
@@ -646,15 +649,17 @@ export function UserProfileDialog({
 
           {/* VK-style wall */}
           <Separator />
+          <div className="min-w-0">
           <ProfileWall
             profileId={profile.id}
             isSelf={profile.isSelf}
             blocked={blocked}
           />
+          </div>
 
-          {/* Block / Report — settings-style menu rows */}
+          {/* Block / Report */}
           {!profile.isSelf && (
-            <div className="space-y-0.5 safe-x px-4 py-3">
+            <div className="min-w-0 space-y-0.5 py-3">
               <MenuRow
                 icon={<UserX className="h-5 w-5" />}
                 color="#e53935"
@@ -671,6 +676,7 @@ export function UserProfileDialog({
           )}
 
           <div className="h-[max(1rem,env(safe-area-inset-bottom))]" />
+          </div>
         </ScrollArea>
       ) : (
         <div className="flex flex-1 flex-col items-center justify-center gap-2 py-24 px-6 text-center text-sm text-muted-foreground">
@@ -693,14 +699,15 @@ export function UserProfileDialog({
         <SheetContent
           side={isMobile ? 'bottom' : 'right'}
           className={cn(
-            'flex max-w-full flex-col gap-0 overflow-x-hidden p-0 [&>button]:hidden',
+            // Override sheet default safe-x / w-3/4 so content is not clipped on the right
+            'flex max-w-full flex-col gap-0 overflow-hidden p-0 !px-0 [&>button]:hidden',
             isMobile
-              ? 'h-[100dvh] max-h-[100dvh] w-full rounded-none safe-x'
-              : 'w-full max-w-md sm:max-w-md safe-right',
+              ? 'h-[100dvh] max-h-[100dvh] w-full rounded-none border-0'
+              : 'inset-y-0 right-0 h-full w-full max-w-md border-l sm:max-w-md',
           )}
         >
           {/* Telegram-style: back only — no "Open profile" title; name lives under the avatar */}
-          <div className="flex items-center gap-2 px-3 pb-2 pt-[max(0.75rem,env(safe-area-inset-top))]">
+          <div className="flex shrink-0 items-center gap-2 pl-[max(0.75rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))] pb-2 pt-[max(0.75rem,env(safe-area-inset-top))]">
             <Button
               variant="ghost"
               size="icon"
@@ -811,7 +818,7 @@ function MenuRow({
     <button
       type="button"
       onClick={onClick}
-      className="flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left transition hover:bg-muted/70 active:scale-[0.99]"
+      className="flex w-full min-w-0 items-center gap-3 rounded-2xl px-3 py-3 text-left transition hover:bg-muted/70 active:scale-[0.99]"
     >
       <span
         className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-white shadow-sm"
@@ -823,7 +830,7 @@ function MenuRow({
         <span className="block truncate text-sm font-medium">{label}</span>
         {hint && <span className="block truncate text-xs text-muted-foreground">{hint}</span>}
       </span>
-      {value && <span className="shrink-0 text-xs font-medium text-violet-500">{value}</span>}
+      {value && <span className="max-w-[40%] shrink-0 truncate text-xs font-medium text-[#3390ec]">{value}</span>}
       <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground/60" />
     </button>
   )
@@ -848,7 +855,7 @@ function InfoRow({
       type={onClick ? 'button' : undefined}
       onClick={onClick}
       className={cn(
-        'flex w-full items-start gap-3 rounded-2xl bg-muted/40 px-4 py-3 text-left',
+        'flex w-full min-w-0 items-start gap-3 rounded-2xl bg-muted/40 px-4 py-3 text-left',
         onClick && 'transition hover:bg-muted/70 active:scale-[0.99]',
       )}
     >
