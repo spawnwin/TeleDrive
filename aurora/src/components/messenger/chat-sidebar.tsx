@@ -831,24 +831,6 @@ export function ChatSidebar({
                   onOpenViewer={(idx) => setStoryViewerIndex(idx)}
                 />
               )}
-              {/* Telegram-style Archive row (mobile) */}
-              {!showArchived && !query.trim() && archivedCount > 0 && (
-                <button
-                  type="button"
-                  onClick={() => setShowArchived(true)}
-                  className="flex w-full items-center gap-3 px-3 py-2.5 text-left transition hover:bg-sidebar-accent active:bg-sidebar-accent xl:hidden"
-                >
-                  <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[#3390ec] text-white">
-                    <Archive className="h-5 w-5" />
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block text-[16px] font-medium leading-tight">{t('sidebar.archived')}</span>
-                    <span className="block truncate text-[14px] text-muted-foreground">
-                      {archivedCount}
-                    </span>
-                  </span>
-                </button>
-              )}
               {showArchived && (
                 <div className="xl:hidden">
                   <button
