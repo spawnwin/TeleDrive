@@ -6,6 +6,7 @@ import { withJsonApi } from '@/lib/with-json-api'
 import { isVideoFile, isVoiceFile, resolveVideoMime, resolveVoiceMime } from '@/lib/media-type'
 import { serializeReplyTo } from '@/lib/message-reply'
 import { getCommentCounts } from '@/lib/comments'
+import { canPostInChat, isUserBanned, checkSlowMode } from '@/lib/channels'
 
 export const GET = withJsonApi(async function GET(
   req: NextRequest,
@@ -177,7 +178,6 @@ export const POST = withJsonApi(async function POST(
     }
   }
 
-  const { canPostInChat, isUserBanned, checkSlowMode } = await import('@/lib/channels')
   if (await isUserBanned(id, me.id)) {
     return NextResponse.json({ error: 'Вы заблокированы в этом чате' }, { status: 403 })
   }
