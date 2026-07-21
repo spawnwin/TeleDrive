@@ -2359,9 +2359,9 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
           onClick={() => void jumpToMessage(pinnedMessage.id)}
           className="flex w-full items-center gap-2 border-b border-border bg-muted/30 px-4 py-2 text-left transition hover:bg-muted/60"
         >
-          <Pin className="h-4 w-4 shrink-0 text-[#3390ec]" />
+          <Pin className="h-4 w-4 shrink-0 text-primary" />
           <div className="min-w-0 flex-1">
-            <p className="text-xs font-semibold text-[#3390ec]">{pinnedMessage.senderName}</p>
+            <p className="text-xs font-semibold text-primary">{pinnedMessage.senderName}</p>
             <p className="truncate text-xs text-muted-foreground">
               {pinnedMessage.content || (pinnedMessage.type === 'image' ? t('chat.image') : t('chat.file'))}
             </p>
@@ -2382,11 +2382,11 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
         <div className="relative min-h-full">
         {loadingMessages ? (
           <div className="flex h-full items-center justify-center">
-            <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#3390ec] border-t-transparent" />
+            <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
           </div>
         ) : messages.length === 0 ? (
-          <div className="flex h-full flex-col items-center justify-center gap-3 text-center">
-            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-[#3390ec]/15">
+          <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
+            <div className="flex h-20 w-20 items-center justify-center rounded-full bg-primary/10 ring-4 ring-primary/5">
               <Avatar
                 name={activeChat.title}
                 color={activeChat.avatarColor}
@@ -2395,7 +2395,7 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
               />
             </div>
             <div>
-              <p className="text-sm font-medium">{activeChat.title}</p>
+              <p className="text-[15px] font-semibold">{activeChat.title}</p>
               <p className="mt-1 text-xs text-muted-foreground">
                 {searchQuery
                   ? t('chat.emptySearchResult')
@@ -4202,39 +4202,46 @@ function EmptyChatState() {
   const { t } = useI18n()
   return (
     <div className="relative flex h-full flex-col items-center justify-center overflow-hidden bg-background p-8 text-center">
-      <div className="absolute inset-0 -z-10 opacity-50">
-        <div className="absolute left-1/4 top-1/4 h-72 w-72 rounded-full bg-[#3390ec]/10 blur-3xl" />
-        <div className="absolute bottom-1/4 right-1/4 h-72 w-72 rounded-full bg-[#3390ec]/5 blur-3xl" />
+      <div className="pointer-events-none absolute inset-0 -z-10">
+        <div className="absolute -left-16 top-10 h-72 w-72 rounded-full bg-primary/15 blur-3xl" />
+        <div className="absolute -right-10 bottom-16 h-64 w-64 rounded-full bg-primary/10 blur-3xl" />
       </div>
       <motion.div
-        initial={{ opacity: 0, scale: 0.85 }}
-        animate={{ opacity: 1, scale: 1 }}
-        transition={{ duration: 0.5 }}
-        className="flex h-24 w-24 items-center justify-center rounded-3xl bg-[#3390ec] shadow-2xl shadow-[#3390ec]/30"
+        initial={{ opacity: 0, y: 12, scale: 0.92 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        transition={{ duration: 0.45, ease: 'easeOut' }}
+        className="flex max-w-md flex-col items-center"
       >
-        <Sparkle />
+        <motion.div
+          animate={{ y: [0, -6, 0] }}
+          transition={{ duration: 4.5, repeat: Infinity, ease: 'easeInOut' }}
+          className="flex h-24 w-24 items-center justify-center rounded-[1.75rem] bg-primary shadow-2xl shadow-primary/30"
+        >
+          <Sparkle />
+        </motion.div>
+        <h2 className="mt-7 text-[28px] font-bold tracking-tight text-foreground">
+          Aurora
+        </h2>
+        <p className="mt-2 max-w-sm text-[15px] leading-relaxed text-muted-foreground">
+          {t('app.welcomeHint')}
+        </p>
+        <div className="mt-7 flex flex-wrap items-center justify-center gap-2">
+          {[
+            { color: 'bg-emerald-500', label: t('app.featureRealtime') },
+            { color: 'bg-primary', label: t('msg.reaction') },
+            { color: 'bg-sky-500', label: t('chat.image') },
+            { color: 'bg-rose-500', label: t('chat.voice') },
+          ].map((item) => (
+            <span
+              key={item.label}
+              className="inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-muted/50 px-3 py-1.5 text-[11px] font-medium text-muted-foreground backdrop-blur-sm"
+            >
+              <span className={cn('h-1.5 w-1.5 rounded-full', item.color)} />
+              {item.label}
+            </span>
+          ))}
+        </div>
       </motion.div>
-      <h2 className="mt-6 text-xl font-bold">{t('app.welcome')}</h2>
-      <p className="mt-2 max-w-sm text-sm text-muted-foreground">
-        {t('app.welcomeHint')}
-      </p>
-      <div className="mt-6 flex flex-wrap items-center justify-center gap-3 text-xs text-muted-foreground">
-        <span className="flex items-center gap-1.5 rounded-full bg-muted px-3 py-1">
-          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> Realtime
-        </span>
-        <span className="flex items-center gap-1.5 rounded-full bg-muted px-3 py-1">
-          <span className="h-1.5 w-1.5 rounded-full bg-[#3390ec]" /> {t('msg.reaction')}
-        </span>
-        <span className="flex items-center gap-1.5 rounded-full bg-muted px-3 py-1">
-          <span className="h-1.5 w-1.5 rounded-full bg-[#3390ec]" /> {t('chat.image')}
-        </span>
-        <span className="flex items-center gap-1.5 rounded-full bg-muted px-3 py-1">
-          <span className="h-1.5 w-1.5 rounded-full bg-rose-500" /> {t('chat.voice')}
-        </span>
-        <span className="flex items-center gap-1.5 rounded-full bg-muted px-3 py-1">
-          <span className="h-1.5 w-1.5 rounded-full bg-amber-500" /> {t('msg.edit')}
-        </span>
-      </div>
     </div>
   )
 }

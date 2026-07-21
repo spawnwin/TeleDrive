@@ -757,7 +757,7 @@ export function ChatSidebar({
             {/* Pull-to-open archive (Telegram-style) */}
             {!showArchived && archivedCount > 0 && archivePull > 0 && (
               <div
-                className="pointer-events-none sticky top-0 z-20 flex items-center justify-center gap-2 overflow-hidden bg-sidebar/95 text-[#3390ec] backdrop-blur-sm xl:hidden"
+                className="pointer-events-none sticky top-0 z-20 flex items-center justify-center gap-2 overflow-hidden bg-sidebar/95 text-primary backdrop-blur-sm xl:hidden"
                 style={{ height: Math.max(0, archivePull) }}
                 aria-hidden
               >
@@ -776,11 +776,11 @@ export function ChatSidebar({
             )}
             {showArchived && archivePull > 0 && (
               <div
-                className="pointer-events-none absolute inset-y-0 left-0 z-20 flex w-14 items-center justify-center bg-gradient-to-r from-[#3390ec]/25 to-transparent xl:hidden"
+                className="pointer-events-none absolute inset-y-0 left-0 z-20 flex w-14 items-center justify-center bg-gradient-to-r from-primary/25 to-transparent xl:hidden"
                 style={{ opacity: Math.min(1, archivePull / ARCHIVE_SWIPE_BACK) }}
                 aria-hidden
               >
-                <ArrowLeft className="h-5 w-5 text-[#3390ec]" />
+                <ArrowLeft className="h-5 w-5 text-primary" />
               </div>
             )}
             {/* Clearance under floating bottom nav on mobile */}
@@ -806,7 +806,7 @@ export function ChatSidebar({
                   <button
                     type="button"
                     onClick={() => setShowArchived(false)}
-                    className="flex w-full items-center gap-2 px-4 py-2 text-sm font-medium text-[#3390ec]"
+                    className="flex w-full items-center gap-2 px-4 py-2 text-sm font-medium text-primary"
                   >
                     <ArrowLeft className="h-4 w-4" />
                     {t('sidebar.allChats')}
@@ -834,7 +834,7 @@ export function ChatSidebar({
                       {userResults.map((u) => (
                         <div
                           key={u.id}
-                          className="flex items-center gap-2 rounded-xl px-2 py-2 transition hover:bg-sidebar-accent"
+                          className="flex items-center gap-2.5 px-3 py-2 transition hover:bg-sidebar-accent/70"
                         >
                           <button
                             type="button"
@@ -842,34 +842,16 @@ export function ChatSidebar({
                             className="shrink-0"
                             title={t('profile.viewProfile')}
                           >
-                            <Avatar name={u.name} color={u.avatarColor} imageUrl={u.avatarUrl} size="sm" showStatus online={u.online} />
+                            <Avatar name={u.name} color={u.avatarColor} imageUrl={u.avatarUrl} size="md" showStatus online={u.online} />
                           </button>
                           <button
                             type="button"
                             onClick={() => void openSearchUserChat(u.id)}
                             className="min-w-0 flex-1 text-left"
                           >
-                            <p className="truncate text-sm font-medium">{u.name}</p>
-                            <p className="truncate text-xs text-muted-foreground">@{u.username}</p>
+                            <p className="truncate text-[15px] font-medium leading-tight">{u.name}</p>
+                            <p className="truncate text-[12px] text-muted-foreground">@{u.username}</p>
                           </button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 shrink-0"
-                            onClick={() => setProfileUserId(u.id)}
-                            title={t('profile.viewProfile')}
-                          >
-                            <UserCircle className="h-4 w-4 text-muted-foreground" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-8 shrink-0 px-2 text-xs"
-                            onClick={() => void openSearchUserChat(u.id)}
-                            title={t('sidebar.openChat')}
-                          >
-                            {t('sidebar.openChat')}
-                          </Button>
                           <FriendButton
                             userId={u.id}
                             friendship={u.friendship ?? { id: null, status: 'none' }}
@@ -890,20 +872,20 @@ export function ChatSidebar({
                           type="button"
                           disabled={joiningSlug === c.slug}
                           onClick={() => void openSearchPublicChat(c)}
-                          className="flex w-full items-center gap-2 rounded-xl px-2 py-2 text-left transition hover:bg-sidebar-accent disabled:opacity-60"
+                          className="flex w-full items-center gap-2.5 px-3 py-2 text-left transition hover:bg-sidebar-accent/70 disabled:opacity-60"
                         >
-                          <Avatar name={c.title} color={c.avatarColor} imageUrl={c.avatarUrl} size="sm" />
+                          <Avatar name={c.title} color={c.avatarColor} imageUrl={c.avatarUrl} size="md" />
                           <span className="min-w-0 flex-1">
                             <span className="flex items-center gap-1.5">
-                              <Megaphone className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                              <span className="truncate text-sm font-medium">{c.title}</span>
+                              <Megaphone className="h-3.5 w-3.5 shrink-0 text-[#8b5cf6]" />
+                              <span className="truncate text-[15px] font-medium leading-tight">{c.title}</span>
                             </span>
-                            <span className="block truncate text-xs text-muted-foreground">
+                            <span className="block truncate text-[12px] text-muted-foreground">
                               @{c.slug}
                               {c.memberCount > 0 ? ` · ${c.memberCount} ${t('channel.subscribers')}` : ''}
                             </span>
                           </span>
-                          <span className="shrink-0 text-xs font-medium text-[#3390ec]">
+                          <span className="shrink-0 text-xs font-semibold text-primary">
                             {joiningSlug === c.slug ? '…' : t('sidebar.joinChannel')}
                           </span>
                         </button>
@@ -921,20 +903,20 @@ export function ChatSidebar({
                           type="button"
                           disabled={joiningSlug === c.slug}
                           onClick={() => void openSearchPublicChat(c)}
-                          className="flex w-full items-center gap-2 rounded-xl px-2 py-2 text-left transition hover:bg-sidebar-accent disabled:opacity-60"
+                          className="flex w-full items-center gap-2.5 px-3 py-2 text-left transition hover:bg-sidebar-accent/70 disabled:opacity-60"
                         >
-                          <Avatar name={c.title} color={c.avatarColor} imageUrl={c.avatarUrl} size="sm" />
+                          <Avatar name={c.title} color={c.avatarColor} imageUrl={c.avatarUrl} size="md" />
                           <span className="min-w-0 flex-1">
                             <span className="flex items-center gap-1.5">
-                              <Users className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                              <span className="truncate text-sm font-medium">{c.title}</span>
+                              <Users className="h-3.5 w-3.5 shrink-0 text-[#2aabee]" />
+                              <span className="truncate text-[15px] font-medium leading-tight">{c.title}</span>
                             </span>
-                            <span className="block truncate text-xs text-muted-foreground">
+                            <span className="block truncate text-[12px] text-muted-foreground">
                               @{c.slug}
                               {c.memberCount > 0 ? ` · ${c.memberCount} ${t('sidebar.membersCount')}` : ''}
                             </span>
                           </span>
-                          <span className="shrink-0 text-xs font-medium text-[#3390ec]">
+                          <span className="shrink-0 text-xs font-semibold text-primary">
                             {joiningSlug === c.slug ? '…' : t('sidebar.joinGroup')}
                           </span>
                         </button>
@@ -1062,12 +1044,12 @@ export function ChatSidebar({
       </div>
 
       {/* Current user footer */}
-      <div className="hidden shrink-0 items-center justify-between gap-2 border-t border-sidebar-border px-4 py-3 safe-bottom-min xl:flex">
+      <div className="hidden shrink-0 items-center justify-between gap-2 border-t border-sidebar-border/80 bg-sidebar/80 px-4 py-3 backdrop-blur-md safe-bottom-min xl:flex">
         {currentUser && (
           <button
             type="button"
             onClick={() => setProfileUserId(currentUser.id)}
-            className="flex min-w-0 flex-1 items-center gap-2.5 text-left transition hover:opacity-80"
+            className="flex min-w-0 flex-1 items-center gap-2.5 rounded-xl px-1.5 py-1 text-left transition hover:bg-sidebar-accent/80"
           >
             <Avatar
               name={currentUser.name}
@@ -1176,13 +1158,13 @@ export function ChatSidebar({
 
       {/* Telegram-style multi-select strip — replaces bottom nav while active */}
       {selectionMode && (
-        <div className="z-10 shrink-0 border-t border-border bg-background/95 px-2 pt-2 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur-md">
+        <div className="z-10 shrink-0 border-t border-sidebar-border bg-sidebar/95 px-2 pt-2 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur-md">
           <div className="mx-auto flex max-w-lg items-center justify-around gap-1">
             <button
               type="button"
               disabled={selectedIds.size === 0}
               onClick={() => void bulkArchive()}
-              className="flex min-w-0 flex-1 flex-col items-center gap-1 rounded-xl px-2 py-2 text-[#3390ec] transition hover:bg-[#3390ec]/10 disabled:opacity-40"
+              className="flex min-w-0 flex-1 flex-col items-center gap-1 rounded-xl px-2 py-2 text-primary transition hover:bg-primary/10 disabled:opacity-40"
             >
               <Archive className="h-5 w-5" />
               <span className="truncate text-[11px] font-medium">
@@ -1193,7 +1175,7 @@ export function ChatSidebar({
               type="button"
               disabled={selectedIds.size === 0}
               onClick={bulkMarkRead}
-              className="flex min-w-0 flex-1 flex-col items-center gap-1 rounded-xl px-2 py-2 text-[#3390ec] transition hover:bg-[#3390ec]/10 disabled:opacity-40"
+              className="flex min-w-0 flex-1 flex-col items-center gap-1 rounded-xl px-2 py-2 text-primary transition hover:bg-primary/10 disabled:opacity-40"
             >
               <CheckCheck className="h-5 w-5" />
               <span className="truncate text-[11px] font-medium">{t('chat.readShort')}</span>

@@ -111,13 +111,13 @@ export function StoriesRow({ feed, currentUser, onAddStory, onOpenViewer }: Stor
           />
         </StoryRing>
         <span
-          className="absolute -bottom-0.5 -right-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-[#3390ec] text-white shadow"
+          className="absolute -bottom-0.5 -right-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-primary-foreground shadow ring-2 ring-sidebar"
           onClick={(e) => {
             e.stopPropagation()
             onAddStory()
           }}
         >
-          <Plus className="h-3 w-3" />
+          <Plus className="h-3 w-3" strokeWidth={2.5} />
         </span>
       </div>
       <span className="max-w-[64px] truncate text-[10px] text-muted-foreground">
@@ -170,7 +170,7 @@ export function StoriesRow({ feed, currentUser, onAddStory, onOpenViewer }: Stor
     <div
       ref={containerRef}
       className={cn(
-        'relative shrink-0 border-b border-sidebar-border bg-sidebar/70 backdrop-blur-sm',
+        'relative shrink-0 border-b border-sidebar-border/80 bg-sidebar/80 backdrop-blur-md',
         !isDragging && 'transition-[height] duration-200 ease-out',
       )}
       style={{ height }}
@@ -185,7 +185,7 @@ export function StoriesRow({ feed, currentUser, onAddStory, onOpenViewer }: Stor
         data-stories-handle
         className="flex h-7 cursor-grab touch-none select-none items-center justify-center active:cursor-grabbing"
       >
-        <div className="h-1 w-10 rounded-full bg-muted-foreground/40" />
+        <div className="h-1 w-9 rounded-full bg-muted-foreground/35" />
       </div>
 
       <div
