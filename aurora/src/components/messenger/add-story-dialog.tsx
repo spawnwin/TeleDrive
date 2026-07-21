@@ -24,6 +24,7 @@ import { cn } from '@/lib/utils'
 import { STORY_TEXT_BACKGROUNDS } from '@/lib/stories'
 import type { StoryVisibility } from '@/lib/story-visibility'
 import { GALLERY_INPUT_ACCEPT, isVideoFile, VIDEO_INPUT_ACCEPT } from '@/lib/media-type'
+import { uploadFileWithRetry } from '@/lib/upload-client'
 import { toast } from 'sonner'
 
 type StoryMode = 'photo' | 'video' | 'text'
@@ -115,12 +116,7 @@ export function AddStoryDialog({ open, onOpenChange, onCreated }: AddStoryDialog
   const uploadFile = async (file: File) => {
     setUploading(true)
     try {
-      const form = new FormData()
-      form.append('file', file)
-      const res = await fetch('/api/uploads', { method: 'POST', body: form })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || t('stories.errorUpload'))
-
+      const data = await uploadFileWithRetry(file, t)
       const isVideo = data.isVideo || isVideoFile({ type: file.type, name: file.name })
       setMediaUrl(data.url)
       setMediaType(isVideo ? 'video' : 'photo')

@@ -1,4 +1,4 @@
-/** Client-side upload helper shared by chat, gallery, and other pickers. */
+/** Client-side upload helper shared by chat, gallery, stories, wall, etc. */
 
 export type UploadResponse = {
   url: string
@@ -12,20 +12,33 @@ export type UploadResponse = {
 
 type Translate = (key: string) => string
 
+function toUploadFile(file: File | Blob, filename?: string): File {
+  if (typeof File !== 'undefined' && file instanceof File) return file
+  const name = filename || `upload-${Date.now()}.bin`
+  const type = (file as Blob).type || 'application/octet-stream'
+  return new File([file], name, { type })
+}
+
 /**
  * POST /api/uploads with retries — survives mid-deploy chunk errors
  * and empty/non-JSON error bodies from proxies.
  */
 export async function uploadFileWithRetry(
-  file: File,
+  file: File | Blob,
   t: Translate,
   attempts = 3,
+  filename?: string,
 ): Promise<UploadResponse> {
+  const uploadFile = toUploadFile(file, filename)
+  if (!uploadFile.size) {
+    throw new Error(t('composer.errorUploadFailed'))
+  }
+
   let lastError: Error | null = null
   for (let i = 0; i < attempts; i++) {
     try {
       const formData = new FormData()
-      formData.append('file', file)
+      formData.append('file', uploadFile)
       const res = await fetch('/api/uploads', { method: 'POST', body: formData })
       const data = (await res.json().catch(() => ({}))) as UploadResponse & { error?: string }
       if (!res.ok) {

@@ -1259,8 +1259,12 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
     // Snapshot into a plain array BEFORE resetting the input: the FileList
     // returned by input.files is a live object and setting value='' empties
     // the same reference, which would leave files[0] undefined / Array.from([]).
-    const files = Array.from(fileList)
+    const files = Array.from(fileList).filter((f) => f && f.size > 0)
     e.target.value = ''
+    if (files.length === 0) {
+      toast.error(t('composer.errorUploadFailed'))
+      return
+    }
     if (files.length === 1) {
       // Stage single file for preview + caption
       if (pendingPreviewUrl) URL.revokeObjectURL(pendingPreviewUrl)
@@ -2589,9 +2593,14 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
               </div>
               <div className="min-w-0 flex-1">
                 {isImageFile(pendingFile) ? (
-                  <p className="text-xs text-muted-foreground">
-                    {(pendingFile.size / 1024 / 1024).toFixed(1)} МБ
-                  </p>
+                  <>
+                    <p className="truncate text-xs font-medium text-foreground">
+                      {pendingFile.name || t('composer.photo')}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {(pendingFile.size / 1024 / 1024).toFixed(1)} МБ
+                    </p>
+                  </>
                 ) : (
                   <>
                     <p className="truncate text-sm font-medium">{pendingFile.name}</p>
@@ -3503,7 +3512,12 @@ function MessageBubble({
               </div>
             )}
             {msg.type === 'gift' && (
-              <GiftMessageBubble metadata={msg.metadata} content={msg.content} mine={mine} />
+              <GiftMessageBubble
+                metadata={msg.metadata}
+                content={msg.content}
+                mine={mine}
+                senderName={msg.sender.name}
+              />
             )}
             {msg.type === 'sticker' && (
               <StickerMessageBubble attachmentUrl={msg.attachmentUrl} />

@@ -232,6 +232,7 @@ const ru: Dict = {
   'composer.errorMicAccess': 'Не удалось получить доступ к микрофону',
   'composer.errorMicSecureContext': 'Микрофон доступен только по HTTPS',
   'composer.errorUploadFailed': 'Не удалось загрузить',
+  'composer.photo': 'Фото',
   'composer.errorSendFailed': 'Не удалось отправить',
 
   // Search
@@ -1029,6 +1030,8 @@ const ru: Dict = {
   'gifts.fromTwo': 'от {name1} и {name2}',
   'gifts.fromMany': 'от {name} и ещё {count}',
   'gifts.sendersHeading': 'Кто подарил',
+  'gifts.youSent': 'Вы отправили',
+  'gifts.receivedLabel': 'Подарок',
   'gifts.sendGift': 'Подарок',
   'chat.gift': '🎁 Подарок',
   'chat.sticker': '🖼️ Стикер',
@@ -1404,6 +1407,7 @@ const en: Dict = {
   'composer.errorMicAccess': 'Cannot access microphone',
   'composer.errorMicSecureContext': 'Microphone requires HTTPS',
   'composer.errorUploadFailed': 'Upload failed',
+  'composer.photo': 'Photo',
   'composer.errorSendFailed': 'Failed to send',
 
   'search.messages': 'Search messages...',
@@ -2194,6 +2198,8 @@ const en: Dict = {
   'gifts.fromTwo': 'from {name1} and {name2}',
   'gifts.fromMany': 'from {name} and {count} more',
   'gifts.sendersHeading': 'Who gifted',
+  'gifts.youSent': 'You sent',
+  'gifts.receivedLabel': 'Gift',
   'gifts.sendGift': 'Gift',
   'chat.gift': '🎁 Gift',
   'chat.sticker': '🖼️ Sticker',

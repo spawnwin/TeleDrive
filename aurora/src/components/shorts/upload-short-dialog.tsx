@@ -19,6 +19,7 @@ import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { parseVideoUrl } from '@/lib/video-url'
 import { isVideoFile, VIDEO_INPUT_ACCEPT } from '@/lib/media-type'
+import { uploadFileWithRetry } from '@/lib/upload-client'
 import {
   loadVideoFromFile,
   captureVideoFrame,
@@ -242,15 +243,11 @@ export function UploadShortDialog({
     filename: string,
     isVideo: boolean,
   ): Promise<string> => {
-    const form = new FormData()
-    form.append('file', blobToFile(blob, filename))
-    const res = await fetch('/api/uploads', { method: 'POST', body: form })
-    const data = await res.json()
-    if (!res.ok) throw new Error(data.error || t('shorts.upload.errorUpload'))
+    const data = await uploadFileWithRetry(blobToFile(blob, filename), t)
     if (isVideo && data.isVideo === false) {
       throw new Error(t('shorts.upload.errorUpload'))
     }
-    return data.url as string
+    return data.url
   }
 
   const publish = async () => {

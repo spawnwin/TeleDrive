@@ -38,6 +38,7 @@ import { useAppStore } from '@/lib/store'
 import { useI18n } from '@/hooks/use-i18n'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
+import { uploadFileWithRetry } from '@/lib/upload-client'
 import { Avatar } from './avatar'
 import {
   MARKETPLACE_CATEGORIES,
@@ -128,11 +129,7 @@ export function MarketplaceDialog({ open, onOpenChange }: MarketplaceDialogProps
   const uploadImage = async (file: File) => {
     setUploadingImage(true)
     try {
-      const form = new FormData()
-      form.append('file', file)
-      const res = await fetch('/api/uploads', { method: 'POST', body: form })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || t('misc.error'))
+      const data = await uploadFileWithRetry(file, t)
       setFormImages((prev) => [...prev, data.url].slice(0, MAX_LISTING_IMAGES))
     } catch (err) {
       toast.error(err instanceof Error ? err.message : t('misc.error'))

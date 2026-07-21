@@ -5,14 +5,23 @@ import { Gift } from 'lucide-react'
 import { resolveMediaUrl } from '@/lib/media-url'
 import { formatGiftSerial, parseGiftMetadata } from '@/lib/gifts'
 import { cn } from '@/lib/utils'
+import { useI18n } from '@/hooks/use-i18n'
 
 interface GiftMessageBubbleProps {
   metadata: string | null | undefined
   content: string
   mine: boolean
+  /** Display name of the user who sent the gift message. */
+  senderName?: string
 }
 
-export function GiftMessageBubble({ metadata, content, mine }: GiftMessageBubbleProps) {
+export function GiftMessageBubble({
+  metadata,
+  content,
+  mine,
+  senderName,
+}: GiftMessageBubbleProps) {
+  const { t } = useI18n()
   const gift = parseGiftMetadata(metadata)
   const [animating, setAnimating] = useState(true)
 
@@ -27,6 +36,11 @@ export function GiftMessageBubble({ metadata, content, mine }: GiftMessageBubble
 
   const mediaUrl = gift.giftAnimationUrl || gift.giftStickerUrl
   const serial = formatGiftSerial(gift.serialNumber)
+  const fromLine = mine
+    ? t('gifts.youSent')
+    : senderName
+      ? t('gifts.from').replace('{name}', senderName)
+      : t('gifts.receivedLabel')
 
   return (
     <div
@@ -52,8 +66,11 @@ export function GiftMessageBubble({ metadata, content, mine }: GiftMessageBubble
           </span>
         )}
       </button>
-      <div className={cn('text-center', mine && 'text-right')}>
-        <p className="text-xs font-semibold text-violet-500">
+      <div className={cn('max-w-[220px] text-center', mine && 'text-right')}>
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-violet-400/90">
+          {fromLine}
+        </p>
+        <p className="mt-0.5 text-xs font-semibold text-violet-500">
           🎁 {gift.giftTitle}
           {serial ? ` ${serial}` : ''}
         </p>
