@@ -2767,7 +2767,7 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
       <Sheet open={showAttachMenu} onOpenChange={setShowAttachMenu}>
         <SheetContent
           side="bottom"
-          className="mx-auto max-w-md rounded-t-2xl p-4 [&>button]:hidden"
+          className="mx-auto max-w-md rounded-t-2xl p-4 pb-[max(1rem,env(safe-area-inset-bottom))] [&>button]:hidden"
         >
           <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-muted" />
           <div className="grid grid-cols-3 gap-3 pb-2">
@@ -2782,7 +2782,7 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
             />
             <AttachTile
               icon={<ImagePlus className="h-6 w-6" />}
-              color="from-fuchsia-500 to-pink-500"
+              color="from-[#3390ec] to-[#1677d2]"
               label={t('composer.attachPhotoVideo')}
               onClick={() => {
                 setShowAttachMenu(false)
@@ -2791,7 +2791,7 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
             />
             <AttachTile
               icon={<FileIcon className="h-6 w-6" />}
-              color="from-blue-500 to-cyan-500"
+              color="from-[#5ac8fa] to-[#3390ec]"
               label={t('composer.attachFile')}
               onClick={() => {
                 setShowAttachMenu(false)
@@ -2809,7 +2809,7 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
             />
             <AttachTile
               icon={<VideoIcon className="h-6 w-6" />}
-              color="from-violet-500 to-fuchsia-500"
+              color="from-[#3390ec] to-[#2b82d9]"
               label={t('composer.attachVideoMessage')}
               onClick={() => {
                 setShowAttachMenu(false)
@@ -4028,14 +4028,14 @@ function EmptyChatState() {
   return (
     <div className="relative flex h-full flex-col items-center justify-center overflow-hidden bg-background p-8 text-center">
       <div className="absolute inset-0 -z-10 opacity-50">
-        <div className="absolute left-1/4 top-1/4 h-72 w-72 rounded-full bg-violet-500/10 blur-3xl" />
-        <div className="absolute bottom-1/4 right-1/4 h-72 w-72 rounded-full bg-cyan-400/10 blur-3xl" />
+        <div className="absolute left-1/4 top-1/4 h-72 w-72 rounded-full bg-[#3390ec]/10 blur-3xl" />
+        <div className="absolute bottom-1/4 right-1/4 h-72 w-72 rounded-full bg-[#3390ec]/5 blur-3xl" />
       </div>
       <motion.div
         initial={{ opacity: 0, scale: 0.85 }}
         animate={{ opacity: 1, scale: 1 }}
         transition={{ duration: 0.5 }}
-        className="flex h-24 w-24 items-center justify-center rounded-3xl bg-gradient-to-br from-violet-500 to-cyan-400 shadow-2xl shadow-violet-500/30"
+        className="flex h-24 w-24 items-center justify-center rounded-3xl bg-[#3390ec] shadow-2xl shadow-[#3390ec]/30"
       >
         <Sparkle />
       </motion.div>
@@ -4048,10 +4048,10 @@ function EmptyChatState() {
           <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> Realtime
         </span>
         <span className="flex items-center gap-1.5 rounded-full bg-muted px-3 py-1">
-          <span className="h-1.5 w-1.5 rounded-full bg-violet-500" /> {t('msg.reaction')}
+          <span className="h-1.5 w-1.5 rounded-full bg-[#3390ec]" /> {t('msg.reaction')}
         </span>
         <span className="flex items-center gap-1.5 rounded-full bg-muted px-3 py-1">
-          <span className="h-1.5 w-1.5 rounded-full bg-cyan-400" /> {t('chat.image')}
+          <span className="h-1.5 w-1.5 rounded-full bg-[#3390ec]" /> {t('chat.image')}
         </span>
         <span className="flex items-center gap-1.5 rounded-full bg-muted px-3 py-1">
           <span className="h-1.5 w-1.5 rounded-full bg-rose-500" /> {t('chat.voice')}

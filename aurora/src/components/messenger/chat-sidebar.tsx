@@ -716,7 +716,7 @@ export function ChatSidebar({
                 <>
                   {savedChat && savedMatchesQuery && !showArchived && (
                     <>
-                      <SavedChatRow chat={savedChat} />
+                      <SavedChatRow chat={savedChat} selectionMode={selectionMode} />
                       {(pinned.length > 0 || unpinned.length > 0) && (
                         <div className="my-2 ml-3 mr-3 border-t border-sidebar-border/50" />
                       )}
@@ -1150,7 +1150,7 @@ function unreadLabel(count: number, t: (key: string) => string): string {
   return `${n} ${t('sidebar.newMessages')}`
 }
 
-function SavedChatRow({ chat }: { chat: ChatListItem }) {
+function SavedChatRow({ chat, selectionMode = false }: { chat: ChatListItem; selectionMode?: boolean }) {
   const { t, lang } = useI18n()
   const { activeChatId, setActiveChat, markChatRead, drafts } = useAppStore()
   const isActive = activeChatId === chat.id
@@ -1167,24 +1167,27 @@ function SavedChatRow({ chat }: { chat: ChatListItem }) {
     return chat.lastMessage.content
   }
 
+  const openSaved = () => {
+    if (selectionMode) return
+    setActiveChat(chat.id)
+    markChatRead(chat.id)
+  }
+
   return (
     <motion.div
       role="button"
       tabIndex={0}
-      whileTap={{ scale: 0.98 }}
-      onClick={() => {
-        setActiveChat(chat.id)
-        markChatRead(chat.id)
-      }}
+      whileTap={{ scale: selectionMode ? 1 : 0.98 }}
+      onClick={openSaved}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault()
-          setActiveChat(chat.id)
-          markChatRead(chat.id)
+          openSaved()
         }
       }}
       className={cn(
-        'group relative flex w-full items-center gap-3 rounded-none px-4 py-2.5 text-left transition-colors',
+        'group relative flex w-full items-center gap-3 rounded-none border-b border-sidebar-border/40 px-3 py-2.5 text-left transition-colors sm:px-4',
+        selectionMode && 'opacity-60',
         isActive
           ? 'bg-sidebar-accent'
           : 'hover:bg-sidebar-accent/70',

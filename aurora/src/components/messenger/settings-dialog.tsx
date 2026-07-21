@@ -86,9 +86,9 @@ interface SettingsDialogProps {
 }
 
 const COLOR_OPTIONS = [
-  '#7c3aed', '#06b6d4', '#ec4899', '#f97316',
-  '#10b981', '#eab308', '#8b5cf6', '#ef4444',
-  '#0ea5e9', '#14b8a6', '#f43f5e', '#a855f7',
+  '#3390ec', '#0ea5e9', '#10b981', '#eab308',
+  '#f97316', '#ef4444', '#ec4899', '#8b5cf6',
+  '#06b6d4', '#14b8a6', '#f43f5e', '#64748b',
 ]
 
 type SettingsPage =
@@ -245,7 +245,7 @@ export function SettingsDialog({ open, onOpenChange, onOpenPremium, onOpenCoins 
   const [page, setPage] = useState<SettingsPage>('main')
   const [name, setName] = useState(currentUser?.name || '')
   const [bio, setBio] = useState(currentUser?.bio || '')
-  const [avatarColor, setAvatarColor] = useState(currentUser?.avatarColor || '#7c3aed')
+  const [avatarColor, setAvatarColor] = useState(currentUser?.avatarColor || '#3390ec')
   const [avatarUrl, setAvatarUrl] = useState<string | null>(currentUser?.avatarUrl || null)
   const [premiumTheme, setPremiumTheme] = useState(currentUser?.premiumTheme || 'aurora')
   const [saving, setSaving] = useState(false)
@@ -264,7 +264,7 @@ export function SettingsDialog({ open, onOpenChange, onOpenPremium, onOpenCoins 
       setPage('main')
       setName(currentUser?.name || '')
       setBio(currentUser?.bio || '')
-      setAvatarColor(currentUser?.avatarColor || '#7c3aed')
+      setAvatarColor(currentUser?.avatarColor || '#3390ec')
       setAvatarUrl(currentUser?.avatarUrl || null)
       setPremiumTheme(currentUser?.premiumTheme || 'aurora')
       setMessageSoundName(loadCustomSound('message')?.name || '')
@@ -994,7 +994,7 @@ export function SettingsDialog({ open, onOpenChange, onOpenPremium, onOpenCoins 
                   {onOpenPremium && (
                     <Button
                       size="sm"
-                      className="bg-gradient-to-r from-amber-500 to-violet-500 text-white"
+                      className="bg-gradient-to-r from-amber-500 to-[#3390ec] text-white"
                       onClick={onOpenPremium}
                     >
                       {currentUser && isPremiumActive(currentUser) ? t('premium.extend') : t('premium.buy')}

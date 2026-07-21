@@ -147,7 +147,7 @@ export function FriendButton({
         {loading ? (
           <Loader2 className="h-4 w-4 animate-spin" />
         ) : (
-          <Clock className="h-4 w-4 text-violet-500" />
+          <Clock className="h-4 w-4 text-[#3390ec]" />
         )}
         {variant !== 'compact' ? t('friends.requestSent') : t('friends.cancelRequest')}
       </Button>
@@ -161,7 +161,7 @@ export function FriendButton({
           disabled={loading}
           onClick={() => patchAction('accept')}
           className={cn(
-            'flex-1 rounded-xl bg-gradient-to-r from-violet-500 to-cyan-400 text-white',
+            'flex-1 rounded-xl bg-[#3390ec] text-white hover:bg-[#2b82d9]',
             variant === 'compact' && 'h-8 px-3 text-xs',
           )}
         >
@@ -185,8 +185,8 @@ export function FriendButton({
       onClick={sendRequest}
       className={cn(
         variant === 'default' &&
-          'w-full rounded-xl bg-gradient-to-r from-violet-500 to-cyan-400 text-white shadow-md hover:from-violet-400 hover:to-cyan-300',
-        variant === 'outline' && 'w-full rounded-xl border-violet-500/30',
+          'w-full rounded-xl bg-[#3390ec] text-white shadow-md hover:bg-[#2b82d9]',
+        variant === 'outline' && 'w-full rounded-xl border-[#3390ec]/30',
         variant === 'compact' && 'h-8 gap-1 px-2 text-xs',
         className,
       )}

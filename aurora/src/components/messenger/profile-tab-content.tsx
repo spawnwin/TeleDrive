@@ -310,7 +310,7 @@ export function ProfileTabContent({
   if (loading) {
     return (
       <div className="flex min-h-[120px] items-center justify-center py-8">
-        <Loader2 className="h-6 w-6 animate-spin text-violet-500" />
+        <Loader2 className="h-6 w-6 animate-spin text-[#3390ec]" />
       </div>
     )
   }
@@ -421,8 +421,8 @@ export function ProfileTabContent({
                     decoding="async"
                   />
                 ) : (
-                  <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-violet-500/20 to-cyan-500/20">
-                    <Clapperboard className="h-8 w-8 text-violet-500" />
+                  <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-[#3390ec]/20 to-[#3390ec]/10">
+                    <Clapperboard className="h-8 w-8 text-[#3390ec]" />
                   </div>
                 )}
                 {isVideo && url && (
@@ -561,7 +561,7 @@ export function ProfileTabContent({
             download={item.attachmentName || 'file'}
             className="flex items-center gap-3 rounded-xl px-2 py-2.5 transition hover:bg-muted"
           >
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-violet-500/15 text-violet-500">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[#3390ec]/15 text-[#3390ec]">
               <File className="h-5 w-5" />
             </div>
             <div className="min-w-0 flex-1">
@@ -615,7 +615,7 @@ export function ProfileTabContent({
               onClick={() =>
                 openShareToChat(buildLinkSharePayload(item.url, { title: item.title }))
               }
-              className="mr-2 rounded-full p-2 text-muted-foreground transition hover:bg-muted hover:text-violet-500"
+              className="mr-2 rounded-full p-2 text-muted-foreground transition hover:bg-muted hover:text-[#3390ec]"
               title={t('share.title')}
             >
               <Share2 className="h-4 w-4" />
@@ -674,7 +674,7 @@ function GalleryUploadBar({
       type="button"
       onClick={onClick}
       disabled={uploading}
-      className="mb-2 flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-violet-500/40 bg-violet-500/5 py-2.5 text-sm font-medium text-violet-600 transition hover:bg-violet-500/10 disabled:opacity-50 dark:text-cyan-300"
+      className="mb-2 flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-[#3390ec]/40 bg-[#3390ec]/5 py-2.5 text-sm font-medium text-[#3390ec] transition hover:bg-[#3390ec]/10 disabled:opacity-50 dark:text-[#8fc8ff]"
     >
       {uploading ? (
         <Loader2 className="h-4 w-4 animate-spin" />
@@ -699,7 +699,7 @@ function LoadMoreButton({
     <Button
       variant="ghost"
       size="sm"
-      className="mt-3 w-full text-violet-500"
+      className="mt-3 w-full text-[#3390ec]"
       onClick={onClick}
       disabled={loading}
     >
