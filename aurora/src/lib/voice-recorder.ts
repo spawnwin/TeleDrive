@@ -187,7 +187,11 @@ export class WavVoiceRecorder {
       this.chunks.push(new Float32Array(input))
     }
     this.source.connect(this.processor)
-    this.processor.connect(this.context.destination)
+    // Keep the graph alive without monitoring into speakers (avoids echo).
+    const mute = this.context.createGain()
+    mute.gain.value = 0
+    this.processor.connect(mute)
+    mute.connect(this.context.destination)
   }
 
   async stop(): Promise<Blob> {

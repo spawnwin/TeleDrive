@@ -26,6 +26,15 @@ interface VoicePlayerProps {
 }
 
 function inferAudioMime(url: string, mimeType?: string | null): string | undefined {
+  const lower = url.toLowerCase()
+  // Prefer URL extension — after server transcode the stored MIME may still say webm.
+  if (lower.includes('.m4a') || (lower.includes('.mp4') && !lower.includes('.webm'))) return 'audio/mp4'
+  if (lower.includes('.mp3')) return 'audio/mpeg'
+  if (lower.includes('.wav')) return 'audio/wav'
+  if (lower.includes('.ogg') || lower.includes('.oga')) return 'audio/ogg'
+  if (lower.includes('.aac')) return 'audio/aac'
+  if (lower.includes('.webm')) return 'audio/webm'
+
   const mime = (mimeType || '').toLowerCase().trim()
   if (mime.startsWith('audio/')) {
     // Strip codecs=… for the type attribute — browsers are picky.
@@ -33,13 +42,6 @@ function inferAudioMime(url: string, mimeType?: string | null): string | undefin
   }
   if (mime === 'video/webm') return 'audio/webm'
   if (mime === 'video/ogg') return 'audio/ogg'
-  const lower = url.toLowerCase()
-  if (lower.includes('.m4a') || lower.includes('.mp4')) return 'audio/mp4'
-  if (lower.includes('.mp3')) return 'audio/mpeg'
-  if (lower.includes('.wav')) return 'audio/wav'
-  if (lower.includes('.ogg') || lower.includes('.oga')) return 'audio/ogg'
-  if (lower.includes('.webm')) return 'audio/webm'
-  if (lower.includes('.aac')) return 'audio/aac'
   return undefined
 }
 
@@ -245,7 +247,9 @@ export function VoicePlayer({
     return heights
   }, [messageId])
 
-  const ringColor = mine ? '#ffffff' : '#3390ec'
+  const ringColor = mine ? '#ffffff' : 'var(--primary, #3390ec)'
+  const activeBar = mine ? 'bg-white/90' : 'bg-primary'
+  const idleBar = mine ? 'bg-white/30' : 'bg-muted-foreground/30'
 
   const audioEl = (
     <audio ref={audioRef} preload="metadata" playsInline>
@@ -285,7 +289,7 @@ export function VoicePlayer({
               'absolute inset-2 flex flex-col items-center justify-center overflow-hidden rounded-full transition',
               mine
                 ? 'bg-gradient-to-br from-[#2b5278] to-[#1a3a56] text-white'
-                : 'bg-gradient-to-br from-[#3390ec]/25 to-[#1a4a7a]/40 text-foreground',
+                : 'bg-gradient-to-br from-primary/25 to-primary/40 text-foreground',
               playing && 'animate-pulse',
               error && 'ring-2 ring-rose-500/70',
             )}
@@ -302,7 +306,7 @@ export function VoicePlayer({
                     key={i}
                     className={cn(
                       'w-[3px] rounded-full transition-colors',
-                      active ? (mine ? 'bg-white/90' : 'bg-[#3390ec]') : mine ? 'bg-white/25' : 'bg-muted-foreground/25',
+                      active ? activeBar : idleBar,
                     )}
                     style={{ height: `${Math.max(18, h * 0.55)}%` }}
                   />
@@ -354,7 +358,7 @@ export function VoicePlayer({
                   key={r.emoji}
                   className={cn(
                     'rounded-full px-1.5 py-0.5 text-[11px]',
-                    r.mine ? 'bg-[#3390ec]/15' : 'bg-muted/50',
+                    r.mine ? 'bg-primary/15' : 'bg-muted/50',
                   )}
                 >
                   {r.emoji} {r.count > 1 ? r.count : ''}
@@ -377,7 +381,7 @@ export function VoicePlayer({
           'flex h-9 w-9 shrink-0 items-center justify-center rounded-full p-0',
           mine
             ? 'bg-white/20 text-white hover:bg-white/30'
-            : 'bg-[#3390ec]/15 text-[#3390ec] hover:bg-[#3390ec]/25',
+            : 'bg-primary/15 text-primary hover:bg-primary/25',
           error && 'ring-2 ring-rose-500/70',
         )}
         title={error ? 'Не удалось воспроизвести' : undefined}
@@ -385,7 +389,7 @@ export function VoicePlayer({
         {playing ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4 translate-x-0.5" />}
       </Button>
 
-      <div className="flex h-7 flex-1 cursor-pointer items-center gap-[2px]" onClick={seek}>
+      <div className="flex h-7 min-w-0 flex-1 cursor-pointer items-center gap-[2px]" onClick={seek}>
         {Array.from({ length: bars }).map((_, i) => {
           const isActive = i < filledBars
           return (
@@ -399,13 +403,7 @@ export function VoicePlayer({
               }}
               className={cn(
                 'w-[2.5px] rounded-full transition-colors',
-                isActive
-                  ? mine
-                    ? 'bg-white/80'
-                    : 'bg-[#3390ec]'
-                  : mine
-                    ? 'bg-white/30'
-                    : 'bg-muted-foreground/30',
+                isActive ? activeBar : idleBar,
               )}
               style={{ height: `${barHeights[i]}%` }}
             />

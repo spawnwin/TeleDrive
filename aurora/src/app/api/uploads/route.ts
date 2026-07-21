@@ -108,13 +108,19 @@ export const POST = withJsonApi(async function POST(req: NextRequest) {
   // Safari/iOS cannot play Opus in WebM/Ogg — transcode voice notes to AAC/M4A.
   if (isVoiceUpload && needsVoiceTranscode(resolvedMime, filename)) {
     const converted = await transcodeVoiceToM4a(filepath)
-    if (converted) {
-      filepath = converted.outputPath
-      filename = converted.filename
-      resolvedMime = converted.mimeType
-      size = converted.size
-      ext = 'm4a'
+    if (!converted) {
+      const { unlink } = await import('fs/promises')
+      await unlink(filepath).catch(() => {})
+      return NextResponse.json(
+        { error: 'Не удалось обработать голосовое сообщение. Попробуйте ещё раз.' },
+        { status: 502 },
+      )
     }
+    filepath = converted.outputPath
+    filename = converted.filename
+    resolvedMime = converted.mimeType
+    size = converted.size
+    ext = 'm4a'
   }
 
   const fileUrl = `/uploads/${subdir}/${filename}`

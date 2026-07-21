@@ -221,6 +221,8 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
     type: string
     senderName: string
   } | null>(null)
+  /** Peer last-read marker for private chats (ticks turn primary when read). */
+  const [peerLastReadAt, setPeerLastReadAt] = useState<number>(0)
   const [commentsFor, setCommentsFor] = useState<string | null>(null)
   const commentsSheetRef = useRef<ChannelCommentsSheetHandle>(null)
   const [showGiftPicker, setShowGiftPicker] = useState(false)
@@ -511,6 +513,15 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
     [activeChatId],
   )
 
+  const onMessageRead = useCallback(
+    (data: { chatId: string; userId: string }) => {
+      if (data.chatId !== activeChatId) return
+      if (!currentUser || data.userId === currentUser.id) return
+      setPeerLastReadAt(Date.now())
+    },
+    [activeChatId, currentUser],
+  )
+
   const socket = useSocket({
     userId: currentUser?.id ?? null,
     username: currentUser?.username ?? null,
@@ -524,6 +535,7 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
     onMessageDeleted,
     onMessageEdited,
     onMessagePinned,
+    onMessageRead,
     onReaction,
     onCommentNew,
     onCommentDelete,
@@ -821,6 +833,7 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
     setActiveTopicId(null)
     setShowTopicList(false)
     setPinnedMessage(null)
+    setPeerLastReadAt(0)
     setCommentsFor(null)
     setMyAdminMembership(null)
     // Restore any saved draft for this chat (Telegram-style) and stop showing
@@ -1647,6 +1660,15 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
       recordingModeRef.current = 'wav'
       wav.start()
     } catch {
+      clearRecordTimer()
+      recordStreamRef.current?.getTracks().forEach((t) => t.stop())
+      recordStreamRef.current = null
+      mediaRecorderRef.current = null
+      wavRecorderRef.current = null
+      recordingModeRef.current = null
+      setIsRecording(false)
+      setRecordSeconds(0)
+      recordStartRef.current = 0
       toast.error(t('composer.errorMicAccess'))
     }
   }
@@ -2469,6 +2491,12 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
                       canEditOthers={canEditOthers}
                       canPin={canPinMessages}
                       isPinned={pinnedMessage?.id === msg.id}
+                      isRead={
+                        mine &&
+                        activeChat.type === 'private' &&
+                        peerLastReadAt > 0 &&
+                        new Date(msg.createdAt).getTime() <= peerLastReadAt
+                      }
                       onViewProfile={() => setProfileUserId(msg.sender.id)}
                       onReply={() => {
                         setEditingMessage(null)
@@ -3322,6 +3350,8 @@ interface MessageBubbleProps {
   canEditOthers?: boolean
   canPin?: boolean
   isPinned?: boolean
+  /** True when peer has read this outgoing message (private chats). */
+  isRead?: boolean
   onViewProfile?: () => void
   onReply: () => void
   onEdit: () => void
@@ -3354,6 +3384,7 @@ function MessageBubble({
   canEditOthers,
   canPin,
   isPinned,
+  isRead,
   onViewProfile,
   onReply,
   onEdit,
@@ -3534,7 +3565,7 @@ function MessageBubble({
               msg.type === 'image' && !msg.content && 'p-1.5',
               showAsCircleVideo && !msg.content && 'p-1.5 bg-transparent shadow-none',
               showAsVideoAttachment && !msg.content && 'p-1.5',
-              msg.type === 'voice' && 'min-w-0 max-w-full bg-transparent shadow-none p-1.5',
+              msg.type === 'voice' && 'min-w-[12rem] max-w-full px-2.5 py-2',
               msg.type === 'file' && !showAsVideoAttachment && 'w-full min-w-0 sm:min-w-[180px]',
               msg.type === 'share' && 'w-full min-w-0 sm:min-w-[180px]',
               msg.type === 'gift' && 'min-w-0 max-w-full bg-transparent shadow-none',
@@ -3646,8 +3677,7 @@ function MessageBubble({
                 mimeType={msg.attachmentMime}
                 mine={mine}
                 messageId={msg.id}
-                circle
-                onReact={(emoji) => onReact(emoji)}
+                circle={false}
               />
             )}
             {msg.attachmentUrl && msg.type === 'file' && !showAsImage && !showAsVideoAttachment && (
@@ -3705,7 +3735,17 @@ function MessageBubble({
                 {formatMessageTime(msg.createdAt)}
               </span>
               {mine && (
-                <CheckCheck className="h-3.5 w-3.5 shrink-0 text-white/55" strokeWidth={2.25} />
+                <CheckCheck
+                  className={cn(
+                    'h-3.5 w-3.5 shrink-0',
+                    isRead
+                      ? msg.type === 'voice' || msg.type === 'image' || msg.type === 'sticker'
+                        ? 'text-sky-300'
+                        : 'text-sky-200'
+                      : 'text-white/55',
+                  )}
+                  strokeWidth={2.25}
+                />
               )}
             </div>
           </div>

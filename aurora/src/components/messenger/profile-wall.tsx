@@ -126,6 +126,7 @@ export function ProfileWall({ profileId, isSelf, blocked }: ProfileWallProps) {
     const data = await uploadFileWithRetry(typed, t)
     return data as {
       url: string
+      name?: string
       type: string
       isImage: boolean
       isVoice: boolean
@@ -159,13 +160,13 @@ export function ProfileWall({ profileId, isSelf, blocked }: ProfileWallProps) {
         })
       } else if (voiceBlob) {
         const name = `voice-${Date.now()}.webm`
-        const up = await uploadAttachment(voiceBlob, name, 'audio/webm')
+        const up = await uploadAttachment(voiceBlob, name, voiceBlob.type || 'audio/webm')
         await createPost({
           type: 'voice',
           content: hasText ? text.trim() : null,
           attachmentUrl: up.url,
-          attachmentName: name,
-          attachmentMime: 'audio/webm',
+          attachmentName: up.name || name,
+          attachmentMime: up.type || 'audio/mp4',
           attachmentDuration: voiceSecs,
         })
       } else if (musicFile) {
