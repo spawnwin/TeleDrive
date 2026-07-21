@@ -52,7 +52,6 @@ import {
   AlertDialogTitle,
   AlertDialogDescription,
   AlertDialogFooter,
-  AlertDialogAction,
   AlertDialogCancel,
 } from '@/components/ui/alert-dialog'
 import {
@@ -90,6 +89,7 @@ import { languages, type Lang } from '@/lib/i18n'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { resolveMediaUrl } from '@/lib/media-url'
+import { removeProfileAvatar } from '@/lib/remove-avatar'
 import { useE2EE } from '@/hooks/use-e2ee'
 import { isPremiumActive, getUploadLimitMb, PREMIUM_THEMES } from '@/lib/coins'
 import { EmojiStatusPicker } from './emoji-status-picker'
@@ -1310,15 +1310,14 @@ export function SettingsDialog({ open, onOpenChange, onOpenPremium, onOpenCoins,
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter className="flex-col gap-2 px-5 pb-5 pt-4 sm:flex-col">
-          <AlertDialogAction
+          <Button
+            type="button"
             disabled={removingPhoto}
             className="w-full bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            onClick={async (e) => {
-              e.preventDefault()
+            onClick={async () => {
               setRemovingPhoto(true)
               try {
-                const res = await fetch('/api/auth/avatar', { method: 'DELETE' })
-                if (!res.ok) throw new Error()
+                await removeProfileAvatar()
                 setAvatarUrl(null)
                 if (currentUser) setCurrentUser({ ...currentUser, avatarUrl: null })
                 setConfirmRemovePhoto(false)
@@ -1336,8 +1335,10 @@ export function SettingsDialog({ open, onOpenChange, onOpenPremium, onOpenCoins,
               <Trash2 className="mr-2 h-4 w-4" />
             )}
             {t('profile.removePhotoAction')}
-          </AlertDialogAction>
-          <AlertDialogCancel className="mt-0 w-full">{t('misc.cancel')}</AlertDialogCancel>
+          </Button>
+          <AlertDialogCancel className="mt-0 w-full" disabled={removingPhoto}>
+            {t('misc.cancel')}
+          </AlertDialogCancel>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>

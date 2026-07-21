@@ -42,6 +42,7 @@ import { formatLastSeen } from '@/lib/format'
 import { isUserOnline } from '@/lib/friends-client'
 import { cn } from '@/lib/utils'
 import { resolveMediaUrl } from '@/lib/media-url'
+import { removeProfileAvatar } from '@/lib/remove-avatar'
 import { toast } from 'sonner'
 import {
   AlertDialog,
@@ -50,7 +51,6 @@ import {
   AlertDialogTitle,
   AlertDialogDescription,
   AlertDialogFooter,
-  AlertDialogAction,
   AlertDialogCancel,
 } from '@/components/ui/alert-dialog'
 import { ProfileTabContent, PROFILE_EMPTY_KEYS, type ProfileTab } from './profile-tab-content'
@@ -769,7 +769,9 @@ export function UserProfileDialog({
               onClick={(e) => {
                 e.preventDefault()
                 e.stopPropagation()
-                setConfirmRemovePhoto(true)
+                setPhotoOpen(false)
+                // Let lightbox unmount before showing confirm above everything.
+                window.setTimeout(() => setConfirmRemovePhoto(true), 50)
               }}
             >
               <Trash2 className="h-4 w-4" />
@@ -785,7 +787,7 @@ export function UserProfileDialog({
           setConfirmRemovePhoto(open)
         }}
       >
-        <AlertDialogContent className="z-[10050] max-w-sm gap-0 overflow-hidden p-0 sm:max-w-md">
+        <AlertDialogContent className="max-w-sm gap-0 overflow-hidden p-0 sm:max-w-md">
           <div className="relative aspect-square w-full bg-muted">
             {profile?.avatarUrl && (
               <img
@@ -806,15 +808,14 @@ export function UserProfileDialog({
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter className="flex-col gap-2 px-5 pb-5 pt-4 sm:flex-col">
-            <AlertDialogAction
+            <Button
+              type="button"
               disabled={removingPhoto}
               className="w-full bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              onClick={async (e) => {
-                e.preventDefault()
+              onClick={async () => {
                 setRemovingPhoto(true)
                 try {
-                  const res = await fetch('/api/auth/avatar', { method: 'DELETE' })
-                  if (!res.ok) throw new Error()
+                  await removeProfileAvatar()
                   setProfile((p) => (p ? { ...p, avatarUrl: null } : p))
                   if (currentUser) setCurrentUser({ ...currentUser, avatarUrl: null })
                   setConfirmRemovePhoto(false)
@@ -833,8 +834,10 @@ export function UserProfileDialog({
                 <Trash2 className="mr-2 h-4 w-4" />
               )}
               {t('profile.removePhotoAction')}
-            </AlertDialogAction>
-            <AlertDialogCancel className="mt-0 w-full">{t('misc.cancel')}</AlertDialogCancel>
+            </Button>
+            <AlertDialogCancel className="mt-0 w-full" disabled={removingPhoto}>
+              {t('misc.cancel')}
+            </AlertDialogCancel>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

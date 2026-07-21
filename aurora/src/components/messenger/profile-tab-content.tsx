@@ -26,6 +26,7 @@ import { formatMessageTime } from '@/lib/format'
 import { formatBytes } from '@/lib/format-storage'
 import { GALLERY_INPUT_ACCEPT, isVideoFile } from '@/lib/media-type'
 import { uploadFileWithRetry } from '@/lib/upload-client'
+import { removeProfileAvatar } from '@/lib/remove-avatar'
 import { toast } from 'sonner'
 import { useAppStore } from '@/lib/store'
 import { buildLinkSharePayload, buildMediaSharePayload } from '@/lib/share-payload'
@@ -42,7 +43,6 @@ import {
   AlertDialogTitle,
   AlertDialogDescription,
   AlertDialogFooter,
-  AlertDialogAction,
   AlertDialogCancel,
 } from '@/components/ui/alert-dialog'
 import {
@@ -193,8 +193,7 @@ export function ProfileTabContent({
     if (item.source === 'avatar') {
       setGalleryActionLoading(true)
       try {
-        const res = await fetch('/api/auth/avatar', { method: 'DELETE' })
-        if (!res.ok) throw new Error(t('misc.error'))
+        await removeProfileAvatar()
         setItems((prev) => prev.filter((it) => it.id !== item.id))
         const me = useAppStore.getState().currentUser
         if (me) useAppStore.getState().setCurrentUser({ ...me, avatarUrl: null })
@@ -556,19 +555,24 @@ export function ProfileTabContent({
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter className="flex-col gap-2 px-5 pb-5 pt-4 sm:flex-col">
-              <AlertDialogAction
-                onClick={(e) => {
-                  e.preventDefault()
-                  void handleDeleteGalleryItem()
-                }}
+              <Button
+                type="button"
+                onClick={() => void handleDeleteGalleryItem()}
                 disabled={galleryActionLoading}
                 className="w-full bg-destructive text-destructive-foreground hover:bg-destructive/90"
               >
+                {galleryActionLoading ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Trash2 className="mr-2 h-4 w-4" />
+                )}
                 {deleteTarget?.source === 'avatar'
                   ? t('profile.removePhotoAction')
                   : t('profile.galleryDelete')}
-              </AlertDialogAction>
-              <AlertDialogCancel className="mt-0 w-full">{t('misc.cancel')}</AlertDialogCancel>
+              </Button>
+              <AlertDialogCancel className="mt-0 w-full" disabled={galleryActionLoading}>
+                {t('misc.cancel')}
+              </AlertDialogCancel>
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
