@@ -23,6 +23,7 @@ import {
   setAutomation,
   startOperation,
   startRequest,
+  trainSpecialist,
   upgradeBuilding,
   upgradeVehicle,
 } from './economy.js';
@@ -275,6 +276,15 @@ app.post('/v1/vehicles/:id/upgrade', async (req, reply) => {
   try {
     const { id } = req.params as { id: string };
     return upgradeVehicle(userId(req as any), id);
+  } catch (err) {
+    sendError(reply, err);
+  }
+});
+
+app.post('/v1/specialists/:id/train', async (req, reply) => {
+  try {
+    const { id } = req.params as { id: string };
+    return trainSpecialist(userId(req as any), id);
   } catch (err) {
     sendError(reply, err);
   }

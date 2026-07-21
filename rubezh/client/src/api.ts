@@ -51,8 +51,16 @@ export async function bootstrap(): Promise<GameState> {
       const state = await request<GameState>('/v1/base');
       await AsyncStorage.setItem('rubezh_cache', JSON.stringify(state));
       return state;
-    } catch {
-      // fall through to guest
+    } catch (err) {
+      const cached = await AsyncStorage.getItem('rubezh_cache');
+      if (cached) {
+        try {
+          return JSON.parse(cached) as GameState;
+        } catch {
+          /* ignore bad cache */
+        }
+      }
+      throw err instanceof Error ? err : new Error('Не удалось восстановить сохранение');
     }
   }
 
@@ -102,6 +110,7 @@ export const api = {
   advanceStory: () => request<GameState>('/v1/story/advance', { method: 'POST', body: '{}' }),
   repairVehicle: (id: string) => request<GameState>(`/v1/vehicles/${id}/repair`, { method: 'POST', body: '{}' }),
   upgradeVehicle: (id: string) => request<GameState>(`/v1/vehicles/${id}/upgrade`, { method: 'POST', body: '{}' }),
+  trainSpecialist: (id: string) => request<GameState>(`/v1/specialists/${id}/train`, { method: 'POST', body: '{}' }),
   profile: () => request<import('./types').PlayerProfile>('/v1/profile'),
   player: (id: string) => request<import('./types').PlayerProfile>(`/v1/players/${id}`),
   updateProfile: (opts: { callsign: string }) =>

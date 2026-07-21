@@ -283,4 +283,5 @@ export function migrate(): void {
   ensureColumn('player_stats', 'repairs_total', 'repairs_total INTEGER NOT NULL DEFAULT 0');
   ensureColumn('story_progress', 'objective_done', 'objective_done INTEGER NOT NULL DEFAULT 0');
   ensureColumn('story_progress', 'claimed_reward_chapter', 'claimed_reward_chapter INTEGER NOT NULL DEFAULT 0');
+  ensureColumn('race_scores', 'reward_claimed', 'reward_claimed INTEGER NOT NULL DEFAULT 0');
 }

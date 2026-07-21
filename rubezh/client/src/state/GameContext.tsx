@@ -120,6 +120,9 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       setLastSyncedAt(Date.now());
       if (next.lastQuality) setToast(next.lastQuality);
       if ((next as any).helpResult) setToast((next as any).helpResult);
+      if ((next as any).raceReward?.claimed) {
+        setToast(`Награда гонки: ${(next as any).raceReward.place}-е место`);
+      }
       if (next.offlineGained) setToast('Офлайн-доход получен');
       return next;
     } catch (err: any) {

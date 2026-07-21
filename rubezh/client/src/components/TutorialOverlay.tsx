@@ -6,14 +6,14 @@ import { api } from '../api';
 import { useGame } from '../state/GameContext';
 
 const STEPS = [
-  'Поступила заявка — нажмите на неё.',
-  'Примите заявку кнопкой «Принять».',
+  'Поступила заявка — нажмите на неё на базе.',
+  'Примите заявку: выберите транспорт и отправьте колонну.',
   'Осмотрите склад на базе.',
-  'Соберите груз / дождитесь комплектации.',
-  'Выберите транспорт и отправьте колонну.',
-  'Дождитесь доставки.',
-  'Получите награду за заявку.',
-  'Разверните или улучшите склад.',
+  'Соберите накопленные ресурсы со склада.',
+  'Выберите подходящую технику и отправьте колонну.',
+  'Дождитесь доставки (таймер заявки).',
+  'Получите награду за выполненную заявку.',
+  'Разверните или улучшите склад — обучение завершится.',
 ];
 
 export function TutorialOverlay() {
@@ -21,6 +21,7 @@ export function TutorialOverlay() {
   const insets = useSafeAreaInsets();
   if (!state || state.user.tutorialDone) return null;
   const step = Math.min(state.user.tutorialStep, STEPS.length - 1);
+  const canFinish = state.user.tutorialStep >= 7;
 
   return (
     <View
@@ -31,12 +32,19 @@ export function TutorialOverlay() {
         <Text style={styles.eyebrow}>Глава 1 · Первый приказ</Text>
         <Text style={styles.title}>Шаг {step + 1}/8</Text>
         <Text style={styles.text}>{STEPS[step]}</Text>
-        <Pressable
-          style={styles.btn}
-          onPress={() => act(() => api.advanceTutorial(Math.min(8, step + 1)))}
-        >
-          <Text style={styles.btnText}>{step >= 7 ? 'Завершить обучение' : 'Далее'}</Text>
-        </Pressable>
+        <Text style={styles.hint}>Подсказка двигается по мере ваших действий в игре.</Text>
+        {canFinish ? (
+          <Pressable style={styles.btn} onPress={() => act(() => api.advanceTutorial(8))}>
+            <Text style={styles.btnText}>Завершить обучение</Text>
+          </Pressable>
+        ) : (
+          <Pressable
+            style={[styles.btn, styles.btnGhost]}
+            onPress={() => act(() => api.advanceTutorial(Math.min(7, step + 1)))}
+          >
+            <Text style={styles.btnText}>Понятно</Text>
+          </Pressable>
+        )}
       </View>
     </View>
   );
@@ -54,6 +62,7 @@ const styles = StyleSheet.create({
   eyebrow: { color: colors.gold, fontSize: 12, fontWeight: '700' },
   title: { color: colors.text, fontSize: 16, fontWeight: '800', marginTop: 4 },
   text: { color: colors.sand, marginTop: 6, lineHeight: 20 },
+  hint: { color: colors.textDim, marginTop: 6, fontSize: 12 },
   btn: {
     marginTop: 12,
     backgroundColor: colors.olive,
@@ -61,5 +70,6 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     alignItems: 'center',
   },
+  btnGhost: { backgroundColor: colors.graphite },
   btnText: { color: colors.text, fontWeight: '800' },
 });

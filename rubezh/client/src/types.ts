@@ -84,6 +84,7 @@ export interface Building {
   unlocked: boolean;
   unlockLevel?: number;
   assigned_specialist_id: string | null;
+  note?: string | null;
 }
 
 export interface Specialist {
@@ -126,6 +127,7 @@ export interface GameRequest {
   vehicle_id: string | null;
   ends_at: string | null;
   quality: string | null;
+  preferredCategory?: string | null;
 }
 
 export interface Quest {
@@ -181,6 +183,8 @@ export interface ShopItem {
   title: string;
   description: string;
   costBadges: number;
+  owned?: boolean;
+  repeatable?: boolean;
 }
 
 export interface SocialState {

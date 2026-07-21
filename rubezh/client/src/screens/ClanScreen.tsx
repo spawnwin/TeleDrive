@@ -14,6 +14,7 @@ import { useScreenInsets } from '../hooks/useScreenInsets';
 import { useGame } from '../state/GameContext';
 import { colors } from '../theme';
 import type { SocialState } from '../types';
+import { buildingTypeLabel } from '../labels';
 import type { RootStackParamList } from './ProfileScreen';
 
 function roleLabel(role: string) {
@@ -133,6 +134,9 @@ export function ClanScreen() {
                   Ур.{data.clan.level} · {data.clan.memberCount}/{data.clan.maxMembers} · ваша роль:{' '}
                   {roleLabel(data.clan.myRole || 'member')}
                 </Text>
+                <Text style={styles.meta}>
+                  XP союза {data.clan.xp}/{data.clan.xpToNext}
+                </Text>
                 <View style={styles.barBg}>
                   <View
                     style={[
@@ -166,7 +170,7 @@ export function ClanScreen() {
                   </Pressable>
                   <Text style={styles.meta}>
                     {t.upgradingBuilding
-                      ? `Строит: ${t.upgradingBuilding.type}`
+                      ? `Строит: ${buildingTypeLabel(t.upgradingBuilding.type)}`
                       : 'Нет активного строительства'}
                   </Text>
                   <Pressable
@@ -229,7 +233,9 @@ export function ClanScreen() {
       {tab === 'race' && data && (
         <View>
           <Text style={styles.section}>{data.race.title}</Text>
-          <Text style={styles.sub}>{data.race.description}</Text>
+          <Text style={styles.sub}>
+            {data.race.description} Топ-10 получают награду на следующий день автоматически.
+          </Text>
           <Text style={styles.badges}>Ваш счёт сегодня: {data.race.myScore} заявок</Text>
           {data.race.top.map((row, idx) => (
             <Pressable key={row.user_id} style={styles.rowCard} onPress={() => openProfile(row.user_id)}>

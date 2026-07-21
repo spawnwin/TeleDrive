@@ -18,7 +18,7 @@ export function SpecialistsScreen() {
       contentContainerStyle={{ paddingTop: top + 8, paddingHorizontal: 14, paddingBottom: bottom }}
     >
       <Text style={styles.title}>Специалисты</Text>
-      <Text style={styles.sub}>Назначьте офицеров на объекты базы для ускорения работ.</Text>
+      <Text style={styles.sub}>Назначьте офицеров на объекты базы. Обучение в учебном центре повышает уровень (еда/энергия/знаки).</Text>
 
       {state.specialists.map((s) => (
         <View key={s.id} style={styles.card}>
@@ -41,6 +41,13 @@ export function SpecialistsScreen() {
             ))}
             <Pressable style={styles.assignBtn} onPress={() => act(() => api.assign(s.id, null))}>
               <Text style={styles.assignText}>Снять</Text>
+            </Pressable>
+            <Pressable
+              style={[styles.assignBtn, s.level >= 5 && styles.btnDisabled]}
+              disabled={s.level >= 5}
+              onPress={() => act(() => api.trainSpecialist(s.id))}
+            >
+              <Text style={styles.assignText}>{s.level >= 5 ? 'Макс' : 'Обучить'}</Text>
             </Pressable>
           </View>
         </View>

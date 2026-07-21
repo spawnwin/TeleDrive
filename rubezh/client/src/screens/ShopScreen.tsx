@@ -55,18 +55,21 @@ export function ShopScreen() {
 
       <Text style={styles.section}>Каталог</Text>
       {state.shop.map((item) => {
-        const canBuy = state.resources.badges >= item.costBadges;
+        const owned = !!item.owned && !item.repeatable;
+        const canBuy = !owned && state.resources.badges >= item.costBadges;
         return (
           <View key={item.id} style={styles.card}>
             <Text style={styles.name}>{item.title}</Text>
             <Text style={styles.meta}>{item.description}</Text>
             <Text style={styles.price}>{item.costBadges} знаков</Text>
             <Pressable
-              style={[styles.btn, !canBuy && styles.btnDisabled]}
-              disabled={!canBuy}
+              style={[styles.btn, (!canBuy || owned) && styles.btnDisabled]}
+              disabled={!canBuy || owned}
               onPress={() => act(() => api.buyShop(item.id))}
             >
-              <Text style={styles.btnText}>{canBuy ? 'Купить' : 'Не хватает знаков'}</Text>
+              <Text style={styles.btnText}>
+                {owned ? 'Уже получено' : canBuy ? 'Купить' : 'Не хватает знаков'}
+              </Text>
             </Pressable>
           </View>
         );

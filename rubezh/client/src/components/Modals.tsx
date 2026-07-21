@@ -1,8 +1,20 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { buildingStateLabel } from '../labels';
 import { colors } from '../theme';
 import { RESOURCE_LABELS, type Building, type GameRequest, type Vehicle } from '../types';
+
+function useCountdown(endsAt: string | null | undefined) {
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    if (!endsAt) return;
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [endsAt]);
+  if (!endsAt) return 0;
+  return Math.max(0, Math.ceil((new Date(endsAt).getTime() - now) / 1000));
+}
 
 type Props = {
   visible: boolean;
@@ -15,9 +27,14 @@ type Props = {
 
 export function RequestModal({ visible, request, vehicles, onClose, onStart, onClaim }: Props) {
   const insets = useSafeAreaInsets();
+  const remaining = useCountdown(request?.ends_at);
   if (!request) return null;
-  const idle = vehicles.filter((v) => v.status === 'idle');
-  const remaining = request.ends_at ? Math.max(0, Math.ceil((new Date(request.ends_at).getTime() - Date.now()) / 1000)) : 0;
+
+  const preferred = request.preferredCategory;
+  const idle = vehicles.filter((v) => v.status === 'idle' && v.condition >= 35);
+  const preferredIdle = preferred ? idle.filter((v) => v.category === preferred) : [];
+  const otherIdle = preferred ? idle.filter((v) => v.category !== preferred) : idle;
+  const canAuto = idle.length > 0;
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
@@ -28,28 +45,41 @@ export function RequestModal({ visible, request, vehicles, onClose, onStart, onC
           <Text style={styles.meta}>
             Сложность {request.difficulty} · {request.duration_sec}с · +{request.xp} XP
           </Text>
+          {preferred ? <Text style={styles.hint}>Предпочтительная техника: {preferred}</Text> : null}
 
           <Text style={styles.section}>Стоимость</Text>
           <Text style={styles.line}>{formatBag(request.cost)}</Text>
           <Text style={styles.section}>Награда</Text>
           <Text style={styles.line}>{formatBag(request.reward)}</Text>
 
-          {request.status === 'in_progress' && (
-            <Text style={styles.timer}>В пути: {remaining}с</Text>
-          )}
+          {request.status === 'in_progress' && <Text style={styles.timer}>В пути: {remaining}с</Text>}
           {request.status === 'ready' && <Text style={styles.ready}>Груз доставлен. Можно принять отчёт.</Text>}
 
           {request.status === 'available' && (
-            <ScrollView horizontal style={{ marginVertical: 8 }}>
-              {idle.map((v) => (
-                <Pressable key={v.id} style={styles.vehicle} onPress={() => onStart(v.id)}>
-                  <Text style={styles.vehicleName}>{v.name}</Text>
-                  <Text style={styles.vehicleMeta}>
-                    сп.{v.speed} · сост.{v.condition}%
-                  </Text>
-                </Pressable>
-              ))}
-            </ScrollView>
+            <>
+              {!idle.length ? (
+                <Text style={styles.warn}>Нет свободной техники в исправном состоянии (≥35%). Отремонтируйте автопарк.</Text>
+              ) : (
+                <ScrollView horizontal style={{ marginVertical: 8 }}>
+                  {[...preferredIdle, ...otherIdle].map((v) => {
+                    const match = preferred ? v.category === preferred : true;
+                    return (
+                      <Pressable
+                        key={v.id}
+                        style={[styles.vehicle, match && styles.vehicleMatch]}
+                        onPress={() => onStart(v.id)}
+                      >
+                        <Text style={styles.vehicleName}>{v.name}</Text>
+                        <Text style={styles.vehicleMeta}>
+                          {v.category} · сп.{v.speed} · сост.{v.condition}%
+                          {match && preferred ? ' · подходит' : ''}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </ScrollView>
+              )}
+            </>
           )}
 
           <View style={styles.actions}>
@@ -57,8 +87,12 @@ export function RequestModal({ visible, request, vehicles, onClose, onStart, onC
               <Text style={styles.btnText}>Закрыть</Text>
             </Pressable>
             {request.status === 'available' && (
-              <Pressable style={styles.primary} onPress={() => onStart()}>
-                <Text style={styles.btnText}>Принять</Text>
+              <Pressable
+                style={[styles.primary, !canAuto && styles.disabled]}
+                disabled={!canAuto}
+                onPress={() => onStart(preferredIdle[0]?.id || idle[0]?.id)}
+              >
+                <Text style={styles.btnText}>{canAuto ? 'Принять' : 'Нет техники'}</Text>
               </Pressable>
             )}
             {request.status === 'ready' && (
@@ -87,10 +121,8 @@ export function BuildingModal({
   onCollect: () => void;
 }) {
   const insets = useSafeAreaInsets();
+  const ends = useCountdown(building?.upgrade_ends_at);
   if (!building) return null;
-  const ends = building.upgrade_ends_at
-    ? Math.max(0, Math.ceil((new Date(building.upgrade_ends_at).getTime() - Date.now()) / 1000))
-    : 0;
 
   return (
     <Modal visible={visible} animationType="fade" transparent onRequestClose={onClose}>
@@ -98,8 +130,9 @@ export function BuildingModal({
         <View style={[styles.card, { paddingBottom: Math.max(insets.bottom, 12) + 18 }]}>
           <Text style={styles.title}>{building.name}</Text>
           <Text style={styles.meta}>
-            Уровень {building.level} · {building.state}
+            Уровень {building.level} · {buildingStateLabel(building.state)}
           </Text>
+          {building.note ? <Text style={styles.hint}>{building.note}</Text> : null}
           {building.produces && (
             <Text style={styles.line}>
               Производит: {RESOURCE_LABELS[building.produces as keyof typeof RESOURCE_LABELS] || building.produces} (
@@ -154,6 +187,8 @@ const styles = StyleSheet.create({
   title: { color: colors.text, fontSize: 20, fontWeight: '800' },
   desc: { color: colors.sand, marginTop: 8, lineHeight: 20 },
   meta: { color: colors.textDim, marginTop: 8 },
+  hint: { color: colors.gold, marginTop: 6, fontSize: 12, fontWeight: '700' },
+  warn: { color: colors.warn, marginTop: 10, lineHeight: 18 },
   section: { color: colors.accent, marginTop: 12, fontWeight: '700' },
   line: { color: colors.text, marginTop: 4 },
   timer: { color: colors.gold, marginTop: 10, fontWeight: '700' },
@@ -167,6 +202,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
   },
+  vehicleMatch: { borderColor: colors.gold },
   vehicleName: { color: colors.text, fontWeight: '700' },
   vehicleMeta: { color: colors.textDim, fontSize: 12, marginTop: 4 },
   actions: { flexDirection: 'row', gap: 10, marginTop: 16 },
@@ -186,5 +222,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     minHeight: 48,
   },
+  disabled: { opacity: 0.45 },
   btnText: { color: colors.text, fontWeight: '700' },
 });

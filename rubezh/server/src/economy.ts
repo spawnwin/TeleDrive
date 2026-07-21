@@ -309,13 +309,90 @@ function canAfford(userId: string, cost: Partial<Record<ResourceType, number>>):
   return Object.entries(cost).every(([k, v]) => (resources[k as ResourceType] ?? 0) >= (v ?? 0));
 }
 
-function pickIdleVehicle(userId: string, vehicleId?: string) {
+function pickIdleVehicle(userId: string, vehicleId?: string, preferredCategory?: string | null) {
   if (vehicleId) {
     return db.prepare('SELECT * FROM vehicles WHERE id = ? AND user_id = ?').get(vehicleId, userId) as any;
+  }
+  if (preferredCategory) {
+    const preferred = db
+      .prepare(
+        `SELECT * FROM vehicles WHERE user_id = ? AND status = 'idle' AND condition >= 35 AND category = ?
+         ORDER BY speed DESC`,
+      )
+      .get(userId, preferredCategory) as any;
+    if (preferred) return preferred;
   }
   return db
     .prepare(`SELECT * FROM vehicles WHERE user_id = ? AND status = 'idle' AND condition >= 35 ORDER BY speed DESC`)
     .get(userId) as any;
+}
+
+function preferredCategoryForRequest(type: string): string | null {
+  const def = REQUEST_DEFS.find((r) => r.type === type);
+  return def?.preferredCategory || null;
+}
+
+function maybeLevelClan(clanId: string): void {
+  const clan = db.prepare('SELECT * FROM clans WHERE id = ?').get(clanId) as any;
+  if (!clan) return;
+  let level = clan.level;
+  let xp = clan.xp;
+  let leveled = false;
+  while (xp >= level * 100 && level < 20) {
+    xp -= level * 100;
+    level += 1;
+    leveled = true;
+  }
+  if (leveled) {
+    db.prepare(`UPDATE clans SET level = ?, xp = ?, weekly_goal = ? WHERE id = ?`).run(
+      level,
+      xp,
+      150 + level * 50,
+      clanId,
+    );
+  }
+}
+
+function automationBonus(userId: string): number {
+  const auto = db.prepare('SELECT * FROM automation WHERE user_id = ?').get(userId) as any;
+  if (auto?.auto_collect) return 1;
+  return 0.85;
+}
+
+function trainingBonus(userId: string): number {
+  const training = db.prepare(`SELECT level FROM buildings WHERE user_id = ? AND type = 'training'`).get(userId) as any;
+  if (!training || training.level <= 0) return 1;
+  return 1 - Math.min(0.2, training.level * 0.03);
+}
+
+function settleRaceRewards(userId: string): { claimed?: boolean; place?: number; reward?: Record<string, number> } | null {
+  const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+  const mine = db
+    .prepare(`SELECT * FROM race_scores WHERE user_id = ? AND day_key = ?`)
+    .get(userId, yesterday) as any;
+  if (!mine || mine.reward_claimed || mine.requests <= 0) return null;
+
+  const better = db
+    .prepare(
+      `SELECT COUNT(*) as c FROM race_scores WHERE day_key = ? AND (requests > ? OR (requests = ? AND user_id < ?))`,
+    )
+    .get(yesterday, mine.requests, mine.requests, userId) as { c: number };
+  const place = better.c + 1;
+  if (place > 10) {
+    db.prepare(`UPDATE race_scores SET reward_claimed = 1 WHERE user_id = ? AND day_key = ?`).run(userId, yesterday);
+    return null;
+  }
+
+  const reward: Partial<Record<ResourceType, number>> = {
+    badges: Math.max(5, 55 - place * 5),
+    materials: Math.max(20, 120 - place * 10),
+    fuel: Math.max(10, 60 - place * 5),
+  };
+  for (const [k, v] of Object.entries(reward)) {
+    addResource(userId, k as ResourceType, v ?? 0, 'race_reward', yesterday);
+  }
+  db.prepare(`UPDATE race_scores SET reward_claimed = 1 WHERE user_id = ? AND day_key = ?`).run(userId, yesterday);
+  return { claimed: true, place, reward: reward as Record<string, number> };
 }
 
 function grantSpecialist(userId: string, templateId: string): void {
@@ -437,7 +514,8 @@ function runAutomation(userId: string): void {
         )
         .all(userId) as any[];
       for (const req of available) {
-        const vehicle = pickIdleVehicle(userId);
+        const preferred = preferredCategoryForRequest(req.type);
+        const vehicle = pickIdleVehicle(userId, undefined, preferred);
         if (!vehicle) break;
         const baseCost = parseJson<Partial<Record<ResourceType, number>>>(req.cost_json);
         const cost = { ...baseCost, fuel: (baseCost.fuel ?? 0) + Math.max(1, vehicle.fuel_use ?? 1) };
@@ -630,6 +708,7 @@ export function getBaseState(userId: string) {
   spawnRequests(userId);
   ensureDailyQuests(userId);
   syncAchievements(userId);
+  const raceReward = settleRaceRewards(userId);
 
   // Ensure newly added building types exist for older saves
   for (const b of BUILDINGS) {
@@ -654,6 +733,7 @@ export function getBaseState(userId: string) {
       ...r,
       cost: parseJson(r.cost_json),
       reward: parseJson(r.reward_json),
+      preferredCategory: preferredCategoryForRequest(r.type),
     }));
   const quests = db
     .prepare('SELECT * FROM quests WHERE user_id = ?')
@@ -704,14 +784,30 @@ export function getBaseState(userId: string) {
   });
 
   const automation = db.prepare('SELECT * FROM automation WHERE user_id = ?').get(userId) as any;
-  const shop = SHOP_ITEMS.map((item) => ({
-    id: item.id,
-    title: item.title,
-    description: item.description,
-    costBadges: item.costBadges,
-  }));
+  const ownedSpecs = new Set(
+    (db.prepare(`SELECT template_id FROM specialists WHERE user_id = ?`).all(userId) as any[]).map((s) => s.template_id),
+  );
+  const ownedVehicles = new Set(
+    (db.prepare(`SELECT template_id FROM vehicles WHERE user_id = ?`).all(userId) as any[]).map((v) => v.template_id),
+  );
+  const shop = SHOP_ITEMS.map((item) => {
+    const owned =
+      (!!item.unlockSpecialist && ownedSpecs.has(item.unlockSpecialist)) ||
+      (!!(item as any).unlockVehicle && ownedVehicles.has((item as any).unlockVehicle));
+    return {
+      id: item.id,
+      title: item.title,
+      description: item.description,
+      costBadges: item.costBadges,
+      owned: !!owned,
+      repeatable: !item.unlockSpecialist && !(item as any).unlockVehicle,
+    };
+  });
 
-  return {
+  const raceDay = dayKey();
+  const raceToday = db.prepare(`SELECT requests FROM race_scores WHERE user_id = ? AND day_key = ?`).get(userId, raceDay) as any;
+
+  const result: any = {
     user: {
       id: user.id,
       nickname: user.nickname,
@@ -739,6 +835,10 @@ export function getBaseState(userId: string) {
         nextUpgradeDurationSec: upgradeDurationSec(Math.max(b.level, 1)),
         unlocked: b.level > 0,
         unlockLevel: def.unlockLevel,
+        note:
+          b.type === 'training' && b.level > 0
+            ? `Ускоряет заявки · обучение специалистов (ур.${b.level})`
+            : null,
       };
     }),
     specialists,
@@ -757,6 +857,10 @@ export function getBaseState(userId: string) {
       lastAction: user.last_auto_action || null,
     },
     story: storyFor(userId),
+    race: {
+      dayKey: raceDay,
+      myScore: raceToday?.requests || 0,
+    },
     offline: {
       hoursAvailable: Number(offlineHours.toFixed(2)),
       capHours: OFFLINE_CAP_HOURS,
@@ -764,6 +868,13 @@ export function getBaseState(userId: string) {
     },
     region: getRegionView(userId),
   };
+
+  if (raceReward?.claimed) {
+    result.raceReward = raceReward;
+    result.lastQuality = `Гонка: ${raceReward.place}-е место — награда получена`;
+  }
+
+  return result;
 }
 
 export function upgradeBuilding(userId: string, buildingId: string) {
@@ -792,6 +903,11 @@ export function upgradeBuilding(userId: string, buildingId: string) {
   db.prepare(`UPDATE buildings SET state = 'upgrading', upgrade_ends_at = ? WHERE id = ?`).run(ends, buildingId);
   bumpQuest(userId, 'upgrades');
   bumpVersion(userId);
+
+  const user = getUser(userId);
+  if (user.tutorial_done === 0 && b.type === 'warehouse') {
+    db.prepare('UPDATE users SET tutorial_step = MAX(tutorial_step, 8) WHERE id = ?').run(userId);
+  }
 
   // Unlock specialists / vehicles with buildings
   if (b.level <= 0 && b.type === 'repair') {
@@ -845,6 +961,10 @@ export function collectBuilding(userId: string, buildingId: string) {
   db.prepare('UPDATE buildings SET stored = 0 WHERE id = ?').run(buildingId);
   bumpQuest(userId, 'collects');
   db.prepare(`UPDATE player_stats SET collects_total = collects_total + 1 WHERE user_id = ?`).run(userId);
+  const user = getUser(userId);
+  if (user.tutorial_done === 0) {
+    db.prepare('UPDATE users SET tutorial_step = MAX(tutorial_step, 4) WHERE id = ?').run(userId);
+  }
   bumpVersion(userId);
   return getBaseState(userId);
 }
@@ -876,12 +996,16 @@ export function startRequest(userId: string, requestId: string, vehicleId?: stri
     }
   }
 
-  const vehicle = pickIdleVehicle(userId, vehicleId);
+  const preferred = preferredCategoryForRequest(req.type);
+  const vehicle = pickIdleVehicle(userId, vehicleId, preferred);
   if (!vehicle || vehicle.status !== 'idle') {
     throw Object.assign(new Error('Нет свободного транспорта'), { statusCode: 400 });
   }
   if (vehicle.condition < 35) {
     throw Object.assign(new Error('Техника требует ремонта'), { statusCode: 400 });
+  }
+  if (preferred && vehicleId && vehicle.category !== preferred) {
+    // Allow any selected vehicle, but mismatched category is slower (handled below)
   }
 
   const baseCost = parseJson<Partial<Record<ResourceType, number>>>(req.cost_json);
@@ -895,14 +1019,20 @@ export function startRequest(userId: string, requestId: string, vehicleId?: stri
     .prepare(
       `SELECT s.* FROM specialists s
        JOIN buildings b ON b.assigned_specialist_id = s.id
-       WHERE b.user_id = ? AND b.type IN ('motorpool','warehouse','repair','medical','comms','engineering')
+       WHERE b.user_id = ? AND b.type IN ('motorpool','warehouse','repair','medical','comms','engineering','training')
        LIMIT 1`,
     )
     .get(userId) as any;
   const conditionFactor = vehicle.condition < 60 ? 1.25 : vehicle.condition < 80 ? 1.1 : 1;
   const vehicleSpeedFactor = Math.max(0.7, 6 / Math.max(3, vehicle.speed));
+  const categoryFactor = preferred && vehicle.category === preferred ? 0.9 : preferred ? 1.12 : 1;
   const speedBonus =
-    (assigned ? 1 - Math.min(0.35, assigned.speed * 0.02) : 1) * speedMultiplier(userId) * conditionFactor * vehicleSpeedFactor;
+    (assigned ? 1 - Math.min(0.35, assigned.speed * 0.02) : 1) *
+    speedMultiplier(userId) *
+    conditionFactor *
+    vehicleSpeedFactor *
+    categoryFactor *
+    trainingBonus(userId);
   const duration = Math.max(5, Math.round(req.duration_sec * speedBonus));
   const ends = new Date(Date.now() + duration * 1000).toISOString();
 
@@ -958,6 +1088,22 @@ export function claimRequest(userId: string, requestId: string) {
   if (membership) {
     db.prepare(`UPDATE clan_members SET contribution = contribution + 1 WHERE user_id = ?`).run(userId);
     db.prepare(`UPDATE clans SET weekly_progress = weekly_progress + 1, xp = xp + 2 WHERE id = ?`).run(membership.clan_id);
+    maybeLevelClan(membership.clan_id);
+  }
+
+  // Soft specialist XP from completed requests (assigned officers)
+  const assignedSpecs = db
+    .prepare(
+      `SELECT s.id, s.level FROM specialists s
+       WHERE s.user_id = ? AND s.assigned_building_id IS NOT NULL AND s.level < 5`,
+    )
+    .all(userId) as any[];
+  for (const s of assignedSpecs) {
+    if (Math.random() < 0.35) {
+      db.prepare(
+        `UPDATE specialists SET level = level + 1, management = management + 1, speed = speed + 1, reliability = reliability + 1 WHERE id = ?`,
+      ).run(s.id);
+    }
   }
 
   const user = getUser(userId);
@@ -1007,20 +1153,17 @@ export function claimOffline(userId: string) {
     throw Object.assign(new Error('Офлайн-доход пока недоступен'), { statusCode: 400 });
   }
 
+  // Yield already accrued into buildings.stored via tickProduction — only collect it once.
   const buildings = db.prepare('SELECT * FROM buildings WHERE user_id = ?').all(userId) as any[];
   const warehouse = buildings.find((b) => b.type === 'warehouse');
   const command = buildings.find((b) => b.type === 'command');
+  const bonus = automationBonus(userId);
   const gained: Partial<Record<ResourceType, number>> = {};
 
   for (const b of buildings) {
     const def = buildingDef(b.type);
-    if (!def.produces || b.level <= 0) continue;
-    let bonus = 1;
-    if (b.assigned_specialist_id) {
-      const spec = db.prepare('SELECT * FROM specialists WHERE id = ?').get(b.assigned_specialist_id) as any;
-      if (spec) bonus += spec.speed * 0.01;
-    }
-    const amount = def.ratePerHour * b.level * hours * bonus * 0.85;
+    if (!def.produces || b.stored <= 0) continue;
+    const amount = b.stored * bonus;
     const cap = capacityFor(def.produces, warehouse?.level ?? 1, command?.level ?? 1);
     const before = getResourcesMap(userId)[def.produces];
     const room = Math.max(0, cap - before);
@@ -1029,6 +1172,7 @@ export function claimOffline(userId: string) {
       addResource(userId, def.produces, add, 'offline', undefined, cap);
       gained[def.produces] = (gained[def.produces] ?? 0) + add;
     }
+    db.prepare('UPDATE buildings SET stored = 0 WHERE id = ?').run(b.id);
   }
 
   db.prepare('UPDATE users SET last_offline_claim_at = ? WHERE id = ?').run(nowIso(), userId);
@@ -1055,7 +1199,11 @@ export function claimQuest(userId: string, questId: string) {
 
 export function advanceTutorial(userId: string, step: number) {
   const user = getUser(userId);
-  const next = Math.max(user.tutorial_step, step);
+  if (user.tutorial_done) return getBaseState(userId);
+
+  // Soft gate: cannot skip more than one step ahead of server-tracked progress
+  const allowed = Math.min(step, user.tutorial_step + 1);
+  const next = Math.max(user.tutorial_step, allowed);
   const done = next >= 8 ? 1 : 0;
   db.prepare('UPDATE users SET tutorial_step = ?, tutorial_done = ? WHERE id = ?').run(next, done, userId);
   if (done) {
@@ -1211,6 +1359,18 @@ export function claimAchievement(userId: string, achievementId: string) {
 export function buyShopItem(userId: string, itemId: string) {
   const item = SHOP_ITEMS.find((i) => i.id === itemId);
   if (!item) throw Object.assign(new Error('Товар не найден'), { statusCode: 404 });
+  if (item.unlockSpecialist) {
+    const exists = db
+      .prepare(`SELECT id FROM specialists WHERE user_id = ? AND template_id = ?`)
+      .get(userId, item.unlockSpecialist);
+    if (exists) throw Object.assign(new Error('Специалист уже в штабе'), { statusCode: 400 });
+  }
+  if ((item as any).unlockVehicle) {
+    const exists = db
+      .prepare(`SELECT id FROM vehicles WHERE user_id = ? AND template_id = ?`)
+      .get(userId, (item as any).unlockVehicle);
+    if (exists) throw Object.assign(new Error('Техника уже в автопарке'), { statusCode: 400 });
+  }
   spendResources(userId, { badges: item.costBadges }, 'shop', itemId);
   for (const [k, v] of Object.entries(item.reward || {})) {
     addResource(userId, k as ResourceType, v ?? 0, 'shop', itemId);
@@ -1221,6 +1381,28 @@ export function buyShopItem(userId: string, itemId: string) {
     const until = new Date(Date.now() + 30 * 60 * 1000).toISOString();
     db.prepare(`UPDATE users SET speed_boost_until = ? WHERE id = ?`).run(until, userId);
   }
+  bumpVersion(userId);
+  return getBaseState(userId);
+}
+
+export function trainSpecialist(userId: string, specialistId: string) {
+  tickProduction(userId);
+  const training = db.prepare(`SELECT * FROM buildings WHERE user_id = ? AND type = 'training'`).get(userId) as any;
+  if (!training || training.level <= 0) {
+    throw Object.assign(new Error('Нужен учебный центр'), { statusCode: 400 });
+  }
+  const spec = db.prepare(`SELECT * FROM specialists WHERE id = ? AND user_id = ?`).get(specialistId, userId) as any;
+  if (!spec) throw Object.assign(new Error('Специалист не найден'), { statusCode: 404 });
+  if (spec.level >= 5) throw Object.assign(new Error('Максимальный уровень специалиста'), { statusCode: 400 });
+  const cost = {
+    food: 15 + spec.level * 10,
+    energy: Math.max(1, spec.level),
+    badges: 10 + spec.level * 5,
+  };
+  spendResources(userId, cost, 'train_specialist', specialistId);
+  db.prepare(
+    `UPDATE specialists SET level = level + 1, management = management + 1, speed = speed + 1, reliability = reliability + 1 WHERE id = ?`,
+  ).run(specialistId);
   bumpVersion(userId);
   return getBaseState(userId);
 }

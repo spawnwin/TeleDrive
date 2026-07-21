@@ -11,6 +11,12 @@ export function TopBar({ state, onCollectAll }: { state: GameState; onCollectAll
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const r = state.resources;
+  const boostActive =
+    !!state.user.speedBoostUntil && new Date(state.user.speedBoostUntil).getTime() > Date.now();
+  const boostMin = boostActive
+    ? Math.max(1, Math.ceil((new Date(state.user.speedBoostUntil!).getTime() - Date.now()) / 60000))
+    : 0;
+
   return (
     <View style={[styles.wrap, { paddingTop: Math.max(insets.top, 8) + 4 }]}>
       <View style={styles.row}>
@@ -26,11 +32,16 @@ export function TopBar({ state, onCollectAll }: { state: GameState; onCollectAll
           {state.user.experience}/{state.user.xpToNext} XP
         </Text>
       </View>
+      {boostActive ? (
+        <Text style={styles.boost}>Ускорение штаба · ещё ~{boostMin} мин</Text>
+      ) : null}
       <View style={styles.resRow}>
         <Res label="Мат" value={r.materials} />
         <Res label="Топл" value={r.fuel} />
         <Res label="Запч" value={r.parts} />
         <Res label="Еда" value={r.food} />
+        <Res label="Мед" value={r.medkits} />
+        <Res label="Эн" value={r.energy} />
         <Res label="Знаки" value={r.badges} accent />
         <Pressable style={styles.collectBtn} onPress={onCollectAll}>
           <Text style={styles.collectText}>Сбор</Text>
@@ -52,35 +63,36 @@ function Res({ label, value, accent }: { label: string; value: number; accent?: 
 const styles = StyleSheet.create({
   wrap: {
     backgroundColor: colors.panel,
-    paddingHorizontal: 12,
+    paddingHorizontal: 10,
     paddingBottom: 10,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 6 },
   callsignBtn: { flex: 1 },
   callsign: { color: colors.text, fontSize: 16, fontWeight: '700' },
   profileHint: { color: colors.gold, fontSize: 11, marginTop: 2, fontWeight: '700' },
   level: { color: colors.accent, fontWeight: '700' },
   xp: { color: colors.textDim, fontSize: 12 },
-  resRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  boost: { color: colors.gold, fontSize: 11, fontWeight: '700', marginBottom: 6 },
+  resRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 4 },
   res: {
     backgroundColor: colors.bgAlt,
     borderRadius: 8,
-    paddingHorizontal: 6,
-    paddingVertical: 4,
-    minWidth: 44,
+    paddingHorizontal: 5,
+    paddingVertical: 3,
+    minWidth: 38,
   },
   resAccent: { borderWidth: 1, borderColor: colors.gold },
-  resLabel: { color: colors.textDim, fontSize: 10 },
-  resValue: { color: colors.text, fontWeight: '700', fontSize: 13 },
+  resLabel: { color: colors.textDim, fontSize: 9 },
+  resValue: { color: colors.text, fontWeight: '700', fontSize: 12 },
   collectBtn: {
     marginLeft: 'auto',
     backgroundColor: colors.olive,
-    paddingHorizontal: 12,
+    paddingHorizontal: 10,
     paddingVertical: 8,
     borderRadius: 8,
-    minHeight: 44,
+    minHeight: 40,
     justifyContent: 'center',
   },
   collectText: { color: colors.text, fontWeight: '700' },

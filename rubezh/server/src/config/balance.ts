@@ -56,6 +56,7 @@ export interface RequestDef {
   reward: Partial<Record<ResourceType, number>>;
   xp: number;
   requiredBuilding?: BuildingType;
+  preferredCategory?: string;
 }
 
 export interface OperationDef {
@@ -89,6 +90,7 @@ export const BUILDINGS: BuildingDef[] = [
 export const REQUEST_DEFS: RequestDef[] = [
   {
     type: 'tutorial_delivery',
+    preferredCategory: 'Грузовой',
     title: 'Первый приказ',
     description: 'Доставьте комплект оборудования на учебный пункт.',
     durationSec: 8,
@@ -100,6 +102,7 @@ export const REQUEST_DEFS: RequestDef[] = [
   },
   {
     type: 'supply_food',
+    preferredCategory: 'Продовольствие',
     title: 'Доставка продовольствия',
     description: 'Колонна с рационами для соседнего района.',
     durationSec: 25,
@@ -110,6 +113,7 @@ export const REQUEST_DEFS: RequestDef[] = [
   },
   {
     type: 'supply_fuel',
+    preferredCategory: 'Топливо',
     title: 'Доставка топлива',
     description: 'Срочная заправка генераторов на рубеже.',
     durationSec: 30,
@@ -120,6 +124,7 @@ export const REQUEST_DEFS: RequestDef[] = [
   },
   {
     type: 'supply_gear',
+    preferredCategory: 'Грузовой',
     title: 'Доставка имущества',
     description: 'Комплектация заявки по накладной склада.',
     durationSec: 35,
@@ -130,6 +135,7 @@ export const REQUEST_DEFS: RequestDef[] = [
   },
   {
     type: 'urgent_repair',
+    preferredCategory: 'Ремонт',
     title: 'Срочный ремонт',
     description: 'Вернуть транспорт в строй на ремонтной площадке.',
     durationSec: 40,
@@ -141,6 +147,7 @@ export const REQUEST_DEFS: RequestDef[] = [
   },
   {
     type: 'medevac',
+    preferredCategory: 'Медицина',
     title: 'Медицинская эвакуация',
     description: 'Доставить медкомплекты и сопроводить эвакуацию.',
     durationSec: 45,
@@ -152,6 +159,7 @@ export const REQUEST_DEFS: RequestDef[] = [
   },
   {
     type: 'restore_comms',
+    preferredCategory: 'Связь',
     title: 'Восстановление связи',
     description: 'Настроить резервный канал связи с районом.',
     durationSec: 28,
@@ -163,6 +171,7 @@ export const REQUEST_DEFS: RequestDef[] = [
   },
   {
     type: 'evac_vehicle',
+    preferredCategory: 'Ремонт',
     title: 'Эвакуация техники',
     description: 'Вытянуть повреждённый транспорт на ремонтную базу.',
     durationSec: 50,
@@ -174,6 +183,7 @@ export const REQUEST_DEFS: RequestDef[] = [
   },
   {
     type: 'road_repair',
+    preferredCategory: 'Инженерия',
     title: 'Восстановление дороги',
     description: 'Инженерная бригада расчищает условный участок маршрута.',
     durationSec: 55,
@@ -185,6 +195,7 @@ export const REQUEST_DEFS: RequestDef[] = [
   },
   {
     type: 'generator_delivery',
+    preferredCategory: 'Грузовой',
     title: 'Доставка генератора',
     description: 'Обеспечить автономное питание полевого узла.',
     durationSec: 40,
@@ -195,6 +206,7 @@ export const REQUEST_DEFS: RequestDef[] = [
   },
   {
     type: 'weather_recovery',
+    preferredCategory: 'Склад',
     title: 'Последствия непогоды',
     description: 'Восстановить склад после сильного ветра и дождя.',
     durationSec: 35,
@@ -205,6 +217,7 @@ export const REQUEST_DEFS: RequestDef[] = [
   },
   {
     type: 'civil_aid',
+    preferredCategory: 'Медицина',
     title: 'Помощь гражданской инфраструктуре',
     description: 'Передать запас воды и рационов условному гражданскому объекту.',
     durationSec: 32,
@@ -215,6 +228,7 @@ export const REQUEST_DEFS: RequestDef[] = [
   },
   {
     type: 'search_cargo',
+    preferredCategory: 'Грузовой',
     title: 'Поиск пропавшего груза',
     description: 'Найти и вернуть контейнер, отмеченный на оперативной схеме.',
     durationSec: 48,
@@ -225,6 +239,7 @@ export const REQUEST_DEFS: RequestDef[] = [
   },
   {
     type: 'fortify_post',
+    preferredCategory: 'Инженерия',
     title: 'Инженерное укрепление',
     description: 'Установить защитные конструкции на временном пункте.',
     durationSec: 60,
@@ -236,6 +251,7 @@ export const REQUEST_DEFS: RequestDef[] = [
   },
   {
     type: 'reserve_depot',
+    preferredCategory: 'Склад',
     title: 'Резервный пункт',
     description: 'Развернуть запасной склад на учебном рубеже.',
     durationSec: 70,

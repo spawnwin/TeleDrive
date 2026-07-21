@@ -10,6 +10,11 @@ import { RESOURCE_LABELS } from '../types';
 export function MapScreen() {
   const { state, error, act, online, syncing, lastSyncedAt } = useGame();
   const { top, bottom } = useScreenInsets({ bottomExtra: 28 });
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => setTick((n) => n + 1), 1000);
+    return () => clearInterval(t);
+  }, []);
 
   if (!state) return null;
 
