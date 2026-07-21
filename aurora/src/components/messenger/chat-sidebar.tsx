@@ -32,7 +32,6 @@ import {
   Shield,
   Store,
   Radio,
-  Megaphone,
   MoreVertical,
   ArrowLeft,
 } from 'lucide-react'
@@ -433,12 +432,6 @@ export function ChatSidebar({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56">
-              <DropdownMenuItem onClick={() => openNewChat('group')}>
-                <Users className="mr-2 h-4 w-4" /> {t('sidebar.newGroup')}
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => openNewChat('channel')}>
-                <Megaphone className="mr-2 h-4 w-4" /> {t('sidebar.newChannel')}
-              </DropdownMenuItem>
               <DropdownMenuItem onClick={() => setShowArchived((v) => !v)}>
                 <Archive className="mr-2 h-4 w-4" />
                 {showArchived ? t('sidebar.allChats') : t('sidebar.archived')}
@@ -452,9 +445,6 @@ export function ChatSidebar({
               </DropdownMenuItem>
               <DropdownMenuItem onClick={onOpenCoins}>
                 <Coins className="mr-2 h-4 w-4" /> {t('coins.title')}
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => enterSelectionMode()}>
-                <Check className="mr-2 h-4 w-4" /> {t('msg.select')}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
