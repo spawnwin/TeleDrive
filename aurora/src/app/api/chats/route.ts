@@ -246,12 +246,25 @@ export const POST = withJsonApi(async function POST(req: Request) {
     if (!title) return NextResponse.json({ error: 'Укажите название группы' }, { status: 400 })
     const memberIds: string[] = body.memberIds ?? []
     const isForum = !!body.isForum
+    const { normalizeChannelSlug } = await import('@/lib/channels')
+    let normalizedSlug: string | null = null
+    if (body.slug?.trim()) {
+      normalizedSlug = normalizeChannelSlug(body.slug)
+      if (!normalizedSlug) {
+        return NextResponse.json({ error: 'Некорректная публичная ссылка' }, { status: 400 })
+      }
+      const existing = await db.chat.findUnique({ where: { slug: normalizedSlug } })
+      if (existing) {
+        return NextResponse.json({ error: 'Группа или канал с таким именем уже существует' }, { status: 409 })
+      }
+    }
     const colors = ['#7c3aed', '#06b6d4', '#ec4899', '#f97316', '#10b981']
     const chat = await db.chat.create({
       data: {
         type: 'group',
         title,
         isForum,
+        slug: normalizedSlug,
         avatarColor: colors[Math.floor(Math.random() * colors.length)],
         members: {
           create: [
@@ -274,7 +287,7 @@ export const POST = withJsonApi(async function POST(req: Request) {
         },
       })
     }
-    return NextResponse.json({ chat: { id: chat.id, type: chat.type, title, isForum } })
+    return NextResponse.json({ chat: { id: chat.id, type: chat.type, title, isForum, slug: chat.slug } })
   }
 
   if (type === 'channel') {

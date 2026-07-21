@@ -63,6 +63,7 @@ import { StoryViewer } from './story-viewer'
 import { AddStoryDialog } from './add-story-dialog'
 import { FriendsDialog } from './friends-dialog'
 import { FriendButton } from './friend-button'
+import { joinPublicChatBySlug, openPrivateChatWithUser } from '@/lib/open-private-chat'
 import { UnreadBadge, UnreadLeftMarker } from './unread-indicator'
 import { TypingDots } from './typing-dots'
 import { EditFoldersDialog } from './folder-dialogs'
@@ -259,10 +260,30 @@ export function ChatSidebar({
     window.addEventListener('aurora:new-chat', handler)
     return () => window.removeEventListener('aurora:new-chat', handler)
   }, [openNewChat])
-  const [userResults, setUserResults] = useState<
-    Array<{ id: string; name: string; username: string; avatarColor: string; avatarUrl?: string | null; online: boolean }>
-  >([])
+  type SearchUserHit = {
+    id: string
+    name: string
+    username: string
+    avatarColor: string
+    avatarUrl?: string | null
+    online: boolean
+  }
+  type SearchPublicChatHit = {
+    id: string
+    type: 'channel' | 'group'
+    title: string
+    slug: string
+    description: string | null
+    avatarColor: string
+    avatarUrl: string | null
+    memberCount: number
+    isMember: boolean
+  }
+  const [userResults, setUserResults] = useState<SearchUserHit[]>([])
+  const [channelResults, setChannelResults] = useState<SearchPublicChatHit[]>([])
+  const [groupResults, setGroupResults] = useState<SearchPublicChatHit[]>([])
   const [searchingUsers, setSearchingUsers] = useState(false)
+  const [joiningSlug, setJoiningSlug] = useState<string | null>(null)
   const [storyFeed, setStoryFeed] = useState<StoryFeedUser[]>([])
   const [storyViewerIndex, setStoryViewerIndex] = useState<number | null>(null)
   const [showAddStory, setShowAddStory] = useState(false)
@@ -291,23 +312,61 @@ export function ChatSidebar({
     const q = query.trim()
     if (!q) {
       setUserResults([])
+      setChannelResults([])
+      setGroupResults([])
       setSearchingUsers(false)
       return
     }
     const timer = setTimeout(async () => {
       setSearchingUsers(true)
       try {
-        const res = await fetch(`/api/users/search?q=${encodeURIComponent(q)}`)
-        const data = await res.json()
-        setUserResults(data.users || [])
+        const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`)
+        const data = await readJsonResponse<{
+          users?: SearchUserHit[]
+          channels?: SearchPublicChatHit[]
+          groups?: SearchPublicChatHit[]
+        }>(res)
+        setUserResults(data?.users || [])
+        setChannelResults(data?.channels || [])
+        setGroupResults(data?.groups || [])
       } catch {
         setUserResults([])
+        setChannelResults([])
+        setGroupResults([])
       } finally {
         setSearchingUsers(false)
       }
     }, 300)
     return () => clearTimeout(timer)
   }, [query])
+
+  const openSearchUserChat = useCallback(async (userId: string) => {
+    const result = await openPrivateChatWithUser(userId)
+    if (!result.ok) {
+      toast.error(result.error || t('newChat.errorCreateChat'))
+      return
+    }
+    setQuery('')
+  }, [setQuery, t])
+
+  const openSearchPublicChat = useCallback(async (hit: SearchPublicChatHit) => {
+    if (hit.isMember) {
+      useAppStore.getState().setActiveChat(hit.id)
+      setQuery('')
+      return
+    }
+    setJoiningSlug(hit.slug)
+    try {
+      const result = await joinPublicChatBySlug(hit.slug)
+      if (!result.ok) {
+        toast.error(result.error || t('newChat.errorCreateChat'))
+        return
+      }
+      setQuery('')
+    } finally {
+      setJoiningSlug(null)
+    }
+  }, [setQuery, t])
 
   // Hide archived by default; show them only when archive toggle is on
   const archivedFiltered = useMemo(
@@ -341,17 +400,23 @@ export function ChatSidebar({
   )
 
   const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase()
+    const q = query.trim().toLowerCase().replace(/^@/, '')
     if (!q) return regularChats
-    return regularChats.filter(
-      (c) =>
-        c.title.toLowerCase().includes(q) ||
-        c.lastMessage?.content.toLowerCase().includes(q),
-    )
+    return regularChats.filter((c) => {
+      if (c.title.toLowerCase().includes(q)) return true
+      if (c.slug?.toLowerCase().includes(q)) return true
+      if (c.description?.toLowerCase().includes(q)) return true
+      if (c.lastMessage?.content.toLowerCase().includes(q)) return true
+      return c.members.some(
+        (m) =>
+          m.name.toLowerCase().includes(q) ||
+          m.username.toLowerCase().includes(q),
+      )
+    })
   }, [regularChats, query])
 
   const savedMatchesQuery = useMemo(() => {
-    const q = query.trim().toLowerCase()
+    const q = query.trim().toLowerCase().replace(/^@/, '')
     if (!savedChat) return false
     if (!q) return true
     const savedTitle = t('sidebar.savedMessages').toLowerCase()
@@ -360,6 +425,21 @@ export function ChatSidebar({
       savedChat.lastMessage?.content.toLowerCase().includes(q)
     )
   }, [savedChat, query, t])
+
+  const myChatIds = useMemo(() => new Set(chats.map((c) => c.id)), [chats])
+  const globalChannels = useMemo(
+    () => channelResults.filter((c) => !myChatIds.has(c.id)),
+    [channelResults, myChatIds],
+  )
+  const globalGroups = useMemo(
+    () => groupResults.filter((c) => !myChatIds.has(c.id)),
+    [groupResults, myChatIds],
+  )
+  const hasGlobalHits =
+    userResults.length > 0 || globalChannels.length > 0 || globalGroups.length > 0
+  const hasLocalHits = filtered.length > 0 || savedMatchesQuery
+  const searchEmpty =
+    !!query.trim() && !searchingUsers && !hasLocalHits && !hasGlobalHits
 
   // Group by pinned / unpinned for visual divider
   const pinned = filtered.filter((c) => c.isPinned)
@@ -785,51 +865,136 @@ export function ChatSidebar({
                 </div>
               )}
               {query.trim() && (
-                <div className="mb-3">
-                  <p className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                    {t('profile.searchUsers')}
-                  </p>
-                  {searchingUsers ? (
-                    <p className="px-3 py-4 text-center text-xs text-muted-foreground">{t('newChat.searching')}</p>
-                  ) : userResults.length === 0 ? (
-                    <p className="px-3 py-4 text-center text-xs text-muted-foreground">{t('newChat.nothingFound')}</p>
-                  ) : (
-                    userResults.map((u) => (
-                      <div
-                        key={u.id}
-                        className="flex items-center gap-2 rounded-xl px-2 py-2 transition hover:bg-sidebar-accent"
-                      >
-                        <button
-                          type="button"
-                          onClick={() => setProfileUserId(u.id)}
-                          className="shrink-0"
-                          title={t('profile.viewProfile')}
-                        >
-                          <Avatar name={u.name} color={u.avatarColor} imageUrl={u.avatarUrl} size="sm" showStatus online={u.online} />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setProfileUserId(u.id)}
-                          className="min-w-0 flex-1 text-left"
-                        >
-                          <p className="truncate text-sm font-medium">{u.name}</p>
-                          <p className="truncate text-xs text-muted-foreground">@{u.username}</p>
-                        </button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 shrink-0"
-                          onClick={() => setProfileUserId(u.id)}
-                          title={t('profile.viewProfile')}
-                        >
-                          <UserCircle className="h-4 w-4 text-muted-foreground" />
-                        </Button>
-                        <FriendButton userId={u.id} friendship={{ id: null, status: 'none' }} variant="compact" />
-                      </div>
-                    ))
+                <div className="mb-3 space-y-3">
+                  {searchingUsers && (
+                    <p className="px-3 py-2 text-center text-xs text-muted-foreground">{t('newChat.searching')}</p>
                   )}
-                  {filtered.length > 0 && (
-                    <div className="my-2 ml-3 mr-3 border-t border-sidebar-border/50" />
+                  {!searchingUsers && hasGlobalHits && (
+                    <p className="px-3 pb-0.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                      {t('sidebar.searchGlobal')}
+                    </p>
+                  )}
+                  {userResults.length > 0 && (
+                    <div>
+                      <p className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                        {t('profile.searchUsers')}
+                      </p>
+                      {userResults.map((u) => (
+                        <div
+                          key={u.id}
+                          className="flex items-center gap-2 rounded-xl px-2 py-2 transition hover:bg-sidebar-accent"
+                        >
+                          <button
+                            type="button"
+                            onClick={() => setProfileUserId(u.id)}
+                            className="shrink-0"
+                            title={t('profile.viewProfile')}
+                          >
+                            <Avatar name={u.name} color={u.avatarColor} imageUrl={u.avatarUrl} size="sm" showStatus online={u.online} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void openSearchUserChat(u.id)}
+                            className="min-w-0 flex-1 text-left"
+                          >
+                            <p className="truncate text-sm font-medium">{u.name}</p>
+                            <p className="truncate text-xs text-muted-foreground">@{u.username}</p>
+                          </button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 shrink-0"
+                            onClick={() => setProfileUserId(u.id)}
+                            title={t('profile.viewProfile')}
+                          >
+                            <UserCircle className="h-4 w-4 text-muted-foreground" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 shrink-0 px-2 text-xs"
+                            onClick={() => void openSearchUserChat(u.id)}
+                            title={t('sidebar.openChat')}
+                          >
+                            {t('sidebar.openChat')}
+                          </Button>
+                          <FriendButton userId={u.id} friendship={{ id: null, status: 'none' }} variant="compact" />
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {globalChannels.length > 0 && (
+                    <div>
+                      <p className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                        {t('sidebar.searchChannels')}
+                      </p>
+                      {globalChannels.map((c) => (
+                        <button
+                          key={c.id}
+                          type="button"
+                          disabled={joiningSlug === c.slug}
+                          onClick={() => void openSearchPublicChat(c)}
+                          className="flex w-full items-center gap-2 rounded-xl px-2 py-2 text-left transition hover:bg-sidebar-accent disabled:opacity-60"
+                        >
+                          <Avatar name={c.title} color={c.avatarColor} imageUrl={c.avatarUrl} size="sm" />
+                          <span className="min-w-0 flex-1">
+                            <span className="flex items-center gap-1.5">
+                              <Megaphone className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                              <span className="truncate text-sm font-medium">{c.title}</span>
+                            </span>
+                            <span className="block truncate text-xs text-muted-foreground">
+                              @{c.slug}
+                              {c.memberCount > 0 ? ` · ${c.memberCount} ${t('channel.subscribers')}` : ''}
+                            </span>
+                          </span>
+                          <span className="shrink-0 text-xs font-medium text-[#3390ec]">
+                            {joiningSlug === c.slug ? '…' : t('sidebar.joinChannel')}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {globalGroups.length > 0 && (
+                    <div>
+                      <p className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                        {t('sidebar.searchGroups')}
+                      </p>
+                      {globalGroups.map((c) => (
+                        <button
+                          key={c.id}
+                          type="button"
+                          disabled={joiningSlug === c.slug}
+                          onClick={() => void openSearchPublicChat(c)}
+                          className="flex w-full items-center gap-2 rounded-xl px-2 py-2 text-left transition hover:bg-sidebar-accent disabled:opacity-60"
+                        >
+                          <Avatar name={c.title} color={c.avatarColor} imageUrl={c.avatarUrl} size="sm" />
+                          <span className="min-w-0 flex-1">
+                            <span className="flex items-center gap-1.5">
+                              <Users className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                              <span className="truncate text-sm font-medium">{c.title}</span>
+                            </span>
+                            <span className="block truncate text-xs text-muted-foreground">
+                              @{c.slug}
+                              {c.memberCount > 0 ? ` · ${c.memberCount} ${t('sidebar.membersCount')}` : ''}
+                            </span>
+                          </span>
+                          <span className="shrink-0 text-xs font-medium text-[#3390ec]">
+                            {joiningSlug === c.slug ? '…' : t('sidebar.joinGroup')}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {!searchingUsers && !hasGlobalHits && !hasLocalHits && (
+                    <p className="px-3 py-2 text-center text-xs text-muted-foreground">{t('newChat.nothingFound')}</p>
+                  )}
+                  {hasLocalHits && (
+                    <>
+                      <div className="my-1 ml-3 mr-3 border-t border-sidebar-border/50" />
+                      <p className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                        {t('sidebar.searchChatsSection')}
+                      </p>
+                    </>
                   )}
                 </div>
               )}
@@ -854,8 +1019,8 @@ export function ChatSidebar({
                     </Button>
                   )}
                 </div>
-              ) : filtered.length === 0 && query.trim() && !savedMatchesQuery ? (
-                <p className="px-3 py-2 text-center text-xs text-muted-foreground">{t('sidebar.noChatsFound')}</p>
+              ) : searchEmpty ? null : filtered.length === 0 && query.trim() && !savedMatchesQuery ? (
+                null
               ) : (
                 <>
                   {savedChat && savedMatchesQuery && !showArchived && (
@@ -1954,6 +2119,7 @@ function NewChatDialog({
   }, [open, initialTab])
   const [search, setSearch] = useState('')
   const [groupTitle, setGroupTitle] = useState('')
+  const [groupSlug, setGroupSlug] = useState('')
   const [groupIsForum, setGroupIsForum] = useState(false)
   const [channelTitle, setChannelTitle] = useState('')
   const [channelSlug, setChannelSlug] = useState('')
@@ -1962,38 +2128,56 @@ function NewChatDialog({
   const [results, setResults] = useState<
     Array<{ id: string; name: string; username: string; avatarColor: string; avatarUrl?: string | null; online: boolean }>
   >([])
+  const [channelHits, setChannelHits] = useState<
+    Array<{ id: string; title: string; slug: string; avatarColor: string; avatarUrl: string | null; memberCount: number; isMember: boolean }>
+  >([])
+  const [groupHits, setGroupHits] = useState<
+    Array<{ id: string; title: string; slug: string; avatarColor: string; avatarUrl: string | null; memberCount: number; isMember: boolean }>
+  >([])
   const [loading, setLoading] = useState(false)
+  const [joiningSlug, setJoiningSlug] = useState<string | null>(null)
 
   const runSearch = async (q: string) => {
     setSearch(q)
     if (!q.trim()) {
       setResults([])
+      setChannelHits([])
+      setGroupHits([])
       return
     }
     setLoading(true)
     try {
-      const res = await fetch(`/api/users/search?q=${encodeURIComponent(q)}`)
+      const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`)
       const data = await res.json()
       setResults(data.users || [])
+      setChannelHits(data.channels || [])
+      setGroupHits(data.groups || [])
     } finally {
       setLoading(false)
     }
   }
 
   const startPrivateChat = async (targetUserId: string) => {
-    const res = await fetch('/api/chats', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ type: 'private', targetUserId }),
-    })
-    const data = await res.json()
-    if (!res.ok) {
-      toast.error(data.error || t('newChat.errorCreateChat'))
+    const result = await openPrivateChatWithUser(targetUserId)
+    if (!result.ok) {
+      toast.error(result.error || t('newChat.errorCreateChat'))
       return
     }
-    await refreshChats()
-    setActiveChat(data.chat.id)
     onOpenChange(false)
+  }
+
+  const joinPublicFromDialog = async (slug: string) => {
+    setJoiningSlug(slug)
+    try {
+      const result = await joinPublicChatBySlug(slug)
+      if (!result.ok) {
+        toast.error(result.error || t('newChat.errorCreateChat'))
+        return
+      }
+      onOpenChange(false)
+    } finally {
+      setJoiningSlug(null)
+    }
   }
 
   const createGroup = async () => {
@@ -2004,7 +2188,13 @@ function NewChatDialog({
     const res = await fetch('/api/chats', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ type: 'group', title: groupTitle, memberIds: selectedIds, isForum: groupIsForum }),
+      body: JSON.stringify({
+        type: 'group',
+        title: groupTitle,
+        memberIds: selectedIds,
+        isForum: groupIsForum,
+        slug: groupSlug || undefined,
+      }),
     })
     const data = await res.json()
     if (!res.ok) {
@@ -2014,6 +2204,7 @@ function NewChatDialog({
     await refreshChats()
     setActiveChat(data.chat.id)
     setGroupTitle('')
+    setGroupSlug('')
     setGroupIsForum(false)
     setSelectedIds([])
     onOpenChange(false)
@@ -2110,44 +2301,96 @@ function NewChatDialog({
             <div className="mt-3 max-h-72 space-y-1 overflow-y-auto">
               {loading ? (
                 <p className="py-6 text-center text-sm text-muted-foreground">{t('newChat.searching')}</p>
-              ) : results.length === 0 ? (
+              ) : results.length === 0 && channelHits.length === 0 && groupHits.length === 0 ? (
                 <p className="py-6 text-center text-sm text-muted-foreground">
                   {search ? t('newChat.nothingFound') : t('newChat.startTyping')}
                 </p>
               ) : (
-                results.map((u) => (
-                  <div
-                    key={u.id}
-                    className="flex w-full items-center gap-2 rounded-xl px-2 py-2 transition hover:bg-muted"
-                  >
-                    <button
-                      onClick={() => onViewProfile?.(u.id)}
-                      className="shrink-0"
-                      title={t('profile.viewProfile')}
+                <>
+                  {results.map((u) => (
+                    <div
+                      key={u.id}
+                      className="flex w-full items-center gap-2 rounded-xl px-2 py-2 transition hover:bg-muted"
                     >
-                      <Avatar name={u.name} color={u.avatarColor} imageUrl={u.avatarUrl} size="sm" showStatus online={u.online} />
-                    </button>
-                    <button
-                      onClick={() => startPrivateChat(u.id)}
-                      className="flex min-w-0 flex-1 items-center gap-3 text-left"
-                    >
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-medium">{u.name}</p>
-                        <p className="truncate text-xs text-muted-foreground">@{u.username}</p>
-                      </div>
-                    </button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 shrink-0"
-                      onClick={() => onViewProfile?.(u.id)}
-                      title={t('profile.viewProfile')}
-                    >
-                      <UserCircle className="h-4 w-4 text-muted-foreground" />
-                    </Button>
-                    <FriendButton userId={u.id} friendship={{ id: null, status: 'none' }} variant="compact" />
-                  </div>
-                ))
+                      <button
+                        onClick={() => onViewProfile?.(u.id)}
+                        className="shrink-0"
+                        title={t('profile.viewProfile')}
+                      >
+                        <Avatar name={u.name} color={u.avatarColor} imageUrl={u.avatarUrl} size="sm" showStatus online={u.online} />
+                      </button>
+                      <button
+                        onClick={() => startPrivateChat(u.id)}
+                        className="flex min-w-0 flex-1 items-center gap-3 text-left"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-medium">{u.name}</p>
+                          <p className="truncate text-xs text-muted-foreground">@{u.username}</p>
+                        </div>
+                      </button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 shrink-0"
+                        onClick={() => onViewProfile?.(u.id)}
+                        title={t('profile.viewProfile')}
+                      >
+                        <UserCircle className="h-4 w-4 text-muted-foreground" />
+                      </Button>
+                      <FriendButton userId={u.id} friendship={{ id: null, status: 'none' }} variant="compact" />
+                    </div>
+                  ))}
+                  {channelHits.length > 0 && (
+                    <>
+                      <p className="px-2 pt-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                        {t('sidebar.searchChannels')}
+                      </p>
+                      {channelHits.map((c) => (
+                        <button
+                          key={c.id}
+                          type="button"
+                          disabled={joiningSlug === c.slug}
+                          onClick={() => void joinPublicFromDialog(c.slug)}
+                          className="flex w-full items-center gap-3 rounded-xl px-2 py-2 text-left transition hover:bg-muted disabled:opacity-60"
+                        >
+                          <Avatar name={c.title} color={c.avatarColor} imageUrl={c.avatarUrl} size="sm" />
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-sm font-medium">{c.title}</span>
+                            <span className="block truncate text-xs text-muted-foreground">@{c.slug}</span>
+                          </span>
+                          <span className="text-xs font-medium text-[#3390ec]">
+                            {c.isMember ? t('sidebar.searchChatsSection') : t('sidebar.joinChannel')}
+                          </span>
+                        </button>
+                      ))}
+                    </>
+                  )}
+                  {groupHits.length > 0 && (
+                    <>
+                      <p className="px-2 pt-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                        {t('sidebar.searchGroups')}
+                      </p>
+                      {groupHits.map((c) => (
+                        <button
+                          key={c.id}
+                          type="button"
+                          disabled={joiningSlug === c.slug}
+                          onClick={() => void joinPublicFromDialog(c.slug)}
+                          className="flex w-full items-center gap-3 rounded-xl px-2 py-2 text-left transition hover:bg-muted disabled:opacity-60"
+                        >
+                          <Avatar name={c.title} color={c.avatarColor} imageUrl={c.avatarUrl} size="sm" />
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-sm font-medium">{c.title}</span>
+                            <span className="block truncate text-xs text-muted-foreground">@{c.slug}</span>
+                          </span>
+                          <span className="text-xs font-medium text-[#3390ec]">
+                            {c.isMember ? t('sidebar.searchChatsSection') : t('sidebar.joinGroup')}
+                          </span>
+                        </button>
+                      ))}
+                    </>
+                  )}
+                </>
               )}
             </div>
           </div>
@@ -2161,6 +2404,14 @@ function NewChatDialog({
               placeholder={t('newChat.groupTitlePlaceholder')}
               className="mt-1"
               autoFocus
+            />
+            <Label htmlFor="groupSlug" className="mt-4 block text-xs">{t('newChat.groupSlug')}</Label>
+            <Input
+              id="groupSlug"
+              value={groupSlug}
+              onChange={(e) => setGroupSlug(e.target.value)}
+              placeholder={t('newChat.groupSlugPlaceholder')}
+              className="mt-1"
             />
             <div className="mt-3">
               <button
