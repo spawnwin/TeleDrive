@@ -132,7 +132,7 @@ export function ProfileGiftsSection({ gifts, collectibles = [], isSelf, loading,
                 type="button"
                 onClick={() => setSelected(g)}
                 className={cn(
-                  'group relative flex aspect-square flex-col items-center justify-center rounded-xl border',
+                  'group relative flex min-h-0 flex-col items-center rounded-xl border p-1.5 pb-2',
                   isTop
                     ? 'border-amber-400/40 bg-gradient-to-br from-amber-400/15 via-orange-500/5 to-transparent shadow-[0_0_12px_-4px_rgba(251,191,36,0.5)] hover:border-amber-400/70'
                     : 'border-violet-500/15 bg-gradient-to-br from-violet-500/10 to-cyan-500/5 hover:border-violet-500/30 hover:from-violet-500/15 hover:to-cyan-500/10',
@@ -146,35 +146,36 @@ export function ProfileGiftsSection({ gifts, collectibles = [], isSelf, loading,
                 }
               >
                 {isTop && (
-                  <span className="absolute -left-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-gradient-to-br from-amber-400 to-orange-500 shadow-md ring-2 ring-background">
+                  <span className="absolute -left-1 -top-1 z-[1] flex h-5 w-5 items-center justify-center rounded-full bg-gradient-to-br from-amber-400 to-orange-500 shadow-md ring-2 ring-background">
                     <Crown className="h-3 w-3 text-white" />
                   </span>
                 )}
-                <img
-                  src={resolveMediaUrl(g.gift.thumbnailUrl)}
-                  alt={g.gift.title}
-                  className="h-10 w-10 object-contain drop-shadow-sm transition group-hover:scale-110 sm:h-12 sm:w-12"
-                />
-                {g.count > 1 && (
-                  <span className="absolute -bottom-1 -right-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-gradient-to-br from-violet-500 to-cyan-400 px-1 text-[10px] font-bold text-white shadow-md ring-2 ring-background">
-                    ×{g.count}
-                  </span>
-                )}
-                {g.gift.isLimited && (g.serialLabels?.[0] || g.gift.totalSupply) && (
-                  <span className="absolute bottom-1 left-1 rounded bg-black/55 px-1 py-px text-[9px] font-bold tabular-nums text-amber-300">
-                    {g.serialLabels?.[0] ||
-                      `#001–#${String(g.gift.totalSupply || 999).padStart(3, '0')}`}
-                  </span>
-                )}
-                {g.senders?.[0] && (
-                  <span className="absolute left-1 top-1 overflow-hidden rounded-full ring-2 ring-background">
-                    <Avatar
-                      name={g.senders[0].name}
-                      color={g.senders[0].avatarColor}
-                      imageUrl={g.senders[0].avatarUrl}
-                      size="xs"
-                    />
-                  </span>
+                <div className="relative flex aspect-square w-full items-center justify-center">
+                  <img
+                    src={resolveMediaUrl(g.gift.thumbnailUrl)}
+                    alt={g.gift.title}
+                    className="h-10 w-10 object-contain drop-shadow-sm transition group-hover:scale-110 sm:h-12 sm:w-12"
+                  />
+                  {g.count > 1 && (
+                    <span className="absolute -bottom-0.5 -right-0.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-gradient-to-br from-violet-500 to-cyan-400 px-1 text-[10px] font-bold text-white shadow-md ring-2 ring-background">
+                      ×{g.count}
+                    </span>
+                  )}
+                  {g.gift.isLimited && (g.serialLabels?.[0] || g.gift.totalSupply) && (
+                    <span className="absolute bottom-0 left-0 rounded bg-black/55 px-1 py-px text-[9px] font-bold tabular-nums text-amber-300">
+                      {g.serialLabels?.[0] ||
+                        `#001–#${String(g.gift.totalSupply || 999).padStart(3, '0')}`}
+                    </span>
+                  )}
+                </div>
+                {fromLabel ? (
+                  <p className="mt-1 line-clamp-2 w-full px-0.5 text-center text-[10px] font-medium leading-tight text-violet-600 dark:text-violet-300">
+                    {fromLabel}
+                  </p>
+                ) : (
+                  <p className="mt-1 line-clamp-1 w-full px-0.5 text-center text-[10px] text-muted-foreground">
+                    {g.gift.title}
+                  </p>
                 )}
               </button>
             )
@@ -246,7 +247,6 @@ function ProfileGiftPreview({
     showAnimation && animationUrl ? animationUrl : stickerUrl,
   )
   const isVideo = isVideoUrl(mediaUrl)
-  const fromLabel = formatFromSenders(gift?.senders, t)
 
   useEffect(() => {
     if (!gift) return
@@ -325,31 +325,36 @@ function ProfileGiftPreview({
               </button>
               <div className="pointer-events-auto text-center">
                 <p className="text-sm font-semibold text-white">{gift.gift.title}</p>
-                {fromLabel && (
-                  <div className="mt-2 flex flex-col items-center gap-2">
-                    <p className="text-sm font-medium text-violet-200">{fromLabel}</p>
-                    {gift.senders && gift.senders.length > 0 && (
-                      <div className="flex items-center -space-x-2">
-                        {gift.senders.slice(0, 5).map((s) => (
-                          <span
-                            key={s.id}
-                            className="rounded-full ring-2 ring-black/80"
-                            title={s.name}
-                          >
-                            <Avatar
-                              name={s.name}
-                              color={s.avatarColor}
-                              imageUrl={s.avatarUrl}
-                              size="sm"
-                            />
-                          </span>
-                        ))}
-                      </div>
-                    )}
+                {gift.senders && gift.senders.length > 0 && (
+                  <div className="mt-3 w-full max-w-xs space-y-2">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-white/50">
+                      {t('gifts.sendersHeading')}
+                    </p>
+                    <ul className="space-y-1.5">
+                      {gift.senders.slice(0, 5).map((s) => (
+                        <li
+                          key={s.id}
+                          className="flex items-center gap-2 rounded-xl bg-white/10 px-3 py-2 text-left"
+                        >
+                          <Avatar
+                            name={s.name}
+                            color={s.avatarColor}
+                            imageUrl={s.avatarUrl}
+                            size="sm"
+                          />
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-sm font-medium text-white">{s.name}</p>
+                            <p className="text-[11px] text-violet-200">
+                              {t('gifts.from').replace('{name}', s.name)}
+                            </p>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
                   </div>
                 )}
                 {gift.count > 1 && (
-                  <p className="mt-1 text-xs text-violet-300">
+                  <p className="mt-2 text-xs text-violet-300">
                     {t('gifts.receivedCount').replace('{count}', String(gift.count))}
                   </p>
                 )}

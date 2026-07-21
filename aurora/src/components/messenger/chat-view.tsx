@@ -109,6 +109,7 @@ import { isImageUrl, isVideoUrl, resolveMediaUrl } from '@/lib/media-url'
 import { isE2EEPayload } from '@/lib/e2ee-payload'
 import { callPreviewLabel, parseCallMetadata } from '@/lib/call-message'
 import { isVideoFile, isImageFile, CHAT_ATTACHMENT_ACCEPT } from '@/lib/media-type'
+import { uploadFileWithRetry } from '@/lib/upload-client'
 import {
   canRecordVoiceInBrowser,
   createVoiceMediaRecorder,
@@ -3098,46 +3099,6 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
       )}
     </div>
   )
-}
-
-type UploadResponse = {
-  url: string
-  name: string
-  type: string
-  size: number
-  isImage?: boolean
-  isVoice?: boolean
-  isVideo?: boolean
-}
-
-/** Upload with retries — survives mid-deploy chunk errors and empty error bodies. */
-async function uploadFileWithRetry(
-  file: File,
-  t: (key: string) => string,
-  attempts = 3,
-): Promise<UploadResponse> {
-  let lastError: Error | null = null
-  for (let i = 0; i < attempts; i++) {
-    try {
-      const formData = new FormData()
-      formData.append('file', file)
-      const res = await fetch('/api/uploads', { method: 'POST', body: formData })
-      const data = (await res.json().catch(() => ({}))) as UploadResponse & { error?: string }
-      if (!res.ok) {
-        throw new Error(data.error || t('composer.errorUploadFailed'))
-      }
-      if (!data.url) {
-        throw new Error(t('composer.errorUploadFailed'))
-      }
-      return data
-    } catch (err) {
-      lastError = err instanceof Error ? err : new Error(t('composer.errorUpload'))
-      if (i < attempts - 1) {
-        await new Promise((r) => setTimeout(r, 400 * (i + 1)))
-      }
-    }
-  }
-  throw lastError || new Error(t('composer.errorUpload'))
 }
 
 /** Lightweight context-menu item used by the floating right-click / long-press menu. */

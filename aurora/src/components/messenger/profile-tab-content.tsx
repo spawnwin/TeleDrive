@@ -25,6 +25,7 @@ import { useI18n } from '@/hooks/use-i18n'
 import { formatMessageTime } from '@/lib/format'
 import { formatBytes } from '@/lib/format-storage'
 import { GALLERY_INPUT_ACCEPT, isVideoFile } from '@/lib/media-type'
+import { uploadFileWithRetry } from '@/lib/upload-client'
 import { toast } from 'sonner'
 import { useAppStore } from '@/lib/store'
 import { buildLinkSharePayload, buildMediaSharePayload } from '@/lib/share-payload'
@@ -289,11 +290,7 @@ export function ProfileTabContent({
   const handleGalleryUpload = async (file: File) => {
     setUploading(true)
     try {
-      const form = new FormData()
-      form.append('file', file)
-      const uploadRes = await fetch('/api/uploads', { method: 'POST', body: form })
-      const uploadData = await uploadRes.json()
-      if (!uploadRes.ok) throw new Error(uploadData.error || t('profile.galleryUploadError'))
+      const uploadData = await uploadFileWithRetry(file, t)
 
       const isVideo = uploadData.isVideo || isVideoFile({ type: file.type, name: file.name })
       const galleryRes = await fetch(`/api/users/${encodeURIComponent(userId)}/gallery`, {
@@ -304,7 +301,7 @@ export function ProfileTabContent({
           type: isVideo ? 'video' : 'photo',
         }),
       })
-      const galleryData = await galleryRes.json()
+      const galleryData = await galleryRes.json().catch(() => ({}))
       if (!galleryRes.ok) throw new Error(galleryData.error || t('profile.galleryUploadError'))
 
       toast.success(t('profile.galleryUploaded'))

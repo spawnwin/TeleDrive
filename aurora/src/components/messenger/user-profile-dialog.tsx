@@ -23,6 +23,7 @@ import {
   Gift,
   Info,
   AtSign,
+  Trash2,
 } from 'lucide-react'
 import { Avatar } from './avatar'
 import { EmojiStatusBadge } from './emoji-status-badge'
@@ -40,7 +41,18 @@ import { translate } from '@/lib/i18n'
 import { formatLastSeen } from '@/lib/format'
 import { isUserOnline } from '@/lib/friends-client'
 import { cn } from '@/lib/utils'
+import { resolveMediaUrl } from '@/lib/media-url'
 import { toast } from 'sonner'
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogAction,
+  AlertDialogCancel,
+} from '@/components/ui/alert-dialog'
 import { ProfileTabContent, PROFILE_EMPTY_KEYS, type ProfileTab } from './profile-tab-content'
 import { FriendButton, type FriendshipState } from './friend-button'
 import { MediaLightbox } from './media-lightbox'
@@ -107,12 +119,14 @@ export function UserProfileDialog({
 }: UserProfileDialogProps) {
   const { t, lang } = useI18n()
   const isMobile = useIsMobile()
-  const { onlineUserIds, presenceSynced, setActiveChat, openBrowser, openVideoPlayer, setProfileUserId } = useAppStore()
+  const { onlineUserIds, presenceSynced, setActiveChat, openBrowser, openVideoPlayer, setProfileUserId, setCurrentUser, currentUser } = useAppStore()
   const [profile, setProfile] = useState<ProfileData | null>(null)
   const [loading, setLoading] = useState(false)
   const [loadError, setLoadError] = useState<'not_found' | 'error' | null>(null)
   const [activeTab, setActiveTab] = useState<ProfileTab>('profilePhotos')
   const [photoOpen, setPhotoOpen] = useState(false)
+  const [confirmRemovePhoto, setConfirmRemovePhoto] = useState(false)
+  const [removingPhoto, setRemovingPhoto] = useState(false)
   const [profileStories, setProfileStories] = useState<StoryFeedUser | null>(null)
   const [showStoryViewer, setShowStoryViewer] = useState(false)
   const [showAddStory, setShowAddStory] = useState(false)
@@ -747,7 +761,83 @@ export function UserProfileDialog({
         url={photoOpen && profile?.avatarUrl ? profile.avatarUrl : null}
         alt={profile?.name ?? ''}
         onClose={() => setPhotoOpen(false)}
+        footer={
+          profile?.isSelf && profile.avatarUrl ? (
+            <button
+              type="button"
+              className="mx-auto flex min-h-11 items-center justify-center gap-2 rounded-full bg-red-500/90 px-5 text-sm font-semibold text-white active:bg-red-600"
+              onClick={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                setConfirmRemovePhoto(true)
+              }}
+            >
+              <Trash2 className="h-4 w-4" />
+              {t('profile.removePhotoAction')}
+            </button>
+          ) : null
+        }
       />
+
+      <AlertDialog
+        open={confirmRemovePhoto}
+        onOpenChange={(open) => {
+          setConfirmRemovePhoto(open)
+        }}
+      >
+        <AlertDialogContent className="z-[10050] max-w-sm gap-0 overflow-hidden p-0 sm:max-w-md">
+          <div className="relative aspect-square w-full bg-muted">
+            {profile?.avatarUrl && (
+              <img
+                src={resolveMediaUrl(profile.avatarUrl)}
+                alt=""
+                className="h-full w-full object-cover"
+              />
+            )}
+            <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/55 via-transparent to-transparent" />
+          </div>
+          <AlertDialogHeader className="space-y-2 px-5 pt-4 text-left">
+            <AlertDialogTitle className="flex items-center gap-2 text-base">
+              <Trash2 className="h-5 w-5 text-destructive" />
+              {t('profile.removePhotoTitle')}
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-sm leading-relaxed">
+              {t('profile.removePhotoDesc')}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="flex-col gap-2 px-5 pb-5 pt-4 sm:flex-col">
+            <AlertDialogAction
+              disabled={removingPhoto}
+              className="w-full bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={async (e) => {
+                e.preventDefault()
+                setRemovingPhoto(true)
+                try {
+                  const res = await fetch('/api/auth/avatar', { method: 'DELETE' })
+                  if (!res.ok) throw new Error()
+                  setProfile((p) => (p ? { ...p, avatarUrl: null } : p))
+                  if (currentUser) setCurrentUser({ ...currentUser, avatarUrl: null })
+                  setConfirmRemovePhoto(false)
+                  setPhotoOpen(false)
+                  toast.success(t('profile.photoRemoved'))
+                } catch {
+                  toast.error(t('misc.error'))
+                } finally {
+                  setRemovingPhoto(false)
+                }
+              }}
+            >
+              {removingPhoto ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Trash2 className="mr-2 h-4 w-4" />
+              )}
+              {t('profile.removePhotoAction')}
+            </AlertDialogAction>
+            <AlertDialogCancel className="mt-0 w-full">{t('misc.cancel')}</AlertDialogCancel>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {showStoryViewer && profileStories && (
         <StoryViewer
