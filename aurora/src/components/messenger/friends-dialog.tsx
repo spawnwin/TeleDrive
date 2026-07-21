@@ -367,6 +367,8 @@ function FriendRow({
         )}
         <FriendButton
           userId={user.id}
+          peerName={user.name}
+          peerUsername={user.username}
           friendship={friendship}
           onUpdate={onUpdate}
           variant="compact"

@@ -85,6 +85,11 @@ export function ChatInfoPanel({ open, onClose }: ChatInfoPanelProps) {
   const [myMembership, setMyMembership] = useState<ChatAdminMember | null>(null)
   const [favorites, setFavorites] = useState<any[]>([])
   const [friendship, setFriendship] = useState<FriendshipState | null>(null)
+  const [peerContact, setPeerContact] = useState<{
+    firstName: string
+    lastName: string | null
+  } | null>(null)
+  const [peerOriginalName, setPeerOriginalName] = useState<string | null>(null)
   const [uploadingAvatar, setUploadingAvatar] = useState(false)
   const [cropSrc, setCropSrc] = useState<string | null>(null)
   const [showWallpaper, setShowWallpaper] = useState(false)
@@ -125,8 +130,12 @@ export function ChatInfoPanel({ open, onClose }: ChatInfoPanelProps) {
       const profileRes = await fetch(`/api/users/${other.id}/profile?chatId=${activeChatId}`)
       const profileData = await profileRes.json()
       setFriendship(profileData.profile?.friendship ?? null)
+      setPeerContact(profileData.profile?.contact ?? null)
+      setPeerOriginalName(profileData.profile?.originalName || profileData.profile?.name || other.name)
     } else {
       setFriendship(null)
+      setPeerContact(null)
+      setPeerOriginalName(null)
     }
   }
 
@@ -394,8 +403,24 @@ export function ChatInfoPanel({ open, onClose }: ChatInfoPanelProps) {
         <div className="px-4 pb-4">
           <FriendButton
             userId={otherMember.id}
+            peerName={peerOriginalName || otherMember.name}
+            peerUsername={otherMember.username}
+            contactFirstName={peerContact?.firstName}
+            contactLastName={peerContact?.lastName}
             friendship={friendship}
             onUpdate={setFriendship}
+            onContactNameChange={(displayName, parts) => {
+              setPeerContact({
+                firstName: parts.firstName,
+                lastName: parts.lastName || null,
+              })
+              // Update chat title in store immediately
+              useAppStore.setState((s) => ({
+                chats: s.chats.map((c) =>
+                  c.id === activeChatId ? { ...c, title: displayName } : c,
+                ),
+              }))
+            }}
           />
         </div>
       )}

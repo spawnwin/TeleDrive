@@ -94,6 +94,8 @@ model User {
   nearbyPresence  NearbyPresence?
   friendshipsSent     Friendship[] @relation("FriendshipRequester")
   friendshipsReceived Friendship[] @relation("FriendshipAddressee")
+  contactsOwned       Contact[]    @relation("ContactsOwned")
+  contactsAppearsIn   Contact[]    @relation("ContactsAppearsIn")
   profileGallery      ProfileGalleryItem[]
   giftsSent           GiftSent[] @relation("GiftSender")
   giftsReceived       GiftSent[] @relation("GiftRecipient")
@@ -154,6 +156,24 @@ model Friendship {
   @@index([requesterId])
   @@index([addresseeId])
   @@index([status])
+}
+
+// One-sided contact book entry (Telegram-style custom name for a peer).
+model Contact {
+  id        String   @id @default(cuid())
+  ownerId   String
+  peerId    String
+  firstName String
+  lastName  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  owner User @relation("ContactsOwned", fields: [ownerId], references: [id], onDelete: Cascade)
+  peer  User @relation("ContactsAppearsIn", fields: [peerId], references: [id], onDelete: Cascade)
+
+  @@unique([ownerId, peerId])
+  @@index([ownerId])
+  @@index([peerId])
 }
 
 model UserBlock {

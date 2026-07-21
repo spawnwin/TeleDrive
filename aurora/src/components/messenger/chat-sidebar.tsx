@@ -854,6 +854,8 @@ export function ChatSidebar({
                           </button>
                           <FriendButton
                             userId={u.id}
+                            peerName={u.name}
+                            peerUsername={u.username}
                             friendship={u.friendship ?? { id: null, status: 'none' }}
                             variant="compact"
                           />
@@ -2270,6 +2272,8 @@ function NewChatDialog({
                       </Button>
                       <FriendButton
                         userId={u.id}
+                        peerName={u.name}
+                        peerUsername={u.username}
                         friendship={u.friendship ?? { id: null, status: 'none' }}
                         variant="compact"
                       />

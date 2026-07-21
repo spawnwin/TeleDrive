@@ -818,6 +818,19 @@ const ru: Dict = {
   'friends.total': 'друзей',
   'friends.stats': 'в сети',
 
+  // Contacts (Telegram-style custom names)
+  'contacts.editName': 'Изменить имя',
+  'contacts.addTitle': 'Новый контакт',
+  'contacts.firstName': 'Имя',
+  'contacts.lastName': 'Фамилия',
+  'contacts.lastNameOptional': 'Фамилия (необязательно)',
+  'contacts.save': 'Сохранить',
+  'contacts.addAndSave': 'Добавить',
+  'contacts.nameRequired': 'Укажите имя',
+  'contacts.nameUpdated': 'Имя контакта обновлено',
+  'contacts.saveError': 'Не удалось сохранить имя',
+  'contacts.originalName': 'В профиле: {name}',
+
   // QR friend add
   'qr.title': 'QR-код',
   'qr.myCode': 'Мой QR',
@@ -2047,6 +2060,19 @@ const en: Dict = {
   'friends.viewAll': 'All friends',
   'friends.total': 'friends',
   'friends.stats': 'online',
+
+  // Contacts (Telegram-style custom names)
+  'contacts.editName': 'Edit name',
+  'contacts.addTitle': 'New contact',
+  'contacts.firstName': 'First name',
+  'contacts.lastName': 'Last name',
+  'contacts.lastNameOptional': 'Last name (optional)',
+  'contacts.save': 'Save',
+  'contacts.addAndSave': 'Add',
+  'contacts.nameRequired': 'Enter a first name',
+  'contacts.nameUpdated': 'Contact name updated',
+  'contacts.saveError': 'Failed to save name',
+  'contacts.originalName': 'Profile name: {name}',
 
   // QR friend add
   'qr.title': 'QR code',

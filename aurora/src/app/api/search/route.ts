@@ -4,6 +4,7 @@ import { getCurrentUser } from '@/lib/auth'
 import { withJsonApi } from '@/lib/with-json-api'
 import { normalizeChannelSlug } from '@/lib/channels'
 import { getFriendshipView } from '@/lib/friends'
+import { getContactDisplayNameMap } from '@/lib/contacts'
 
 const USER_LIMIT = 20
 const CHAT_LIMIT = 15
@@ -160,8 +161,12 @@ export const GET = withJsonApi(async function GET(req: NextRequest) {
     friendshipByUser.set(otherId, getFriendshipView(f, me.id))
   }
 
+  const contactNames = await getContactDisplayNameMap(me.id, userIds)
+
   const users = matchedUsers.map((u) => ({
     ...u,
+    originalName: u.name,
+    name: contactNames.get(u.id) || u.name,
     friendship: friendshipByUser.get(u.id) ?? { id: null, status: 'none' as const },
   }))
 

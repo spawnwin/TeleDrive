@@ -3890,7 +3890,7 @@ function MessageBubble({
                   'text-[10px] tabular-nums',
                   transparentBubble
                     ? 'text-white/90'
-                    : mine
+                    : mine && msg.type !== 'music'
                       ? 'text-white/70'
                       : 'text-muted-foreground',
                 )}
@@ -3904,10 +3904,14 @@ function MessageBubble({
                     isRead
                       ? transparentBubble
                         ? 'text-sky-300'
-                        : 'text-sky-200'
+                        : msg.type === 'music'
+                          ? 'text-sky-500'
+                          : 'text-sky-200'
                       : transparentBubble
                         ? 'text-white/80'
-                        : 'text-white/55',
+                        : msg.type === 'music'
+                          ? 'text-muted-foreground'
+                          : 'text-white/55',
                   )}
                   strokeWidth={2.25}
                 />

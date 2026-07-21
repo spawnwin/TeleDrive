@@ -56,6 +56,7 @@ import {
 } from '@/components/ui/alert-dialog'
 import { ProfileTabContent, PROFILE_EMPTY_KEYS, type ProfileTab } from './profile-tab-content'
 import { FriendButton, type FriendshipState } from './friend-button'
+import { ContactNameDialog } from './contact-name-dialog'
 import { MediaLightbox } from './media-lightbox'
 import { ProfilePhotoViewersPanel } from './profile-photo-viewers-panel'
 import { GiftPickerDialog } from './gift-picker-dialog'
@@ -84,6 +85,7 @@ interface ProfileData {
   id: string
   username: string
   name: string
+  originalName?: string
   avatarColor: string
   avatarUrl?: string | null
   bio?: string | null
@@ -96,6 +98,11 @@ interface ProfileData {
   isMuted?: boolean
   isBlocked?: boolean
   friendship?: FriendshipState | null
+  contact?: {
+    firstName: string
+    lastName: string | null
+    displayName: string
+  } | null
   sharedChats?: SharedChat[]
   mediaCounts?: MediaCounts
 }
@@ -121,7 +128,7 @@ export function UserProfileDialog({
 }: UserProfileDialogProps) {
   const { t, lang } = useI18n()
   const isMobile = useIsNarrowLayout()
-  const { onlineUserIds, presenceSynced, setActiveChat, openBrowser, openVideoPlayer, setProfileUserId, setCurrentUser, currentUser } = useAppStore()
+  const { onlineUserIds, presenceSynced, setActiveChat, openBrowser, openVideoPlayer, setProfileUserId, setCurrentUser, currentUser, setChats } = useAppStore()
   const [profile, setProfile] = useState<ProfileData | null>(null)
   const [loading, setLoading] = useState(false)
   const [loadError, setLoadError] = useState<'not_found' | 'error' | null>(null)
@@ -148,6 +155,7 @@ export function UserProfileDialog({
   const [showGiftPicker, setShowGiftPicker] = useState(false)
   const [creatorTiersCount, setCreatorTiersCount] = useState(0)
   const [showPremium, setShowPremium] = useState(false)
+  const [showContactName, setShowContactName] = useState(false)
 
   useEffect(() => {
     if (!userId) {
@@ -552,7 +560,7 @@ export function UserProfileDialog({
                   <EmojiStatusBadge emojiStatus={profile.emojiStatus} size="lg" />
                   {profile.isPremium && (
                     <span
-                      className="inline-flex items-center gap-1 rounded-full bg-gradient-to-br from-amber-400/25 to-[#3390ec]/20 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-amber-500"
+                      className="inline-flex items-center gap-1 rounded-full bg-gradient-to-br from-amber-400/25 to-primary/20 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-amber-500"
                       title="Aurora Premium"
                     >
                       <Crown className="h-3.5 w-3.5" />
@@ -560,10 +568,17 @@ export function UserProfileDialog({
                     </span>
                   )}
                 </p>
+                {profile.originalName &&
+                  profile.originalName !== profile.name &&
+                  !profile.isSelf && (
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      {t('contacts.originalName').replace('{name}', profile.originalName)}
+                    </p>
+                  )}
                 <button
                   type="button"
                   onClick={copyUsername}
-                  className="mt-1.5 max-w-full truncate text-sm leading-snug text-[#3390ec] transition hover:text-[#1677d2]"
+                  className="mt-1.5 max-w-full truncate text-sm leading-snug text-primary transition hover:text-primary/80"
                 >
                   @{profile.username}
                 </button>
@@ -678,14 +693,44 @@ export function UserProfileDialog({
               />
             </div>
 
-            {/* Friend request button */}
+            {/* Friend request + contact name */}
             {!profile.isSelf && !blocked && (
-              <div className="min-w-0 max-w-full pb-2">
+              <div className="flex min-w-0 max-w-full flex-col gap-2 pb-2">
                 <FriendButton
                   userId={profile.id}
+                  peerName={profile.originalName || profile.name}
+                  peerUsername={profile.username}
+                  contactFirstName={profile.contact?.firstName}
+                  contactLastName={profile.contact?.lastName}
                   friendship={friendship}
                   onUpdate={setFriendship}
+                  onContactNameChange={(displayName, parts) => {
+                    setProfile((prev) =>
+                      prev
+                        ? {
+                            ...prev,
+                            originalName: prev.originalName || prev.name,
+                            name: displayName,
+                            contact: {
+                              firstName: parts.firstName,
+                              lastName: parts.lastName || null,
+                              displayName,
+                            },
+                          }
+                        : prev,
+                    )
+                  }}
                 />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="gap-1.5 text-primary"
+                  onClick={() => setShowContactName(true)}
+                >
+                  <Edit3 className="h-3.5 w-3.5" />
+                  {t('contacts.editName')}
+                </Button>
               </div>
             )}
           </div>
@@ -1115,6 +1160,59 @@ export function UserProfileDialog({
             fetch(`/api/users/${userId}/gifts`)
               .then((r) => r.json())
               .then((d) => setProfileGifts(d.gifts || []))
+          }}
+        />
+      )}
+
+      {profile && !profile.isSelf && userId && (
+        <ContactNameDialog
+          open={showContactName}
+          onOpenChange={setShowContactName}
+          title={t('contacts.editName')}
+          subtitle={`@${profile.username}`}
+          initialFirstName={
+            profile.contact?.firstName ||
+            (profile.originalName || profile.name).trim().split(/\s+/)[0] ||
+            ''
+          }
+          initialLastName={
+            profile.contact?.lastName ||
+            (profile.originalName || profile.name).trim().split(/\s+/).slice(1).join(' ') ||
+            ''
+          }
+          onConfirm={async (value) => {
+            const res = await fetch(`/api/contacts/${encodeURIComponent(userId)}`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(value),
+            })
+            const data = await res.json().catch(() => ({}))
+            if (!res.ok) throw new Error(data.error || t('contacts.saveError'))
+            const displayName =
+              data.contact?.displayName ||
+              [value.firstName, value.lastName].filter(Boolean).join(' ')
+            setProfile((prev) =>
+              prev
+                ? {
+                    ...prev,
+                    originalName: prev.originalName || prev.name,
+                    name: displayName,
+                    contact: {
+                      firstName: value.firstName,
+                      lastName: value.lastName || null,
+                      displayName,
+                    },
+                  }
+                : prev,
+            )
+            try {
+              const chatsRes = await fetch('/api/chats')
+              const chatsData = await chatsRes.json().catch(() => ({}))
+              if (chatsRes.ok && chatsData?.chats) setChats(chatsData.chats)
+            } catch {
+              /* ignore */
+            }
+            toast.success(t('contacts.nameUpdated'))
           }}
         />
       )}

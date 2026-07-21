@@ -4,6 +4,7 @@ import { getCurrentUser } from '@/lib/auth'
 import { getOrCreateSavedChat } from '@/lib/saved-chat'
 import { areUsersBlocked } from '@/lib/user-blocks'
 import { parseChatWallpaper } from '@/lib/chat-wallpaper'
+import { getContactDisplayNameMap } from '@/lib/contacts'
 import { withJsonApi } from '@/lib/with-json-api'
 
 export const GET = withJsonApi(async function GET() {
@@ -61,6 +62,12 @@ export const GET = withJsonApi(async function GET() {
     ],
   })
 
+  const privatePeerIds = memberships
+    .filter((m) => m.chat.type === 'private')
+    .map((m) => m.chat.members.find((mem) => mem.userId !== me.id)?.userId)
+    .filter((id): id is string => !!id)
+  const contactNames = await getContactDisplayNameMap(me.id, privatePeerIds)
+
   // Count unread messages for each chat
   const chats = await Promise.all(
     memberships.map(async (m) => {
@@ -84,7 +91,7 @@ export const GET = withJsonApi(async function GET() {
             ? 'Saved Messages'
             : 'Избранное'
           : m.chat.type === 'private' && otherMember
-            ? otherMember.user.name
+            ? contactNames.get(otherMember.userId) || otherMember.user.name
             : m.chat.title || (m.chat.type === 'channel' ? 'Канал' : 'Чат')
       const avatarColor =
         m.chat.type === 'saved'
@@ -121,7 +128,10 @@ export const GET = withJsonApi(async function GET() {
         wallpaper: parseChatWallpaper(m.wallpaper),
         members: m.chat.members.map((mem) => ({
           id: mem.user.id,
-          name: mem.user.name,
+          name:
+            m.chat.type === 'private' && mem.userId !== me.id
+              ? contactNames.get(mem.userId) || mem.user.name
+              : mem.user.name,
           username: mem.user.username,
           avatarColor: mem.user.avatarColor,
           avatarUrl: mem.user.avatarUrl,
