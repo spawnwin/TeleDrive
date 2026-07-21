@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { api } from '../api';
 import { BuildingNode } from '../components/BuildingNode';
 import { DistrictMapCard } from '../components/DistrictMapCard';
+import { UiIcon } from '../components/Icons';
 import { BuildingModal, RequestModal } from '../components/Modals';
 import { TopBar } from '../components/TopBar';
 import { TutorialOverlay } from '../components/TutorialOverlay';
@@ -101,8 +102,9 @@ export function BaseScreen() {
             );
           })}
           <View style={styles.convoy}>
+            <UiIcon name={state.vehicles.some((v) => v.status === 'on_mission') ? 'boost' : 'collect'} size={18} />
             <Text style={styles.convoyText}>
-              {state.vehicles.some((v) => v.status === 'on_mission') ? '🚛 Колонна в пути' : '🚛 Автопарк готов'}
+              {state.vehicles.some((v) => v.status === 'on_mission') ? 'Колонна в пути' : 'Автопарк готов'}
             </Text>
           </View>
         </View>
@@ -110,6 +112,7 @@ export function BaseScreen() {
         <View style={styles.sectionHead}>
           <Text style={styles.sectionTitle}>Заявки</Text>
           <Pressable style={styles.offlineBtn} onPress={() => act(() => api.claimOffline())}>
+            <UiIcon name="offline" size={16} />
             <Text style={styles.offlineText}>Офлайн {state.offline.hoursAvailable.toFixed(1)}ч</Text>
           </Pressable>
         </View>
@@ -255,6 +258,10 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.35)',
     borderRadius: 10,
     padding: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
   },
   convoyText: { color: colors.text, textAlign: 'center', fontWeight: '600' },
   sectionHead: {
@@ -272,6 +279,9 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     minHeight: 44,
     justifyContent: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
   },
   offlineText: { color: colors.gold, fontWeight: '700' },
   reqCard: {

@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
+import { BuildingIcon } from './Icons';
 import { colors } from '../theme';
 import { BUILDING_COLORS, type Building } from '../types';
 
@@ -39,13 +40,14 @@ export function BuildingNode({ building, onPress, highlight }: Props) {
           {
             backgroundColor: color,
             width: size,
-            height: size * 0.72,
+            height: size * 0.78,
             opacity: locked ? 0.4 : 1,
             transform: [{ scale: pulse }],
             borderColor: highlight ? colors.gold : building.stored > 0 ? colors.accent : colors.border,
           },
         ]}
       >
+        <BuildingIcon type={building.type} size={Math.round(size * 0.48)} />
         <Text style={styles.level}>{building.level > 0 ? `ур.${building.level}` : 'палатка'}</Text>
         {building.state === 'upgrading' && <Text style={styles.badge}>⬆</Text>}
         {building.stored > 0 && <Text style={styles.stored}>●</Text>}
@@ -64,8 +66,9 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 2,
   },
-  level: { color: colors.text, fontWeight: '800', fontSize: 13 },
+  level: { color: colors.text, fontWeight: '800', fontSize: 12 },
   badge: { position: 'absolute', top: 4, right: 6, color: colors.gold, fontWeight: '700' },
   stored: { position: 'absolute', top: 4, left: 8, color: colors.accent, fontSize: 14 },
   name: { color: colors.sand, fontSize: 11, textAlign: 'center', marginTop: 4, minHeight: 28 },

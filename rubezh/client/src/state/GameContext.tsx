@@ -1,11 +1,12 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState } from 'react-native';
-import { api, bootstrap, getApiBase, saveApiUrl } from '../api';
+import { api, clearSession, getApiBase, restoreSession, saveApiUrl } from '../api';
 import type { GameState } from '../types';
 
 interface GameContextValue {
   state: GameState | null;
   loading: boolean;
+  needsAuth: boolean;
   error: string | null;
   apiUrl: string;
   syncing: boolean;
@@ -14,6 +15,10 @@ interface GameContextValue {
   refresh: () => Promise<void>;
   setApiUrl: (url: string) => Promise<void>;
   act: <T extends GameState>(fn: () => Promise<T>) => Promise<T | null>;
+  login: (callsign: string, password: string) => Promise<void>;
+  register: (callsign: string, password: string) => Promise<void>;
+  guestLogin: (callsign?: string) => Promise<void>;
+  logout: () => Promise<void>;
   toast: string | null;
   clearToast: () => void;
 }
@@ -25,6 +30,7 @@ const POLL_MS = 3000;
 export function GameProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<GameState | null>(null);
   const [loading, setLoading] = useState(true);
+  const [needsAuth, setNeedsAuth] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [apiUrl, setApiUrlState] = useState(getApiBase());
@@ -33,16 +39,21 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   const [online, setOnline] = useState(true);
   const syncingRef = useRef(false);
 
+  const applyState = useCallback((next: GameState) => {
+    setState(next);
+    setNeedsAuth(false);
+    setError(null);
+    setOnline(true);
+    setLastSyncedAt(Date.now());
+  }, []);
+
   const refresh = useCallback(async () => {
-    if (syncingRef.current) return;
+    if (syncingRef.current || needsAuth) return;
     syncingRef.current = true;
     setSyncing(true);
     try {
       const next = await api.base();
-      setState(next);
-      setError(null);
-      setOnline(true);
-      setLastSyncedAt(Date.now());
+      applyState(next);
     } catch (err: any) {
       setOnline(false);
       setError(err.message || 'Ошибка сети');
@@ -50,23 +61,27 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       syncingRef.current = false;
       setSyncing(false);
     }
-  }, []);
+  }, [applyState, needsAuth]);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const s = await bootstrap();
+        const s = await restoreSession();
         if (cancelled) return;
-        setState(s);
-        setApiUrlState(getApiBase());
-        setOnline(true);
-        setLastSyncedAt(Date.now());
-        setError(null);
+        if (s) {
+          applyState(s);
+          setApiUrlState(getApiBase());
+        } else {
+          setNeedsAuth(true);
+          setState(null);
+        }
       } catch (err: any) {
         if (cancelled) return;
+        // Saved session exists but server unreachable — keep cached if restore threw after cache miss
         setOnline(false);
         setError(err.message || 'Не удалось подключиться к серверу');
+        setNeedsAuth(true);
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -74,29 +89,14 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [applyState]);
 
   const hasStateRef = useRef(false);
   hasStateRef.current = !!state;
 
   useEffect(() => {
     const tick = async () => {
-      if (!hasStateRef.current) {
-        try {
-          const s = await bootstrap();
-          setState(s);
-          setApiUrlState(getApiBase());
-          setOnline(true);
-          setLastSyncedAt(Date.now());
-          setError(null);
-          setLoading(false);
-        } catch (err: any) {
-          setOnline(false);
-          setError(err.message || 'Нет связи с сервером');
-          setLoading(false);
-        }
-        return;
-      }
+      if (!hasStateRef.current || needsAuth) return;
       await refresh();
     };
     const t = setInterval(() => {
@@ -109,15 +109,12 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       clearInterval(t);
       sub.remove();
     };
-  }, [refresh]);
+  }, [refresh, needsAuth]);
 
   const act = useCallback(async <T extends GameState>(fn: () => Promise<T>) => {
     try {
       const next = await fn();
-      setState(next);
-      setError(null);
-      setOnline(true);
-      setLastSyncedAt(Date.now());
+      applyState(next);
       if (next.lastQuality) setToast(next.lastQuality);
       if ((next as any).helpResult) setToast((next as any).helpResult);
       if ((next as any).raceReward?.claimed) {
@@ -130,18 +127,53 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       setError(err.message || 'Ошибка');
       return null;
     }
-  }, []);
+  }, [applyState]);
 
   const setApiUrl = useCallback(async (url: string) => {
     await saveApiUrl(url);
     setApiUrlState(getApiBase());
-    await refresh();
-  }, [refresh]);
+  }, []);
+
+  const login = useCallback(
+    async (callsign: string, password: string) => {
+      const next = await api.login(callsign, password);
+      applyState(next);
+      setToast(`Добро пожаловать, ${next.user.callsign}`);
+    },
+    [applyState],
+  );
+
+  const register = useCallback(
+    async (callsign: string, password: string) => {
+      const next = await api.register(callsign, password);
+      applyState(next);
+      setToast(`Командир ${next.user.callsign} зарегистрирован`);
+    },
+    [applyState],
+  );
+
+  const guestLogin = useCallback(
+    async (callsign?: string) => {
+      const next = await api.guest(callsign);
+      applyState(next);
+      setToast(`Гостевой вход: ${next.user.callsign}`);
+    },
+    [applyState],
+  );
+
+  const logout = useCallback(async () => {
+    await clearSession();
+    setState(null);
+    setNeedsAuth(true);
+    setError(null);
+    setToast('Вы вышли из штаба');
+  }, []);
 
   const value = useMemo(
     () => ({
       state,
       loading,
+      needsAuth,
       error,
       apiUrl,
       syncing,
@@ -150,10 +182,31 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       refresh,
       setApiUrl,
       act,
+      login,
+      register,
+      guestLogin,
+      logout,
       toast,
       clearToast: () => setToast(null),
     }),
-    [state, loading, error, apiUrl, syncing, lastSyncedAt, online, refresh, setApiUrl, act, toast],
+    [
+      state,
+      loading,
+      needsAuth,
+      error,
+      apiUrl,
+      syncing,
+      lastSyncedAt,
+      online,
+      refresh,
+      setApiUrl,
+      act,
+      login,
+      register,
+      guestLogin,
+      logout,
+      toast,
+    ],
   );
 
   return <GameContext.Provider value={value}>{children}</GameContext.Provider>;

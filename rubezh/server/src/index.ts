@@ -37,6 +37,7 @@ import {
   postClanMessage,
 } from './social.js';
 import { getPlayerProfile, getSelfProfile, updateSelfProfile } from './profile.js';
+import { loginPlayer, registerPlayer, setAccountPassword } from './auth.js';
 
 migrate();
 
@@ -103,9 +104,48 @@ app.get('/v1/players/:id', async (req, reply) => {
 
 app.post('/v1/auth/guest', async (req, reply) => {
   try {
-    const body = (req.body || {}) as { nickname?: string };
-    const state = createGuest(body.nickname);
+    const body = (req.body || {}) as { nickname?: string; callsign?: string };
+    const state = createGuest(body.callsign || body.nickname);
     return { token: state.user.id, userId: state.user.id, state: withSocial(state.user.id, state) };
+  } catch (err) {
+    sendError(reply, err);
+  }
+});
+
+app.post('/v1/auth/register', async (req, reply) => {
+  try {
+    const body = (req.body || {}) as { callsign?: string; password?: string };
+    const result = registerPlayer(body.callsign || '', body.password || '');
+    return {
+      token: result.token,
+      userId: result.userId,
+      callsign: result.callsign,
+      state: withSocial(result.userId, result.state),
+    };
+  } catch (err) {
+    sendError(reply, err);
+  }
+});
+
+app.post('/v1/auth/login', async (req, reply) => {
+  try {
+    const body = (req.body || {}) as { callsign?: string; password?: string };
+    const result = loginPlayer(body.callsign || '', body.password || '');
+    return {
+      token: result.token,
+      userId: result.userId,
+      callsign: result.callsign,
+      state: withSocial(result.userId, result.state),
+    };
+  } catch (err) {
+    sendError(reply, err);
+  }
+});
+
+app.post('/v1/auth/set-password', async (req, reply) => {
+  try {
+    const body = (req.body || {}) as { password?: string };
+    return setAccountPassword(userId(req as any), body.password || '');
   } catch (err) {
     sendError(reply, err);
   }

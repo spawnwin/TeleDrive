@@ -18,6 +18,10 @@ export function getUserId() {
   return userId;
 }
 
+export function setUserId(id: string | null) {
+  userId = id;
+}
+
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -40,38 +44,45 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   throw lastErr;
 }
 
-export async function bootstrap(): Promise<GameState> {
-  const savedId = await AsyncStorage.getItem('rubezh_user_id');
+export type AuthResult = { userId: string; token: string; callsign?: string; state: GameState };
+
+async function persistSession(result: AuthResult) {
+  userId = result.userId;
+  await AsyncStorage.setItem('rubezh_user_id', result.userId);
+  await AsyncStorage.setItem('rubezh_cache', JSON.stringify(result.state));
+  return result.state;
+}
+
+/** Restore saved session if any. Does NOT create a guest automatically. */
+export async function restoreSession(): Promise<GameState | null> {
   const savedApi = await AsyncStorage.getItem('rubezh_api_url');
   if (savedApi) apiBase = savedApi;
 
-  if (savedId) {
-    userId = savedId;
-    try {
-      const state = await request<GameState>('/v1/base');
-      await AsyncStorage.setItem('rubezh_cache', JSON.stringify(state));
-      return state;
-    } catch (err) {
-      const cached = await AsyncStorage.getItem('rubezh_cache');
-      if (cached) {
-        try {
-          return JSON.parse(cached) as GameState;
-        } catch {
-          /* ignore bad cache */
-        }
-      }
-      throw err instanceof Error ? err : new Error('Не удалось восстановить сохранение');
-    }
-  }
+  const savedId = await AsyncStorage.getItem('rubezh_user_id');
+  if (!savedId) return null;
 
-  const auth = await request<{ userId: string; state: GameState }>('/v1/auth/guest', {
-    method: 'POST',
-    body: JSON.stringify({}),
-  });
-  userId = auth.userId;
-  await AsyncStorage.setItem('rubezh_user_id', userId);
-  await AsyncStorage.setItem('rubezh_cache', JSON.stringify(auth.state));
-  return auth.state;
+  userId = savedId;
+  try {
+    const state = await request<GameState>('/v1/base');
+    await AsyncStorage.setItem('rubezh_cache', JSON.stringify(state));
+    return state;
+  } catch (err) {
+    const cached = await AsyncStorage.getItem('rubezh_cache');
+    if (cached) {
+      try {
+        return JSON.parse(cached) as GameState;
+      } catch {
+        /* ignore */
+      }
+    }
+    throw err instanceof Error ? err : new Error('Не удалось восстановить сессию');
+  }
+}
+
+export async function clearSession() {
+  userId = null;
+  await AsyncStorage.removeItem('rubezh_user_id');
+  await AsyncStorage.removeItem('rubezh_cache');
 }
 
 export async function saveApiUrl(url: string) {
@@ -80,6 +91,32 @@ export async function saveApiUrl(url: string) {
 }
 
 export const api = {
+  register: async (callsign: string, password: string) => {
+    const result = await request<AuthResult>('/v1/auth/register', {
+      method: 'POST',
+      body: JSON.stringify({ callsign, password }),
+    });
+    return persistSession(result);
+  },
+  login: async (callsign: string, password: string) => {
+    const result = await request<AuthResult>('/v1/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ callsign, password }),
+    });
+    return persistSession(result);
+  },
+  guest: async (callsign?: string) => {
+    const result = await request<AuthResult>('/v1/auth/guest', {
+      method: 'POST',
+      body: JSON.stringify({ callsign, nickname: callsign }),
+    });
+    return persistSession(result);
+  },
+  setPassword: (password: string) =>
+    request<{ ok: boolean; callsign: string }>('/v1/auth/set-password', {
+      method: 'POST',
+      body: JSON.stringify({ password }),
+    }),
   base: () => request<GameState>('/v1/base'),
   upgrade: (id: string) => request<GameState>(`/v1/buildings/${id}/upgrade`, { method: 'POST', body: '{}' }),
   collect: (id: string) => request<GameState>(`/v1/buildings/${id}/collect`, { method: 'POST', body: '{}' }),

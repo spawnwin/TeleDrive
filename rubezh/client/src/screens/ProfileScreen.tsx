@@ -38,7 +38,7 @@ function roleLabel(role?: string) {
 }
 
 export function ProfileScreen({ navigation, route }: Props) {
-  const { state, refresh } = useGame();
+  const { state, refresh, logout } = useGame();
   const { top, bottom } = useScreenInsets({ bottomExtra: 24 });
   const targetId = route.params?.userId || state?.user.id;
   const [profile, setProfile] = useState<PlayerProfile | null>(null);
@@ -47,6 +47,8 @@ export function ProfileScreen({ navigation, route }: Props) {
   const [editing, setEditing] = useState(false);
   const [callsign, setCallsign] = useState('');
   const [saving, setSaving] = useState(false);
+  const [password, setPassword] = useState('');
+  const [passwordHint, setPasswordHint] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!targetId) return;
@@ -189,9 +191,51 @@ export function ProfileScreen({ navigation, route }: Props) {
             </Pressable>
           </View>
         ) : (
-          <Pressable style={styles.btn} onPress={() => setEditing(true)}>
-            <Text style={styles.btnText}>Изменить позывной</Text>
-          </Pressable>
+          <>
+            <Pressable style={styles.btn} onPress={() => setEditing(true)}>
+              <Text style={styles.btnText}>Изменить позывной</Text>
+            </Pressable>
+
+            <Text style={styles.section}>Пароль для входа с другого устройства</Text>
+            <TextInput
+              style={styles.input}
+              value={password}
+              onChangeText={setPassword}
+              placeholder="Новый пароль (мин. 4)"
+              placeholderTextColor={colors.textDim}
+              secureTextEntry
+              maxLength={64}
+            />
+            <Pressable
+              style={[styles.btn, styles.btnGhost]}
+              disabled={saving || password.trim().length < 4}
+              onPress={async () => {
+                setSaving(true);
+                setPasswordHint(null);
+                try {
+                  await api.setPassword(password.trim());
+                  setPassword('');
+                  setPasswordHint('Пароль сохранён — можно входить по позывному');
+                } catch (err: any) {
+                  setError(err.message || 'Не удалось сохранить пароль');
+                } finally {
+                  setSaving(false);
+                }
+              }}
+            >
+              <Text style={styles.btnText}>Сохранить пароль</Text>
+            </Pressable>
+            {passwordHint ? <Text style={styles.meta}>{passwordHint}</Text> : null}
+
+            <Pressable
+              style={[styles.btn, styles.btnDanger]}
+              onPress={async () => {
+                await logout();
+              }}
+            >
+              <Text style={styles.btnText}>Выйти из аккаунта</Text>
+            </Pressable>
+          </>
         )
       ) : null}
     </ScrollView>
@@ -274,6 +318,7 @@ const styles = StyleSheet.create({
     minHeight: 48,
   },
   btnGhost: { backgroundColor: colors.graphite },
+  btnDanger: { backgroundColor: colors.warn },
   btnText: { color: colors.text, fontWeight: '800' },
   error: { color: colors.warn, marginTop: 10, textAlign: 'center' },
 });

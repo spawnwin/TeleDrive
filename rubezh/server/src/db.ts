@@ -284,4 +284,5 @@ export function migrate(): void {
   ensureColumn('story_progress', 'objective_done', 'objective_done INTEGER NOT NULL DEFAULT 0');
   ensureColumn('story_progress', 'claimed_reward_chapter', 'claimed_reward_chapter INTEGER NOT NULL DEFAULT 0');
   ensureColumn('race_scores', 'reward_claimed', 'reward_claimed INTEGER NOT NULL DEFAULT 0');
+  ensureColumn('users', 'password_hash', 'password_hash TEXT');
 }

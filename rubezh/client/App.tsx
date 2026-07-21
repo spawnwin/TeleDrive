@@ -11,7 +11,9 @@ import { SpecialistsScreen } from './src/screens/SpecialistsScreen';
 import { ClanScreen } from './src/screens/ClanScreen';
 import { MoreScreen } from './src/screens/MoreScreen';
 import { ProfileScreen, type RootStackParamList } from './src/screens/ProfileScreen';
+import { AuthScreen } from './src/screens/AuthScreen';
 import { UpdateModal } from './src/components/UpdateModal';
+import { TabIcon } from './src/components/Icons';
 import { colors } from './src/theme';
 
 const Tab = createBottomTabNavigator();
@@ -40,7 +42,7 @@ function RootTabs() {
         tabBarStyle: {
           backgroundColor: colors.panel,
           borderTopColor: colors.border,
-          height: 52 + tabPad,
+          height: 58 + tabPad,
           paddingBottom: tabPad,
           paddingTop: 6,
         },
@@ -49,17 +51,47 @@ function RootTabs() {
         tabBarLabelStyle: { fontSize: 10, fontWeight: '700' },
       }}
     >
-      <Tab.Screen name="База" component={BaseScreen} />
-      <Tab.Screen name="Карта" component={MapScreen} />
-      <Tab.Screen name="Союз" component={ClanScreen} />
-      <Tab.Screen name="Штаб" component={SpecialistsScreen} />
-      <Tab.Screen name="Ещё" component={MoreScreen} />
+      <Tab.Screen
+        name="База"
+        component={BaseScreen}
+        options={{
+          tabBarIcon: ({ focused }) => <TabIcon name="base" focused={focused} />,
+        }}
+      />
+      <Tab.Screen
+        name="Карта"
+        component={MapScreen}
+        options={{
+          tabBarIcon: ({ focused }) => <TabIcon name="map" focused={focused} />,
+        }}
+      />
+      <Tab.Screen
+        name="Союз"
+        component={ClanScreen}
+        options={{
+          tabBarIcon: ({ focused }) => <TabIcon name="clan" focused={focused} />,
+        }}
+      />
+      <Tab.Screen
+        name="Штаб"
+        component={SpecialistsScreen}
+        options={{
+          tabBarIcon: ({ focused }) => <TabIcon name="staff" focused={focused} />,
+        }}
+      />
+      <Tab.Screen
+        name="Ещё"
+        component={MoreScreen}
+        options={{
+          tabBarIcon: ({ focused }) => <TabIcon name="more" focused={focused} />,
+        }}
+      />
     </Tab.Navigator>
   );
 }
 
 function RootNavigator() {
-  const { loading, error, state } = useGame();
+  const { loading, error, state, needsAuth } = useGame();
   const insets = useSafeAreaInsets();
 
   if (loading) {
@@ -71,7 +103,8 @@ function RootNavigator() {
     );
   }
 
-  if (!state) {
+  if (needsAuth || !state) {
+    if (needsAuth) return <AuthScreen />;
     return (
       <View style={[styles.center, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
         <Text style={styles.errorTitle}>Нет связи с сервером</Text>
