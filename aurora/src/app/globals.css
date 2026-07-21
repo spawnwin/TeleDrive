@@ -509,3 +509,46 @@ body[data-lightbox-open] [data-slot="sheet-content"] {
   --primary: #fb923c;
   --ring: #fb923c;
 }
+
+/* —— Aurora Admin panel —— */
+.admin-panel {
+  --admin-accent: #38bdf8;
+  --admin-accent-soft: rgba(56, 189, 248, 0.14);
+  background:
+    radial-gradient(1200px 600px at 10% -10%, rgba(56, 189, 248, 0.08), transparent 55%),
+    radial-gradient(900px 500px at 90% 0%, rgba(255, 255, 255, 0.04), transparent 50%),
+    linear-gradient(180deg, #09090b 0%, #0c1017 48%, #09090b 100%);
+  color: #f4f4f5;
+}
+
+.admin-panel [data-slot='card'] {
+  border-radius: 1.5rem;
+  border-color: rgba(255, 255, 255, 0.08);
+  background: linear-gradient(165deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.02));
+  box-shadow: 0 10px 36px rgba(0, 0, 0, 0.28);
+  backdrop-filter: blur(16px);
+}
+
+.admin-panel [data-slot='card']:hover {
+  border-color: rgba(255, 255, 255, 0.11);
+}
+
+.admin-panel button {
+  border-radius: 0.9rem;
+}
+
+.admin-panel input,
+.admin-panel textarea,
+.admin-panel [data-slot='select-trigger'] {
+  border-radius: 0.9rem !important;
+}
+
+.admin-panel table {
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.admin-panel [role='tablist'] {
+  border-radius: 1rem;
+  padding: 0.25rem;
+}

@@ -8,6 +8,8 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { AdminPageHeader, adminCardClass } from '@/components/admin/admin-ui'
+import { cn } from '@/lib/utils'
 
 type UserReport = {
   id: string
@@ -110,14 +112,14 @@ export function AdminReportsPage() {
 
   return (
     <div>
-      <h1 className="mb-6 text-2xl font-semibold">Жалобы</h1>
+      <AdminPageHeader title="Жалобы" description="Жалобы на пользователей и сообщения" />
       {error && (
-        <p className="mb-4 rounded-lg border border-red-900/50 bg-red-950/30 px-4 py-3 text-sm text-red-300">
+        <p className="mb-4 rounded-2xl border border-red-400/20 bg-red-500/10 px-4 py-3 text-sm text-red-300">
           {error}
         </p>
       )}
       <Tabs defaultValue="users">
-        <TabsList className="border border-zinc-800 bg-zinc-900">
+        <TabsList className="rounded-2xl border border-white/10 bg-white/[0.04]">
           <TabsTrigger value="users">
             На пользователей ({userReports.filter((r) => r.status === 'pending').length})
           </TabsTrigger>
@@ -133,7 +135,7 @@ export function AdminReportsPage() {
             <p className="text-zinc-500">Жалоб нет</p>
           ) : (
             userReports.map((r) => (
-              <Card key={r.id} className="border-zinc-800 bg-zinc-900/50">
+              <Card key={r.id} className={cn(adminCardClass)}>
                 <CardHeader className="pb-2">
                   <div className="flex items-start justify-between gap-4">
                     <CardTitle className="text-base">
@@ -178,7 +180,7 @@ export function AdminReportsPage() {
             <p className="text-zinc-500">Жалоб нет</p>
           ) : (
             messageReports.map((r) => (
-              <Card key={r.id} className="border-zinc-800 bg-zinc-900/50">
+              <Card key={r.id} className={cn(adminCardClass)}>
                 <CardHeader className="pb-2">
                   <div className="flex items-start justify-between gap-4">
                     <CardTitle className="text-base">
@@ -188,7 +190,7 @@ export function AdminReportsPage() {
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-2 text-sm">
-                  <p className="rounded-lg bg-zinc-950 p-3 text-zinc-300">
+                  <p className="rounded-2xl bg-black/30 p-3 text-zinc-300">
                     {r.message?.content ?? 'Сообщение удалено'}
                   </p>
                   <p className="text-zinc-300">Причина: {r.reason}</p>

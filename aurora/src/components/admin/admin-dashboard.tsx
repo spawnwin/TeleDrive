@@ -15,6 +15,13 @@ import {
   Send,
   Sticker,
 } from 'lucide-react'
+import {
+  AdminPageHeader,
+  adminCardClass,
+  adminCardHoverClass,
+  adminSectionLabelClass,
+} from '@/components/admin/admin-ui'
+import { cn } from '@/lib/utils'
 
 type Stats = {
   totalUsers: number
@@ -43,7 +50,13 @@ const activityCards: { key: keyof Stats; label: string; icon: typeof Users; href
   { key: 'reportsPending', label: 'Жалоб в ожидании', icon: Flag, href: '/admin/reports' },
 ]
 
-const economyCards: { key: keyof Stats; label: string; icon: typeof Users; href?: string; suffix?: string }[] = [
+const economyCards: {
+  key: keyof Stats
+  label: string
+  icon: typeof Users
+  href?: string
+  suffix?: string
+}[] = [
   { key: 'revenueTodayRub', label: 'Пополнено сегодня', icon: Wallet, suffix: ' ₽', href: '/admin/payments' },
   { key: 'coinsInCirculation', label: 'Всего на балансах', icon: Wallet, suffix: ' ₽', href: '/admin/payments' },
   { key: 'transfersTodayRub', label: 'Переводов сегодня', icon: Send, suffix: ' ₽', href: '/admin/transfers' },
@@ -86,24 +99,24 @@ export function AdminDashboard() {
     href?: string
     suffix?: string
   }) => {
-    const value = loading ? '—' : `${(stats?.[key] ?? 0).toLocaleString('ru-RU')}${!loading && suffix ? suffix : ''}`
+    const value = loading
+      ? '—'
+      : `${(stats?.[key] ?? 0).toLocaleString('ru-RU')}${!loading && suffix ? suffix : ''}`
     const card = (
-      <Card
-        className={
-          'border-zinc-800 bg-zinc-900/50' + (href ? ' transition hover:border-amber-500/40' : '')
-        }
-      >
-        <CardHeader className="flex flex-row items-center justify-between pb-2">
+      <Card className={cn(adminCardClass, 'gap-4 py-5', href && adminCardHoverClass)}>
+        <CardHeader className="flex flex-row items-center justify-between px-5 pb-0">
           <CardTitle className="text-sm font-medium text-zinc-400">{label}</CardTitle>
-          <Icon className="size-4 text-amber-500/70" />
+          <span className="flex h-9 w-9 items-center justify-center rounded-2xl bg-sky-400/10 text-sky-300">
+            <Icon className="size-4" />
+          </span>
         </CardHeader>
-        <CardContent>
-          <p className="text-3xl font-bold text-zinc-100">{value}</p>
+        <CardContent className="px-5">
+          <p className="text-3xl font-semibold tracking-tight text-zinc-50">{value}</p>
         </CardContent>
       </Card>
     )
     return href ? (
-      <Link key={key} href={href}>
+      <Link key={key} href={href} className="block">
         {card}
       </Link>
     ) : (
@@ -113,19 +126,22 @@ export function AdminDashboard() {
 
   return (
     <div>
-      <h1 className="mb-6 text-2xl font-semibold text-zinc-100">Дашборд</h1>
+      <AdminPageHeader
+        title="Дашборд"
+        description="Обзор активности и экономики Aurora"
+      />
       {error && (
-        <p className="mb-4 rounded-lg border border-red-900/50 bg-red-950/30 px-4 py-3 text-sm text-red-300">
+        <p className="mb-4 rounded-2xl border border-red-400/20 bg-red-500/10 px-4 py-3 text-sm text-red-200">
           {error}
         </p>
       )}
 
-      <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-zinc-500">Активность</p>
+      <p className={adminSectionLabelClass}>Активность</p>
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         {activityCards.map(renderCard)}
       </div>
 
-      <p className="mb-3 mt-8 text-xs font-semibold uppercase tracking-wide text-zinc-500">Экономика</p>
+      <p className={cn(adminSectionLabelClass, 'mt-9')}>Экономика</p>
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         {economyCards.map(renderCard)}
       </div>

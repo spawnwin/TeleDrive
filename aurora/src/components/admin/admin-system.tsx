@@ -15,6 +15,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { AdminPageHeader, adminCardClass } from '@/components/admin/admin-ui'
+import { cn } from '@/lib/utils'
 
 type SystemData = {
   db: {
@@ -219,7 +221,7 @@ export function AdminSystemPage() {
   if (error) {
     return (
       <div>
-        <h1 className="mb-6 text-2xl font-semibold">Система</h1>
+        <AdminPageHeader title="Система" description="База, push, очистка и флаги платформы" />
         <p className="text-red-400">{error}</p>
         <Button variant="outline" className="mt-4" onClick={load}>
           Повторить
@@ -230,10 +232,10 @@ export function AdminSystemPage() {
 
   return (
     <div>
-      <h1 className="mb-6 text-2xl font-semibold">Система</h1>
+      <AdminPageHeader title="Система" description="База, push, очистка и флаги платформы" />
 
       <div className="grid gap-4 md:grid-cols-2">
-        <Card className="border-zinc-800 bg-zinc-900/50">
+        <Card className={cn(adminCardClass)}>
           <CardHeader>
             <CardTitle className="text-base text-zinc-300">База данных</CardTitle>
           </CardHeader>
@@ -265,7 +267,7 @@ export function AdminSystemPage() {
           </CardContent>
         </Card>
 
-        <Card className="border-zinc-800 bg-zinc-900/50">
+        <Card className={cn(adminCardClass)}>
           <CardHeader>
             <CardTitle className="text-base text-zinc-300">Хранилище и Push</CardTitle>
           </CardHeader>
@@ -291,7 +293,7 @@ export function AdminSystemPage() {
               </span>
             </div>
             {data?.push?.apns && (
-              <div className="rounded-lg border border-zinc-800 bg-zinc-950/40 p-3 text-xs text-zinc-400 space-y-1">
+              <div className="rounded-2xl border border-white/8 bg-black/30 p-3 text-xs text-zinc-400 space-y-1">
                 <p>Bundle: {data.push.apns.bundleId}</p>
                 <p>Mode: {data.push.apns.production ? 'production' : 'sandbox'}</p>
                 <p>Key file: {data.push.apns.keyFileExists ? 'есть' : 'нет'}</p>
@@ -303,7 +305,7 @@ export function AdminSystemPage() {
               <span>{data?.push?.subscriptions ?? 0}</span>
             </div>
 
-            <div className="space-y-2 border-t border-zinc-800 pt-3">
+            <div className="space-y-2 border-t border-white/8 pt-3">
               <p className="text-sm font-medium text-zinc-300">Настройка APNs</p>
               <p className="text-xs text-zinc-500">
                 Apple Developer → Keys → Apple Push Notifications service (APNs). Bundle ID:{' '}
@@ -316,7 +318,7 @@ export function AdminSystemPage() {
                     value={apnsKeyId}
                     onChange={(e) => setApnsKeyId(e.target.value.trim())}
                     placeholder="ABCDE12345"
-                    className="bg-zinc-950"
+                    className="rounded-2xl border-white/10 bg-black/30"
                   />
                 </div>
                 <div className="space-y-1">
@@ -325,7 +327,7 @@ export function AdminSystemPage() {
                     value={apnsTeamId}
                     onChange={(e) => setApnsTeamId(e.target.value.trim())}
                     placeholder="TEAMID1234"
-                    className="bg-zinc-950"
+                    className="rounded-2xl border-white/10 bg-black/30"
                   />
                 </div>
               </div>
@@ -334,10 +336,10 @@ export function AdminSystemPage() {
                 <Input
                   value={apnsBundleId}
                   onChange={(e) => setApnsBundleId(e.target.value.trim())}
-                  className="bg-zinc-950"
+                  className="rounded-2xl border-white/10 bg-black/30"
                 />
               </div>
-              <div className="flex items-center justify-between rounded-lg border border-zinc-800 px-3 py-2">
+              <div className="flex items-center justify-between rounded-2xl border border-white/8 px-3 py-2">
                 <span className="text-xs text-zinc-400">Production APNs</span>
                 <Switch checked={apnsProduction} onCheckedChange={setApnsProduction} />
               </div>
@@ -361,12 +363,12 @@ export function AdminSystemPage() {
           </CardContent>
         </Card>
 
-        <Card className="border-zinc-800 bg-zinc-900/50 md:col-span-2">
+        <Card className={cn(adminCardClass, "md:col-span-2")}>
           <CardHeader>
             <CardTitle className="text-base text-zinc-300">Очистка</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="flex flex-wrap items-center justify-between gap-4 rounded-lg border border-zinc-800 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-white/8 p-4">
               <div>
                 <p className="font-medium">Просроченные истории</p>
                 <p className="text-sm text-zinc-500">{data?.cleanup?.expiredStories ?? 0} записей</p>
@@ -379,7 +381,7 @@ export function AdminSystemPage() {
                 Очистить
               </Button>
             </div>
-            <div className="flex flex-wrap items-center justify-between gap-4 rounded-lg border border-zinc-800 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-white/8 p-4">
               <div>
                 <p className="font-medium">Просроченные сессии</p>
                 <p className="text-sm text-zinc-500">{data?.cleanup?.expiredSessions ?? 0} записей</p>
@@ -392,7 +394,7 @@ export function AdminSystemPage() {
                 Очистить
               </Button>
             </div>
-            <div className="flex flex-wrap items-center justify-between gap-4 rounded-lg border border-zinc-800 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-white/8 p-4">
               <div>
                 <p className="font-medium">Просроченный Nearby</p>
                 <p className="text-sm text-zinc-500">Удалить истёкшие гео-присутствия</p>
@@ -408,12 +410,12 @@ export function AdminSystemPage() {
           </CardContent>
         </Card>
 
-        <Card className="border-zinc-800 bg-zinc-900/50 md:col-span-2">
+        <Card className={cn(adminCardClass, "md:col-span-2")}>
           <CardHeader>
             <CardTitle className="text-base text-zinc-300">Функции и техработы</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="flex flex-wrap items-center justify-between gap-4 rounded-lg border border-amber-500/30 bg-amber-500/5 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-amber-400/25 bg-amber-400/10 p-4">
               <div>
                 <p className="font-medium text-amber-300">Режим техобслуживания</p>
                 <p className="text-sm text-zinc-500">Сайт становится недоступен всем, кроме админов</p>
@@ -451,7 +453,7 @@ export function AdminSystemPage() {
             </div>
 
             <div className="grid gap-3 sm:grid-cols-2">
-              <div className="flex items-center justify-between gap-4 rounded-lg border border-zinc-800 p-4">
+              <div className="flex items-center justify-between gap-4 rounded-2xl border border-white/8 p-4">
                 <p className="font-medium">Звонки</p>
                 <Switch
                   checked={!!flags?.callsEnabled}
@@ -459,7 +461,7 @@ export function AdminSystemPage() {
                   onCheckedChange={(v) => patchFlags({ callsEnabled: v }, 'callsEnabled')}
                 />
               </div>
-              <div className="flex items-center justify-between gap-4 rounded-lg border border-zinc-800 p-4">
+              <div className="flex items-center justify-between gap-4 rounded-2xl border border-white/8 p-4">
                 <p className="font-medium">Стена профиля</p>
                 <Switch
                   checked={!!flags?.wallEnabled}
@@ -467,7 +469,7 @@ export function AdminSystemPage() {
                   onCheckedChange={(v) => patchFlags({ wallEnabled: v }, 'wallEnabled')}
                 />
               </div>
-              <div className="flex items-center justify-between gap-4 rounded-lg border border-zinc-800 p-4">
+              <div className="flex items-center justify-between gap-4 rounded-2xl border border-white/8 p-4">
                 <p className="font-medium">Маркетплейс</p>
                 <Switch
                   checked={!!flags?.marketplaceEnabled}
@@ -475,7 +477,7 @@ export function AdminSystemPage() {
                   onCheckedChange={(v) => patchFlags({ marketplaceEnabled: v }, 'marketplaceEnabled')}
                 />
               </div>
-              <div className="flex items-center justify-between gap-4 rounded-lg border border-zinc-800 p-4">
+              <div className="flex items-center justify-between gap-4 rounded-2xl border border-white/8 p-4">
                 <p className="font-medium">Стримы</p>
                 <Switch
                   checked={!!flags?.streamsEnabled}
@@ -487,15 +489,15 @@ export function AdminSystemPage() {
           </CardContent>
         </Card>
 
-        <Card className="border-zinc-800 bg-zinc-900/50 md:col-span-2">
+        <Card className={cn(adminCardClass, "md:col-span-2")}>
           <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3">
             <CardTitle className="text-base text-zinc-300">Логи сервисов</CardTitle>
             <div className="flex flex-wrap gap-2">
               <Select value={logService} onValueChange={setLogService}>
-                <SelectTrigger className="w-[130px] border-zinc-700 bg-zinc-950">
+                <SelectTrigger className="w-[130px] rounded-2xl border-white/10 bg-black/30">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent className="border-zinc-700 bg-zinc-900">
+                <SelectContent className="rounded-2xl border-white/10 bg-zinc-900">
                   <SelectItem value="all">Все</SelectItem>
                   <SelectItem value="web">Web</SelectItem>
                   <SelectItem value="chat">Chat</SelectItem>
@@ -504,10 +506,10 @@ export function AdminSystemPage() {
                 </SelectContent>
               </Select>
               <Select value={logLevel} onValueChange={setLogLevel}>
-                <SelectTrigger className="w-[130px] border-zinc-700 bg-zinc-950">
+                <SelectTrigger className="w-[130px] rounded-2xl border-white/10 bg-black/30">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent className="border-zinc-700 bg-zinc-900">
+                <SelectContent className="rounded-2xl border-white/10 bg-zinc-900">
                   <SelectItem value="all">Все уровни</SelectItem>
                   <SelectItem value="error">Errors</SelectItem>
                   <SelectItem value="warn">Warn</SelectItem>
@@ -526,8 +528,8 @@ export function AdminSystemPage() {
               <p className="text-sm text-zinc-500">Логов пока нет (или каталог пуст)</p>
             ) : (
               Object.entries(logs).map(([file, info]) => (
-                <div key={file} className="overflow-hidden rounded-lg border border-zinc-800">
-                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-800 bg-zinc-950/60 px-3 py-2 text-xs text-zinc-400">
+                <div key={file} className="overflow-hidden rounded-2xl border border-white/8">
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/8 bg-black/30 px-3 py-2 text-xs text-zinc-400">
                     <span className="font-mono text-zinc-200">{file}</span>
                     <span>
                       {formatBytes(info.size)} ·{' '}

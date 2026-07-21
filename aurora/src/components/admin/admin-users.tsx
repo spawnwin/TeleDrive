@@ -30,6 +30,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { ChevronLeft, ChevronRight, MoreHorizontal, Search } from 'lucide-react'
+import { AdminPageHeader } from '@/components/admin/admin-ui'
 
 type UserRow = {
   id: string
@@ -127,35 +128,35 @@ export function AdminUsersPage() {
 
   return (
     <div>
-      <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold">Пользователи</h1>
-          <p className="mt-1 text-sm text-zinc-500">Всего: {total.toLocaleString('ru-RU')}</p>
-        </div>
-        <form onSubmit={submitSearch} className="flex w-full max-w-md gap-2 sm:w-auto">
-          <div className="relative flex-1">
-            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-zinc-500" />
-            <Input
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              placeholder="Поиск: @username, имя или id"
-              className="border-zinc-700 bg-zinc-950 pl-9"
-            />
-          </div>
-          <Button type="submit" variant="outline">
-            Найти
-          </Button>
-        </form>
-      </div>
+      <AdminPageHeader
+        title="Пользователи"
+        description={`Всего: ${total.toLocaleString('ru-RU')}`}
+        actions={
+          <form onSubmit={submitSearch} className="flex w-full max-w-md gap-2 sm:w-auto">
+            <div className="relative flex-1">
+              <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-zinc-500" />
+              <Input
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                placeholder="Поиск: @username, имя или id"
+                className="rounded-2xl border-white/10 bg-black/30 pl-9"
+              />
+            </div>
+            <Button type="submit" variant="outline" className="rounded-2xl">
+              Найти
+            </Button>
+          </form>
+        }
+      />
       {error && (
-        <p className="mb-4 rounded-lg border border-red-900/50 bg-red-950/30 px-4 py-3 text-sm text-red-300">
+        <p className="mb-4 rounded-2xl border border-red-400/20 bg-red-500/10 px-4 py-3 text-sm text-red-200">
           {error}
         </p>
       )}
-      <div className="overflow-x-auto rounded-xl border border-zinc-800">
+      <div className="overflow-x-auto rounded-3xl border border-white/8 bg-white/[0.03] shadow-[0_8px_32px_rgba(0,0,0,0.28)] backdrop-blur-xl">
         <Table>
           <TableHeader>
-            <TableRow className="border-zinc-800 hover:bg-transparent">
+            <TableRow className="border-white/8 hover:bg-transparent">
               <TableHead>Логин</TableHead>
               <TableHead>Имя</TableHead>
               <TableHead>Premium</TableHead>
@@ -182,7 +183,7 @@ export function AdminUsersPage() {
               </TableRow>
             ) : (
               users.map((u) => (
-                <TableRow key={u.id} className="border-zinc-800">
+                <TableRow key={u.id} className="border-white/8">
                   <TableCell className="font-mono text-sm">
                     @{u.username}
                     {u.isBanned && (
@@ -213,7 +214,7 @@ export function AdminUsersPage() {
                           <MoreHorizontal className="size-4" />
                         </Button>
                       </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="border-zinc-700 bg-zinc-900">
+                      <DropdownMenuContent align="end" className="rounded-2xl border-white/10 bg-zinc-900/95">
                         {u.isBanned ? (
                           <DropdownMenuItem onClick={() => action(u.id, 'unban')}>
                             Разбанить
@@ -299,7 +300,7 @@ export function AdminUsersPage() {
       </div>
 
       <Dialog open={!!coinsDialog} onOpenChange={() => setCoinsDialog(null)}>
-        <DialogContent className="border-zinc-700 bg-zinc-900">
+        <DialogContent className="rounded-2xl border-white/10 bg-zinc-900/95">
           <DialogHeader>
             <DialogTitle>
               {coinsDialog?.mode === 'subtract' ? 'Списать' : 'Начислить'} баланс, ₽ — @
