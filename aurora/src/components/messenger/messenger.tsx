@@ -609,6 +609,7 @@ export function Messenger() {
         )}
 
       {!activeChatId &&
+        !isShortsMode &&
         !showSettings &&
         !showFriends &&
         !showCoins &&

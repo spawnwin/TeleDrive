@@ -2479,38 +2479,41 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
         )}
       </AnimatePresence>
 
-      {/* Recording indicator */}
+      {/* Voice Notes 2.0 — circular recording HUD */}
       <AnimatePresence>
         {isRecording && (
           <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            className="shrink-0 overflow-hidden border-t border-border bg-rose-500/10"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="pointer-events-auto fixed inset-x-0 bottom-0 z-[350] flex flex-col items-center gap-3 xl:absolute bg-gradient-to-t from-background via-background/95 to-transparent px-4 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-16"
           >
-            <div className="flex items-center gap-3 px-4 py-3">
-              <div className="flex h-3 w-3 items-center justify-center">
-                <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-rose-500" />
+            <div className="relative flex h-40 w-40 items-center justify-center">
+              <span className="absolute inset-0 animate-ping rounded-full bg-rose-500/20" />
+              <span className="absolute inset-2 animate-pulse rounded-full border-2 border-rose-500/50" />
+              <div className="relative flex h-28 w-28 flex-col items-center justify-center rounded-full bg-gradient-to-br from-rose-500 to-rose-700 text-white shadow-lg">
+                <span className="text-lg font-semibold tabular-nums">
+                  {Math.floor(recordSeconds / 60)}:{(recordSeconds % 60).toString().padStart(2, '0')}
+                </span>
+                <span className="mt-0.5 text-[10px] uppercase tracking-wide text-white/80">
+                  {t('composer.recording')}
+                </span>
               </div>
-              <span className="text-sm font-medium text-rose-600 dark:text-rose-400">
-                {t('composer.recording')} {Math.floor(recordSeconds / 60)}:{(recordSeconds % 60).toString().padStart(2, '0')}
-              </span>
-              <div className="flex-1" />
+            </div>
+            <div className="flex w-full max-w-sm items-center gap-2">
               <Button
-                variant="ghost"
-                size="sm"
-                className="h-8 text-xs"
+                variant="outline"
+                className="flex-1"
                 onClick={cancelRecording}
               >
-                <X className="mr-1 h-3.5 w-3.5" />
+                <X className="mr-1 h-4 w-4" />
                 {t('composer.cancelRecording')}
               </Button>
               <Button
-                size="sm"
-                className="h-8 bg-rose-500 text-white hover:bg-rose-600"
+                className="flex-1 bg-rose-500 text-white hover:bg-rose-600"
                 onClick={stopRecording}
               >
-                <Check className="mr-1 h-3.5 w-3.5" />
+                <Check className="mr-1 h-4 w-4" />
                 {t('composer.stopRecording')}
               </Button>
             </div>

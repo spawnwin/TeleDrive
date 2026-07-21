@@ -817,7 +817,7 @@ export function ShortCard({
       <div className="pointer-events-none absolute inset-x-0 bottom-0 h-2/3 bg-gradient-to-t from-black/90 via-black/40 to-transparent" />
 
       {/* Right action rail */}
-      <div className="absolute bottom-[max(6rem,calc(env(safe-area-inset-bottom)+6rem))] right-3 z-20 flex flex-col items-center gap-4">
+      <div className="absolute bottom-[max(4.5rem,calc(env(safe-area-inset-bottom)+3.5rem))] right-3 z-20 flex flex-col items-center gap-4">
         {/* Avatar with follow button */}
         <div className="relative mb-1">
           <Avatar
@@ -938,7 +938,7 @@ export function ShortCard({
       </div>
 
       {/* Bottom-left info */}
-      <div className="absolute bottom-[max(6rem,calc(env(safe-area-inset-bottom)+6rem))] left-4 right-20 z-20 text-white">
+      <div className="absolute bottom-[max(4.5rem,calc(env(safe-area-inset-bottom)+3.5rem))] left-4 right-20 z-20 text-white">
         {short.parentShort && (
           <div className="mb-2 flex items-center gap-2 rounded-xl bg-black/40 px-2 py-1.5 backdrop-blur">
             {short.parentShort.thumbnailUrl ? (
@@ -1046,7 +1046,7 @@ export function ShortCard({
       {/* Playback progress bar (native uploads only) */}
       {showProgressBar && (
         <div
-          className="absolute bottom-0 left-0 right-0 z-20 h-1.5 cursor-pointer bg-white/20"
+          className="absolute bottom-[max(0.75rem,env(safe-area-inset-bottom))] left-0 right-0 z-20 h-1.5 cursor-pointer bg-white/20"
           onClick={handleSeek}
           role="progressbar"
           aria-valuenow={Math.round(progress * 100)}

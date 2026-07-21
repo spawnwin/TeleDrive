@@ -367,30 +367,31 @@ export function StoryViewer({
           )}
         </div>
 
-        {!currentUser.isSelf && !showViewers && (
+        {!showViewers && (currentStory.content && currentStory.type !== 'text' || !currentUser.isSelf) && (
           <div
-            className="absolute bottom-0 left-0 right-0 z-20 flex justify-center bg-gradient-to-t from-black/80 to-transparent px-4 pb-[max(2rem,calc(env(safe-area-inset-bottom)+2rem))] pt-12"
+            className="absolute bottom-0 left-0 right-0 z-20 bg-gradient-to-t from-black/80 to-transparent px-4 pb-[max(2rem,calc(env(safe-area-inset-bottom)+2rem))] pt-12"
             onPointerDown={(e) => e.stopPropagation()}
           >
-            <button
-              type="button"
-              onClick={toggleLike}
-              disabled={likeBusy}
-              className={cn(
-                'flex items-center gap-2 rounded-full px-5 py-2.5 text-sm font-medium text-white backdrop-blur transition active:scale-95',
-                isLiked ? 'bg-rose-500/40' : 'bg-white/15 hover:bg-white/25',
-              )}
-            >
-              <Heart className={cn('h-5 w-5', isLiked && 'fill-rose-400 text-rose-400')} />
-              {isLiked ? t('stories.liked') : t('stories.like')}
-              {likes > 0 && <span className="text-white/80">{likes}</span>}
-            </button>
-          </div>
-        )}
-
-        {currentStory.content && currentStory.type !== 'text' && !showViewers && currentUser.isSelf && (
-          <div className="absolute bottom-0 left-0 right-0 z-20 bg-gradient-to-t from-black/80 to-transparent px-[max(1rem,env(safe-area-inset-right,1rem))] pb-[max(2rem,calc(env(safe-area-inset-bottom)+2rem))] pt-12">
-            <p className="text-center text-sm text-white">{currentStory.content}</p>
+            {currentStory.content && currentStory.type !== 'text' && (
+              <p className="mb-3 text-center text-sm text-white">{currentStory.content}</p>
+            )}
+            {!currentUser.isSelf && (
+              <div className="flex justify-center">
+                <button
+                  type="button"
+                  onClick={toggleLike}
+                  disabled={likeBusy}
+                  className={cn(
+                    'flex items-center gap-2 rounded-full px-5 py-2.5 text-sm font-medium text-white backdrop-blur transition active:scale-95',
+                    isLiked ? 'bg-rose-500/40' : 'bg-white/15 hover:bg-white/25',
+                  )}
+                >
+                  <Heart className={cn('h-5 w-5', isLiked && 'fill-rose-400 text-rose-400')} />
+                  {isLiked ? t('stories.liked') : t('stories.like')}
+                  {likes > 0 && <span className="text-white/80">{likes}</span>}
+                </button>
+              </div>
+            )}
           </div>
         )}
 
