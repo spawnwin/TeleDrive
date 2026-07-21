@@ -20,7 +20,8 @@ interface MobileBottomNavProps {
   userName?: string | null
   userAvatarColor?: string | null
   userAvatarUrl?: string | null
-  /** Telegram-style: search field slides up from the bottom */
+  /** Hide while chat multi-select is active (Telegram replaces tab bar). */
+  hidden?: boolean
   searchOpen?: boolean
   searchQuery?: string
   onSearchQueryChange?: (query: string) => void
@@ -43,6 +44,7 @@ export function MobileBottomNav({
   userName,
   userAvatarColor,
   userAvatarUrl,
+  hidden = false,
   searchOpen = false,
   searchQuery = '',
   onSearchQueryChange,
@@ -60,11 +62,9 @@ export function MobileBottomNav({
     { id: 'chats' as const, icon: MessageCircle, onClick: onChats, label: labels.chats },
   ]
 
-  // Telegram tab bar: frosted bar, blue active tint (not red badges)
-  const bar =
-    'border-t border-white/10 bg-[#1c1c1e]/88 shadow-[0_-4px_24px_rgba(0,0,0,0.25)] backdrop-blur-2xl dark:bg-[#17212b]/92'
-  const pill =
-    'border border-white/10 bg-[#2c2c2e]/80 shadow-[0_4px_16px_rgba(0,0,0,0.28)] backdrop-blur-2xl'
+  // High-contrast floating glass — must stay above list/stories and remain tappable
+  const glass =
+    'border border-white/12 bg-[#1c1c1e]/85 shadow-[0_8px_28px_rgba(0,0,0,0.4)] backdrop-blur-2xl dark:bg-[#17212b]/90'
 
   useEffect(() => {
     if (!searchOpen) return
@@ -72,12 +72,14 @@ export function MobileBottomNav({
     return () => window.clearTimeout(id)
   }, [searchOpen])
 
+  if (hidden) return null
+
   return (
     <nav
       aria-label="Мобильная навигация"
-      className="pointer-events-none fixed inset-x-0 bottom-0 z-[200] xl:hidden"
+      className="pointer-events-none fixed inset-x-0 bottom-0 z-[300] xl:hidden"
     >
-      <div className="pointer-events-none mx-auto w-full max-w-lg px-2 pb-[max(0.35rem,env(safe-area-inset-bottom))] pt-1">
+      <div className="pointer-events-none mx-auto w-full max-w-lg px-3 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-1">
         <AnimatePresence mode="wait" initial={false}>
           {searchOpen ? (
             <motion.div
@@ -88,7 +90,7 @@ export function MobileBottomNav({
               transition={{ type: 'spring', stiffness: 420, damping: 34, mass: 0.85 }}
               className="pointer-events-auto flex items-center gap-2"
             >
-              <div className={cn('flex h-[48px] min-w-0 flex-1 items-center gap-2 rounded-full px-3.5', pill)}>
+              <div className={cn('flex h-[52px] min-w-0 flex-1 items-center gap-2 rounded-full px-3.5', glass)}>
                 <Search
                   strokeWidth={1.75}
                   absoluteStrokeWidth
@@ -126,8 +128,8 @@ export function MobileBottomNav({
                 type="button"
                 onClick={onSearchClose}
                 className={cn(
-                  'h-[48px] shrink-0 touch-manipulation rounded-full px-4 text-[15px] font-medium text-[#3390ec] active:opacity-70',
-                  pill,
+                  'h-[52px] shrink-0 touch-manipulation rounded-full px-4 text-[15px] font-medium text-[#3390ec] active:opacity-70',
+                  glass,
                 )}
               >
                 {cancelLabel}
@@ -140,12 +142,12 @@ export function MobileBottomNav({
               animate={{ y: 0, opacity: 1 }}
               exit={{ y: 24, opacity: 0 }}
               transition={{ type: 'spring', stiffness: 420, damping: 34, mass: 0.85 }}
-              className="pointer-events-none flex items-end gap-2"
+              className="pointer-events-auto flex items-end gap-2"
             >
               <div
                 className={cn(
-                  'pointer-events-auto flex min-w-0 flex-1 items-stretch justify-between rounded-[22px] px-1 py-1',
-                  bar,
+                  'flex min-w-0 flex-1 items-stretch justify-between rounded-full px-1.5 py-1',
+                  glass,
                 )}
               >
                 {items.map(({ id, icon: Icon, onClick, label }) => {
@@ -157,7 +159,7 @@ export function MobileBottomNav({
                       onClick={onClick}
                       aria-label={label}
                       aria-current={active ? 'page' : undefined}
-                      className="relative flex min-w-0 flex-1 touch-manipulation flex-col items-center justify-center gap-0.5 rounded-2xl px-1 py-0.5 transition-opacity active:opacity-60"
+                      className="relative flex min-w-0 flex-1 touch-manipulation flex-col items-center justify-center gap-0.5 rounded-full px-1 py-0.5 transition-opacity active:opacity-60"
                     >
                       <span className="relative flex h-[22px] w-[22px] items-center justify-center">
                         <Icon
@@ -165,7 +167,7 @@ export function MobileBottomNav({
                           absoluteStrokeWidth
                           className={cn(
                             'h-[22px] w-[22px] transition-colors duration-150',
-                            active ? 'text-[#3390ec]' : 'text-white/50',
+                            active ? 'text-[#3390ec]' : 'text-white/55',
                           )}
                         />
                         {id === 'chats' && unreadCount > 0 && (
@@ -178,7 +180,7 @@ export function MobileBottomNav({
                       <span
                         className={cn(
                           'max-w-full truncate text-[9px] leading-none tracking-tight',
-                          active ? 'font-medium text-[#3390ec]' : 'font-normal text-white/45',
+                          active ? 'font-medium text-[#3390ec]' : 'font-normal text-white/50',
                         )}
                       >
                         {label}
@@ -192,9 +194,10 @@ export function MobileBottomNav({
                     type="button"
                     onClick={onSettings}
                     aria-label={settingsLabel}
-                    className="relative flex min-w-0 flex-1 touch-manipulation flex-col items-center justify-center gap-0.5 rounded-2xl px-1 py-0.5 transition-opacity active:opacity-60"
+                    aria-current={undefined}
+                    className="relative flex min-w-0 flex-1 touch-manipulation flex-col items-center justify-center gap-0.5 rounded-full px-1 py-0.5 transition-opacity active:opacity-60"
                   >
-                    <span className="flex h-[22px] w-[22px] items-center justify-center overflow-hidden rounded-full ring-1 ring-white/15">
+                    <span className="flex h-[22px] w-[22px] items-center justify-center overflow-hidden rounded-full ring-2 ring-[#3390ec]/40">
                       <Avatar
                         name={userName || 'U'}
                         color={userAvatarColor || '#3390ec'}
@@ -203,7 +206,7 @@ export function MobileBottomNav({
                         className="h-[22px] w-[22px] overflow-hidden rounded-full [&>div]:!h-[22px] [&>div]:!w-[22px] [&>div]:!rounded-full [&>div]:text-[8px] [&>div]:shadow-none"
                       />
                     </span>
-                    <span className="max-w-full truncate text-[9px] font-normal leading-none tracking-tight text-white/45">
+                    <span className="max-w-full truncate text-[9px] font-normal leading-none tracking-tight text-white/50">
                       {settingsLabel}
                     </span>
                   </button>
@@ -220,14 +223,14 @@ export function MobileBottomNav({
                   }}
                   aria-label={searchLabel}
                   className={cn(
-                    'pointer-events-auto relative z-[1] flex h-[48px] w-[48px] shrink-0 touch-manipulation items-center justify-center rounded-full transition-opacity active:opacity-60',
-                    pill,
+                    'relative z-[1] flex h-[52px] w-[52px] shrink-0 touch-manipulation items-center justify-center rounded-full transition-opacity active:opacity-60',
+                    glass,
                   )}
                 >
                   <Search
                     strokeWidth={1.75}
                     absoluteStrokeWidth
-                    className="pointer-events-none h-[20px] w-[20px] text-white"
+                    className="pointer-events-none h-[22px] w-[22px] text-white"
                   />
                 </button>
               )}

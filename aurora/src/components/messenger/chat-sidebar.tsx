@@ -940,9 +940,9 @@ export function ChatSidebar({
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Telegram-style multi-select action strip */}
+      {/* Telegram-style multi-select strip — inside sidebar, does NOT cover bottom nav */}
       {selectionMode && (
-        <div className="pointer-events-auto fixed inset-x-0 bottom-0 z-[210] border-t border-border bg-background/95 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur-md xl:static xl:z-auto">
+        <div className="z-10 shrink-0 border-t border-border bg-background/95 px-2 pt-2 pb-[max(4.75rem,calc(3.75rem+env(safe-area-inset-bottom)))] backdrop-blur-md xl:pb-2">
           <div className="mx-auto flex max-w-lg items-center justify-around gap-1">
             <button
               type="button"
@@ -1448,7 +1448,7 @@ function ChatListItemRow({
         }
       }}
       className={cn(
-        'group relative flex w-full min-w-0 items-center gap-3 rounded-none px-3 py-2.5 text-left transition-colors sm:px-4',
+        'group relative flex w-full min-w-0 items-center gap-3 rounded-none border-b border-sidebar-border/40 px-3 py-2.5 text-left transition-colors sm:px-4',
         selectionMode && selected
           ? 'bg-[#3390ec]/10'
           : isActive

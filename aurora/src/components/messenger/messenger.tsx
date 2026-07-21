@@ -620,6 +620,7 @@ export function Messenger() {
           }}
           onSettings={() => {
             closeMobileSearch()
+            setShowFriends(false)
             setShowSettings(true)
           }}
           onSearch={() => {
