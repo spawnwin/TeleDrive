@@ -94,6 +94,8 @@ interface SettingsDialogProps {
   onOpenChange: (v: boolean) => void
   onOpenPremium?: () => void
   onOpenCoins?: () => void
+  /** Open the current user's public profile wall. */
+  onOpenMyProfile?: () => void
 }
 
 const COLOR_OPTIONS = [
@@ -324,7 +326,7 @@ function SoundPickerList({
   )
 }
 
-export function SettingsDialog({ open, onOpenChange, onOpenPremium, onOpenCoins }: SettingsDialogProps) {
+export function SettingsDialog({ open, onOpenChange, onOpenPremium, onOpenCoins, onOpenMyProfile }: SettingsDialogProps) {
   const { t, lang, setLang } = useI18n()
   const {
     currentUser,
@@ -735,16 +737,31 @@ export function SettingsDialog({ open, onOpenChange, onOpenPremium, onOpenCoins 
           >
             {page === 'main' && (
               <>
-                {/* Profile header (tap → account page) */}
+                {/* Profile header — tap opens public profile wall */}
                 <div className="mb-3 flex flex-col items-center gap-3 pb-2">
                   <div className="relative">
-                    <Avatar
-                      name={currentUser?.name || '?'}
-                      color={currentUser?.avatarColor || avatarColor}
-                      imageUrl={currentUser?.avatarUrl || null}
-                      size="xl"
-                    />
                     <button
+                      type="button"
+                      onClick={() => {
+                        if (onOpenMyProfile) {
+                          onOpenChange(false)
+                          onOpenMyProfile()
+                        } else {
+                          setPage('account')
+                        }
+                      }}
+                      className="rounded-full transition hover:opacity-90"
+                      title={t('profile.myProfile')}
+                    >
+                      <Avatar
+                        name={currentUser?.name || '?'}
+                        color={currentUser?.avatarColor || avatarColor}
+                        imageUrl={currentUser?.avatarUrl || null}
+                        size="xl"
+                      />
+                    </button>
+                    <button
+                      type="button"
                       onClick={() => fileInputRef.current?.click()}
                       disabled={uploadingAvatar}
                       className="absolute bottom-0 right-0 flex h-8 w-8 items-center justify-center rounded-full bg-[#3390ec] text-white shadow-md transition hover:bg-[#2b82d9] disabled:opacity-50"
@@ -757,7 +774,18 @@ export function SettingsDialog({ open, onOpenChange, onOpenPremium, onOpenCoins 
                       )}
                     </button>
                   </div>
-                  <div className="text-center">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (onOpenMyProfile) {
+                        onOpenChange(false)
+                        onOpenMyProfile()
+                      } else {
+                        setPage('account')
+                      }
+                    }}
+                    className="text-center transition hover:opacity-90"
+                  >
                     <p className="flex items-center justify-center gap-1 text-base font-semibold">
                       {currentUser?.name}
                       {currentUser?.emojiStatus && (
@@ -765,14 +793,29 @@ export function SettingsDialog({ open, onOpenChange, onOpenPremium, onOpenCoins 
                       )}
                     </p>
                     <p className="text-xs text-muted-foreground">@{currentUser?.username}</p>
-                  </div>
+                    <p className="mt-1 text-[11px] font-medium text-[#3390ec]">
+                      {t('profile.myProfile')}
+                    </p>
+                  </button>
                 </div>
 
                 {/* Telegram-style menu */}
                 <div className="space-y-0.5">
+                  {onOpenMyProfile && (
+                    <MenuRow
+                      icon={<Sparkles className="h-5 w-5" />}
+                      color="#3390ec"
+                      label={t('profile.myProfile')}
+                      hint={t('profile.myProfileHint')}
+                      onClick={() => {
+                        onOpenChange(false)
+                        onOpenMyProfile()
+                      }}
+                    />
+                  )}
                   <MenuRow
                     icon={<User className="h-5 w-5" />}
-                    color="#3390ec"
+                    color="#5c6bc0"
                     label={t('settings.account')}
                     hint={t('settings.accountHint')}
                     onClick={() => setPage('account')}

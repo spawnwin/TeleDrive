@@ -630,6 +630,7 @@ export function Messenger() {
             contacts: lang === 'ru' ? 'Контакты' : 'Contacts',
           }}
           settingsLabel={lang === 'ru' ? 'Настройки' : 'Settings'}
+          profileLabel={lang === 'ru' ? 'Профиль' : 'Profile'}
           searchLabel={lang === 'ru' ? 'Поиск' : 'Search'}
           cancelLabel={lang === 'ru' ? 'Отмена' : 'Cancel'}
           searchPlaceholder={translate(lang, 'sidebar.searchChats')}
@@ -659,6 +660,11 @@ export function Messenger() {
             setShowFriends(false)
             setShowSettings(true)
           }}
+          onProfile={() => {
+            closeMobileSearch()
+            setShowFriends(false)
+            if (currentUser?.id) setProfileUserId(currentUser.id)
+          }}
           onSearch={() => {
             // Open bottom search sheet in the same tap gesture (Telegram-style).
             flushSync(() => {
@@ -676,6 +682,9 @@ export function Messenger() {
         onOpenChange={setShowSettings}
         onOpenPremium={() => setShowPremium(true)}
         onOpenCoins={() => setShowCoins(true)}
+        onOpenMyProfile={() => {
+          if (currentUser?.id) setProfileUserId(currentUser.id)
+        }}
       />
       <CoinsDialog
         open={showCoins}

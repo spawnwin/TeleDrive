@@ -14,6 +14,7 @@ interface MobileBottomNavProps {
   unreadCount: number
   labels: Record<MobileTab, string>
   settingsLabel?: string
+  profileLabel?: string
   searchLabel?: string
   cancelLabel?: string
   searchPlaceholder?: string
@@ -29,6 +30,8 @@ interface MobileBottomNavProps {
   onShorts: () => void
   onContacts: () => void
   onSettings?: () => void
+  /** Opens the current user's profile wall (Telegram-style). */
+  onProfile?: () => void
   onSearch?: () => void
   onSearchClose?: () => void
 }
@@ -38,6 +41,7 @@ export function MobileBottomNav({
   unreadCount,
   labels,
   settingsLabel = 'Настройки',
+  profileLabel = 'Профиль',
   searchLabel = 'Поиск',
   cancelLabel = 'Отмена',
   searchPlaceholder = 'Поиск',
@@ -52,6 +56,7 @@ export function MobileBottomNav({
   onShorts,
   onContacts,
   onSettings,
+  onProfile,
   onSearch,
   onSearchClose,
 }: MobileBottomNavProps) {
@@ -189,11 +194,11 @@ export function MobileBottomNav({
                   )
                 })}
 
-                {onSettings && (
+                {(onProfile || onSettings) && (
                   <button
                     type="button"
-                    onClick={onSettings}
-                    aria-label={settingsLabel}
+                    onClick={onProfile || onSettings}
+                    aria-label={onProfile ? profileLabel : settingsLabel}
                     aria-current={undefined}
                     className="relative flex min-w-0 flex-1 touch-manipulation flex-col items-center justify-center gap-0.5 rounded-full px-1 py-0.5 transition-opacity active:opacity-60"
                   >
@@ -207,7 +212,7 @@ export function MobileBottomNav({
                       />
                     </span>
                     <span className="max-w-full truncate text-[9px] font-normal leading-none tracking-tight text-white/50">
-                      {settingsLabel}
+                      {onProfile ? profileLabel : settingsLabel}
                     </span>
                   </button>
                 )}

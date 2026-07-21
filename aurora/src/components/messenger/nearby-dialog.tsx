@@ -66,6 +66,40 @@ function readPositionOnce(options: PositionOptions): Promise<GeolocationPosition
   })
 }
 
+/** Short watchPosition fallback — helps iOS after the user grants permission mid-flow. */
+function readPositionWatch(timeoutMs: number): Promise<GeolocationPosition> {
+  return new Promise((resolve, reject) => {
+    if (typeof navigator === 'undefined' || !navigator.geolocation) {
+      reject(Object.assign(new Error('no-geo'), { code: 2 }))
+      return
+    }
+    let settled = false
+    const timer = window.setTimeout(() => {
+      if (settled) return
+      settled = true
+      navigator.geolocation.clearWatch(watchId)
+      reject(Object.assign(new Error('timeout'), { code: 3 }))
+    }, timeoutMs)
+    const watchId = navigator.geolocation.watchPosition(
+      (pos) => {
+        if (settled) return
+        settled = true
+        window.clearTimeout(timer)
+        navigator.geolocation.clearWatch(watchId)
+        resolve(pos)
+      },
+      (err) => {
+        if (settled) return
+        settled = true
+        window.clearTimeout(timer)
+        navigator.geolocation.clearWatch(watchId)
+        reject(err)
+      },
+      { enableHighAccuracy: true, maximumAge: 0, timeout: timeoutMs },
+    )
+  })
+}
+
 export function NearbyDialog({ open, onOpenChange }: NearbyDialogProps) {
   const { t, lang } = useI18n()
   const setProfileUserId = useAppStore((s) => s.setProfileUserId)
@@ -78,6 +112,7 @@ export function NearbyDialog({ open, onOpenChange }: NearbyDialogProps) {
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null)
   const [radiusKm, setRadiusKm] = useState(3)
   const [error, setError] = useState<string | null>(null)
+  const [hint, setHint] = useState<string | null>(null)
 
   const readPosition = useCallback(async (): Promise<GeolocationPosition> => {
     if (typeof window !== 'undefined' && !window.isSecureContext) {
@@ -86,22 +121,43 @@ export function NearbyDialog({ open, onOpenChange }: NearbyDialogProps) {
     if (!navigator.geolocation) {
       throw new Error(t('nearby.noGeo'))
     }
+
+    // Prefer Permissions API hint when available (Chrome/Android); iOS may omit it.
+    try {
+      const perms = navigator.permissions
+      if (perms?.query) {
+        const status = await perms.query({ name: 'geolocation' as PermissionName })
+        if (status.state === 'denied') {
+          throw Object.assign(new Error('denied'), { code: 1 })
+        }
+      }
+    } catch (err) {
+      if (err && typeof err === 'object' && 'code' in err && (err as { code: number }).code === 1) {
+        throw err
+      }
+      // permissions.query unsupported — continue to getCurrentPosition
+    }
+
     try {
       return await readPositionOnce({
         enableHighAccuracy: true,
-        timeout: 10000,
-        maximumAge: 60000,
+        timeout: 12000,
+        maximumAge: 0,
       })
     } catch (first) {
-      // Retry with coarse location — many desktops/VPNs time out on high accuracy.
       try {
         return await readPositionOnce({
           enableHighAccuracy: false,
-          timeout: 15000,
-          maximumAge: 120000,
+          timeout: 20000,
+          maximumAge: 60000,
         })
-      } catch (second) {
-        throw second || first
+      } catch {
+        // Last resort: watchPosition (user-gesture friendly on some iOS builds)
+        try {
+          return await readPositionWatch(20000)
+        } catch (third) {
+          throw third || first
+        }
       }
     }
   }, [t])
@@ -126,7 +182,10 @@ export function NearbyDialog({ open, onOpenChange }: NearbyDialogProps) {
   const goLive = async () => {
     setPublishing(true)
     setError(null)
+    setHint(null)
     try {
+      // Must run from a direct user gesture — iOS Safari often blocks
+      // getCurrentPosition started from useEffect after dialog open.
       const pos = await readPosition()
       const next = { lat: pos.coords.latitude, lng: pos.coords.longitude }
       setCoords(next)
@@ -187,27 +246,15 @@ export function NearbyDialog({ open, onOpenChange }: NearbyDialogProps) {
     }
   }
 
+  // Reset UI when opening; do NOT auto-request geolocation (breaks iOS gesture chain).
   useEffect(() => {
     if (!open) return
-    let cancelled = false
-    ;(async () => {
-      try {
-        const pos = await readPosition()
-        if (cancelled) return
-        const next = { lat: pos.coords.latitude, lng: pos.coords.longitude }
-        setCoords(next)
-        await refresh(next)
-      } catch (err) {
-        if (!cancelled) {
-          // Soft hint on open — don't toast spam; button "Показать меня" will retry.
-          setError(formatGeoError(err, t))
-        }
-      }
-    })()
-    return () => {
-      cancelled = true
-    }
-  }, [open, readPosition, refresh, t])
+    setError(null)
+    setHint(t('nearby.tapToLocate'))
+    setPeople([])
+    setCoords(null)
+    setActive(false)
+  }, [open, t])
 
   const radarDots = useMemo(() => {
     const maxM = Math.max(300, radiusKm * 1000)
@@ -280,18 +327,21 @@ export function NearbyDialog({ open, onOpenChange }: NearbyDialogProps) {
         </div>
 
         <div className="flex gap-2">
-          <Button className="flex-1" onClick={goLive} disabled={publishing}>
+          <Button className="flex-1" onClick={() => void goLive()} disabled={publishing}>
             {publishing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <MapPin className="mr-2 h-4 w-4" />}
             {active ? t('nearby.refresh') : t('nearby.goLive')}
           </Button>
           {active && (
-            <Button variant="outline" onClick={goOffline}>
+            <Button variant="outline" onClick={() => void goOffline()}>
               <X className="mr-1 h-4 w-4" />
               {t('nearby.stop')}
             </Button>
           )}
         </div>
 
+        {hint && !error && !coords && (
+          <p className="text-sm text-muted-foreground">{hint}</p>
+        )}
         {error && <p className="text-sm text-destructive">{error}</p>}
 
         <div className="min-h-[8rem]">
