@@ -1,0 +1,7 @@
+dist/
+*.apk
+client/android/
+client/ios/
+client/.expo/
+**/node_modules/
+server/data/

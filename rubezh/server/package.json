@@ -1,0 +1,25 @@
+{
+  "name": "rubezh-server",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "tsx src/index.ts",
+    "smoke": "tsx scripts/smoke.ts"
+  },
+  "dependencies": {
+    "@fastify/cors": "^11.3.0",
+    "better-sqlite3": "^11.10.0",
+    "dotenv": "^16.6.1",
+    "fastify": "^5.10.0",
+    "uuid": "^11.1.1"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^22.20.1",
+    "@types/uuid": "^10.0.0",
+    "tsx": "^4.23.1",
+    "typescript": "5.8"
+  }
+}
