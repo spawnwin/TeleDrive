@@ -2013,7 +2013,7 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
 
   return (
     <div
-      className="relative flex h-full touch-pan-y flex-col bg-background xl:!translate-x-0"
+      className="relative flex h-full min-w-0 touch-pan-y flex-col overflow-hidden bg-background xl:!translate-x-0"
       style={{
         transform: swipeBackOffset ? `translateX(${Math.min(56, swipeBackOffset * 0.35)}px)` : undefined,
         transition: swipeBackAnimating ? 'transform 0.22s ease-out' : undefined,
@@ -2025,16 +2025,16 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
     >
       {swipeBackOffset > 0 && (
         <div
-          className="pointer-events-none absolute inset-y-0 left-0 z-30 flex w-14 items-center justify-center bg-gradient-to-r from-[#3390ec]/25 to-transparent xl:hidden"
+          className="pointer-events-none absolute inset-y-0 left-0 z-30 flex w-14 items-center justify-center bg-gradient-to-r from-primary/25 to-transparent xl:hidden"
           style={{ opacity: Math.min(1, swipeBackOffset / SWIPE_BACK_THRESHOLD) }}
           aria-hidden
         >
-          <ArrowLeft className="h-5 w-5 text-[#3390ec]" />
+          <ArrowLeft className="h-5 w-5 text-primary" />
         </div>
       )}
-      {/* Header */}
-      <div className="aurora-chat-safe-top flex items-center justify-between gap-2 border-b border-border/40 bg-background/90 px-2 pb-1.5 pt-1 backdrop-blur-md sm:px-4">
-        <div className="flex min-w-0 flex-1 items-center gap-2.5">
+      {/* Header — thin; secondary actions live in overflow to avoid clipping */}
+      <div className="aurora-chat-safe-top flex min-w-0 shrink-0 items-center gap-1 border-b border-border/40 bg-background/90 px-1.5 pb-1.5 pt-1 backdrop-blur-md sm:gap-2 sm:px-3">
+        <div className="flex min-w-0 flex-1 items-center gap-1.5 sm:gap-2">
           <Button
             variant="ghost"
             size="icon"
@@ -2044,7 +2044,7 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
             <ArrowLeft className="h-5 w-5" />
           </Button>
           <button
-            className="flex min-w-0 flex-1 items-center gap-3 text-left"
+            className="flex min-w-0 flex-1 items-center gap-2.5 text-left"
             onClick={() => {
               if (isSavedChat) {
                 onShowInfo()
@@ -2056,7 +2056,7 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
             }}
           >
             {isSavedChat ? (
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#3390ec] shadow-sm">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary shadow-sm sm:h-10 sm:w-10">
                 <Bookmark className="h-4 w-4 text-white" fill="currentColor" />
               </div>
             ) : (
@@ -2069,16 +2069,16 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
               online={isOnline}
             />
             )}
-            <div className="min-w-0">
-              <div className="flex items-center gap-1.5">
-                <p className="truncate text-[15px] font-semibold leading-tight">
-                  <span className="inline-flex max-w-full items-center gap-1">
-                    <span className="truncate">{chatTitle}</span>
-                    {otherUser?.emojiStatus && (
-                      <EmojiStatusBadge emojiStatus={otherUser.emojiStatus} size="md" />
-                    )}
-                  </span>
+            <div className="min-w-0 flex-1 overflow-hidden">
+              <div className="flex min-w-0 items-center gap-1">
+                <p className="min-w-0 truncate text-[15px] font-semibold leading-tight">
+                  {chatTitle}
                 </p>
+                {otherUser?.emojiStatus && (
+                  <span className="shrink-0">
+                    <EmojiStatusBadge emojiStatus={otherUser.emojiStatus} size="md" />
+                  </span>
+                )}
                 {isChatEncrypted && (
                   <Lock className="h-3.5 w-3.5 shrink-0 text-emerald-500" />
                 )}
@@ -2091,15 +2091,12 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
               </div>
               <p className="truncate text-[12px] text-muted-foreground">
                 {typingNames.length > 0 ? (
-                  <span className="inline-flex items-center gap-1.5 text-[#3390ec]" title={t('chat.typing')} aria-label={t('chat.typing')}>
-                    <span className="truncate">{typingNames.join(', ')}</span>
-                    <TypingDots className="text-[#3390ec]" size={4} gap={2} label={t('chat.typing')} />
+                  <span className="inline-flex max-w-full items-center gap-1.5 text-primary" title={t('chat.typing')} aria-label={t('chat.typing')}>
+                    <span className="min-w-0 truncate">{typingNames.join(', ')}</span>
+                    <TypingDots className="shrink-0 text-primary" size={4} gap={2} label={t('chat.typing')} />
                   </span>
                 ) : (
-                  <span className="flex items-center gap-1">
-                    {isChatEncrypted && (
-                      <span className="text-emerald-500">🔒</span>
-                    )}
+                  <span className="block truncate">
                     {presence}
                   </span>
                 )}
@@ -2107,36 +2104,18 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
             </div>
           </button>
         </div>
-        <div className="flex shrink-0 items-center gap-1">
+        <div className="flex shrink-0 items-center gap-0.5">
           {isForum && (
             <Button
               variant="ghost"
               size="sm"
-              className="h-8 gap-1.5 rounded-full px-3 text-xs font-medium"
+              className="hidden h-8 max-w-[7.5rem] gap-1 truncate rounded-full px-2.5 text-xs font-medium sm:inline-flex"
               onClick={() => setShowTopicList(true)}
             >
-              <Hash className="h-3.5 w-3.5" />
-              {activeTopicId ? 'Тема' : 'General'}
+              <Hash className="h-3.5 w-3.5 shrink-0" />
+              <span className="truncate">{activeTopicId ? 'Тема' : 'General'}</span>
             </Button>
           )}
-          <Button
-            variant="ghost"
-            size="icon"
-            className="hidden h-9 w-9 sm:inline-flex"
-            onClick={toggleMessageSearch}
-            title={showFavorites ? t('misc.close') : t('chat.search')}
-          >
-            {showFavorites ? <X className="h-4 w-4" /> : <Search className="h-4 w-4" />}
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="hidden h-9 w-9 sm:inline-flex"
-            onClick={toggleFavoritesView}
-            title={showSearch ? t('misc.close') : t('info.favorites')}
-          >
-            {showSearch ? <X className="h-4 w-4" /> : <Star className="h-4 w-4" />}
-          </Button>
           {activeChat.type === 'private' && (
             <>
               <Button
@@ -2151,7 +2130,7 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
               <Button
                 variant="ghost"
                 size="icon"
-                className="hidden h-9 w-9 sm:inline-flex"
+                className="hidden h-9 w-9 md:inline-flex"
                 onClick={() => handleStartCall('video')}
                 title={t('chat.video')}
               >
@@ -2159,47 +2138,33 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
               </Button>
             </>
           )}
-          {activeChat.type === 'private' && otherUser && (
-            <Button
-              variant="ghost"
-              size="icon"
-              className="hidden h-9 w-9 sm:inline-flex"
-              onClick={() => setShowGiftPicker(true)}
-              title={t('gifts.sendGift')}
-            >
-              <Gift className="h-4 w-4" />
-            </Button>
-          )}
-          <Button variant="ghost" size="icon" className="hidden h-9 w-9 sm:inline-flex" onClick={onShowInfo} title={t('chat.info')}>
-            <Info className="h-4 w-4" />
-          </Button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="icon" className="h-9 w-9">
                 <MoreVertical className="h-4 w-4" />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem className="sm:hidden" onClick={toggleMessageSearch}>
+            <DropdownMenuContent align="end" className="max-h-[min(70dvh,28rem)] w-56 overflow-y-auto">
+              <DropdownMenuItem onClick={toggleMessageSearch}>
                 <Search className="mr-2 h-4 w-4" /> {t('chat.search')}
               </DropdownMenuItem>
-              <DropdownMenuItem className="sm:hidden" onClick={toggleFavoritesView}>
+              <DropdownMenuItem onClick={toggleFavoritesView}>
                 <Star className="mr-2 h-4 w-4" /> {t('info.favorites')}
               </DropdownMenuItem>
               {activeChat.type === 'private' && (
-                <DropdownMenuItem className="sm:hidden" onClick={() => handleStartCall('video')}>
+                <DropdownMenuItem className="md:hidden" onClick={() => handleStartCall('video')}>
                   <Video className="mr-2 h-4 w-4" /> {t('chat.video')}
                 </DropdownMenuItem>
               )}
               {activeChat.type === 'private' && otherUser && (
-                <DropdownMenuItem className="sm:hidden" onClick={() => setShowGiftPicker(true)}>
+                <DropdownMenuItem onClick={() => setShowGiftPicker(true)}>
                   <Gift className="mr-2 h-4 w-4" /> {t('gifts.sendGift')}
                 </DropdownMenuItem>
               )}
-              <DropdownMenuItem className="sm:hidden" onClick={onShowInfo}>
+              <DropdownMenuItem onClick={onShowInfo}>
                 <Info className="mr-2 h-4 w-4" /> {t('chat.info')}
               </DropdownMenuItem>
-              <DropdownMenuSeparator className="sm:hidden" />
+              <DropdownMenuSeparator />
               {canViewAnalytics && (
                 <DropdownMenuItem onClick={() => setShowAnalytics(true)}>
                   <BarChart3 className="mr-2 h-4 w-4" /> Аналитика чата
@@ -2256,11 +2221,11 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
       {(keyStatus === 'mismatch' || keyStatus === 'missing') &&
         activeChat.type === 'private' &&
         messages.some((m) => m.type === 'text' && isEncrypted(m.content)) && (
-          <div className="flex items-start gap-2 border-b border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[12px] text-amber-200 sm:px-4">
+          <div className="flex min-w-0 items-start gap-2 border-b border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[12px] text-amber-200 sm:px-4">
             <Lock className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-            <div className="min-w-0 flex-1">
+            <div className="min-w-0 flex-1 overflow-hidden">
               <p className="font-medium text-amber-100">{t('chat.e2eeKeyProblemTitle')}</p>
-              <p className="mt-0.5 text-amber-200/80">{t('chat.e2eeKeyProblemHint')}</p>
+              <p className="mt-0.5 break-words text-amber-200/80">{t('chat.e2eeKeyProblemHint')}</p>
             </div>
             <Button
               type="button"
@@ -2292,7 +2257,7 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
                   value={searchQuery}
                   onChange={(e) => runSearch(e.target.value)}
                   placeholder={t('search.messages')}
-                  className="h-9 rounded-lg border-none bg-background pl-10 pr-9 text-sm focus-visible:ring-1 focus-visible:ring-[#3390ec]"
+                  className="h-9 rounded-lg border-none bg-background pl-10 pr-9 text-sm focus-visible:ring-1 focus-visible:ring-primary"
                   autoFocus
                 />
                 {searchQuery && (
@@ -2357,11 +2322,11 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
         <button
           type="button"
           onClick={() => void jumpToMessage(pinnedMessage.id)}
-          className="flex w-full items-center gap-2 border-b border-border bg-muted/30 px-4 py-2 text-left transition hover:bg-muted/60"
+          className="flex w-full min-w-0 shrink-0 items-center gap-2 border-b border-border border-l-[3px] border-l-primary bg-muted/25 px-3 py-2 text-left transition hover:bg-muted/50 sm:px-4"
         >
           <Pin className="h-4 w-4 shrink-0 text-primary" />
-          <div className="min-w-0 flex-1">
-            <p className="text-xs font-semibold text-primary">{pinnedMessage.senderName}</p>
+          <div className="min-w-0 flex-1 overflow-hidden">
+            <p className="truncate text-xs font-semibold text-primary">{pinnedMessage.senderName}</p>
             <p className="truncate text-xs text-muted-foreground">
               {pinnedMessage.content || (pinnedMessage.type === 'image' ? t('chat.image') : t('chat.file'))}
             </p>
@@ -2376,7 +2341,7 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
           ref={scrollRef}
           onScroll={handleMessagesScroll}
           className={cn(
-            'relative z-[1] h-full touch-pan-y overflow-x-hidden overflow-y-auto overscroll-x-none px-3 py-4 sm:px-6',
+            'relative z-[1] h-full touch-pan-y overflow-x-hidden overflow-y-auto overscroll-x-none overscroll-y-contain px-2 py-3 sm:px-4 sm:py-4',
           )}
         >
         <div className="relative min-h-full">
@@ -2385,23 +2350,31 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
             <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
           </div>
         ) : messages.length === 0 ? (
-          <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
-            <div className="flex h-20 w-20 items-center justify-center rounded-full bg-primary/10 ring-4 ring-primary/5">
-              <Avatar
-                name={activeChat.title}
-                color={activeChat.avatarColor}
-                imageUrl={getChatAvatarImageUrl(activeChat, currentUser?.id)}
-                size="lg"
-              />
+          <div className="flex h-full min-h-[14rem] flex-col items-center justify-center gap-3 overflow-hidden px-6 text-center">
+            <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-full bg-primary/10 ring-4 ring-primary/5">
+              {isSavedChat ? (
+                <div className="flex h-16 w-16 items-center justify-center rounded-full bg-primary">
+                  <Bookmark className="h-7 w-7 text-white" fill="currentColor" />
+                </div>
+              ) : (
+                <Avatar
+                  name={activeChat.title}
+                  color={activeChat.avatarColor}
+                  imageUrl={getChatAvatarImageUrl(activeChat, currentUser?.id)}
+                  size="lg"
+                />
+              )}
             </div>
-            <div>
-              <p className="text-[15px] font-semibold">{activeChat.title}</p>
-              <p className="mt-1 text-xs text-muted-foreground">
+            <div className="min-w-0 max-w-sm">
+              <p className="truncate text-[15px] font-semibold">{activeChat.title}</p>
+              <p className="mt-1 text-[13px] leading-relaxed text-muted-foreground">
                 {searchQuery
                   ? t('chat.emptySearchResult')
                   : showFavorites
                     ? t('info.noFavorites')
-                    : t('app.welcomeNoChats')}
+                    : activeChat.type === 'private'
+                      ? t('chat.startConversation')
+                      : t('app.welcomeNoChats')}
               </p>
             </div>
           </div>
@@ -2409,8 +2382,8 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
           <div className="mx-auto flex w-full max-w-none min-w-0 flex-col gap-2">
             {grouped.map((group) => (
               <div key={group.day} className="flex flex-col gap-1.5">
-                <div className="my-2 flex justify-center">
-                  <span className="rounded-full bg-black/35 px-3 py-1 text-[12px] font-medium text-white shadow-sm backdrop-blur-sm dark:bg-black/45">
+                <div className="my-2 flex justify-center px-2">
+                  <span className="max-w-full truncate rounded-full bg-muted/80 px-3 py-1 text-[12px] font-medium text-muted-foreground shadow-none backdrop-blur-sm dark:bg-black/40 dark:text-white/85">
                     {formatDayDivider(group.items[0].createdAt, lang)}
                   </span>
                 </div>
@@ -2556,7 +2529,7 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
             >
               <ChevronDown className="h-5 w-5" />
               {belowViewportUnread > 0 && (
-                <span className="absolute -right-1 -top-1 flex min-w-[18px] items-center justify-center rounded-full bg-[#3390ec] px-1 text-[10px] font-semibold leading-[18px] text-white shadow">
+                <span className="absolute -right-1 -top-1 flex min-w-[18px] items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold leading-[18px] text-white shadow">
                   {belowViewportUnread > 99 ? '99+' : belowViewportUnread}
                 </span>
               )}
@@ -2574,10 +2547,10 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
             exit={{ height: 0, opacity: 0 }}
             className="shrink-0 overflow-hidden border-t border-border bg-muted/50"
           >
-            <div className="flex items-center gap-3 px-4 py-2.5">
-              <Reply className="h-4 w-4 shrink-0 text-[#3390ec]" />
-              <div className="min-w-0 flex-1 border-l-2 border-[#3390ec] pl-2">
-                <p className="text-xs font-medium text-[#3390ec]">
+            <div className="flex min-w-0 items-center gap-3 px-3 py-2.5 sm:px-4">
+              <Reply className="h-4 w-4 shrink-0 text-primary" />
+              <div className="min-w-0 flex-1 overflow-hidden border-l-2 border-primary pl-2">
+                <p className="truncate text-xs font-medium text-primary">
                   {t('msg.replyTo')} {replyTo.sender.name}
                 </p>
                 <p className="truncate text-xs text-muted-foreground">
@@ -2678,7 +2651,7 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
           {t('channel.readOnly')}
         </div>
       ) : (
-      <div className="shrink-0 bg-background/90 px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-1.5 sm:px-3">
+      <div className="shrink-0 overflow-hidden bg-background/90 px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-1.5 sm:px-3">
         {/* Hidden file pickers used by attach sheet */}
         <input
           ref={imageInputRef}
@@ -2710,10 +2683,10 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
           onChange={handleFileSelect}
           className="hidden"
         />
-        <div className="mx-auto flex w-full max-w-none flex-col gap-1.5">
+        <div className="mx-auto flex w-full min-w-0 max-w-none flex-col gap-1.5">
           {/* Pending attachment — Telegram strip above the input row */}
           {pendingFile && pendingPreviewUrl && !isRecording && (
-            <div className="flex items-center gap-2 rounded-2xl bg-muted/40 px-2 py-2">
+            <div className="flex min-w-0 items-center gap-2 overflow-hidden rounded-2xl bg-muted/40 px-2 py-2">
               <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-lg border border-border bg-muted">
                 {isImageFile(pendingFile) ? (
                   <img src={pendingPreviewUrl} alt="" className="h-full w-full object-cover" />
@@ -2723,7 +2696,7 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
                   </div>
                 )}
               </div>
-              <div className="min-w-0 flex-1">
+              <div className="min-w-0 flex-1 overflow-hidden">
                 {isImageFile(pendingFile) ? (
                   <>
                     <p className="truncate text-xs font-medium text-foreground">
@@ -2753,15 +2726,17 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
             </div>
           )}
 
-          <div className="flex w-full items-end gap-1.5">
+          <div className="flex w-full min-w-0 items-end gap-1.5">
           {/* Telegram: rounded text field; circular send/mic sits outside to the right */}
           {isRecording ? (
-            <div className="flex flex-1 items-center justify-center rounded-2xl border border-rose-500/40 bg-rose-500/10 px-3 py-3 text-sm font-medium text-rose-600 dark:text-rose-400">
-              <span className="mr-2 h-2 w-2 animate-pulse rounded-full bg-rose-500" />
-              {Math.floor(recordSeconds / 60)}:{(recordSeconds % 60).toString().padStart(2, '0')}
+            <div className="flex min-w-0 flex-1 items-center justify-center overflow-hidden rounded-2xl border border-rose-500/40 bg-rose-500/10 px-3 py-3 text-sm font-medium text-rose-600 dark:text-rose-400">
+              <span className="mr-2 h-2 w-2 shrink-0 animate-pulse rounded-full bg-rose-500" />
+              <span className="tabular-nums">
+                {Math.floor(recordSeconds / 60)}:{(recordSeconds % 60).toString().padStart(2, '0')}
+              </span>
             </div>
           ) : (
-            <div className="flex min-w-0 flex-1 items-end gap-0.5 rounded-[22px] bg-muted/50 px-1 py-1 transition focus-within:bg-muted/70">
+            <div className="flex min-w-0 flex-1 items-end gap-0.5 overflow-hidden rounded-[22px] bg-muted/50 px-1 py-1 transition focus-within:bg-muted/70">
               <Button
                 variant="ghost"
                 size="icon"
@@ -2806,7 +2781,7 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
                       : t('composer.placeholder')
                 }
                 rows={1}
-                className="max-h-32 w-full min-w-0 flex-1 resize-none overflow-y-auto bg-transparent py-2 text-[15px] outline-none placeholder:text-muted-foreground"
+                className="max-h-32 w-full min-w-0 flex-1 resize-none overflow-x-hidden overflow-y-auto break-words bg-transparent py-2 text-[15px] outline-none placeholder:text-muted-foreground"
                 style={{ height: 'auto', minHeight: '24px' }}
               />
 
@@ -2816,15 +2791,15 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
                     <Smile className="h-5 w-5" />
                   </Button>
                 </PopoverTrigger>
-                <PopoverContent side="top" align="end" className="w-80 p-0">
-                  <div className="flex gap-1 border-b border-border p-2">
+                <PopoverContent side="top" align="end" className="w-[min(20rem,calc(100vw-1.5rem))] max-w-[calc(100vw-1.5rem)] overflow-hidden p-0">
+                  <div className="flex gap-1 overflow-x-auto border-b border-border p-2">
                     <button
                       type="button"
                       onClick={() => setActiveEmojiSet(EMOJI_SET_IDS[0])}
                       className={cn(
-                        'rounded-md px-2 py-1 text-xs font-medium transition',
+                        'shrink-0 rounded-md px-2 py-1 text-xs font-medium transition',
                         EMOJI_SET_IDS.includes(activeEmojiSet)
-                          ? 'bg-[#3390ec]/15 text-[#3390ec]'
+                          ? 'bg-primary/15 text-primary'
                           : 'text-muted-foreground hover:bg-muted',
                       )}
                     >
@@ -2836,7 +2811,7 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
                         setEmojiOpen(false)
                         setShowStickerPicker(true)
                       }}
-                      className="rounded-md px-2 py-1 text-xs font-medium text-muted-foreground transition hover:bg-muted"
+                      className="shrink-0 rounded-md px-2 py-1 text-xs font-medium text-muted-foreground transition hover:bg-muted"
                     >
                       {t('stickers.title')}
                     </button>
@@ -2851,7 +2826,7 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
                           className={cn(
                             'rounded-md px-2 py-1 text-xs font-medium transition',
                             activeEmojiSet === setId
-                              ? 'bg-[#3390ec]/15 text-[#3390ec]'
+                              ? 'bg-primary/15 text-primary'
                               : 'text-muted-foreground hover:bg-muted',
                           )}
                         >
@@ -2881,7 +2856,7 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
               <Button
                 onClick={() => (pendingFile ? confirmSendPendingFile() : sendMessage())}
                 disabled={uploading}
-                className="mb-0.5 h-10 w-10 shrink-0 rounded-full bg-[#3390ec] p-0 text-white shadow-none transition hover:bg-[#2b82d9] disabled:opacity-40"
+                className="mb-0.5 h-10 w-10 shrink-0 rounded-full bg-primary p-0 text-white shadow-none transition hover:bg-primary/90 disabled:opacity-40"
                 title={t('composer.send')}
               >
                 <AnimatePresence mode="wait" initial={false}>
@@ -2901,7 +2876,7 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
               <Button
                 onClick={handleVoiceMicClick}
                 disabled={uploading}
-                className="mb-0.5 h-10 w-10 shrink-0 rounded-full bg-[#3390ec] p-0 text-white shadow-none transition hover:bg-[#2b82d9] disabled:opacity-40"
+                className="mb-0.5 h-10 w-10 shrink-0 rounded-full bg-primary p-0 text-white shadow-none transition hover:bg-primary/90 disabled:opacity-40"
                 title={t('composer.recordVoice')}
               >
                 <Mic className="h-4 w-4" />
@@ -2942,7 +2917,7 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
             />
             <AttachTile
               icon={<ImagePlus className="h-6 w-6" />}
-              color="from-[#3390ec] to-[#1677d2]"
+              color="from-primary to-primary"
               label={t('composer.attachPhotoVideo')}
               onClick={() => {
                 setShowAttachMenu(false)
@@ -2951,7 +2926,7 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
             />
             <AttachTile
               icon={<FileIcon className="h-6 w-6" />}
-              color="from-[#5ac8fa] to-[#3390ec]"
+              color="from-sky-400 to-primary"
               label={t('composer.attachFile')}
               onClick={() => {
                 setShowAttachMenu(false)
@@ -2969,7 +2944,7 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
             />
             <AttachTile
               icon={<VideoIcon className="h-6 w-6" />}
-              color="from-[#3390ec] to-[#2b82d9]"
+              color="from-primary to-primary"
               label={t('composer.attachVideoMessage')}
               onClick={() => {
                 setShowAttachMenu(false)
@@ -3187,10 +3162,10 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
           />
           <div
             ref={contextMenuRef}
-            className="fixed z-50 min-w-[180px] rounded-xl border border-border bg-background p-1.5 shadow-xl animate-in fade-in-0 zoom-in-95"
+            className="fixed z-50 max-h-[min(70dvh,24rem)] min-w-[180px] max-w-[calc(100vw-1rem)] overflow-y-auto rounded-xl border border-border bg-background p-1.5 shadow-xl animate-in fade-in-0 zoom-in-95"
             style={{
-              left: Math.min(contextMenu.x, window.innerWidth - 200),
-              top: Math.max(contextMenu.y - 10, 8),
+              left: Math.min(Math.max(8, contextMenu.x), Math.max(8, window.innerWidth - 208)),
+              top: Math.min(Math.max(8, contextMenu.y - 10), Math.max(8, window.innerHeight - 320)),
             }}
           >
             <ContextMenuItem2 icon={<Reply className="h-4 w-4" />} label={t('msg.reply')} onClick={() => {
@@ -3481,20 +3456,20 @@ function MessageBubble({
           ) : null}
         </div>
       ) : null}
-      <div className={cn('flex min-w-0 max-w-[85%] flex-col gap-0.5 sm:max-w-[65%]', mine ? 'items-end' : 'items-start')}>
+      <div className={cn('flex min-w-0 max-w-[min(85%,24rem)] flex-col gap-0.5 sm:max-w-[min(65%,28rem)]', mine ? 'items-end' : 'items-start')}>
         {/* Sender name only for others in groups — never "You" */}
         {!grouped && showSenderProfile && !mine && (
-          <div className="flex items-baseline gap-2 px-1">
+          <div className="flex max-w-full min-w-0 items-baseline gap-2 px-1">
             <button
               type="button"
               onClick={onViewProfile}
-              className="text-xs font-semibold text-[#3390ec] transition hover:underline"
+              className="truncate text-xs font-semibold text-primary transition hover:underline"
             >
               {msg.sender.name}
             </button>
           </div>
         )}
-        <div className="relative min-w-0 max-w-full">
+        <div className="relative min-w-0 max-w-full overflow-visible">
           {/* Quick reaction bar */}
           <AnimatePresence>
             {showQuickReactions && (
@@ -3503,7 +3478,7 @@ function MessageBubble({
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: 6, scale: 0.95 }}
                 className={cn(
-                  'absolute -top-11 z-10 flex items-center gap-0.5 rounded-full border border-border bg-background px-1.5 py-1 shadow-lg',
+                  'absolute -top-11 z-10 flex max-w-[calc(100vw-2rem)] items-center gap-0.5 overflow-x-auto rounded-full border border-border bg-background px-1.5 py-1 shadow-lg',
                   mine ? 'right-0' : 'left-0',
                 )}
               >
@@ -3520,7 +3495,7 @@ function MessageBubble({
                       }}
                       className={cn(
                         'flex h-8 w-8 items-center justify-center rounded-full text-lg transition hover:bg-muted',
-                        active && 'bg-[#3390ec]/10',
+                        active && 'bg-primary/10',
                       )}
                     >
                       {emoji}
@@ -3535,18 +3510,18 @@ function MessageBubble({
           {msg.forwardedFrom && (
             <div
               className={cn(
-                'mb-1 flex items-center gap-1 px-1 text-[10px]',
+                'mb-1 flex max-w-full items-center gap-1 overflow-hidden px-1 text-[10px]',
                 mine ? 'text-white/60' : 'text-muted-foreground',
               )}
             >
-              <Forward className="h-3 w-3" />
-              {t('msg.forwarded')} · {msg.forwardedFrom.senderName}
+              <Forward className="h-3 w-3 shrink-0" />
+              <span className="truncate">{t('msg.forwarded')} · {msg.forwardedFrom.senderName}</span>
             </div>
           )}
 
           <div
             className={cn(
-              'relative min-w-0 max-w-full rounded-2xl px-3 py-1.5 text-[15px] leading-snug shadow-none transition-shadow',
+              'relative min-w-0 max-w-full overflow-hidden rounded-2xl px-3 py-1.5 text-[15px] leading-snug shadow-none transition-shadow',
               mine && msg.type !== 'gift' && msg.type !== 'sticker'
                 ? 'bg-[var(--bubble-out)] text-white'
                 : mine
@@ -3559,12 +3534,12 @@ function MessageBubble({
               msg.type === 'image' && !msg.content && 'p-1.5',
               showAsCircleVideo && !msg.content && 'p-1.5 bg-transparent shadow-none',
               showAsVideoAttachment && !msg.content && 'p-1.5',
-              msg.type === 'voice' && 'min-w-0 bg-transparent shadow-none p-1.5',
-              msg.type === 'file' && !showAsVideoAttachment && 'min-w-[180px] sm:min-w-[220px]',
-              msg.type === 'share' && 'min-w-[180px] sm:min-w-[220px]',
-              msg.type === 'gift' && 'min-w-[200px] bg-transparent shadow-none',
-              msg.type === 'sticker' && 'min-w-[140px] bg-transparent shadow-none p-1',
-              highlighted && 'ring-2 ring-[#3390ec] ring-offset-2 ring-offset-background',
+              msg.type === 'voice' && 'min-w-0 max-w-full bg-transparent shadow-none p-1.5',
+              msg.type === 'file' && !showAsVideoAttachment && 'w-full min-w-0 sm:min-w-[180px]',
+              msg.type === 'share' && 'w-full min-w-0 sm:min-w-[180px]',
+              msg.type === 'gift' && 'min-w-0 max-w-full bg-transparent shadow-none',
+              msg.type === 'sticker' && 'min-w-0 bg-transparent shadow-none p-1',
+              highlighted && 'ring-2 ring-primary ring-offset-2 ring-offset-background',
             )}
           >
             {msg.replyTo && (
@@ -3583,13 +3558,13 @@ function MessageBubble({
                   }
                 }}
                 className={cn(
-                  'mb-1.5 cursor-pointer rounded-md border-l-[3px] px-2 py-1 text-xs',
+                  'mb-1.5 cursor-pointer overflow-hidden rounded-md border-l-[3px] px-2 py-1 text-xs',
                   mine
                     ? 'border-white/70 bg-white/10 text-white/90'
-                    : 'border-[#3390ec] bg-[#3390ec]/10 text-muted-foreground',
+                    : 'border-primary bg-primary/10 text-muted-foreground',
                 )}
               >
-                <p className={cn('font-semibold', mine ? 'text-white' : 'text-[#3390ec]')}>
+                <p className={cn('truncate font-semibold', mine ? 'text-white' : 'text-primary')}>
                   {msg.replyTo.senderName}
                 </p>
                 <p className="line-clamp-2 break-words opacity-90">{msg.replyTo.content}</p>
@@ -3599,18 +3574,18 @@ function MessageBubble({
               <button
                 type="button"
                 onClick={() => setImageOpen(true)}
-                className="block overflow-hidden rounded-[10px]"
+                className="block w-full max-w-full overflow-hidden rounded-[10px]"
               >
                 <img
                   src={imageSrc}
                   alt={msg.attachmentName || 'Изображение'}
-                  className="max-h-[520px] max-w-full cursor-zoom-in object-cover transition hover:opacity-90"
+                  className="max-h-[min(520px,70vh)] w-full max-w-full cursor-zoom-in object-cover transition hover:opacity-90"
                   loading="lazy"
                 />
               </button>
             )}
             {showAsCircleVideo && msg.attachmentUrl && (
-              <div className="relative">
+              <div className="relative max-w-full overflow-hidden">
                 <VideoMessage
                   url={msg.attachmentUrl}
                   durationSec={msg.durationSec}
@@ -3628,13 +3603,13 @@ function MessageBubble({
               </div>
             )}
             {showAsVideoAttachment && videoSrc && (
-              <div className="relative">
+              <div className="relative max-w-full overflow-hidden">
                 <video
                   src={videoSrc}
                   controls
                   playsInline
                   preload="metadata"
-                  className="max-h-80 max-w-full rounded-xl"
+                  className="max-h-80 w-full max-w-full rounded-xl"
                 />
                 <button
                   type="button"
@@ -3692,7 +3667,7 @@ function MessageBubble({
                     ? encryptedLabel || t('chat.encrypted')
                     : msg.content
                 }
-                linkClassName={mine ? 'text-white/90' : 'text-[#3390ec]'}
+                linkClassName={mine ? 'text-white/90' : 'text-primary'}
                 readMoreLabel={t('share.readMore')}
                 readLessLabel={t('share.readLess')}
                 onLinkClick={onLinkClick}
@@ -3708,7 +3683,7 @@ function MessageBubble({
                 <Star className={cn('h-3 w-3', mine ? 'fill-amber-300 text-amber-300' : 'fill-amber-500 text-amber-500')} />
               )}
               {isPinned && (
-                <Pin className={cn('h-3 w-3', mine ? 'text-white/70' : 'text-[#3390ec]')} />
+                <Pin className={cn('h-3 w-3', mine ? 'text-white/70' : 'text-primary')} />
               )}
               {msg.editedAt && (
                 <span
@@ -3752,7 +3727,7 @@ function MessageBubble({
                     className={cn(
                       'flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-xs transition',
                       mineReacted
-                        ? 'border-[#3390ec] bg-[#3390ec]/15 text-[#3390ec]'
+                        ? 'border-primary bg-primary/15 text-primary'
                         : 'border-border bg-background text-muted-foreground hover:bg-muted',
                     )}
                   >
@@ -3769,7 +3744,7 @@ function MessageBubble({
               type="button"
               onClick={onOpenComments}
               className={cn(
-                'mt-1 flex items-center gap-1.5 text-xs font-medium text-[#3390ec] transition hover:text-[#2b82d9]',
+                'mt-1 flex items-center gap-1.5 text-xs font-medium text-primary transition hover:text-primary/80',
                 mine ? 'justify-end' : 'justify-start',
               )}
             >
@@ -3780,11 +3755,11 @@ function MessageBubble({
             </button>
           )}
 
-          {/* Hover actions */}
+          {/* Hover actions — stay inside bubble bounds to avoid horizontal overflow */}
           <div
             className={cn(
-              'absolute top-0 hidden gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 sm:flex',
-              mine ? '-left-12' : '-right-12',
+              'absolute top-1 hidden gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 sm:flex',
+              mine ? 'left-1' : 'right-1',
             )}
           >
             <Button
@@ -3957,7 +3932,7 @@ function AlbumBubble({
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.18 }}
       className={cn(
-        'group relative flex',
+        'group relative flex min-w-0',
         showSenderProfile ? 'gap-2' : 'gap-0',
         mine ? 'flex-row-reverse' : 'flex-row',
       )}
@@ -3999,13 +3974,13 @@ function AlbumBubble({
           ) : null}
         </div>
       ) : null}
-      <div className={cn('flex min-w-[200px] max-w-[85%] flex-col gap-0.5', mine ? 'items-end' : 'items-start')}>
+      <div className={cn('flex min-w-0 max-w-[min(85%,24rem)] flex-col gap-0.5 sm:max-w-[min(65%,28rem)]', mine ? 'items-end' : 'items-start')}>
         {!grouped && showSenderProfile && !mine && (
-          <div className="flex items-baseline gap-2 px-1">
+          <div className="flex max-w-full min-w-0 items-baseline gap-2 px-1">
             <button
               type="button"
               onClick={onViewProfile}
-              className="text-xs font-semibold text-[#3390ec] transition hover:underline"
+              className="truncate text-xs font-semibold text-primary transition hover:underline"
             >
               {first.sender.name}
             </button>
@@ -4013,14 +3988,14 @@ function AlbumBubble({
         )}
         <div
           className={cn(
-            'relative overflow-hidden rounded-2xl p-1 shadow-sm',
+            'relative w-full min-w-0 overflow-hidden rounded-2xl p-1 shadow-sm',
             mine
-              ? 'bg-[#3390ec] text-white'
-              : 'bg-white text-foreground shadow-sm dark:bg-[#212121] dark:shadow-none',
+              ? 'bg-[var(--bubble-out)] text-white'
+              : 'bg-[var(--bubble-in)] text-foreground shadow-none',
             // Telegram-style tails
             !grouped && (mine ? 'rounded-tr-md' : 'rounded-tl-md'),
             !nextGrouped && (mine ? 'rounded-br-md' : 'rounded-bl-md'),
-            highlighted && 'ring-2 ring-[#3390ec]',
+            highlighted && 'ring-2 ring-primary',
           )}
         >
           <div
@@ -4076,7 +4051,7 @@ function AlbumBubble({
               <Star className={cn('h-3 w-3', mine ? 'fill-amber-300 text-amber-300' : 'fill-amber-500 text-amber-500')} />
             )}
             {isPinned && (
-              <Pin className={cn('h-3 w-3', mine ? 'text-white/70' : 'text-[#3390ec]')} />
+              <Pin className={cn('h-3 w-3', mine ? 'text-white/70' : 'text-primary')} />
             )}
             <span
               className={cn(
@@ -4106,7 +4081,7 @@ function AlbumBubble({
                   className={cn(
                     'flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-xs transition',
                     mineReacted
-                      ? 'border-[#3390ec] bg-[#3390ec]/15 text-[#3390ec]'
+                      ? 'border-primary bg-primary/15 text-primary'
                       : 'border-border bg-background text-muted-foreground hover:bg-muted',
                   )}
                 >
@@ -4118,11 +4093,11 @@ function AlbumBubble({
           </div>
         )}
 
-        {/* Hover actions */}
+        {/* Hover actions — stay inside bubble bounds to avoid horizontal overflow */}
         <div
           className={cn(
-            'absolute top-0 hidden gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 sm:flex',
-            mine ? '-left-12' : '-right-12',
+            'absolute top-1 hidden gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 sm:flex',
+            mine ? 'left-1' : 'right-1',
           )}
         >
           <Button

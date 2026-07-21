@@ -191,6 +191,8 @@ const ru: Dict = {
   'chat.album': '🖼️ Альбом',
   'chat.emptySearchResult': 'По запросу ничего не найдено',
   'chat.found': 'Найдено',
+  'chat.startConversation': 'Напишите первое сообщение',
+  'chat.encryptedChatHint': 'Сообщения в этом чате защищены',
 
   // Messages
   'msg.you': 'Вы',
@@ -1424,6 +1426,8 @@ const en: Dict = {
   'chat.album': '🖼️ Album',
   'chat.emptySearchResult': 'No results found',
   'chat.found': 'Found',
+  'chat.startConversation': 'Send the first message',
+  'chat.encryptedChatHint': 'Messages in this chat are protected',
 
   'msg.you': 'You',
   'msg.replyTo': 'Reply to',

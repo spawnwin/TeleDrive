@@ -697,11 +697,11 @@ export function Messenger() {
     <div className="relative flex h-[100dvh] w-full overflow-hidden bg-background">
       {swipeHintVisible && (
         <div
-          className="pointer-events-none absolute inset-y-0 left-0 z-[12000] flex w-14 items-center justify-center bg-gradient-to-r from-[#3390ec]/25 to-transparent xl:hidden"
+          className="pointer-events-none absolute inset-y-0 left-0 z-[12000] flex w-14 items-center justify-center bg-gradient-to-r from-primary/25 to-transparent xl:hidden"
           style={{ opacity: swipeHintOpacity }}
           aria-hidden
         >
-          <ArrowLeft className="h-5 w-5 text-[#3390ec]" />
+          <ArrowLeft className="h-5 w-5 text-primary" />
         </div>
       )}
         {/* Sidebar */}

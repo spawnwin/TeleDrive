@@ -203,9 +203,9 @@ export function VoicePlayer({
 
   if (circle) {
     return (
-      <div className="flex flex-col items-center gap-2 py-1">
+      <div className="flex flex-col items-center gap-2 overflow-hidden py-1">
         <audio ref={audioRef} src={url} preload="metadata" />
-        <div className="relative h-44 w-44">
+        <div className="relative h-[min(11rem,70vw)] w-[min(11rem,70vw)] max-h-44 max-w-44">
           <svg className="absolute inset-0 -rotate-90" viewBox="0 0 100 100">
             <circle cx="50" cy="50" r="48" fill="none" stroke="rgba(0,0,0,0.15)" strokeWidth="1.5" />
             <circle

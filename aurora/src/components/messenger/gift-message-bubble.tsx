@@ -51,7 +51,7 @@ export function GiftMessageBubble({
     >
       <button
         type="button"
-        className="relative flex h-40 w-40 items-center justify-center"
+        className="relative flex h-[min(10rem,60vw)] w-[min(10rem,60vw)] max-h-40 max-w-40 items-center justify-center"
         onClick={() => setAnimating((v) => !v)}
       >
         <img
@@ -66,7 +66,7 @@ export function GiftMessageBubble({
           </span>
         )}
       </button>
-      <div className={cn('max-w-[220px] text-center', mine && 'text-right')}>
+      <div className={cn('max-w-[min(220px,100%)] min-w-0 text-center', mine && 'text-right')}>
         <p className="text-[11px] font-semibold uppercase tracking-wide text-violet-400/90">
           {fromLine}
         </p>
@@ -75,7 +75,7 @@ export function GiftMessageBubble({
           {serial ? ` ${serial}` : ''}
         </p>
         {content && content !== `🎁 ${gift.giftTitle}` && (
-          <p className="mt-0.5 text-sm text-foreground">{content}</p>
+          <p className="mt-0.5 break-words text-sm text-foreground">{content}</p>
         )}
         <p className="mt-0.5 text-[10px] text-muted-foreground">{gift.starsSpent} ₽</p>
       </div>
