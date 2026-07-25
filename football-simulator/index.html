@@ -4,8 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="theme-color" content="#0b1020">
-<meta name="description" content="FUTBOL X — аркадный футбольный симулятор для браузера телефона с ультра-способностями, погодой, карьерой и мгновенными повторами.">
-<title>FUTBOL X — Футбольный симулятор</title>
+<meta name="description" content="FUTBOL X — футбольный менеджер в браузере телефона: состав, тактика, лига, трансферы и live-матчи с тренерскими вмешательствами.">
+<title>FUTBOL X — Футбольный менеджер</title>
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
@@ -19,10 +19,10 @@
     <div class="boot-logo">
       <span class="boot-ball">⚽</span>
       <h1>FUTBOL<span class="accent">X</span></h1>
-      <p class="boot-sub">Ультра-аркадный футбол</p>
+      <p class="boot-sub">Футбольный менеджер</p>
     </div>
     <div class="boot-bar"><div id="boot-fill" class="boot-fill"></div></div>
-    <p class="boot-hint">Загрузка стадиона…</p>
+    <p class="boot-hint">Формируем состав…</p>
   </section>
 
   <!-- ================= ГЛАВНОЕ МЕНЮ ================= -->
@@ -32,7 +32,7 @@
         <span class="chip-icon">👤</span>
         <div class="chip-text">
           <b id="menu-club-name">FC Аврора</b>
-          <small>Ур. <span id="menu-level">1</span></small>
+          <small>Ур. <span id="menu-level">1</span> · Сезон <span id="menu-season">1</span></small>
         </div>
       </div>
       <div class="coin-chip">🪙 <span id="menu-coins">0</span></div>
@@ -40,15 +40,21 @@
 
     <div class="menu-hero">
       <h1>FUTBOL<span class="accent">X</span></h1>
-      <p>Аркадный симулятор с суперспособностями</p>
+      <p>Управляй клубом. Матчи играются сами.</p>
     </div>
 
     <nav class="menu-grid">
-      <button class="menu-btn primary" data-nav="match-setup">
-        <span class="mi">▶️</span>Быстрый матч
+      <button class="menu-btn primary" data-nav="friendly">
+        <span class="mi">▶️</span>Товарищеский матч
       </button>
-      <button class="menu-btn" data-nav="career">
-        <span class="mi">🏆</span>Карьера
+      <button class="menu-btn" data-nav="league">
+        <span class="mi">🏆</span>Лига
+      </button>
+      <button class="menu-btn" data-nav="squad">
+        <span class="mi">👥</span>Состав и тактика
+      </button>
+      <button class="menu-btn" data-nav="transfers">
+        <span class="mi">🤝</span>Трансферы
       </button>
       <button class="menu-btn" data-nav="shop">
         <span class="mi">🛒</span>Магазин
@@ -64,14 +70,14 @@
       </button>
     </nav>
 
-    <p class="menu-footer">v1.0 · Играй одним пальцем 👆</p>
+    <p class="menu-footer">v2.0 · Менеджер нового поколения</p>
   </section>
 
-  <!-- ================= НАСТРОЙКА МАТЧА ================= -->
-  <section id="screen-match-setup" class="screen">
+  <!-- ================= ТОВАРИЩЕСКИЙ МАТЧ ================= -->
+  <section id="screen-friendly" class="screen">
     <header class="subbar">
       <button class="back-btn" data-nav="menu">←</button>
-      <h2>Быстрый матч</h2>
+      <h2>Товарищеский матч</h2>
     </header>
 
     <div class="setup-card">
@@ -89,22 +95,76 @@
       <div id="weather-list" class="pill-row"></div>
     </div>
 
-    <div class="setup-card">
-      <h3>Сложность</h3>
-      <div id="difficulty-list" class="pill-row"></div>
+    <div class="setup-card info-card">
+      <p>Тактика и состав берутся из экрана «Состав и тактика». Товарищеский матч не влияет на таблицу лиги.</p>
     </div>
 
     <button id="btn-start-match" class="menu-btn primary big">⚽ НАЧАТЬ МАТЧ</button>
   </section>
 
-  <!-- ================= КАРЬЕРА ================= -->
-  <section id="screen-career" class="screen">
+  <!-- ================= ЛИГА ================= -->
+  <section id="screen-league" class="screen">
     <header class="subbar">
       <button class="back-btn" data-nav="menu">←</button>
-      <h2>Карьера</h2>
+      <h2>Ультра-Лига · Сезон <span id="league-season">1</span></h2>
     </header>
-    <p class="career-desc">Пройди лестницу из 8 клубов Российской Ультра-Лиги и стань легендой.</p>
-    <div id="career-ladder" class="career-ladder"></div>
+
+    <div class="setup-card">
+      <h3>Таблица</h3>
+      <div class="table-wrap">
+        <table class="league-table">
+          <thead><tr><th>#</th><th>Клуб</th><th>И</th><th>+/-</th><th>О</th></tr></thead>
+          <tbody id="league-table-body"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="setup-card">
+      <h3>Тур <span id="league-round">1</span> из 7</h3>
+      <div id="league-fixtures" class="fixture-list"></div>
+    </div>
+  </section>
+
+  <!-- ================= СОСТАВ И ТАКТИКА ================= -->
+  <section id="screen-squad" class="screen">
+    <header class="subbar">
+      <button class="back-btn" data-nav="menu">←</button>
+      <h2>Состав и тактика</h2>
+    </header>
+
+    <div class="setup-card">
+      <h3>Формация</h3>
+      <div id="formation-list" class="pill-row"></div>
+    </div>
+
+    <div class="setup-card">
+      <h3>Стиль игры</h3>
+      <div id="tactic-list" class="pill-row"></div>
+    </div>
+
+    <div class="setup-card">
+      <h3>Сила команды</h3>
+      <div class="stat-bars">
+        <div class="stat-bar-row"><span>⚔️ Атака</span><div class="stat-bar"><div id="stat-attack-fill" class="stat-bar-fill atk"></div></div><b id="stat-attack-val">0</b></div>
+        <div class="stat-bar-row"><span>🛡️ Оборона</span><div class="stat-bar"><div id="stat-defense-fill" class="stat-bar-fill def"></div></div><b id="stat-defense-val">0</b></div>
+      </div>
+    </div>
+
+    <div class="setup-card">
+      <h3>Игроки</h3>
+      <div id="squad-list" class="squad-list"></div>
+    </div>
+  </section>
+
+  <!-- ================= ТРАНСФЕРЫ ================= -->
+  <section id="screen-transfers" class="screen">
+    <header class="subbar">
+      <button class="back-btn" data-nav="menu">←</button>
+      <h2>Трансферный рынок</h2>
+      <div class="coin-chip small">🪙 <span id="transfers-coins">0</span></div>
+    </header>
+    <button id="btn-refresh-market" class="menu-btn" style="margin-bottom:12px;">🔄 Обновить рынок</button>
+    <div id="transfer-list" class="squad-list"></div>
   </section>
 
   <!-- ================= МАГАЗИН ================= -->
@@ -118,7 +178,7 @@
     <div class="shop-tabs">
       <button class="shop-tab active" data-tab="kits">Формы</button>
       <button class="shop-tab" data-tab="balls">Мячи</button>
-      <button class="shop-tab" data-tab="abilities">Способности</button>
+      <button class="shop-tab" data-tab="interventions">Вмешательства</button>
       <button class="shop-tab" data-tab="stadiums">Стадионы</button>
     </div>
 
@@ -162,16 +222,16 @@
       <h2>Как играть</h2>
     </header>
     <div class="howto-body">
-      <div class="howto-item"><span>🕹️</span><p><b>Левый джойстик</b> — бег игрока во всех направлениях.</p></div>
-      <div class="howto-item"><span>👆</span><p><b>Короткий тап по кнопке B</b> — короткий пас ближайшему партнёру.</p></div>
-      <div class="howto-item"><span>✊</span><p><b>Удержание кнопки B</b> — заряд удара, отпусти для удара по воротам. Чем дольше держишь — тем сильнее удар.</p></div>
-      <div class="howto-item"><span>⬆️</span><p><b>Свайп вверх во время удержания</b> — удар свечой (навес).</p></div>
-      <div class="howto-item"><span>⚡</span><p><b>Шкала ULTRA</b> заполняется за дриблинг, обводки и голы. При заполнении нажми кнопку способности для взрыва суперсилы: Огненный удар, Замедление времени или Магнит-дриблинг.</p></div>
-      <div class="howto-item"><span>🎬</span><p>После каждого гола — мгновенный повтор в замедленной съёмке, как на большом ТВ.</p></div>
+      <div class="howto-item"><span>👥</span><p><b>Состав и тактика</b> — выбери формацию и стиль игры (атака/баланс/оборона). Матчи симулируются автоматически на основе силы твоей команды.</p></div>
+      <div class="howto-item"><span>🏆</span><p><b>Лига</b> — сыграй 7 туров сезона против клубов Ультра-Лиги. Побеждай, чтобы возглавить таблицу.</p></div>
+      <div class="howto-item"><span>📺</span><p>Во время матча идёт <b>живой текстовый репортаж</b> и анимация на мини-поле — сиди и наслаждайся игрой.</p></div>
+      <div class="howto-item"><span>🔥</span><p><b>Тренерские вмешательства</b> — во время матча ты можешь произнести мотивационную речь, перестроить тактику или сделать замену, не трогая джойстик.</p></div>
+      <div class="howto-item"><span>🤝</span><p><b>Трансферы</b> — покупай и продавай игроков, усиливай состав монетами, заработанными в матчах.</p></div>
+      <div class="howto-item"><span>🎨</span><p>Настраивай клуб: название, цвет формы, мяч и стадион в «Магазине» и «Клуб и форма».</p></div>
     </div>
   </section>
 
-  <!-- ================= МАТЧ (canvas) ================= -->
+  <!-- ================= МАТЧ ================= -->
   <section id="screen-match" class="screen">
     <div id="match-hud">
       <div class="hud-score">
@@ -179,34 +239,30 @@
         <b id="hud-score">0 : 0</b>
         <span id="hud-away-name">Соперник</span>
       </div>
-      <div class="hud-time"><span id="hud-clock">02:00</span> <span id="hud-half">1-й тайм</span></div>
+      <div class="hud-time"><span id="hud-minute">0'</span></div>
       <button id="btn-pause" class="hud-pause">⏸</button>
-    </div>
-
-    <div id="ultra-bar-wrap">
-      <div id="ultra-bar-fill" class="ultra-bar-fill"></div>
-      <span class="ultra-label">ULTRA</span>
     </div>
 
     <canvas id="game-canvas"></canvas>
 
-    <div id="toast-layer"></div>
-    <div id="replay-badge" class="replay-badge">🎬 ПОВТОР</div>
-
-    <div id="controls-layer">
-      <div id="joystick-zone" class="joystick-zone">
-        <div id="joystick-base" class="joystick-base">
-          <div id="joystick-knob" class="joystick-knob"></div>
-        </div>
-      </div>
-      <div class="action-zone">
-        <button id="btn-ultra" class="btn-ultra" disabled>⚡</button>
-        <button id="btn-action" class="btn-action">B</button>
-        <div id="power-meter-wrap" class="power-meter-wrap">
-          <div id="power-meter-fill" class="power-meter-fill"></div>
-        </div>
-      </div>
+    <div id="speed-bar">
+      <button class="speed-btn active" data-speed="1">1x</button>
+      <button class="speed-btn" data-speed="2">2x</button>
+      <button class="speed-btn" data-speed="4">4x</button>
+      <button id="btn-skip" class="speed-btn skip">⏭ Пропустить</button>
     </div>
+
+    <div id="manager-bar">
+      <div class="mgr-row">
+        <button class="mgr-tactic-btn" data-tactic="attack">⚔️</button>
+        <button class="mgr-tactic-btn" data-tactic="balance">⚖️</button>
+        <button class="mgr-tactic-btn" data-tactic="defense">🛡️</button>
+        <button id="btn-sub" class="mgr-action-btn">🔄 Замена</button>
+      </div>
+      <div class="mgr-row" id="intervention-row"></div>
+    </div>
+
+    <div id="commentary-feed"></div>
   </section>
 
   <!-- ================= ПАУЗА ================= -->

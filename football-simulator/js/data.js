@@ -1,13 +1,12 @@
 const DATA = {
-  rivals: [
-    { id: 'volna', name: 'Волна Юга', power: 1, color: '#f43f5e' },
-    { id: 'ural', name: 'Уральский Кряж', power: 2, color: '#78716c' },
-    { id: 'tayga', name: 'Тайга ФК', power: 3, color: '#22c55e' },
-    { id: 'stal', name: 'Сталь Города', power: 4, color: '#64748b' },
-    { id: 'metel', name: 'Метель Норд', power: 5, color: '#e2e8f0' },
-    { id: 'vulkan', name: 'Вулкан Ультра', power: 6, color: '#f97316' },
-    { id: 'grom', name: 'Гром Столицы', power: 7, color: '#facc15' },
-    { id: 'legenda', name: 'Легенда X', power: 8, color: '#a855f7' }
+  clubs: [
+    { id: 'volna', name: 'Волна Юга', power: 58, color: '#f43f5e' },
+    { id: 'ural', name: 'Уральский Кряж', power: 64, color: '#78716c' },
+    { id: 'tayga', name: 'Тайга ФК', power: 69, color: '#22c55e' },
+    { id: 'metel', name: 'Метель Норд', power: 75, color: '#e2e8f0' },
+    { id: 'vulkan', name: 'Вулкан Ультра', power: 80, color: '#f97316' },
+    { id: 'grom', name: 'Гром Столицы', power: 85, color: '#facc15' },
+    { id: 'legenda', name: 'Легенда X', power: 90, color: '#a855f7' }
   ],
 
   stadiums: [
@@ -18,18 +17,24 @@ const DATA = {
   ],
 
   weathers: [
-    { id: 'clear', name: '☀️ Ясно', friction: 0.988, windX: 0, slip: 1 },
-    { id: 'rain', name: '🌧️ Дождь', friction: 0.978, windX: 0.02, slip: 1.25 },
-    { id: 'snow', name: '❄️ Снег', friction: 0.965, windX: 0, slip: 0.85 },
-    { id: 'night', name: '🌙 Ночь', friction: 0.988, windX: 0, slip: 1 },
-    { id: 'wind', name: '🌬️ Ветер', friction: 0.988, windX: 0.06, slip: 1 }
+    { id: 'clear', name: '☀️ Ясно', atkMul: 1, defMul: 1 },
+    { id: 'rain', name: '🌧️ Дождь', atkMul: 0.94, defMul: 0.94 },
+    { id: 'snow', name: '❄️ Снег', atkMul: 0.9, defMul: 0.96 },
+    { id: 'night', name: '🌙 Ночь', atkMul: 1, defMul: 1 },
+    { id: 'wind', name: '🌬️ Ветер', atkMul: 0.95, defMul: 1 }
   ],
 
-  difficulties: [
-    { id: 'easy', name: 'Новичок', aiSkill: 0.55 },
-    { id: 'normal', name: 'Игрок', aiSkill: 0.72 },
-    { id: 'hard', name: 'Профи', aiSkill: 0.88 },
-    { id: 'ultra', name: 'ULTRA', aiSkill: 1.0 }
+  formations: {
+    '4-4-2': { def: 4, mid: 4, fwd: 2, label: '4-4-2 · Классика' },
+    '4-3-3': { def: 4, mid: 3, fwd: 3, label: '4-3-3 · Атакующая' },
+    '3-5-2': { def: 3, mid: 5, fwd: 2, label: '3-5-2 · Контроль центра' },
+    '5-3-2': { def: 5, mid: 3, fwd: 2, label: '5-3-2 · Автобус' }
+  },
+
+  tacticStyles: [
+    { id: 'attack', name: 'Атакующий', icon: '⚔️', atkMul: 1.18, defMul: 0.85 },
+    { id: 'balance', name: 'Сбалансированный', icon: '⚖️', atkMul: 1, defMul: 1 },
+    { id: 'defense', name: 'Оборонительный', icon: '🛡️', atkMul: 0.85, defMul: 1.18 }
   ],
 
   kitColors: [
@@ -48,20 +53,36 @@ const DATA = {
     { id: 'galaxy', name: 'Галактика', cost: 450, icon: '🌌' }
   ],
 
-  abilities: [
-    { id: 'fireshot', name: 'Огненный удар', cost: 0, icon: '🔥', desc: 'Неберущийся удар с огненным следом' },
-    { id: 'timewarp', name: 'Разрыв времени', cost: 400, icon: '⏱️', desc: 'Замедляет соперников на 3 сек' },
-    { id: 'magnet', name: 'Магнит-дриблинг', cost: 400, icon: '🧲', desc: 'Мяч прилипает к ноге на 4 сек' }
+  interventions: [
+    { id: 'speech', name: 'Мотивационная речь', cost: 0, icon: '🔥', desc: '+15% к силе команды на 15 минут (1 раз за матч)' },
+    { id: 'masterclass', name: 'Тактический гений', cost: 400, icon: '🧠', desc: 'Смена тактики без штрафа адаптации' },
+    { id: 'ironwall', name: 'Железная стена', cost: 400, icon: '🛡️', desc: 'Оборона держится насмерть 10 минут' }
   ],
 
   achievements: [
-    { id: 'first_goal', icon: '⚽', name: 'Первый гол', desc: 'Забей свой первый гол' },
-    { id: 'hat_trick', icon: '🎩', name: 'Хет-трик', desc: 'Забей 3 гола в одном матче' },
+    { id: 'first_goal', icon: '⚽', name: 'Первый гол', desc: 'Забей свой первый гол в матче' },
+    { id: 'hat_trick', icon: '🎩', name: 'Разгром', desc: 'Выиграй матч с разницей в 3+ гола' },
     { id: 'first_win', icon: '🏅', name: 'Первая победа', desc: 'Выиграй свой первый матч' },
-    { id: 'ultra_used', icon: '⚡', name: 'Сила Ультра', desc: 'Используй суперспособность' },
-    { id: 'career_complete', icon: '👑', name: 'Легенда Лиги', desc: 'Пройди всю карьеру' },
+    { id: 'intervention_used', icon: '⚡', name: 'Слово тренера', desc: 'Используй тренерское вмешательство' },
+    { id: 'league_complete', icon: '👑', name: 'Легенда Лиги', desc: 'Пройди весь сезон Ультра-Лиги' },
     { id: 'shopaholic', icon: '🛍️', name: 'Модник', desc: 'Купи любой предмет в магазине' },
-    { id: 'comeback', icon: '🔥', name: 'Камбэк', desc: 'Выиграй матч, проигрывая в счёте' },
-    { id: 'clean_sheet', icon: '🧤', name: 'Сухой лист', desc: 'Не пропусти ни одного гола за матч' }
+    { id: 'transfer_done', icon: '🤝', name: 'Трансферное окно', desc: 'Купи игрока на трансферном рынке' },
+    { id: 'clean_sheet', icon: '🧤', name: 'Сухой лист', desc: 'Не пропусти ни одного гола за матч' },
+    { id: 'top_table', icon: '🥇', name: 'Вершина таблицы', desc: 'Возглавь турнирную таблицу лиги' }
+  ],
+
+  firstNames: ['Артём', 'Дмитрий', 'Иван', 'Максим', 'Никита', 'Егор', 'Кирилл', 'Роман',
+    'Данила', 'Богдан', 'Тимур', 'Владислав', 'Глеб', 'Ярослав', 'Матвей', 'Савелий',
+    'Руслан', 'Захар', 'Всеволод', 'Демид'],
+
+  lastNames: ['Соколов', 'Волков', 'Морозов', 'Орлов', 'Быков', 'Громов', 'Захаров', 'Куницын',
+    'Лебедев', 'Медведев', 'Рысаков', 'Ястребов', 'Барсуков', 'Тигров', 'Комаров', 'Соловьёв',
+    'Воронин', 'Метелин', 'Стрелков', 'Буревой'],
+
+  positions: [
+    { id: 'GK', name: 'Вратарь' },
+    { id: 'DEF', name: 'Защитник' },
+    { id: 'MID', name: 'Полузащитник' },
+    { id: 'FWD', name: 'Нападающий' }
   ]
 };

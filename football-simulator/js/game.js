@@ -1,519 +1,253 @@
-const Match = (() => {
+const MatchEngine = (() => {
   const canvas = document.getElementById('game-canvas');
   const ctx = canvas.getContext('2d');
-
-  let W = 0, H = 0, PAD = 0, pitchTop = 0, pitchBottom = 0, pitchLeft = 0, pitchRight = 0, goalW = 0;
-  let dpr = Math.max(1, window.devicePixelRatio || 1);
+  let W = 0, H = 0, dpr = Math.max(1, window.devicePixelRatio || 1);
 
   function resize() {
     W = canvas.clientWidth; H = canvas.clientHeight;
     canvas.width = W * dpr; canvas.height = H * dpr;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    PAD = W * 0.07;
-    pitchLeft = PAD; pitchRight = W - PAD;
-    pitchTop = H * 0.09; pitchBottom = H * 0.93;
-    goalW = (pitchRight - pitchLeft) * 0.34;
   }
   window.addEventListener('resize', resize);
 
-  // ---------------- MATCH STATE ----------------
-  let cfg = null;
-  let running = false, paused = false;
-  let half = 1, halfTime = 75, clock = 75;
-  let score = { home: 0, away: 0 };
-  let matchGoals = 0;
-  let possessor = null;
-  let possessTimer = 0;
-  let ultra = 0, ultraReady = false;
-  let ultraActive = null, ultraActiveTimer = 0;
-  let cooldownTackle = 0;
-  let ball, homeGK, awayGK, homePlayers, awayPlayers, allOutfield;
-  let weather, stadium, rival, aiSkill;
-  let replayBuffer = [];
-  let replaying = false, replayIdx = 0, replayFrom = null;
-  let onFinish = null;
-  let particles = [];
-  let matchStats = { homeGoals: 0, awayGoals: 0, wentBehind: false };
-  let lastTime = 0;
-  let rafId = null;
-  let shakeT = 0, shakeMag = 0;
+  const FLAVORS = {
+    chance: [
+      '{team} создаёт опасный момент у штрафной!',
+      '{team} проходит по флангу и навешивает в штрафную!',
+      '{team} разыгрывает комбинацию до линии штрафной!',
+      'Быстрая контратака {team}!',
+      '{team} находит свободную зону перед воротами!'
+    ],
+    goal: [
+      'ГОЛ!!! {player} ({team}) выводит команду вперёд!',
+      'ГОЛ! {player} мощно пробивает в девятку!',
+      'ГОЛ! {player} замыкает передачу точным ударом!',
+      'ГОЛ! {player} оформляет великолепный удар!'
+    ],
+    save: ['Вратарь {opp} тащит мёртвый мяч!', 'Отличный сейв вратаря {opp}!', 'Вратарь {opp} в падении переводит мяч на угловой!'],
+    miss: ['Удар {team} уходит выше ворот', '{team} не попадает в створ', 'Неточный удар {team}'],
+    post: ['Мяч после удара {team} попадает в перекладину!', '{team} попадает в штангу!'],
+    card: ['Жёлтая карточка сопернику за грубый снос', 'Судья показывает жёлтую карточку за фол'],
+    injury: ['Игрок получил повреждение и вынужден покинуть поле'],
+    halftime: ['Судья фиксирует окончание первого тайма'],
+    fulltime: ['Финальный свисток! Матч завершён']
+  };
 
-  function lerp(a, b, t) { return a + (b - a) * t; }
+  function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+  function fmt(str, o) { return str.replace(/\{(\w+)\}/g, (_, k) => o[k] || ''); }
   function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
-  function dist(a, b) { return Math.hypot(a.x - b.x, a.y - b.y); }
 
-  // ---------------- ENTITIES ----------------
-  function makePlayer(team, role, x, y, isUser) {
-    return { team, role, x, y, vx: 0, vy: 0, dirX: 0, dirY: -1, r: 13, isUser: !!isUser, speed: 2.55, stamina: 1 };
+  let state = null;
+
+  function buildState(opts) {
+    const stadium = DATA.stadiums.find(s => s.id === opts.stadiumId) || DATA.stadiums[0];
+    const weather = DATA.weathers.find(w => w.id === opts.weatherId) || DATA.weathers[0];
+    const rival = DATA.clubs.find(c => c.id === opts.opponentId) || DATA.clubs[0];
+    const homeStrength = Save.teamStrength();
+    const rivalTacticId = pick(['attack', 'balance', 'balance', 'defense']);
+    const rivalTactic = DATA.tacticStyles.find(t => t.id === rivalTacticId);
+
+    return {
+      opts, stadium, weather, rival,
+      homeName: Save.data.clubName,
+      awayName: rival.name,
+      awayBaseAttack: rival.power,
+      awayBaseDefense: rival.power,
+      awayTactic: rivalTactic,
+      minute: 0,
+      injuryMinuteNext: null,
+      score: { home: 0, away: 0 },
+      running: false,
+      paused: false,
+      speed: 1,
+      boosts: [], // {side:'home'|'away', type:'atk'|'def', mul, untilMinute}
+      speechUsed: false,
+      ironwallUsed: false,
+      masterclassCharge: Save.owns('interventions', 'masterclass'),
+      subsUsed: 0,
+      tacticPenaltyUntil: 0,
+      xi: homeStrength.xi,
+      lastTacticSwitchMinute: -99,
+      ballAnim: { x: 0.5, y: 0.5, phase: 'idle' },
+      momentum: 0,
+      timerHandle: null,
+      onCommentary: opts.onCommentary || (() => {}),
+      onScore: opts.onScore || (() => {}),
+      onMinute: opts.onMinute || (() => {}),
+      onFinish: opts.onFinish || (() => {}),
+      onState: opts.onState || (() => {})
+    };
   }
 
-  function setupMatch(options) {
-    cfg = options;
-    rival = DATA.rivals.find(r => r.id === options.rivalId) || DATA.rivals[0];
-    stadium = DATA.stadiums.find(s => s.id === options.stadiumId) || DATA.stadiums[0];
-    weather = DATA.weathers.find(w => w.id === options.weatherId) || DATA.weathers[0];
-    const diff = DATA.difficulties.find(d => d.id === options.difficultyId) || DATA.difficulties[1];
-    aiSkill = clamp(diff.aiSkill + (rival.power - 4) * 0.03, 0.4, 1.05);
-    onFinish = options.onFinish || null;
-
-    half = 1; halfTime = options.halfSeconds || 75; clock = halfTime;
-    score = { home: 0, away: 0 };
-    matchStats = { homeGoals: 0, awayGoals: 0, wentBehind: false };
-    ultra = 0; ultraReady = false; ultraActive = null; ultraActiveTimer = 0;
-    replayBuffer = []; replaying = false;
-    particles = [];
-
-    resize();
-    kickoffSetup();
-    running = true; paused = false;
-    lastTime = performance.now();
-    if (rafId) cancelAnimationFrame(rafId);
-    rafId = requestAnimationFrame(loop);
-    SFX.whistle();
-    SFX.crowdAmbience(true);
-  }
-
-  function kickoffSetup() {
-    const cx = (pitchLeft + pitchRight) / 2;
-    const cy = (pitchTop + pitchBottom) / 2;
-    ball = { x: cx, y: cy, vx: 0, vy: 0, z: 0, vz: 0, r: 8 };
-
-    homeGK = makePlayer('home', 'gk', cx, pitchBottom - 14);
-    awayGK = makePlayer('away', 'gk', cx, pitchTop + 14);
-
-    homePlayers = [
-      makePlayer('home', 'user', cx, cy + 70, true),
-      makePlayer('home', 'mate', cx - 90, cy + 40),
-      makePlayer('home', 'mate', cx + 90, cy + 40)
-    ];
-    awayPlayers = [
-      makePlayer('away', 'opp', cx, cy - 70),
-      makePlayer('away', 'opp', cx - 90, cy - 40),
-      makePlayer('away', 'opp', cx + 90, cy - 40)
-    ];
-    allOutfield = homePlayers.concat(awayPlayers);
-    possessor = null; possessTimer = 0;
-  }
-
-  // ---------------- INPUT ----------------
-  const input = { joyX: 0, joyY: 0, charging: false, chargeStart: 0, swipeStartY: 0, swipeUp: false };
-
-  function setupInput() {
-    const zone = document.getElementById('joystick-zone');
-    const base = document.getElementById('joystick-base');
-    const knob = document.getElementById('joystick-knob');
-    let joyActive = false, joyId = null, baseX = 0, baseY = 0, maxR = 46;
-
-    zone.addEventListener('pointerdown', e => {
-      joyActive = true; joyId = e.pointerId;
-      const rect = zone.getBoundingClientRect();
-      baseX = e.clientX - rect.left; baseY = e.clientY - rect.top;
-      base.style.left = (baseX - 54) + 'px'; base.style.top = (baseY - 54) + 'px';
-      base.style.bottom = 'auto';
-      knob.style.left = '31px'; knob.style.top = '31px';
-      zone.setPointerCapture(e.pointerId);
-    });
-    zone.addEventListener('pointermove', e => {
-      if (!joyActive || e.pointerId !== joyId) return;
-      const rect = zone.getBoundingClientRect();
-      let dx = (e.clientX - rect.left) - baseX;
-      let dy = (e.clientY - rect.top) - baseY;
-      const d = Math.hypot(dx, dy);
-      if (d > maxR) { dx = dx / d * maxR; dy = dy / d * maxR; }
-      knob.style.left = (31 + dx) + 'px'; knob.style.top = (31 + dy) + 'px';
-      input.joyX = dx / maxR; input.joyY = dy / maxR;
-    });
-    function endJoy(e) {
-      if (e.pointerId !== joyId) return;
-      joyActive = false; joyId = null;
-      input.joyX = 0; input.joyY = 0;
-      knob.style.left = '31px'; knob.style.top = '31px';
-      base.style.left = ''; base.style.top = ''; base.style.bottom = '30px';
+  function homeStrengthNow() {
+    const base = Save.teamStrength();
+    let atk = base.attack, def = base.defense;
+    for (const b of state.boosts) {
+      if (b.side !== 'home' || b.untilMinute < state.minute) continue;
+      if (b.type === 'atk') atk *= b.mul; else def *= b.mul;
     }
-    zone.addEventListener('pointerup', endJoy);
-    zone.addEventListener('pointercancel', endJoy);
-
-    const actionBtn = document.getElementById('btn-action');
-    const powerFill = document.getElementById('power-meter-fill');
-    actionBtn.addEventListener('pointerdown', e => {
-      SFX.unlock();
-      input.charging = true; input.chargeStart = performance.now();
-      input.swipeStartY = e.clientY; input.swipeUp = false;
-      actionBtn.classList.add('charging');
-      actionBtn.setPointerCapture(e.pointerId);
-    });
-    actionBtn.addEventListener('pointermove', e => {
-      if (!input.charging) return;
-      if (input.swipeStartY - e.clientY > 40) input.swipeUp = true;
-    });
-    actionBtn.addEventListener('pointerup', () => {
-      if (!input.charging) return;
-      const held = performance.now() - input.chargeStart;
-      input.charging = false;
-      actionBtn.classList.remove('charging');
-      powerFill.style.height = '0%';
-      doAction(held, input.swipeUp);
-    });
-    actionBtn.addEventListener('pointercancel', () => {
-      input.charging = false; actionBtn.classList.remove('charging'); powerFill.style.height = '0%';
-    });
-
-    document.getElementById('btn-ultra').addEventListener('pointerdown', () => {
-      if (ultraReady) activateUltra();
-    });
-
-    document.getElementById('btn-pause').addEventListener('click', () => Match.pause());
+    if (state.minute < state.tacticPenaltyUntil) { atk *= 0.9; def *= 0.9; }
+    return { attack: atk, defense: def };
   }
 
-  function userPlayer() { return homePlayers[0]; }
-
-  function nearestTeammate(p, list) {
-    let best = null, bd = Infinity;
-    for (const t of list) {
-      if (t === p) continue;
-      const d = dist(t, p);
-      if (d < bd) { bd = d; best = t; }
+  function awayStrengthNow() {
+    let atk = state.awayBaseAttack * state.awayTactic.atkMul * state.weather.atkMul;
+    let def = state.awayBaseDefense * state.awayTactic.defMul * state.weather.defMul;
+    for (const b of state.boosts) {
+      if (b.side !== 'away' || b.untilMinute < state.minute) continue;
+      if (b.type === 'atk') atk *= b.mul; else def *= b.mul;
     }
-    return best;
+    return { attack: atk, defense: def };
   }
 
-  function doAction(heldMs, swipeUp) {
-    const p = userPlayer();
-    if (possessor !== p) return; // no ball, no action
-    if (heldMs < 180) {
-      const mate = nearestTeammateAheadOf(p);
-      if (mate) kickBallTo(mate.x, mate.y - 40, 6.2, 0);
-      SFX.pass();
-      addUltra(1.5);
-    } else {
-      const power = clamp(heldMs / 1100, 0.35, 1);
-      const targetX = (pitchLeft + pitchRight) / 2 + (p.x - (pitchLeft + pitchRight) / 2) * -0.15;
-      const targetY = pitchTop;
-      let speed = lerp(7, 16.5, power);
-      let vz = swipeUp ? lerp(3, 7.5, power) : 0.6;
-      if (ultraActive === 'fireshot') {
-        speed *= 1.35; vz = swipeUp ? vz : 1.2;
-        spawnFireTrail();
-        ultraActive = null; ultraActiveTimer = 0;
-      }
-      const dx = targetX - ball.x, dy = targetY - ball.y;
-      const d = Math.hypot(dx, dy) || 1;
-      ball.vx = (dx / d) * speed; ball.vy = (dy / d) * speed; ball.vz = vz;
-      possessor = null; possessTimer = 20;
-      SFX.kick();
-      addUltra(3 + power * 4);
-      shake(4 + power * 5);
+  function randomAttackerName(side) {
+    if (side === 'home') {
+      const pool = state.xi.fwd.concat(state.xi.mid);
+      const p = pick(pool.length ? pool : state.xi.all);
+      return p.name;
     }
+    return choice(DATA.firstNames) + ' ' + choice(DATA.lastNames);
   }
 
-  function nearestTeammateAheadOf(p) {
-    let best = null, bd = Infinity;
-    for (const t of homePlayers) {
-      if (t === p) continue;
-      const d = dist(t, p);
-      if (d < bd) { bd = d; best = t; }
-    }
-    return best;
+  function say(text, kind) {
+    state.onCommentary({ minute: state.minute, text, kind: kind || 'info' });
   }
 
-  function kickBallTo(tx, ty, speed, vz) {
-    const dx = tx - ball.x, dy = ty - ball.y;
-    const d = Math.hypot(dx, dy) || 1;
-    ball.vx = (dx / d) * speed; ball.vy = (dy / d) * speed; ball.vz = vz || 0.3;
-    possessor = null; possessTimer = 14;
-  }
-
-  function addUltra(n) {
-    if (ultraActive) return;
-    ultra = clamp(ultra + n, 0, 100);
-    ultraReady = ultra >= 100;
-    document.getElementById('ultra-bar-fill').style.width = ultra + '%';
-    const btn = document.getElementById('btn-ultra');
-    btn.disabled = !ultraReady;
-  }
-
-  function activateUltra() {
-    const ability = Save.data.equippedAbility || 'fireshot';
-    ultra = 0; ultraReady = false;
-    document.getElementById('ultra-bar-fill').style.width = '0%';
-    document.getElementById('btn-ultra').disabled = true;
-    SFX.ultra();
-    Save.unlockAchievement('ultra_used');
-    if (ability === 'timewarp') {
-      ultraActive = 'timewarp'; ultraActiveTimer = 180;
-      showToast('⏱️ РАЗРЫВ ВРЕМЕНИ!');
-    } else if (ability === 'magnet') {
-      ultraActive = 'magnet'; ultraActiveTimer = 240;
-      showToast('🧲 МАГНИТ-ДРИБЛИНГ!');
-    } else {
-      ultraActive = 'fireshot'; ultraActiveTimer = 400;
-      showToast('🔥 ОГНЕННЫЙ УДАР ГОТОВ!');
-    }
-  }
-
-  function spawnFireTrail() {
-    for (let i = 0; i < 18; i++) {
-      particles.push({ type: 'fire', x: ball.x, y: ball.y, life: 40, vx: (Math.random() - 0.5) * 2, vy: (Math.random() - 0.5) * 2 });
-    }
-  }
-
-  function shake(mag) { shakeT = 14; shakeMag = mag; }
-
-  function showToast(text) {
-    const layer = document.getElementById('toast-layer');
-    const el = document.createElement('div');
-    el.className = 'toast'; el.textContent = text;
-    layer.appendChild(el);
-    setTimeout(() => el.remove(), 1900);
-  }
-
-  // ---------------- AI ----------------
-  function updateAI(dt) {
-    const cx = (pitchLeft + pitchRight) / 2;
-    const homeHasBall = possessor && possessor.team === 'home';
-    const awayHasBall = possessor && possessor.team === 'away';
-    const slow = ultraActive === 'timewarp' ? 0.4 : 1;
-
-    // home AI mates (skip user index 0)
-    for (let i = 1; i < homePlayers.length; i++) {
-      const p = homePlayers[i];
-      let tx, ty;
-      if (homeHasBall) {
-        tx = cx + (i === 1 ? -110 : 110); ty = (possessor ? possessor.y : ball.y) - 90;
-      } else if (awayHasBall) {
-        tx = ball.x + (i === 1 ? -40 : 40); ty = ball.y + 60;
-      } else {
-        tx = ball.x + (i === 1 ? -60 : 60); ty = ball.y + 30;
-      }
-      steerTo(p, tx, ty, 1);
-    }
-
-    // away AI
-    for (let i = 0; i < awayPlayers.length; i++) {
-      const p = awayPlayers[i];
-      let tx, ty;
-      if (awayHasBall) {
-        if (possessor === p) {
-          tx = cx + (p.x > cx ? 40 : -40); ty = pitchBottom - 120;
-          if (dist(p, { x: cx, y: pitchBottom }) < 230 && Math.random() < 0.012 * aiSkill) {
-            aiShoot(p);
-          }
-        } else {
-          tx = cx + (i === 0 ? 0 : i === 1 ? -100 : 100); ty = (possessor ? possessor.y : ball.y) + 80;
-        }
-      } else if (homeHasBall) {
-        tx = ball.x + (i - 1) * 50; ty = ball.y - 40;
-      } else {
-        tx = ball.x + (i - 1) * 40; ty = ball.y - 20;
-      }
-      steerTo(p, tx, ty, slow);
-    }
-
-    // goalkeepers
-    const gkSpan = goalW / 2 - 14;
-    homeGK.x = lerp(homeGK.x, clamp(ball.x, cx - gkSpan, cx + gkSpan), 0.08);
-    homeGK.y = pitchBottom - 14;
-    awayGK.x = lerp(awayGK.x, clamp(ball.x, cx - gkSpan, cx + gkSpan), 0.08);
-    awayGK.y = pitchTop + 14;
-  }
-
-  function aiShoot(p) {
-    const cx = (pitchLeft + pitchRight) / 2;
-    const targetX = cx + (Math.random() - 0.5) * goalW * 0.7;
-    kickBallTo(targetX, pitchBottom, lerp(8, 13, aiSkill), Math.random() < 0.3 ? 3 : 0.5);
-    SFX.kick();
-  }
-
-  function steerTo(p, tx, ty, mult) {
-    const dx = tx - p.x, dy = ty - p.y;
-    const d = Math.hypot(dx, dy) || 1;
-    const spd = p.speed * mult;
-    p.vx = lerp(p.vx, (dx / d) * spd, 0.18);
-    p.vy = lerp(p.vy, (dy / d) * spd, 0.18);
-  }
-
-  // ---------------- PHYSICS ----------------
-  function updateUser(dt) {
-    const p = userPlayer();
-    const mag = clamp(Math.hypot(input.joyX, input.joyY), 0, 1);
-    if (mag > 0.05) {
-      p.dirX = input.joyX / (mag || 1); p.dirY = input.joyY / (mag || 1);
-    }
-    p.vx = lerp(p.vx, input.joyX * p.speed, 0.25);
-    p.vy = lerp(p.vy, input.joyY * p.speed, 0.25);
-
-    if (input.charging) {
-      const held = performance.now() - input.chargeStart;
-      document.getElementById('power-meter-fill').style.height = clamp(held / 1100, 0, 1) * 100 + '%';
-    }
-  }
-
-  function movePlayers() {
-    for (const p of allOutfield) {
-      p.x += p.vx; p.y += p.vy;
-      p.x = clamp(p.x, pitchLeft + 8, pitchRight - 8);
-      p.y = clamp(p.y, pitchTop + 8, pitchBottom - 8);
-    }
-    // soft separation
-    for (let i = 0; i < allOutfield.length; i++) {
-      for (let j = i + 1; j < allOutfield.length; j++) {
-        const a = allOutfield[i], b = allOutfield[j];
-        const d = dist(a, b);
-        const minD = a.r + b.r;
-        if (d < minD && d > 0.01) {
-          const push = (minD - d) / 2;
-          const nx = (a.x - b.x) / d, ny = (a.y - b.y) / d;
-          a.x += nx * push; a.y += ny * push;
-          b.x -= nx * push; b.y -= ny * push;
-        }
-      }
-    }
-  }
-
-  function updateBall() {
-    if (ball.z > 0 || ball.vz !== 0) {
-      ball.z += ball.vz;
-      ball.vz -= 0.35;
-      if (ball.z <= 0) { ball.z = 0; ball.vz = 0; }
-    }
-    ball.vx += weather.windX;
-    ball.x += ball.vx; ball.y += ball.vy;
-    const fr = ball.z > 4 ? 0.996 : weather.friction;
-    ball.vx *= fr; ball.vy *= fr;
-
-    const cx = (pitchLeft + pitchRight) / 2;
-    const gL = cx - goalW / 2, gR = cx + goalW / 2;
-
-    if (ball.x < pitchLeft + ball.r) { ball.x = pitchLeft + ball.r; ball.vx *= -0.6; }
-    if (ball.x > pitchRight - ball.r) { ball.x = pitchRight - ball.r; ball.vx *= -0.6; }
-
-    if (ball.y < pitchTop + ball.r) {
-      if (ball.x > gL && ball.x < gR && ball.z < 18) {
-        scoreGoal('home');
-      } else {
-        ball.y = pitchTop + ball.r; ball.vy *= -0.6; SFX.postHit();
-      }
-    }
-    if (ball.y > pitchBottom - ball.r) {
-      if (ball.x > gL && ball.x < gR && ball.z < 18) {
-        scoreGoal('away');
-      } else {
-        ball.y = pitchBottom - ball.r; ball.vy *= -0.6; SFX.postHit();
-      }
-    }
-  }
-
-  function updatePossession() {
-    if (possessTimer > 0) { possessTimer--; return; }
-    const candidates = allOutfield.concat([homeGK, awayGK]);
-    let best = null, bd = 22;
-    for (const p of candidates) {
-      const d = dist(p, ball);
-      if (d < bd && ball.z < 6) { bd = d; best = p; }
-    }
-    if (best) {
-      if (possessor !== best) {
-        if (possessor && possessor.team !== best.team) SFX.tackle();
-        possessor = best;
-      }
-      const stickiness = (ultraActive === 'magnet' && best.isUser) ? 0.55 : 0.32;
-      const ang = Math.atan2(best.vy, best.vx);
-      const fx = (Math.abs(best.vx) + Math.abs(best.vy)) > 0.05 ? Math.cos(ang) : best.dirX || 0;
-      const fy = (Math.abs(best.vx) + Math.abs(best.vy)) > 0.05 ? Math.sin(ang) : best.dirY || -1;
-      const tx = best.x + fx * 20, ty = best.y + fy * 20;
-      ball.x = lerp(ball.x, tx, stickiness);
-      ball.y = lerp(ball.y, ty, stickiness);
-      ball.vx *= 0.8; ball.vy *= 0.8; ball.z = 0; ball.vz = 0;
-      if (best.isUser && Math.random() < 0.01) addUltra(0.6);
-    }
-  }
-
-  function scoreGoal(who) {
-    score[who]++;
-    matchStats[who === 'home' ? 'homeGoals' : 'awayGoals']++;
-    if (who === 'home') { matchGoals++; addUltra(20); }
-    updateScoreHud();
+  function triggerGoal(side) {
+    if (side === 'home') state.score.home++; else state.score.away++;
+    state.onScore(Object.assign({}, state.score));
+    const teamName = side === 'home' ? state.homeName : state.awayName;
+    say(fmt(pick(FLAVORS.goal), { team: teamName, player: randomAttackerName(side) }), 'goal');
+    playGoalFx(side);
     SFX.goal();
-    if (navigator.vibrate) navigator.vibrate(who === 'home' ? [40, 60, 90] : 40);
-    showToast(who === 'home' ? '⚽ ГОЛ!' : 'ГОЛ СОПЕРНИКА');
-    if (who === 'home' && score.home === 3) Save.unlockAchievement('hat_trick');
-    startReplay();
+    if (navigator.vibrate) navigator.vibrate(side === 'home' ? [40, 60, 90] : 40);
   }
 
-  function updateScoreHud() {
-    document.getElementById('hud-score').textContent = `${score.home} : ${score.away}`;
+  function simulateMinute() {
+    const home = homeStrengthNow();
+    const away = awayStrengthNow();
+
+    const pChanceHome = clamp(0.03 + (home.attack - away.defense) / 900, 0.008, 0.11);
+    const pChanceAway = clamp(0.03 + (away.attack - home.defense) / 900, 0.008, 0.11);
+
+    state.momentum = clamp(state.momentum * 0.85 + ((pChanceHome - pChanceAway) * 6), -1, 1);
+    animateMomentum();
+
+    if (Math.random() < pChanceHome) resolveChance('home', home, away);
+    if (Math.random() < pChanceAway) resolveChance('away', away, home);
+
+    if (Math.random() < 0.01) say(pick(FLAVORS.card), 'card');
+    if (Math.random() < 0.0035) say(pick(FLAVORS.injury), 'injury');
   }
 
-  // ---------------- REPLAY ----------------
-  function pushReplayFrame() {
-    replayBuffer.push({
-      ball: { x: ball.x, y: ball.y, z: ball.z },
-      players: allOutfield.map(p => ({ x: p.x, y: p.y, team: p.team, r: p.r })),
-      gk: [{ x: homeGK.x, y: homeGK.y, r: homeGK.r }, { x: awayGK.x, y: awayGK.y, r: awayGK.r }]
-    });
-    if (replayBuffer.length > 210) replayBuffer.shift();
-  }
-
-  function startReplay() {
-    replaying = true; replayIdx = Math.max(0, replayBuffer.length - 150);
-    document.getElementById('replay-badge').classList.add('show');
-  }
-
-  function endReplay() {
-    replaying = false;
-    document.getElementById('replay-badge').classList.remove('show');
-    kickoffSetup();
-  }
-
-  // ---------------- RENDER ----------------
-  function drawPitch() {
-    ctx.fillStyle = stadium.sky;
-    ctx.fillRect(0, 0, W, pitchTop);
-    const g = ctx.createLinearGradient(0, pitchTop, 0, pitchBottom);
-    g.addColorStop(0, stadium.grass);
-    g.addColorStop(1, shade(stadium.grass, -12));
-    ctx.fillStyle = g;
-    ctx.fillRect(0, pitchTop, W, pitchBottom - pitchTop);
-
-    // stripes
-    ctx.save();
-    ctx.globalAlpha = 0.06;
-    const stripes = 10;
-    const sh = (pitchBottom - pitchTop) / stripes;
-    for (let i = 0; i < stripes; i += 2) {
-      ctx.fillStyle = '#fff';
-      ctx.fillRect(pitchLeft, pitchTop + i * sh, pitchRight - pitchLeft, sh);
+  function resolveChance(side, atkTeam, defTeam) {
+    const opp = side === 'home' ? state.awayName : state.homeName;
+    const team = side === 'home' ? state.homeName : state.awayName;
+    say(fmt(pick(FLAVORS.chance), { team }), 'chance');
+    animateChance(side);
+    const onTarget = Math.random() < 0.62;
+    if (!onTarget) {
+      if (Math.random() < 0.15) say(fmt(pick(FLAVORS.post), { team }), 'miss');
+      else say(fmt(pick(FLAVORS.miss), { team }), 'miss');
+      return;
     }
+    const pGoal = clamp(0.28 + (atkTeam.attack - defTeam.defense) / 260, 0.08, 0.62);
+    if (Math.random() < pGoal) {
+      triggerGoal(side);
+    } else {
+      say(fmt(pick(FLAVORS.save), { opp }), 'save');
+    }
+  }
+
+  // ---------------- MANAGER ACTIONS ----------------
+  function useSpeech() {
+    if (state.speechUsed) return false;
+    state.speechUsed = true;
+    state.boosts.push({ side: 'home', type: 'atk', mul: 1.15, untilMinute: state.minute + 15 });
+    state.boosts.push({ side: 'home', type: 'def', mul: 1.1, untilMinute: state.minute + 15 });
+    say('🔥 Тренер произносит мотивационную речь перед трибунами!', 'boost');
+    Save.unlockAchievement('intervention_used');
+    return true;
+  }
+
+  function useIronwall() {
+    if (state.ironwallUsed || !Save.owns('interventions', 'ironwall')) return false;
+    state.ironwallUsed = true;
+    state.boosts.push({ side: 'home', type: 'def', mul: 1.2, untilMinute: state.minute + 10 });
+    say('🛡️ Команда перестраивается в железную стену обороны!', 'boost');
+    Save.unlockAchievement('intervention_used');
+    return true;
+  }
+
+  function setTactic(styleId) {
+    if (Save.data.tacticStyle === styleId) return;
+    Save.data.tacticStyle = styleId;
+    Save.persist();
+    if (state.masterclassCharge) {
+      state.masterclassCharge = false;
+      say('🧠 Тактический гений: команда мгновенно перестраивается без потерь!', 'boost');
+    } else {
+      state.tacticPenaltyUntil = state.minute + 5;
+      say('🔄 Тренер меняет тактику — команде нужно немного времени на перестроение', 'info');
+    }
+  }
+
+  function substitute() {
+    if (state.subsUsed >= 3) return false;
+    let worst = null, worstScore = Infinity;
+    for (const p of state.xi.all) {
+      if (p.fitness < worstScore) { worstScore = p.fitness; worst = p; }
+    }
+    if (!worst || worst.fitness > 70) return false;
+    const bench = Save.data.squad.filter(p => p.pos === worst.pos && !state.xi.all.includes(p))
+      .sort((a, b) => effectiveRating(b) - effectiveRating(a));
+    if (!bench.length) return false;
+    const inPlayer = bench[0];
+    ['gk', 'def', 'mid', 'fwd'].forEach(group => {
+      const idx = state.xi[group].indexOf(worst);
+      if (idx !== -1) state.xi[group][idx] = inPlayer;
+    });
+    const allIdx = state.xi.all.indexOf(worst);
+    if (allIdx !== -1) state.xi.all[allIdx] = inPlayer;
+    state.subsUsed++;
+    say(`🔄 Замена: ${worst.name} уступает место ${inPlayer.name}`, 'info');
+    return true;
+  }
+
+  // ---------------- ANIMATION ----------------
+  let animRaf = null;
+  function animateChance(side) {
+    state.ballAnim.phase = 'attack';
+    state.ballAnim.side = side;
+    state.ballAnim.t = 0;
+  }
+  function animateMomentum() {}
+
+  function renderLoop() {
+    animRaf = requestAnimationFrame(renderLoop);
+    render();
+  }
+
+  function drawPitch() {
+    const stadium = state.stadium;
+    ctx.fillStyle = stadium.sky; ctx.fillRect(0, 0, W, H * 0.12);
+    const g = ctx.createLinearGradient(0, H * 0.12, 0, H);
+    g.addColorStop(0, stadium.grass); g.addColorStop(1, shade(stadium.grass, -14));
+    ctx.fillStyle = g; ctx.fillRect(0, H * 0.12, W, H * 0.88);
+
+    ctx.save(); ctx.globalAlpha = 0.05;
+    const stripes = 8, top = H * 0.12, sh = (H - top) / stripes;
+    for (let i = 0; i < stripes; i += 2) { ctx.fillStyle = '#fff'; ctx.fillRect(0, top + i * sh, W, sh); }
     ctx.restore();
 
-    ctx.strokeStyle = stadium.line; ctx.lineWidth = 2; ctx.globalAlpha = 0.85;
-    ctx.strokeRect(pitchLeft, pitchTop, pitchRight - pitchLeft, pitchBottom - pitchTop);
-    const cx = (pitchLeft + pitchRight) / 2, cy = (pitchTop + pitchBottom) / 2;
-    ctx.beginPath(); ctx.moveTo(pitchLeft, cy); ctx.lineTo(pitchRight, cy); ctx.stroke();
-    ctx.beginPath(); ctx.arc(cx, cy, 46, 0, Math.PI * 2); ctx.stroke();
-    ctx.beginPath(); ctx.arc(cx, cy, 3, 0, Math.PI * 2); ctx.fillStyle = stadium.line; ctx.fill();
-
-    const boxW = goalW + 60, boxH = 60;
-    ctx.strokeRect(cx - boxW / 2, pitchTop, boxW, boxH);
-    ctx.strokeRect(cx - boxW / 2, pitchBottom - boxH, boxW, boxH);
-
+    ctx.strokeStyle = stadium.line; ctx.globalAlpha = 0.8; ctx.lineWidth = 2;
+    const pad = W * 0.06;
+    ctx.strokeRect(pad, top + 6, W - pad * 2, H - top - 12);
+    const cx = W / 2, cy = (top + H) / 2;
+    ctx.beginPath(); ctx.moveTo(pad, cy); ctx.lineTo(W - pad, cy); ctx.stroke();
+    ctx.beginPath(); ctx.arc(cx, cy, W * 0.11, 0, Math.PI * 2); ctx.stroke();
     ctx.globalAlpha = 1;
-    ctx.fillStyle = '#f5fff9';
-    ctx.fillRect(cx - goalW / 2, pitchTop - 8, goalW, 8);
-    ctx.fillRect(cx - goalW / 2, pitchBottom, goalW, 8);
-    ctx.strokeStyle = '#f5fff9'; ctx.lineWidth = 3;
-    ctx.strokeRect(cx - goalW / 2, pitchTop - 8, goalW, 8);
-    ctx.strokeRect(cx - goalW / 2, pitchBottom, goalW, 8);
-
-    if (stadium.id === 'night' || weather.id === 'night') {
-      for (const fx of [pitchLeft - 10, pitchRight + 10]) {
-        for (const fy of [pitchTop - 4, pitchBottom]) {
-          const rg = ctx.createRadialGradient(fx, fy, 0, fx, fy, 90);
-          rg.addColorStop(0, 'rgba(255,255,220,.18)'); rg.addColorStop(1, 'rgba(255,255,220,0)');
-          ctx.fillStyle = rg; ctx.beginPath(); ctx.arc(fx, fy, 90, 0, Math.PI * 2); ctx.fill();
-        }
-      }
-    }
+    return { cx, cy, top, pad };
   }
 
   function shade(hex, pct) {
@@ -523,193 +257,154 @@ const Match = (() => {
     return `rgb(${r},${g},${b})`;
   }
 
-  function drawPlayer(p, color, label, team) {
-    const shy = p.y + 4;
-    ctx.beginPath(); ctx.ellipse(p.x, shy + 10, 12, 4, 0, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(0,0,0,.25)'; ctx.fill();
+  function kitColorHex() {
+    const k = DATA.kitColors.find(k => k.id === Save.data.kit);
+    return k ? k.color : '#22d3ee';
+  }
 
-    ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
-    ctx.fillStyle = color; ctx.fill();
-    ctx.lineWidth = team === 'away' ? 2.5 : 2;
-    ctx.strokeStyle = team === 'away' ? 'rgba(10,12,20,.85)' : 'rgba(255,255,255,.65)';
-    ctx.stroke();
-    if (label) {
-      ctx.fillStyle = '#fff'; ctx.font = '9px sans-serif'; ctx.textAlign = 'center';
-      ctx.fillText(label, p.x, p.y + 3);
-    }
-    if (p.isUser) {
-      ctx.beginPath(); ctx.arc(p.x, p.y, p.r + 5, 0, Math.PI * 2);
-      ctx.strokeStyle = 'rgba(255,255,255,.8)'; ctx.lineWidth = 1.5; ctx.stroke();
+  function drawDots(geo) {
+    const { cx, cy, top, pad } = geo;
+    const spanX = (W - pad * 2) * 0.8;
+    const homeColor = kitColorHex(), awayColor = state.rival.color;
+    const homeBiasY = clamp(state.momentum, -1, 1) * 14;
+    const homeRows = [
+      { n: DATA.formations[Save.data.formation].fwd, y: cy - 60 - homeBiasY },
+      { n: DATA.formations[Save.data.formation].mid, y: cy - 24 - homeBiasY },
+      { n: DATA.formations[Save.data.formation].def, y: cy + 40 - homeBiasY }
+    ];
+    homeRows.forEach(row => drawRow(row.n, row.y, cx, spanX, homeColor));
+    ctx.beginPath(); ctx.arc(cx, cy + 90 - homeBiasY, 8, 0, Math.PI * 2); ctx.fillStyle = '#334155'; ctx.fill();
+
+    const awayF = { def: 4, mid: 4, fwd: 2 };
+    const awayRows = [
+      { n: awayF.def, y: cy - 40 - homeBiasY },
+      { n: awayF.mid, y: cy + 24 - homeBiasY },
+      { n: awayF.fwd, y: cy + 60 - homeBiasY }
+    ];
+    awayRows.forEach(row => drawRow(row.n, row.y, cx, spanX, awayColor));
+    ctx.beginPath(); ctx.arc(cx, cy - 90 - homeBiasY, 8, 0, Math.PI * 2); ctx.fillStyle = '#1e293b'; ctx.fill();
+  }
+
+  function drawRow(n, y, cx, spanX, color) {
+    if (!n) return;
+    for (let i = 0; i < n; i++) {
+      const t = n === 1 ? 0.5 : i / (n - 1);
+      const x = cx - spanX / 2 + t * spanX;
+      ctx.beginPath(); ctx.arc(x, y, 6.5, 0, Math.PI * 2);
+      ctx.fillStyle = color; ctx.fill();
+      ctx.lineWidth = 1.2; ctx.strokeStyle = 'rgba(255,255,255,.5)'; ctx.stroke();
     }
   }
 
-  function drawBall() {
-    const scale = 1 + ball.z * 0.02;
-    ctx.beginPath(); ctx.ellipse(ball.x, ball.y + ball.z * 0.6 + 3, 7, 3, 0, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(0,0,0,.3)'; ctx.fill();
-    ctx.beginPath();
-    ctx.arc(ball.x, ball.y - ball.z, ball.r * scale, 0, Math.PI * 2);
-    ctx.fillStyle = '#fefefe'; ctx.fill();
-    ctx.strokeStyle = '#333'; ctx.lineWidth = 1; ctx.stroke();
+  let particles = [];
+  function playGoalFx(side) {
+    for (let i = 0; i < 26; i++) {
+      particles.push({ x: W / 2, y: H / 2, vx: (Math.random() - 0.5) * 6, vy: (Math.random() - 0.5) * 6 - 1, life: 45, color: side === 'home' ? kitColorHex() : state.rival.color });
+    }
   }
 
   function drawParticles() {
     for (let i = particles.length - 1; i >= 0; i--) {
-      const pt = particles[i];
-      pt.x += pt.vx; pt.y += pt.vy; pt.life--;
-      if (pt.life <= 0) { particles.splice(i, 1); continue; }
-      ctx.globalAlpha = pt.life / 40;
-      ctx.fillStyle = pt.type === 'fire' ? '#f97316' : '#fff';
-      ctx.beginPath(); ctx.arc(pt.x, pt.y, 3, 0, Math.PI * 2); ctx.fill();
+      const p = particles[i];
+      p.x += p.vx; p.y += p.vy; p.vy += 0.12; p.life--;
+      if (p.life <= 0) { particles.splice(i, 1); continue; }
+      ctx.globalAlpha = p.life / 45;
+      ctx.fillStyle = p.color; ctx.beginPath(); ctx.arc(p.x, p.y, 4, 0, Math.PI * 2); ctx.fill();
       ctx.globalAlpha = 1;
     }
   }
 
-  let weatherParticles = null;
-  function initWeatherParticles() {
-    weatherParticles = [];
-    if (weather.id === 'rain') {
-      for (let i = 0; i < 70; i++) weatherParticles.push({ x: Math.random() * W, y: Math.random() * H, s: 10 + Math.random() * 6 });
-    } else if (weather.id === 'snow') {
-      for (let i = 0; i < 50; i++) weatherParticles.push({ x: Math.random() * W, y: Math.random() * H, s: 1 + Math.random() * 2, sway: Math.random() * 2 });
+  function drawBall(geo) {
+    const { cx, cy } = geo;
+    let bx = cx, by = cy;
+    if (state.ballAnim.phase === 'attack') {
+      state.ballAnim.t = Math.min(1, (state.ballAnim.t || 0) + 0.06);
+      const dir = state.ballAnim.side === 'home' ? -1 : 1;
+      by = cy + dir * state.ballAnim.t * (H * 0.32);
+      if (state.ballAnim.t >= 1) state.ballAnim.phase = 'idle';
     }
-  }
-  function drawWeather() {
-    if (!weatherParticles || !weatherParticles.length) return;
-    if (weather.id === 'rain') {
-      ctx.strokeStyle = 'rgba(180,220,255,.5)'; ctx.lineWidth = 1;
-      for (const p of weatherParticles) {
-        ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(p.x - 2, p.y + p.s); ctx.stroke();
-        p.y += p.s; p.x -= 1;
-        if (p.y > H) { p.y = -10; p.x = Math.random() * W; }
-      }
-    } else if (weather.id === 'snow') {
-      ctx.fillStyle = 'rgba(255,255,255,.85)';
-      for (const p of weatherParticles) {
-        ctx.beginPath(); ctx.arc(p.x, p.y, p.s, 0, Math.PI * 2); ctx.fill();
-        p.y += p.s * 0.6; p.x += Math.sin(p.y * 0.02) * p.sway * 0.3;
-        if (p.y > H) { p.y = -5; p.x = Math.random() * W; }
-      }
-    }
+    ctx.beginPath(); ctx.arc(bx, by, 6, 0, Math.PI * 2);
+    ctx.fillStyle = '#fefefe'; ctx.fill(); ctx.strokeStyle = '#333'; ctx.lineWidth = 1; ctx.stroke();
   }
 
   function render() {
-    ctx.save();
-    if (shakeT > 0) {
-      ctx.translate((Math.random() - 0.5) * shakeMag, (Math.random() - 0.5) * shakeMag);
-      shakeT--; shakeMag *= 0.9;
-    }
-    drawPitch();
-
-    if (replaying) {
-      const f = replayBuffer[Math.floor(replayIdx)];
-      if (f) {
-        drawPlayer(f.gk[0], '#334155', '', 'home');
-        drawPlayer(f.gk[1], '#334155', '', 'away');
-        for (const p of f.players) {
-          drawPlayer(p, p.team === 'home' ? kitColorHex() : rival.color, '', p.team);
-        }
-        const b = f.ball;
-        ctx.beginPath(); ctx.arc(b.x, b.y - b.z, 8, 0, Math.PI * 2);
-        ctx.fillStyle = '#fefefe'; ctx.fill(); ctx.strokeStyle = '#333'; ctx.stroke();
-      }
-    } else {
-      drawPlayer(homeGK, '#334155', 'GK', 'home');
-      drawPlayer(awayGK, '#1e293b', 'GK', 'away');
-      homePlayers.forEach(p => drawPlayer(p, kitColorHex(), '', 'home'));
-      awayPlayers.forEach(p => drawPlayer(p, rival.color, '', 'away'));
-      drawBall();
-      drawParticles();
-    }
-    drawWeather();
-    ctx.restore();
+    if (!state) return;
+    const geo = drawPitch();
+    drawDots(geo);
+    drawBall(geo);
+    drawParticles();
   }
 
-  function kitColorHex() {
-    const k = DATA.kitColors.find(k => k.id === (Save.data && Save.data.kit));
-    return k ? k.color : '#22d3ee';
+  // ---------------- LOOP / TIMING ----------------
+  function scheduleNext() {
+    if (!state.running || state.paused) return;
+    const msPerMinute = 480 / state.speed;
+    state.timerHandle = setTimeout(tick, msPerMinute);
   }
 
-  // ---------------- LOOP ----------------
-  function loop(t) {
-    if (!running) return;
-    rafId = requestAnimationFrame(loop);
-    const dt = Math.min(2, (t - lastTime) / 16.67);
-    lastTime = t;
-    if (paused) { render(); return; }
-
-    if (replaying) {
-      replayIdx += 0.5;
-      if (replayIdx >= replayBuffer.length) endReplay();
-      render();
+  function tick() {
+    if (!state.running || state.paused) return;
+    state.minute++;
+    state.onMinute(state.minute);
+    if (state.minute === 45) say(pick(FLAVORS.halftime), 'info');
+    simulateMinute();
+    if (state.minute >= 90) {
+      finish();
       return;
     }
-
-    clock -= dt / 60;
-    if (clock <= 0) { clock = 0; endHalf(); }
-    document.getElementById('hud-clock').textContent = formatClock(clock);
-
-    if (ultraActiveTimer > 0) { ultraActiveTimer--; if (ultraActiveTimer <= 0 && ultraActive !== 'fireshot') ultraActive = null; }
-
-    updateUser(dt);
-    updateAI(dt);
-    movePlayers();
-    updateBall();
-    updatePossession();
-    pushReplayFrame();
-    render();
+    scheduleNext();
   }
 
-  function formatClock(s) {
-    const m = Math.floor(s / 60), sec = Math.floor(s % 60);
-    return `${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
-  }
-
-  function endHalf() {
-    if (half === 1) {
-      half = 2; clock = halfTime;
-      document.getElementById('hud-half').textContent = '2-й тайм';
-      showToast('⏱️ ПЕРЕРЫВ');
-      kickoffSetup();
-    } else {
-      finishMatch();
-    }
-  }
-
-  function finishMatch() {
-    running = false;
-    if (rafId) cancelAnimationFrame(rafId);
-    SFX.crowdAmbience(false);
+  function finish() {
+    state.running = false;
+    if (state.timerHandle) clearTimeout(state.timerHandle);
+    say(pick(FLAVORS.fulltime), 'info');
     SFX.whistle();
-    if (onFinish) onFinish({ score, matchGoals, matchStats });
+    Save.applyFatigue(state.xi);
+    const result = { score: state.score };
+    if (animRaf) cancelAnimationFrame(animRaf);
+    state.onFinish(result);
   }
 
-  // ---------------- PUBLIC API ----------------
   return {
-    init() { setupInput(); resize(); },
-    start(options) {
-      document.getElementById('hud-half').textContent = '1-й тайм';
-      document.getElementById('hud-home-name').textContent = Save.data.clubName;
-      document.getElementById('hud-away-name').textContent = (DATA.rivals.find(r => r.id === options.rivalId) || DATA.rivals[0]).name;
-      updateScoreHud();
-      document.getElementById('ultra-bar-fill').style.width = '0%';
-      document.getElementById('btn-ultra').disabled = true;
+    init() { resize(); },
+    start(opts) {
       resize();
-      setupMatch(options);
-      initWeatherParticles();
+      state = buildState(opts);
+      state.running = true; state.paused = false;
+      particles = [];
+      SFX.crowdAmbience(true);
+      SFX.whistle();
+      say('⚽ Судья дает стартовый свисток!', 'info');
+      if (animRaf) cancelAnimationFrame(animRaf);
+      renderLoop();
+      scheduleNext();
     },
-    pause() {
-      paused = true;
-      document.getElementById('overlay-pause').classList.remove('hidden');
+    setSpeed(n) { if (state) state.speed = n; },
+    skip() {
+      if (!state || !state.running) return;
+      while (state.running && state.minute < 90) {
+        state.minute++;
+        if (state.minute === 45) {}
+        simulateMinute();
+        if (state.minute >= 90) { finish(); break; }
+      }
+      state && state.onMinute && state.onMinute(state.minute);
     },
-    resume() {
-      paused = false; lastTime = performance.now();
-      document.getElementById('overlay-pause').classList.add('hidden');
-    },
+    pause() { if (state) { state.paused = true; if (state.timerHandle) clearTimeout(state.timerHandle); } },
+    resume() { if (state) { state.paused = false; scheduleNext(); } },
     stop() {
-      running = false;
-      if (rafId) cancelAnimationFrame(rafId);
+      if (state) { state.running = false; if (state.timerHandle) clearTimeout(state.timerHandle); }
+      if (animRaf) cancelAnimationFrame(animRaf);
       SFX.crowdAmbience(false);
-    }
+    },
+    useSpeech() { return state && useSpeech(); },
+    useIronwall() { return state && useIronwall(); },
+    setTactic(id) { if (state) setTactic(id); },
+    substitute() { return state && substitute(); },
+    getSpeechUsed() { return state ? state.speechUsed : false },
+    getIronwallUsed() { return state ? state.ironwallUsed : false },
+    getSubsUsed() { return state ? state.subsUsed : 0 },
+    currentMinute() { return state ? state.minute : 0; }
   };
 })();
