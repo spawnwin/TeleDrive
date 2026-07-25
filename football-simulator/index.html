@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0b1020">
+<meta name="description" content="FUTBOL X — аркадный футбольный симулятор для браузера телефона с ультра-способностями, погодой, карьерой и мгновенными повторами.">
+<title>FUTBOL X — Футбольный симулятор</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div id="app">
+
+  <!-- ================= ЗАГРУЗКА ================= -->
+  <section id="screen-boot" class="screen active">
+    <div class="boot-logo">
+      <span class="boot-ball">⚽</span>
+      <h1>FUTBOL<span class="accent">X</span></h1>
+      <p class="boot-sub">Ультра-аркадный футбол</p>
+    </div>
+    <div class="boot-bar"><div id="boot-fill" class="boot-fill"></div></div>
+    <p class="boot-hint">Загрузка стадиона…</p>
+  </section>
+
+  <!-- ================= ГЛАВНОЕ МЕНЮ ================= -->
+  <section id="screen-menu" class="screen">
+    <header class="topbar">
+      <div class="profile-chip">
+        <span class="chip-icon">👤</span>
+        <div class="chip-text">
+          <b id="menu-club-name">FC Аврора</b>
+          <small>Ур. <span id="menu-level">1</span></small>
+        </div>
+      </div>
+      <div class="coin-chip">🪙 <span id="menu-coins">0</span></div>
+    </header>
+
+    <div class="menu-hero">
+      <h1>FUTBOL<span class="accent">X</span></h1>
+      <p>Аркадный симулятор с суперспособностями</p>
+    </div>
+
+    <nav class="menu-grid">
+      <button class="menu-btn primary" data-nav="match-setup">
+        <span class="mi">▶️</span>Быстрый матч
+      </button>
+      <button class="menu-btn" data-nav="career">
+        <span class="mi">🏆</span>Карьера
+      </button>
+      <button class="menu-btn" data-nav="shop">
+        <span class="mi">🛒</span>Магазин
+      </button>
+      <button class="menu-btn" data-nav="customize">
+        <span class="mi">🎨</span>Клуб и форма
+      </button>
+      <button class="menu-btn" data-nav="achievements">
+        <span class="mi">🥇</span>Достижения
+      </button>
+      <button class="menu-btn" data-nav="howto">
+        <span class="mi">❔</span>Как играть
+      </button>
+    </nav>
+
+    <p class="menu-footer">v1.0 · Играй одним пальцем 👆</p>
+  </section>
+
+  <!-- ================= НАСТРОЙКА МАТЧА ================= -->
+  <section id="screen-match-setup" class="screen">
+    <header class="subbar">
+      <button class="back-btn" data-nav="menu">←</button>
+      <h2>Быстрый матч</h2>
+    </header>
+
+    <div class="setup-card">
+      <h3>Соперник</h3>
+      <div id="rival-list" class="pill-row"></div>
+    </div>
+
+    <div class="setup-card">
+      <h3>Стадион</h3>
+      <div id="stadium-list" class="pill-row"></div>
+    </div>
+
+    <div class="setup-card">
+      <h3>Погода</h3>
+      <div id="weather-list" class="pill-row"></div>
+    </div>
+
+    <div class="setup-card">
+      <h3>Сложность</h3>
+      <div id="difficulty-list" class="pill-row"></div>
+    </div>
+
+    <button id="btn-start-match" class="menu-btn primary big">⚽ НАЧАТЬ МАТЧ</button>
+  </section>
+
+  <!-- ================= КАРЬЕРА ================= -->
+  <section id="screen-career" class="screen">
+    <header class="subbar">
+      <button class="back-btn" data-nav="menu">←</button>
+      <h2>Карьера</h2>
+    </header>
+    <p class="career-desc">Пройди лестницу из 8 клубов Российской Ультра-Лиги и стань легендой.</p>
+    <div id="career-ladder" class="career-ladder"></div>
+  </section>
+
+  <!-- ================= МАГАЗИН ================= -->
+  <section id="screen-shop" class="screen">
+    <header class="subbar">
+      <button class="back-btn" data-nav="menu">←</button>
+      <h2>Магазин</h2>
+      <div class="coin-chip small">🪙 <span id="shop-coins">0</span></div>
+    </header>
+
+    <div class="shop-tabs">
+      <button class="shop-tab active" data-tab="kits">Формы</button>
+      <button class="shop-tab" data-tab="balls">Мячи</button>
+      <button class="shop-tab" data-tab="abilities">Способности</button>
+      <button class="shop-tab" data-tab="stadiums">Стадионы</button>
+    </div>
+
+    <div id="shop-grid" class="shop-grid"></div>
+  </section>
+
+  <!-- ================= КАСТОМИЗАЦИЯ ================= -->
+  <section id="screen-customize" class="screen">
+    <header class="subbar">
+      <button class="back-btn" data-nav="menu">←</button>
+      <h2>Клуб и форма</h2>
+    </header>
+    <div class="setup-card">
+      <h3>Название клуба</h3>
+      <input id="club-name-input" class="text-input" maxlength="18" placeholder="FC Аврора">
+    </div>
+    <div class="setup-card">
+      <h3>Цвет формы</h3>
+      <div id="kit-color-list" class="pill-row"></div>
+    </div>
+    <div class="setup-card">
+      <h3>Мяч</h3>
+      <div id="ball-skin-list" class="pill-row"></div>
+    </div>
+    <button id="btn-save-customize" class="menu-btn primary big">💾 Сохранить</button>
+  </section>
+
+  <!-- ================= ДОСТИЖЕНИЯ ================= -->
+  <section id="screen-achievements" class="screen">
+    <header class="subbar">
+      <button class="back-btn" data-nav="menu">←</button>
+      <h2>Достижения</h2>
+    </header>
+    <div id="achievements-list" class="achv-list"></div>
+  </section>
+
+  <!-- ================= КАК ИГРАТЬ ================= -->
+  <section id="screen-howto" class="screen">
+    <header class="subbar">
+      <button class="back-btn" data-nav="menu">←</button>
+      <h2>Как играть</h2>
+    </header>
+    <div class="howto-body">
+      <div class="howto-item"><span>🕹️</span><p><b>Левый джойстик</b> — бег игрока во всех направлениях.</p></div>
+      <div class="howto-item"><span>👆</span><p><b>Короткий тап по кнопке B</b> — короткий пас ближайшему партнёру.</p></div>
+      <div class="howto-item"><span>✊</span><p><b>Удержание кнопки B</b> — заряд удара, отпусти для удара по воротам. Чем дольше держишь — тем сильнее удар.</p></div>
+      <div class="howto-item"><span>⬆️</span><p><b>Свайп вверх во время удержания</b> — удар свечой (навес).</p></div>
+      <div class="howto-item"><span>⚡</span><p><b>Шкала ULTRA</b> заполняется за дриблинг, обводки и голы. При заполнении нажми кнопку способности для взрыва суперсилы: Огненный удар, Замедление времени или Магнит-дриблинг.</p></div>
+      <div class="howto-item"><span>🎬</span><p>После каждого гола — мгновенный повтор в замедленной съёмке, как на большом ТВ.</p></div>
+    </div>
+  </section>
+
+  <!-- ================= МАТЧ (canvas) ================= -->
+  <section id="screen-match" class="screen">
+    <div id="match-hud">
+      <div class="hud-score">
+        <span id="hud-home-name">FC Аврора</span>
+        <b id="hud-score">0 : 0</b>
+        <span id="hud-away-name">Соперник</span>
+      </div>
+      <div class="hud-time"><span id="hud-clock">02:00</span> <span id="hud-half">1-й тайм</span></div>
+      <button id="btn-pause" class="hud-pause">⏸</button>
+    </div>
+
+    <div id="ultra-bar-wrap">
+      <div id="ultra-bar-fill" class="ultra-bar-fill"></div>
+      <span class="ultra-label">ULTRA</span>
+    </div>
+
+    <canvas id="game-canvas"></canvas>
+
+    <div id="toast-layer"></div>
+    <div id="replay-badge" class="replay-badge">🎬 ПОВТОР</div>
+
+    <div id="controls-layer">
+      <div id="joystick-zone" class="joystick-zone">
+        <div id="joystick-base" class="joystick-base">
+          <div id="joystick-knob" class="joystick-knob"></div>
+        </div>
+      </div>
+      <div class="action-zone">
+        <button id="btn-ultra" class="btn-ultra" disabled>⚡</button>
+        <button id="btn-action" class="btn-action">B</button>
+        <div id="power-meter-wrap" class="power-meter-wrap">
+          <div id="power-meter-fill" class="power-meter-fill"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= ПАУЗА ================= -->
+  <div id="overlay-pause" class="overlay hidden">
+    <div class="overlay-card">
+      <h2>Пауза</h2>
+      <button class="menu-btn primary" id="btn-resume">▶️ Продолжить</button>
+      <button class="menu-btn" id="btn-quit-match">🚪 Выйти в меню</button>
+    </div>
+  </div>
+
+  <!-- ================= ФИНАЛ МАТЧА ================= -->
+  <div id="overlay-result" class="overlay hidden">
+    <div class="overlay-card">
+      <h2 id="result-title">ПОБЕДА!</h2>
+      <p id="result-score" class="result-score">3 : 1</p>
+      <div class="result-stats">
+        <div><b id="stat-xp">+0</b><span>Опыт</span></div>
+        <div><b id="stat-coins">+0</b><span>Монеты</span></div>
+        <div><b id="stat-goals">0</b><span>Голы</span></div>
+      </div>
+      <button class="menu-btn primary" id="btn-result-continue">Продолжить</button>
+    </div>
+  </div>
+
+  <div id="global-toast-layer"></div>
+
+</div>
+<script src="js/audio.js"></script>
+<script src="js/data.js"></script>
+<script src="js/state.js"></script>
+<script src="js/game.js"></script>
+<script src="js/ui.js"></script>
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  });
+}
+</script>
+</body>
+</html>
