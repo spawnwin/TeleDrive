@@ -1,0 +1,52 @@
+name: Deploy to Selectel
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    name: Deploy via Docker Compose
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SELECTEL_HOST }}
+          username: ${{ secrets.SELECTEL_USER }}
+          password: ${{ secrets.SELECTEL_PASSWORD }}
+          port: 22
+          command_timeout: 20m
+          script: |
+            set -e
+
+            APP_DIR="/opt/teledrive"
+            REPO_URL="https://github.com/spawnwin/TeleDrive.git"
+            BRANCH="main"
+
+            if [ ! -d "$APP_DIR/.git" ]; then
+              echo "No existing checkout found, cloning fresh..."
+              git clone --branch "$BRANCH" "$REPO_URL" "$APP_DIR"
+            fi
+
+            cd "$APP_DIR"
+
+            if [ ! -f docker/.env ]; then
+              echo "docker/.env is missing. Run the interactive first-time setup once manually:"
+              echo "  cd $APP_DIR && ./install.docker.new.sh"
+              exit 1
+            fi
+
+            git fetch origin "$BRANCH"
+            git reset --hard "origin/$BRANCH"
+
+            export $(cat docker/.env | xargs)
+
+            cd docker
+            docker compose down
+            docker compose up --build --force-recreate -d
+            sleep 5
+            docker compose exec -T teledrive yarn workspace api prisma migrate deploy
+            docker image prune -f
