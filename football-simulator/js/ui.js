@@ -452,13 +452,34 @@
   }
 
   // ---------------- ЭФИР МАТЧА ----------------
+  const EVENT_ICON = {
+    goal: 'ball', save: 'shield', miss: 'miss', card: 'card',
+    injury: 'injury', boost: 'flame', chance: 'attack', info: 'whistle'
+  };
+
   function pushCommentary(ev) {
     const feed = document.getElementById('commentary-feed');
     const div = document.createElement('div');
     div.className = 'cfeed-item ' + (ev.kind || 'info');
-    div.innerHTML = `<span class="cmin">${ev.minute}'</span><span class="ctext">${ev.text}</span>`;
+    div.innerHTML = `<span class="cmin">${ev.minute}'</span>` +
+      `<span class="cico">${icon(EVENT_ICON[ev.kind] || 'whistle', 'ic-sm')}</span>` +
+      `<span class="ctext">${ev.text}</span>`;
     feed.appendChild(div);
     feed.scrollTop = feed.scrollHeight;
+  }
+
+  function paintTimeline(minute, scorers) {
+    document.getElementById('tl-fill').style.width =
+      Math.min(100, minute / 90 * 100) + '%';
+    if (!scorers) return;
+    const marks = document.getElementById('tl-marks');
+    marks.innerHTML = '';
+    scorers.forEach(g => {
+      const i = document.createElement('i');
+      i.style.left = Math.min(100, g.minute / 90 * 100) + '%';
+      i.style.background = g.side === 'home' ? kitHex() : clubColor(activeMatchCtx.opponentId);
+      marks.appendChild(i);
+    });
   }
 
   function renderInterventionButtons() {
@@ -490,6 +511,8 @@
     document.getElementById('bb-away-dot').style.background = clubColor(ctx.opponentId);
     document.getElementById('hud-score').textContent = '0:0';
     document.getElementById('hud-minute').textContent = "0'";
+    document.getElementById('tl-fill').style.width = '0%';
+    document.getElementById('tl-marks').innerHTML = '';
     document.getElementById('btn-sub').disabled = false;
     document.querySelectorAll('.speed-btn[data-speed]')
       .forEach(b => b.classList.toggle('active', b.dataset.speed === '1'));
@@ -511,6 +534,7 @@
       onMinute: m => {
         document.getElementById('hud-minute').textContent = m + "'";
         paintLiveStats();
+        paintTimeline(m, MatchEngine.getScorers());
       },
       onFinish: result => onMatchFinish(result, ctx)
     });

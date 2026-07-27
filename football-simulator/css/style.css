@@ -459,7 +459,23 @@ button { border: none; background: none; cursor: pointer; }
 }
 .bb-pause { flex: 0 0 auto; background: var(--surface); padding: 0 11px; color: var(--muted); }
 
-#game-canvas { width: 100%; height: 25vh; display: block; margin-top: 8px; }
+/* таймлайн матча с отметками голов */
+.timeline { margin: 9px 10px 0; }
+.tl-track { position: relative; height: 3px; background: rgba(233,241,234,.12); }
+.tl-fill { height: 100%; width: 0%; background: var(--lime); transition: width .3s linear; }
+.tl-half { position: absolute; left: 50%; top: -2px; width: 1px; height: 7px; background: rgba(233,241,234,.28); }
+.tl-marks { position: absolute; inset: 0; }
+.tl-marks i {
+  position: absolute; top: -3px; width: 3px; height: 9px; border-radius: 1px;
+  transform: translateX(-1.5px);
+}
+.tl-legend {
+  display: flex; justify-content: space-between; margin-top: 5px;
+  font-size: 8.5px; font-weight: 700; letter-spacing: .12em; color: var(--faint);
+  font-variant-numeric: tabular-nums;
+}
+
+#game-canvas { width: 100%; height: 25vh; display: block; margin-top: 7px; }
 
 @keyframes goalFlash { from { opacity: .85; } to { opacity: 0; } }
 .goal-flash {
@@ -582,9 +598,15 @@ button { border: none; background: none; cursor: pointer; }
   animation: riseIn .26s ease backwards;
 }
 .cfeed-item .cmin {
-  flex: 0 0 30px; font-size: 11px; font-weight: 900; color: var(--faint);
+  flex: 0 0 26px; font-size: 11px; font-weight: 900; color: var(--faint);
   font-variant-numeric: tabular-nums;
 }
+.cfeed-item .cico { flex: 0 0 auto; color: var(--faint); align-self: flex-start; margin-top: 1px; }
+.cfeed-item .ctext { flex: 1; }
+.cfeed-item.goal .cico { color: var(--lime); }
+.cfeed-item.boost .cico { color: var(--amber); }
+.cfeed-item.card .cico { color: var(--amber); }
+.cfeed-item.injury .cico { color: var(--flare); }
 .cfeed-item.goal {
   color: var(--chalk); font-weight: 800;
   border-bottom-color: var(--edge);
