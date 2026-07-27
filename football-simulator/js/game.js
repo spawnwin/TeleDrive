@@ -44,7 +44,14 @@ const MatchEngine = (() => {
   function buildState(opts) {
     const stadium = DATA.stadiums.find(s => s.id === opts.stadiumId) || DATA.stadiums[0];
     const weather = DATA.weathers.find(w => w.id === opts.weatherId) || DATA.weathers[0];
-    const rival = DATA.clubs.find(c => c.id === opts.opponentId) || DATA.clubs[0];
+    /* Соперником может быть клуб из справочника либо клуб живого менеджера,
+       пришедший с сервера, — тогда имя, цвет и силу берём из опций. */
+    const rival = DATA.findClub(opts.opponentId) || {
+      id: opts.opponentId,
+      name: opts.rivalName || 'Соперник',
+      color: opts.rivalColor || '#a855f7',
+      power: opts.rivalRating || 65
+    };
     const homeStrength = Save.teamStrength();
     const rivalTacticId = pick(['attack', 'balance', 'balance', 'defense']);
     const rivalTactic = DATA.tacticStyles.find(t => t.id === rivalTacticId);
@@ -53,8 +60,8 @@ const MatchEngine = (() => {
       opts, stadium, weather, rival,
       homeName: Save.data.clubName,
       awayName: rival.name,
-      awayBaseAttack: rival.power,
-      awayBaseDefense: rival.power,
+      awayBaseAttack: opts.rivalRating || rival.power,
+      awayBaseDefense: opts.rivalRating || rival.power,
       awayTactic: rivalTactic,
       minute: 0,
       injuryMinuteNext: null,

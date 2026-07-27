@@ -23,6 +23,24 @@
     return src.slice(0, 2).map(w => w[0]).join('').toUpperCase() || 'FX';
   }
 
+  /* Русские числительные: 1 победа, 2 победы, 5 побед. Формы задаются
+     тройкой [одна, две, пять]. */
+  function plural(n, forms) {
+    const a = Math.abs(n) % 100, b = a % 10;
+    const form = a > 10 && a < 20 ? 2 : b === 1 ? 0 : b >= 2 && b <= 4 ? 1 : 2;
+    return n + ' ' + forms[form];
+  }
+
+  /* Цвет чужого клуба выводим из названия, чтобы эмблема соперника не
+     менялась от захода к заходу и совпадала в списке и на предматчевом. */
+  const RIVAL_COLORS = ['#F2564A', '#4AA3F2', '#F2B14A', '#A855F7', '#3FD98B',
+                        '#F24A9E', '#4AE0F2', '#F27C4A'];
+  function colorFromName(name) {
+    let h = 0;
+    for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
+    return RIVAL_COLORS[h % RIVAL_COLORS.length];
+  }
+
   /* Эмблема собирается процедурно: щит цветом формы + инициалы клуба. */
   function crestMarkup(name, color) {
     const ini = initials(name);
@@ -60,6 +78,10 @@
     if (id === 'trophies') renderTrophies();
     if (id === 'auth') renderAuth();
     if (id === 'create-team') renderCreateTeam();
+    if (id === 'prematch') renderPreMatch();
+    if (id === 'history') renderHistory();
+    if (id === 'profile') renderProfile();
+    if (id === 'rivals') renderRivals();
   }
 
   document.querySelectorAll('[data-nav]').forEach(btn => {
@@ -109,6 +131,8 @@
     document.getElementById('menu-coins').textContent = d.coins;
     paintCrest(document.getElementById('menu-crest'));
     paintAccountBar();
+    const rivalTile = document.getElementById('tile-rivals');
+    if (rivalTile) rivalTile.style.display = Account.isRemote() ? '' : 'none';
     const divFoot = document.getElementById('menu-division');
     if (divFoot) divFoot.textContent = DATA.divisions.find(x => x.id === d.division).name;
 
@@ -121,6 +145,8 @@
     document.getElementById('menu-strength').textContent =
       Math.round((s.attack + s.defense) / 2);
 
+    formStrip(document.getElementById('menu-form'), Save.formGuide(5));
+
     const fx = Save.nextFixture();
     const ctxEl = document.getElementById('fh-context');
     const roundEl = document.getElementById('fh-round');
@@ -128,9 +154,11 @@
 
     if (fx) {
       ctxEl.textContent = fx.label;
+      // В кубке стадия уже названа в подписи слева — справа её не повторяем.
+      const stage = DATA.knockoutStages[fx.stage];
       roundEl.textContent = fx.kind === 'league'
         ? `Тур ${d.round + 1} / ${d.fixtures.length}`
-        : DATA.knockoutStages[fx.stage];
+        : (stage && fx.label.toLowerCase().includes(stage.toLowerCase()) ? '' : stage || '');
       setFixtureSide('home', fx.home);
       setFixtureSide('away', fx.away);
       ctaLabel.textContent = 'Провести матч';
@@ -144,18 +172,17 @@
   }
 
   function setFixtureSide(side, id) {
-    const badge = document.getElementById(`fh-${side}-badge`);
+    const crest = document.getElementById(`fh-${side}-crest`);
     const name = document.getElementById(`fh-${side}-name`);
-    const color = clubColor(id);
-    badge.style.background = color;
-    badge.textContent = initials(clubName(id));
+    // Свой клуб рисуется цветом выбранной формы, чужой — цветом клуба.
+    crest.innerHTML = crestMarkup(clubName(id), id === 'user' ? kitHex() : clubColor(id));
     name.textContent = clubName(id);
   }
 
   document.getElementById('btn-play-next').addEventListener('click', () => {
     const fx = Save.nextFixture();
     if (fx) {
-      launchMatch({
+      openPreMatch({
         opponentId: fx.home === 'user' ? fx.away : fx.home,
         competition: fx.kind,
         userIsHome: fx.home === 'user',
@@ -180,7 +207,7 @@
   }
 
   document.getElementById('btn-start-match').addEventListener('click', () => {
-    launchMatch({ opponentId: friendlyRivalId, isLeague: false });
+    openPreMatch({ opponentId: friendlyRivalId, label: 'Товарищеский матч' });
   });
 
   // ---------------- ЛИГА ----------------
@@ -640,6 +667,45 @@
   // ---------------- СОЗДАНИЕ КОМАНДЫ ----------------
   const draft = { clubName: 'FC Аврора', kit: 'cyan', formation: '4-4-2', tacticStyle: 'balance' };
 
+  /* Состав генерируется вместе с сохранением, поэтому при создании клуба его
+     можно сразу показать — игрок видит, кем будет играть, до первого матча. */
+  function renderCreateSquad() {
+    const squad = Save.data.squad;
+    const ratings = squad.map(overall);
+    const avg = Math.round(ratings.reduce((a, b) => a + b, 0) / squad.length);
+    const best = Math.max.apply(null, ratings);
+    const age = (squad.reduce((a, p) => a + p.age, 0) / squad.length).toFixed(1);
+
+    document.getElementById('cs-rating').textContent = avg;
+    document.getElementById('cs-age').textContent = age;
+    document.getElementById('cs-best').textContent = best;
+
+    const order = { GK: 0, DEF: 1, MID: 2, FWD: 3 };
+    const grid = document.getElementById('create-squad');
+    grid.innerHTML = '';
+    squad.slice()
+      .sort((a, b) => order[a.pos] - order[b.pos] || overall(b) - overall(a))
+      .forEach(p => {
+        const cell = document.createElement('div');
+        cell.className = 'xi-cell';
+        cell.innerHTML = `<div class="player-pos ${p.pos}">${p.pos}</div>
+          <span>${p.name}</span><b>${overall(p)}</b>`;
+        grid.appendChild(cell);
+      });
+
+    const young = squad.filter(p => p.age <= 21).length;
+    document.getElementById('cs-note').textContent =
+      `${squad.length} игроков, из них молодых до 21 года — ${young}. ` +
+      'Состав можно менять на трансферном рынке и в тренировках.';
+  }
+
+  document.getElementById('btn-reroll-squad').addEventListener('click', () => {
+    Save.data.squad = genSquad(62);
+    Save.persist();
+    renderCreateSquad();
+    showToast('Состав пересобран');
+  });
+
   function renderCreateTeam() {
     const nameInput = document.getElementById('create-name');
     nameInput.value = draft.clubName;
@@ -658,6 +724,8 @@
       draft.formation, id => draft.formation = id);
     pill(document.getElementById('create-style'), DATA.tacticStyles, draft.tacticStyle,
       id => draft.tacticStyle = id);
+
+    renderCreateSquad();
   }
 
   document.getElementById('btn-create-team').addEventListener('click', () => {
@@ -665,6 +733,9 @@
       clubName: draft.clubName || 'FC Аврора',
       kit: draft.kit, formation: draft.formation, tacticStyle: draft.tacticStyle
     });
+    const st0 = Save.teamStrength();
+    Save.data.rating = Math.round((st0.attack + st0.defense) / 2);
+    Save.persist();
     Account.scheduleSync();
     showToast('Клуб основан');
     showScreen('menu');
@@ -785,6 +856,249 @@
   }
   Account.onSyncChange = paintAccountBar;
 
+
+  // ---------------- ПОДГОТОВКА К МАТЧУ ----------------
+  let pendingMatch = null;
+
+  function formStrip(el, list) {
+    el.innerHTML = '';
+    const marks = { w: 'В', d: 'Н', l: 'П' };
+    if (!list.length) {
+      el.innerHTML = '<i class="none">—</i>';
+      return;
+    }
+    list.forEach(r => {
+      const i = document.createElement('i');
+      i.className = r;
+      i.textContent = marks[r] || '—';
+      el.appendChild(i);
+    });
+  }
+
+  /* Сила соперника: у клуба это его power, у живого менеджера — рейтинг
+     состава, присланный сервером. */
+  function rivalStrength(ctx) {
+    if (ctx.rivalRating) return { attack: ctx.rivalRating, defense: ctx.rivalRating };
+    const c = DATA.findClub(ctx.opponentId);
+    const p = c ? c.power : 60;
+    return { attack: p, defense: p };
+  }
+
+  function openPreMatch(ctx) {
+    pendingMatch = ctx;
+    showScreen('prematch');
+  }
+
+  function renderPreMatch() {
+    const ctx = pendingMatch;
+    if (!ctx) { showScreen('menu'); return; }
+
+    document.getElementById('pm-competition').textContent =
+      ctx.competition ? DATA.competitions[ctx.competition].name : 'Товарищеский матч';
+    document.getElementById('pm-stage').textContent = ctx.label || '';
+
+    document.getElementById('pm-home-crest').innerHTML = crestMarkup(Save.data.clubName, kitHex());
+    document.getElementById('pm-home-name').textContent = Save.data.clubName;
+    const awayName = ctx.rivalName || clubName(ctx.opponentId);
+    document.getElementById('pm-away-crest').innerHTML =
+      crestMarkup(awayName, ctx.rivalColor || clubColor(ctx.opponentId));
+    document.getElementById('pm-away-name').textContent = awayName;
+
+    formStrip(document.getElementById('pm-home-form'), Save.formGuide(5));
+    // Форма живого менеджера приходит с сервера, у клубов-ботов она своя.
+    formStrip(document.getElementById('pm-away-form'),
+      ctx.rivalForm || (ctx.rivalRating ? [] : Save.rivalForm(ctx.opponentId, 5)));
+
+    const us = Save.teamStrength();
+    const them = rivalStrength(ctx);
+    const setRow = (key, ourVal, theirVal) => {
+      document.getElementById(`pm-${key}-us`).textContent = Math.round(ourVal);
+      document.getElementById(`pm-${key}-them`).textContent = Math.round(theirVal);
+      const share = ourVal + theirVal > 0 ? ourVal / (ourVal + theirVal) * 100 : 50;
+      document.getElementById(`pm-${key}-bar`).style.width = share + '%';
+    };
+    setRow('atk', us.attack, them.defense);
+    setRow('def', us.defense, them.attack);
+
+    const diff = (us.attack + us.defense) / 2 - (them.attack + them.defense) / 2;
+    const verdict = document.getElementById('pm-verdict');
+    verdict.textContent = diff > 6 ? 'мы сильнее' : diff < -6 ? 'соперник сильнее' : 'силы равны';
+
+    pill(document.getElementById('pm-tactic'), DATA.tacticStyles, Save.data.tacticStyle,
+      id => { Save.data.tacticStyle = id; Save.persist(); renderPreMatch(); });
+
+    const xi = us.xi;
+    document.getElementById('pm-xi-count').textContent = xi.all.length + ' из 11';
+    const grid = document.getElementById('pm-xi');
+    grid.innerHTML = '';
+    xi.all.forEach(p => {
+      const cell = document.createElement('div');
+      cell.className = 'xi-cell';
+      cell.innerHTML = `<div class="player-pos ${p.pos}">${p.pos}</div>
+        <span>${p.name}</span><b>${overall(p)}</b>`;
+      grid.appendChild(cell);
+    });
+
+    const out = Save.data.squad.filter(p => !Save.isAvailable(p));
+    document.getElementById('pm-missing').textContent = out.length
+      ? 'Не сыграют: ' + out.map(p => p.name).join(', ')
+      : 'Все игроки в строю.';
+  }
+
+  document.getElementById('btn-kickoff').addEventListener('click', () => {
+    if (pendingMatch) launchMatch(pendingMatch);
+  });
+
+  // ---------------- ИСТОРИЯ ----------------
+  function renderHistory() {
+    const list = document.getElementById('history-list');
+    const hist = Save.data.history || [];
+    const w = hist.filter(h => h.result === 'w').length;
+    const d = hist.filter(h => h.result === 'd').length;
+    document.getElementById('history-summary').textContent = hist.length
+      ? [plural(w, ['победа', 'победы', 'побед']),
+         plural(d, ['ничья', 'ничьи', 'ничьих']),
+         plural(hist.length - w - d, ['поражение', 'поражения', 'поражений'])].join(' · ')
+      : 'пока пусто';
+
+    list.innerHTML = '';
+    if (!hist.length) {
+      list.innerHTML = '<p class="locked-note">Матчей ещё не было.</p>';
+      return;
+    }
+    const marks = { w: 'В', d: 'Н', l: 'П' };
+    hist.forEach(h => {
+      const comp = h.competition === 'friendly'
+        ? 'Товарищеский'
+        : (DATA.competitions[h.competition] || {}).name || h.competition;
+      const row = document.createElement('div');
+      row.className = 'hist-row';
+      const color = h.opponentColor || colorFromName(h.opponent);
+      row.innerHTML = `
+        <span class="hist-mark ${h.result}">${marks[h.result]}</span>
+        <svg class="hist-crest" viewBox="0 0 48 48">${crestMarkup(h.opponent, color)}</svg>
+        <div class="hist-info">
+          <b>${h.opponent}</b>
+          <small>${comp} · сезон ${h.season}</small>
+        </div>
+        <span class="hist-score">${h.gf}:${h.ga}</span>`;
+      list.appendChild(row);
+    });
+  }
+
+  // ---------------- ПРОФИЛЬ ----------------
+  function renderProfile() {
+    const d = Save.data;
+    document.getElementById('pf-crest').innerHTML = crestMarkup(d.clubName, kitHex());
+    document.getElementById('pf-club').textContent = d.clubName;
+    document.getElementById('pf-manager').textContent = Account.displayName();
+    const where = document.getElementById('pf-where');
+    where.textContent = Account.isRemote() ? 'аккаунт на сервере' : 'сохранение на устройстве';
+    where.className = 'profile-badge' + (Account.isRemote() ? ' cloud' : '');
+
+    document.getElementById('pf-level').textContent = d.level;
+    const need = Save.xpForNextLevel(d.level);
+    document.getElementById('pf-xp').textContent = `${d.xp} / ${need} опыта`;
+    document.getElementById('pf-xp-bar').style.width = Math.min(100, d.xp / need * 100) + '%';
+
+    const st = d.stats || { matches: 0, wins: 0, goals: 0 };
+    document.getElementById('pf-seasons').textContent = d.season;
+    document.getElementById('pf-matches').textContent = st.matches;
+    document.getElementById('pf-wins').textContent = st.wins;
+    document.getElementById('pf-winrate').textContent =
+      st.matches ? Math.round(st.wins / st.matches * 100) + '%' : '0%';
+    document.getElementById('pf-goals').textContent = st.goals;
+    document.getElementById('pf-trophies').textContent = (d.trophies || []).length;
+
+    const table = sortedTable();
+    const me = table.find(r => r.id === 'user');
+    document.getElementById('pf-division').textContent =
+      DATA.divisions.find(x => x.id === d.division).name;
+    document.getElementById('pf-place').textContent =
+      me && me.played ? (table.findIndex(r => r.id === 'user') + 1) + ' место' : 'сезон не начат';
+    const s = Save.teamStrength();
+    document.getElementById('pf-rating').textContent = Math.round((s.attack + s.defense) / 2);
+    document.getElementById('pf-squad').textContent = d.squad.length;
+    document.getElementById('pf-coins').textContent = d.coins;
+
+    // Легенда клуба — лучшие по голам за всю карьеру, а не за сезон.
+    const legend = document.getElementById('pf-legend');
+    legend.innerHTML = '';
+    const best = d.squad.slice()
+      .map(p => ({ p, total: p.careerGoals + p.goals }))
+      .filter(x => x.total > 0)
+      .sort((a, b) => b.total - a.total)
+      .slice(0, 3);
+    if (!best.length) {
+      legend.innerHTML = '<p class="locked-note">Голов пока никто не забил.</p>';
+    }
+    best.forEach(({ p, total }) => {
+      const row = document.createElement('div');
+      row.className = 'player-row';
+      row.innerHTML = `
+        <div class="player-pos ${p.pos}">${p.pos}</div>
+        <div class="player-info"><b>${p.name}</b>
+          <div class="player-meta"><span>матчей ${p.apps}</span><span>${p.age} лет</span></div></div>
+        <div class="player-ovr ovr-hi">${total}</div>`;
+      legend.appendChild(row);
+    });
+  }
+
+  document.getElementById('btn-profile-logout').addEventListener('click', async () => {
+    await Account.logout();
+    authMode = (Account.serverDetected || Net.enabled()) ? 'remote' : 'local';
+    showScreen('auth');
+  });
+
+  document.getElementById('club-head').addEventListener('click', () => showScreen('profile'));
+
+  // ---------------- ВЫЗОВ МЕНЕДЖЕРАМ ----------------
+  function renderRivals() {
+    const list = document.getElementById('rivals-list');
+    const count = document.getElementById('rivals-count');
+    if (!Account.isRemote()) {
+      count.textContent = '';
+      list.innerHTML = '<p class="locked-note">Нужен аккаунт на сервере: только так видно клубы других менеджеров.</p>';
+      return;
+    }
+    list.innerHTML = '<p class="locked-note">Загружаем…</p>';
+    Net.rivals().then(data => {
+      list.innerHTML = '';
+      count.textContent = data.rows.length
+        ? plural(data.rows.length, ['клуб', 'клуба', 'клубов']) : '';
+      if (!data.rows.length) {
+        list.innerHTML = '<p class="locked-note">Пока вы единственный менеджер на сервере.</p>';
+        return;
+      }
+      data.rows.forEach(r => {
+        const color = colorFromName(r.clubName + r.manager);
+        const row = document.createElement('div');
+        row.className = 'player-row rival-row';
+        row.innerHTML = `
+          <svg class="rival-crest" viewBox="0 0 48 48">${crestMarkup(r.clubName, color)}</svg>
+          <div class="player-info"><b>${r.clubName}</b>
+            <div class="player-meta"><span>${r.manager}</span>
+              <span>${(DATA.divisions.find(x => x.id === r.division) || {}).short || ''}</span>
+              <span>трофеев ${r.trophies}</span></div>
+            <div class="form-strip sm"></div></div>
+          <div class="player-ovr">${r.rating}</div>
+          <button class="rival-play">Вызвать</button>`;
+        formStrip(row.querySelector('.form-strip'), r.form || []);
+        row.querySelector('.rival-play').addEventListener('click', () => {
+          openPreMatch({
+            opponentId: 'rival:' + r.id,
+            rivalName: r.clubName,
+            rivalRating: r.rating,
+            rivalForm: r.form || [],
+            rivalColor: color,
+            label: 'Товарищеский матч · ' + r.manager
+          });
+        });
+        list.appendChild(row);
+      });
+    }).catch(e => { list.innerHTML = `<p class="locked-note">${e.message}</p>`; });
+  }
+
   // ---------------- ЭФИР МАТЧА ----------------
   const EVENT_ICON = {
     goal: 'ball', save: 'shield', miss: 'miss', card: 'card',
@@ -840,9 +1154,11 @@
     showScreen('match');
     document.getElementById('commentary-feed').innerHTML = '';
     document.getElementById('hud-home-name').textContent = Save.data.clubName;
-    document.getElementById('hud-away-name').textContent = clubName(ctx.opponentId);
+    const oppLabel = ctx.rivalName || clubName(ctx.opponentId);
+    document.getElementById('hud-away-name').textContent = oppLabel;
     document.getElementById('bb-home-dot').style.background = kitHex();
-    document.getElementById('bb-away-dot').style.background = clubColor(ctx.opponentId);
+    document.getElementById('bb-away-dot').style.background =
+      ctx.rivalColor || clubColor(ctx.opponentId);
     document.getElementById('hud-score').textContent = '0:0';
     document.getElementById('hud-minute').textContent = "0'";
     document.getElementById('tl-fill').style.width = '0%';
@@ -857,6 +1173,9 @@
     MatchEngine.init();
     MatchEngine.start({
       opponentId: ctx.opponentId,
+      rivalName: ctx.rivalName,
+      rivalRating: ctx.rivalRating,
+      rivalColor: ctx.rivalColor,
       stadiumId: Save.data.stadiumId,
       weatherId: Save.data.weatherId,
       onCommentary: pushCommentary,
@@ -966,6 +1285,17 @@
 
     Save.addXp(xp);
     Save.addCoins(coins);
+
+    Save.recordMatch({
+      competition: ctx.competition || 'friendly',
+      opponent: ctx.rivalName || clubName(ctx.opponentId),
+      opponentColor: ctx.rivalColor || clubColor(ctx.opponentId),
+      gf: score.home, ga: score.away
+    });
+
+    // Рейтинг состава уходит на сервер: по нему другие менеджеры видят силу клуба.
+    const st = Save.teamStrength();
+    Save.data.rating = Math.round((st.attack + st.defense) / 2);
 
     const title = document.getElementById('result-title');
     title.textContent = win ? 'Победа' : draw ? 'Ничья' : 'Поражение';

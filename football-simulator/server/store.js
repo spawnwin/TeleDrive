@@ -117,6 +117,28 @@ class Store {
     return this.data.saves[userId];
   }
 
+  rivals(excludeUserId, limit) {
+    const rows = [];
+    for (const user of this.data.users) {
+      if (user.id === excludeUserId) continue;
+      const entry = this.data.saves[user.id];
+      if (!entry || !entry.save || !entry.save.rating) continue;
+      const s = entry.save;
+      rows.push({
+        id: user.id, manager: user.name, clubName: s.clubName || '—',
+        division: s.division || 2, season: s.season || 1,
+        rating: s.rating || 0,
+        trophies: Array.isArray(s.trophies) ? s.trophies.length : 0,
+        // Полоска формы — от старого матча к новому, как её рисует интерфейс.
+        form: (Array.isArray(s.history) ? s.history : []).slice(0, 5)
+          .map(h => h && h.result).filter(r => r === 'w' || r === 'd' || r === 'l').reverse(),
+        updatedAt: entry.updatedAt
+      });
+    }
+    rows.sort((a, b) => b.updatedAt - a.updatedAt);
+    return rows.slice(0, limit || 30);
+  }
+
   /* Таблица лидеров строится из сохранений: трофеи, дивизион, сезон. */
   leaderboard(limit) {
     const rows = [];

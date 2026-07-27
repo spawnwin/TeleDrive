@@ -146,6 +146,21 @@ async function run() {
     assert.ok(r.data.rows.some(x => x.clubName === 'ФК Тест'));
   });
 
+  await test('список соперников требует токен', async () => {
+    const r = await call('GET', '/api/rivals');
+    assert.strictEqual(r.status, 401);
+  });
+
+  await test('список соперников не показывает тебя самого', async () => {
+    const login = await call('POST', '/api/auth/login',
+      { name: 'Менеджер Тест', password: 'longenough1' });
+    const r = await call('GET', '/api/rivals', undefined, login.data.token);
+    assert.strictEqual(r.status, 200);
+    assert.ok(Array.isArray(r.data.rows));
+    assert.ok(!r.data.rows.some(x => x.clubName === 'ФК Тест'),
+      'свой клуб не должен попадать в список вызова');
+  });
+
   await test('обход каталога заблокирован', async () => {
     const res = await fetch(base + '/%2e%2e%2f%2e%2e%2fetc%2fpasswd');
     assert.ok(res.status === 403 || res.status === 404, 'ожидался отказ, получено ' + res.status);
@@ -225,6 +240,50 @@ async function run() {
       assert.strictEqual(r.data.rows[0].clubName, 'ФК Титул');
       assert.strictEqual(r.data.rows[0].trophies, 4);
       assert.strictEqual(r.data.rows[0].manager, 'Титулованный');
+    });
+
+    await test('база: соперник без рейтинга не попадает в список вызова', () => {
+      const withRating = 'u_ready';
+      const noRating = 'u_fresh';
+      [withRating, noRating].forEach((id, i) => {
+        store.addUser({ id, name: 'Вызов' + i, nameKey: 'вызов' + i,
+                        passwordHash: 'scrypt$1$1$1$aa$bb', createdAt: Date.now() });
+      });
+      store.putSave(withRating, { clubName: 'ФК Готовый', division: 2, season: 1, rating: 62 });
+      store.putSave(noRating, { clubName: 'ФК Пустой', division: 2, season: 1 });
+
+      store.putSave(withRating, {
+        clubName: 'ФК Готовый', division: 2, season: 1, rating: 62,
+        // history лежит от нового к старому, а полоска формы — наоборот.
+        history: [{ result: 'w' }, { result: 'l' }, { result: 'd' }]
+      });
+
+      const rows = store.rivals('u_someone_else', 30);
+      assert.ok(rows.some(r => r.clubName === 'ФК Готовый'), 'клуб с рейтингом должен быть виден');
+      assert.ok(!rows.some(r => r.clubName === 'ФК Пустой'), 'клуб без рейтинга должен быть скрыт');
+      // Наружу уходит только витрина — сохранение целиком остаётся на сервере.
+      const shown = rows.find(r => r.clubName === 'ФК Готовый');
+      assert.ok(!('payload' in shown) && !('save' in shown), 'сохранение просочилось наружу');
+      assert.deepStrictEqual(shown.form, ['d', 'l', 'w'], 'форма отдана не в том порядке');
+
+      assert.ok(!store.rivals(withRating, 30).some(r => r.clubName === 'ФК Готовый'),
+        'себя в списке быть не должно');
+    });
+
+    await test('запасное JSON-хранилище отдаёт соперников так же', () => {
+      const { Store } = require('./store');
+      const jsonPath = path.join(os.tmpdir(), 'fallback-' + Date.now() + '.json');
+      const js = new Store(jsonPath);
+      js.addUser({ id: 'j1', name: 'Джей', nameKey: 'джей',
+                   passwordHash: 'scrypt$1$1$1$aa$bb', createdAt: Date.now() });
+      js.putSave('j1', { clubName: 'ФК Запас', division: 2, season: 1, rating: 55,
+                         history: [{ result: 'w' }, { result: 'l' }, { result: 'd' }] });
+      const rows = js.rivals('other', 30);
+      assert.strictEqual(rows.length, 1);
+      assert.strictEqual(rows[0].clubName, 'ФК Запас');
+      assert.deepStrictEqual(rows[0].form, ['d', 'l', 'w']);
+      assert.strictEqual(js.rivals('j1', 30).length, 0, 'себя в списке быть не должно');
+      try { fs.unlinkSync(jsonPath); } catch (e) {}
     });
 
     await test('база: перенос из JSON выполняется один раз', async () => {

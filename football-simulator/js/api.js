@@ -54,7 +54,8 @@ const Net = {
   logout() { return this.request('POST', '/api/auth/logout'); },
   pullSave() { return this.request('GET', '/api/save'); },
   pushSave(save) { return this.request('PUT', '/api/save', { save }); },
-  leaderboard() { return this.request('GET', '/api/leaderboard'); }
+  leaderboard() { return this.request('GET', '/api/leaderboard'); },
+  rivals() { return this.request('GET', '/api/rivals'); }
 };
 
 /* Единая точка входа для интерфейса: он не должен знать, лежит ли

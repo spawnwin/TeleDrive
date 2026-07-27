@@ -152,6 +152,20 @@
     </div>
 
     <div class="block">
+      <div class="block-head">
+        <h3>Ваш состав</h3>
+        <button id="btn-reroll-squad" class="rest-btn">Другой состав</button>
+      </div>
+      <div class="squad-summary">
+        <div><b class="num" id="cs-rating">0</b><small>Рейтинг</small></div>
+        <div><b class="num" id="cs-age">0</b><small>Средний возраст</small></div>
+        <div><b class="num" id="cs-best">0</b><small>Лучший игрок</small></div>
+      </div>
+      <div id="create-squad" class="xi-grid"></div>
+      <p class="note" id="cs-note"></p>
+    </div>
+
+    <div class="block">
       <p class="note">Клуб стартует в Первой лиге. Два первых места выводят в Высшую, два последних отправляют обратно.</p>
     </div>
 
@@ -162,7 +176,7 @@
 
   <!-- ================= ПАНЕЛЬ КЛУБА ================= -->
   <section id="screen-menu" class="screen">
-    <header class="club-head stagger">
+    <header class="club-head stagger" id="club-head">
       <svg class="crest" id="menu-crest" viewBox="0 0 48 48"></svg>
       <div class="club-id">
         <b id="menu-club-name">FC Аврора</b>
@@ -181,6 +195,11 @@
       <div><b class="num" id="menu-strength">0</b><small>Рейтинг</small></div>
     </div>
 
+    <div class="form-row stagger">
+      <span class="t-label">Форма</span>
+      <div class="form-strip" id="menu-form"></div>
+    </div>
+
     <div class="fixture-hero stagger">
       <div class="fh-top">
         <span class="t-label" id="fh-context">Ближайший матч</span>
@@ -188,12 +207,12 @@
       </div>
       <div class="fh-body">
         <div class="fh-side">
-          <div class="fh-badge" id="fh-home-badge">A</div>
+          <svg class="fh-crest" id="fh-home-crest" viewBox="0 0 48 48"></svg>
           <div class="fh-name" id="fh-home-name">FC Аврора</div>
         </div>
         <span class="fh-vs">VS</span>
         <div class="fh-side">
-          <div class="fh-badge" id="fh-away-badge">B</div>
+          <svg class="fh-crest" id="fh-away-crest" viewBox="0 0 48 48"></svg>
           <div class="fh-name" id="fh-away-name">Соперник</div>
         </div>
       </div>
@@ -209,10 +228,13 @@
       <button class="nav-tile" data-nav="training"><svg class="ic"><use href="#i-chart"/></svg>Тренировки</button>
       <button class="nav-tile" data-nav="transfers"><svg class="ic"><use href="#i-transfer"/></svg>Трансферы</button>
       <button class="nav-tile" data-nav="friendly"><svg class="ic"><use href="#i-ball"/></svg>Товарищеский</button>
+      <button class="nav-tile" data-nav="history"><svg class="ic"><use href="#i-tv"/></svg>История</button>
+      <button class="nav-tile" id="tile-rivals" data-nav="rivals"><svg class="ic"><use href="#i-squad"/></svg>Вызов</button>
       <button class="nav-tile" data-nav="shop"><svg class="ic"><use href="#i-shop"/></svg>Магазин</button>
       <button class="nav-tile" data-nav="customize"><svg class="ic"><use href="#i-kit"/></svg>Клуб и форма</button>
+      <button class="nav-tile" data-nav="profile"><svg class="ic"><use href="#i-shield"/></svg>Профиль</button>
       <button class="nav-tile" data-nav="trophies"><svg class="ic"><use href="#i-star"/></svg>Трофеи</button>
-      <button class="nav-tile" data-nav="achievements"><svg class="ic"><use href="#i-medal"/></svg>Достижения</button>
+      <button class="nav-tile" data-nav="achievements"><svg class="ic"><use href="#i-check"/></svg>Достижения</button>
       <button class="nav-tile" data-nav="howto"><svg class="ic"><use href="#i-help"/></svg>Как играть</button>
     </nav>
 
@@ -338,6 +360,143 @@
     <button id="btn-refresh-market" class="act ghost cut-tr">
       <svg class="ic"><use href="#i-refresh"/></svg>Обновить рынок
     </button>
+  </section>
+
+  <!-- ================= ПОДГОТОВКА К МАТЧУ ================= -->
+  <section id="screen-prematch" class="screen">
+    <header class="subbar">
+      <button class="back-btn" data-nav="menu"><svg class="ic"><use href="#i-back"/></svg></button>
+      <h2 id="pm-competition">Матч</h2>
+    </header>
+
+    <div class="pm-card">
+      <div class="pm-teams">
+        <div class="pm-side">
+          <svg class="pm-crest" id="pm-home-crest" viewBox="0 0 48 48"></svg>
+          <b id="pm-home-name">FC Аврора</b>
+          <div class="form-strip" id="pm-home-form"></div>
+        </div>
+        <span class="pm-vs">VS</span>
+        <div class="pm-side">
+          <svg class="pm-crest" id="pm-away-crest" viewBox="0 0 48 48"></svg>
+          <b id="pm-away-name">Соперник</b>
+          <div class="form-strip" id="pm-away-form"></div>
+        </div>
+      </div>
+      <p class="pm-stage" id="pm-stage"></p>
+    </div>
+
+    <div class="block">
+      <div class="block-head"><h3>Расклад сил</h3><span class="hint" id="pm-verdict"></span></div>
+      <div class="compare">
+        <div class="cmp-row">
+          <b class="num" id="pm-atk-us">0</b>
+          <div class="cmp-bar"><div class="cmp-us" id="pm-atk-bar"></div></div>
+          <span>Атака</span>
+          <b class="num" id="pm-atk-them">0</b>
+        </div>
+        <div class="cmp-row">
+          <b class="num" id="pm-def-us">0</b>
+          <div class="cmp-bar"><div class="cmp-us" id="pm-def-bar"></div></div>
+          <span>Оборона</span>
+          <b class="num" id="pm-def-them">0</b>
+        </div>
+      </div>
+    </div>
+
+    <div class="block">
+      <div class="block-head"><h3>Стиль на матч</h3><span class="hint">можно менять по ходу</span></div>
+      <div id="pm-tactic" class="pill-row"></div>
+    </div>
+
+    <div class="block">
+      <div class="block-head"><h3>Стартовый состав</h3><span class="hint" id="pm-xi-count"></span></div>
+      <div id="pm-xi" class="xi-grid"></div>
+      <p class="note" id="pm-missing"></p>
+    </div>
+
+    <button id="btn-kickoff" class="act cut-tr">
+      <svg class="ic"><use href="#i-whistle"/></svg>Выйти на поле
+    </button>
+  </section>
+
+  <!-- ================= ПРОФИЛЬ ================= -->
+  <section id="screen-profile" class="screen">
+    <header class="subbar">
+      <button class="back-btn" data-nav="menu"><svg class="ic"><use href="#i-back"/></svg></button>
+      <h2>Профиль</h2>
+    </header>
+
+    <div class="profile-hero">
+      <svg class="profile-crest" id="pf-crest" viewBox="0 0 48 48"></svg>
+      <div class="profile-id">
+        <b id="pf-club">FC Аврора</b>
+        <span id="pf-manager">Менеджер</span>
+        <i class="profile-badge" id="pf-where">на устройстве</i>
+      </div>
+    </div>
+
+    <div class="block">
+      <div class="block-head"><h3>Уровень <span class="num" id="pf-level">1</span></h3><span class="hint" id="pf-xp"></span></div>
+      <div class="xp-track"><div class="xp-fill" id="pf-xp-bar"></div></div>
+    </div>
+
+    <div class="block">
+      <div class="block-head"><h3>Карьера</h3></div>
+      <div class="stat-tiles">
+        <div><b class="num" id="pf-seasons">1</b><small>Сезонов</small></div>
+        <div><b class="num" id="pf-matches">0</b><small>Матчей</small></div>
+        <div><b class="num" id="pf-wins">0</b><small>Побед</small></div>
+        <div><b class="num" id="pf-winrate">0%</b><small>Побед, доля</small></div>
+        <div><b class="num" id="pf-goals">0</b><small>Голов</small></div>
+        <div><b class="num" id="pf-trophies">0</b><small>Трофеев</small></div>
+      </div>
+    </div>
+
+    <div class="block">
+      <div class="block-head"><h3>Клуб сейчас</h3></div>
+      <div class="kv-list">
+        <div><span>Дивизион</span><b id="pf-division">—</b></div>
+        <div><span>Место в таблице</span><b id="pf-place">—</b></div>
+        <div><span>Рейтинг состава</span><b class="num" id="pf-rating">0</b></div>
+        <div><span>Игроков в заявке</span><b class="num" id="pf-squad">0</b></div>
+        <div><span>Казна</span><b class="num" id="pf-coins">0</b></div>
+      </div>
+    </div>
+
+    <div class="block">
+      <div class="block-head"><h3>Легенда клуба</h3><span class="hint">за всю карьеру</span></div>
+      <div id="pf-legend" class="squad-list"></div>
+    </div>
+
+    <button id="btn-profile-logout" class="act ghost cut-tr">Выйти из профиля</button>
+  </section>
+
+  <!-- ================= ИСТОРИЯ МАТЧЕЙ ================= -->
+  <section id="screen-history" class="screen">
+    <header class="subbar">
+      <button class="back-btn" data-nav="menu"><svg class="ic"><use href="#i-back"/></svg></button>
+      <h2>История</h2>
+    </header>
+    <div class="block">
+      <div class="block-head"><h3>Последние матчи</h3><span class="hint" id="history-summary"></span></div>
+      <div id="history-list" class="squad-list"></div>
+    </div>
+  </section>
+
+  <!-- ================= ВЫЗОВ МЕНЕДЖЕРАМ ================= -->
+  <section id="screen-rivals" class="screen">
+    <header class="subbar">
+      <button class="back-btn" data-nav="menu"><svg class="ic"><use href="#i-back"/></svg></button>
+      <h2>Вызов менеджерам</h2>
+    </header>
+    <div class="block">
+      <p class="note">Товарищеский матч против клуба живого менеджера. Сила соперника берётся из его настоящего состава.</p>
+    </div>
+    <div class="block">
+      <div class="block-head"><h3>Клубы на сервере</h3><span class="hint" id="rivals-count"></span></div>
+      <div id="rivals-list" class="squad-list"></div>
+    </div>
   </section>
 
   <!-- ================= КУБКИ ================= -->

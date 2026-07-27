@@ -15,6 +15,14 @@ const path = require('node:path');
 
 const SCHEMA_VERSION = 1;
 
+/* Последние пять результатов из сохранения — от старого к новому,
+   как их рисует полоска формы в интерфейсе. */
+function formOf(save) {
+  const hist = save && Array.isArray(save.history) ? save.history : [];
+  return hist.slice(0, 5).map(h => h && h.result).filter(r => r === 'w' || r === 'd' || r === 'l')
+    .reverse().join('');
+}
+
 class SqliteStore {
   constructor(file) {
     const { DatabaseSync } = require('node:sqlite');
@@ -67,11 +75,24 @@ class SqliteStore {
         season     INTEGER,
         trophies   INTEGER NOT NULL DEFAULT 0,
         wins       INTEGER NOT NULL DEFAULT 0,
-        goals      INTEGER NOT NULL DEFAULT 0
+        goals      INTEGER NOT NULL DEFAULT 0,
+        rating     INTEGER NOT NULL DEFAULT 0,
+        -- Последние пять результатов строкой вида "wwdlw": на экране вызова
+        -- видно форму соперника, не вытаскивая наружу всё его сохранение.
+        form       TEXT NOT NULL DEFAULT ''
       );
       CREATE INDEX IF NOT EXISTS idx_saves_board
         ON saves(trophies DESC, division ASC, wins DESC, goals DESC);
     `);
+
+    // Колонки появились позже схемы v1 — на старой базе добавляем на месте.
+    const cols = this.db.prepare('PRAGMA table_info(saves)').all().map(c => c.name);
+    if (!cols.includes('rating')) {
+      this.db.exec('ALTER TABLE saves ADD COLUMN rating INTEGER NOT NULL DEFAULT 0');
+    }
+    if (!cols.includes('form')) {
+      this.db.exec("ALTER TABLE saves ADD COLUMN form TEXT NOT NULL DEFAULT ''");
+    }
 
     const row = this.db.prepare("SELECT value FROM meta WHERE key = 'schema_version'").get();
     if (!row) {
@@ -102,13 +123,25 @@ class SqliteStore {
 
       saveByUser: d.prepare('SELECT * FROM saves WHERE user_id = ?'),
       upsertSave: d.prepare(`
-        INSERT INTO saves(user_id, payload, updated_at, club_name, division, season, trophies, wins, goals)
-        VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO saves(user_id, payload, updated_at, club_name, division, season,
+                          trophies, wins, goals, rating, form)
+        VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(user_id) DO UPDATE SET
           payload = excluded.payload, updated_at = excluded.updated_at,
           club_name = excluded.club_name, division = excluded.division,
           season = excluded.season, trophies = excluded.trophies,
-          wins = excluded.wins, goals = excluded.goals`),
+          wins = excluded.wins, goals = excluded.goals, rating = excluded.rating,
+          form = excluded.form`),
+
+      /* Соперники для товарищеских матчей: отдаём только витрину клуба,
+         сохранение целиком наружу не уходит. */
+      rivals: d.prepare(`
+        SELECT u.id AS user_id, u.name AS manager, s.club_name, s.division,
+               s.season, s.rating, s.trophies, s.form, s.updated_at
+        FROM saves s JOIN users u ON u.id = s.user_id
+        WHERE s.user_id != ? AND s.rating > 0
+        ORDER BY s.updated_at DESC
+        LIMIT ?`),
       board: d.prepare(`
         SELECT u.name AS manager, s.club_name, s.division, s.season,
                s.trophies, s.wins, s.goals
@@ -190,9 +223,21 @@ class SqliteStore {
       Number(save && save.season) || 1,
       Array.isArray(save && save.trophies) ? save.trophies.length : 0,
       Number(stats.wins) || 0,
-      Number(stats.goals) || 0
+      Number(stats.goals) || 0,
+      Number(save && save.rating) || 0,
+      formOf(save)
     );
     return { save, updatedAt };
+  }
+
+  rivals(excludeUserId, limit) {
+    return this.q.rivals.all(excludeUserId || '', limit || 30).map(r => ({
+      id: r.user_id, manager: r.manager, clubName: r.club_name || '—',
+      division: r.division || 2, season: r.season || 1,
+      rating: r.rating, trophies: r.trophies,
+      form: (r.form || '').split('').filter(c => 'wdl'.includes(c)),
+      updatedAt: r.updated_at
+    }));
   }
 
   leaderboard(limit) {

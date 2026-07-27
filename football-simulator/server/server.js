@@ -200,6 +200,12 @@ const routes = {
     send(res, 200, { ok: true, updatedAt: entry.updatedAt });
   },
 
+  'GET /api/rivals': async (req, res) => {
+    const auth = authenticate(req);
+    if (!auth) return fail(res, 401, 'Нужен вход');
+    send(res, 200, { rows: store.rivals(auth.user.id, 30) });
+  },
+
   'GET /api/leaderboard': async (req, res) => {
     send(res, 200, { rows: store.leaderboard(50) });
   },

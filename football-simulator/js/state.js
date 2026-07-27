@@ -234,6 +234,8 @@ function defaultSave() {
     cup: buildCup(division),
     world: null,
     trophies: [],
+    history: [],
+    rating: 0,
     achievements: {},
     stats: { goals: 0, wins: 0, matches: 0 }
   };
@@ -271,6 +273,7 @@ const Save = {
     (d.transferPool || []).forEach(normalizePlayer);
     if (!d.division) d.division = 2;
     if (!d.trophies) d.trophies = [];
+    if (!d.history) d.history = [];
     if (!d.fixtures || !d.fixtures.length) d.fixtures = generateFixtures(d.division);
     if (!d.table || !d.table.length) d.table = buildTable(d.division, d.clubName);
     if (!d.calendar || !d.calendar.length) {
@@ -480,6 +483,48 @@ const Save = {
     p.fitness = 100;
     this.persist();
     return { name: p.name, cost };
+  },
+
+  /* История матчей: последние результаты нужны и игроку (что было), и
+     экрану подготовки (в какой форме команды подходят к матчу). */
+  recordMatch(entry) {
+    this.data.history.unshift({
+      season: this.data.season,
+      competition: entry.competition || 'friendly',
+      opponent: entry.opponent,
+      opponentColor: entry.opponentColor || '#879A8E',
+      gf: entry.gf,
+      ga: entry.ga,
+      result: entry.gf > entry.ga ? 'w' : entry.gf === entry.ga ? 'd' : 'l'
+    });
+    // Держим окно в 60 матчей: дальше история не нужна, а сохранение пухнет.
+    if (this.data.history.length > 60) this.data.history.length = 60;
+    this.persist();
+  },
+
+  formGuide(n) {
+    return this.data.history.slice(0, n || 5).map(h => h.result).reverse();
+  },
+
+  /* Форма соперника выводится из его силы: у клуба нет своей истории,
+     поэтому показываем правдоподобную серию, устойчивую для этого клуба
+     в этом сезоне — иначе она бы менялась при каждом заходе на экран. */
+  rivalForm(clubId, n) {
+    const club = DATA.findClub(clubId);
+    if (!club) return [];
+    let seed = (this.data.season * 31 + clubId.length * 17 +
+                clubId.charCodeAt(0) * 7 + club.power) >>> 0;
+    const rnd = () => {
+      seed = (seed * 1664525 + 1013904223) >>> 0;
+      return seed / 4294967296;
+    };
+    const strong = (club.power - 45) / 45;      // 0…1
+    const out = [];
+    for (let i = 0; i < (n || 5); i++) {
+      const r = rnd();
+      out.push(r < 0.25 + strong * 0.4 ? 'w' : r < 0.55 + strong * 0.25 ? 'd' : 'l');
+    }
+    return out;
   },
 
   topScorers(limit) {
