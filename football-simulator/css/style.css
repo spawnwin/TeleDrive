@@ -532,6 +532,36 @@ button { border: none; background: none; cursor: pointer; }
   border-radius: var(--r-chip); font-size: 12px; color: var(--muted);
 }
 .season-scorer b { display: block; color: var(--chalk); font-size: 13.5px; margin-top: 2px; }
+/* межсезонные изменения в составе */
+.offseason { display: flex; flex-direction: column; gap: 5px; margin-bottom: var(--sp-5); text-align: left; }
+.offseason .os-line { display: flex; align-items: baseline; gap: 7px; font-size: 12px; }
+.offseason .os-mark { flex: 0 0 auto; font-weight: 900; font-size: 11px; font-variant-numeric: tabular-nums; }
+.offseason .os-line.up .os-mark { color: var(--lime); }
+.offseason .os-line.down .os-mark { color: var(--flare); }
+.offseason .os-line.gone .os-mark { color: var(--muted); }
+.offseason .os-name { flex: 1; color: var(--chalk); }
+.offseason .os-note { color: var(--faint); font-size: 11px; }
+
+/* тренировки */
+.outlook { font-weight: 700; }
+.outlook.ay { color: var(--lime); }
+.outlook.am { color: var(--chalk); }
+.outlook.as { color: var(--muted); }
+.outlook.av { color: var(--flare); }
+.train-actions { display: flex; flex-direction: column; gap: 4px; flex: 0 0 auto; align-items: stretch; }
+.train-btn {
+  padding: 6px 10px; border-radius: 6px; font-size: 11px; font-weight: 800;
+  background: var(--lime); color: #08120A; white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.train-btn:disabled { background: rgba(233,241,234,.07); color: var(--faint); }
+.rest-btn {
+  padding: 5px 10px; border-radius: 6px; font-size: 10.5px; font-weight: 700;
+  background: transparent; border: 1px solid var(--edge-soft); color: var(--muted);
+  white-space: nowrap; font-variant-numeric: tabular-nums;
+}
+.rest-btn:disabled { opacity: .4; }
+
 .final-table { display: flex; flex-direction: column; margin-bottom: var(--sp-5); }
 .ft-row {
   display: flex; align-items: center; gap: 8px; padding: 6px 0;

@@ -250,6 +250,59 @@ const Save = {
     this.persist();
   },
 
+  // ---------------- ТРЕНИРОВКИ ----------------
+  /* Чем сильнее игрок, тем дороже занятие. Молодёжь вдобавок дешевле в
+     работе и прибавляет охотнее, поэтому растить своих юниоров выгоднее,
+     чем доводить возрастного середняка. */
+  trainingAgeFactor(age) { return age <= 21 ? 0.65 : age <= 28 ? 1 : 1.45; },
+
+  trainingCost(p) {
+    return Math.round(overall(p) * overall(p) / 20 * this.trainingAgeFactor(p.age));
+  },
+
+  restCost(p) { return Math.round((100 - p.fitness) * 2); },
+
+  /* Молодые прибавляют охотно, ветеранам расти уже почти некуда — но
+     занятие никогда не проходит совсем впустую. */
+  trainingGain(age) {
+    if (age <= 21) return randInt(2, 3);
+    if (age <= 26) return randInt(1, 2);
+    return 1;
+  },
+
+  trainingOutlook(age) {
+    if (age <= 21) return 'быстрый рост';
+    if (age <= 26) return 'растёт';
+    if (age <= 30) return 'медленно';
+    return 'почти предел';
+  },
+
+  trainPlayer(id) {
+    const p = this.data.squad.find(x => x.id === id);
+    if (!p) return false;
+    const cost = this.trainingCost(p);
+    if (!this.spendCoins(cost)) return false;
+
+    const primary = p.pos === 'FWD' ? 'att' : p.pos === 'MID' ? 'skill' : 'def';
+    const before = overall(p);
+    const gain = this.trainingGain(p.age);
+    p[primary] = clamp01to100(p[primary] + gain);
+    if (Math.random() < 0.4) p.skill = clamp01to100(p.skill + 1);
+    p.morale = clamp01to100(p.morale + randInt(1, 4));
+    this.persist();
+    return { name: p.name, delta: overall(p) - before, cost };
+  },
+
+  restPlayer(id) {
+    const p = this.data.squad.find(x => x.id === id);
+    if (!p || p.fitness >= 100) return false;
+    const cost = this.restCost(p);
+    if (!this.spendCoins(cost)) return false;
+    p.fitness = 100;
+    this.persist();
+    return { name: p.name, cost };
+  },
+
   topScorers(limit) {
     return this.data.squad
       .filter(p => p.goals > 0)
@@ -316,6 +369,62 @@ const Save = {
     return summary;
   },
 
+  /* Призовые за место: сезон должен окупаться, иначе тренировкам и
+     трансферам не на что жить. */
+  seasonPrize(rank) {
+    const table = [800, 550, 400, 300, 240, 190, 150, 110];
+    return table[rank - 1] || 100;
+  },
+
+  /* Межсезонье: все на год старше, молодые прибавляют, ветераны сдают,
+     а самые возрастные вешают бутсы на гвоздь. */
+  ageSquad() {
+    const grew = [], declined = [], retired = [];
+    const survivors = [];
+
+    this.data.squad.forEach(p => {
+      p.age++;
+      if (p.age >= 36 && this.data.squad.length - retired.length > 14) {
+        retired.push({ name: p.name, age: p.age, goals: p.careerGoals + p.goals });
+        return;
+      }
+      const before = overall(p);
+      if (p.age <= 23) {
+        const primary = p.pos === 'FWD' ? 'att' : p.pos === 'MID' ? 'skill' : 'def';
+        p[primary] = clamp01to100(p[primary] + randInt(1, 4));
+        p.skill = clamp01to100(p.skill + randInt(0, 2));
+      } else if (p.age >= 31) {
+        p.att = clamp01to100(p.att - randInt(1, 3));
+        p.def = clamp01to100(p.def - randInt(1, 3));
+        p.skill = clamp01to100(p.skill - randInt(0, 2));
+      }
+      const delta = overall(p) - before;
+      if (delta > 0) grew.push({ name: p.name, age: p.age, delta });
+      if (delta < 0) declined.push({ name: p.name, age: p.age, delta });
+      survivors.push(p);
+    });
+
+    this.data.squad = survivors;
+
+    /* Ушедших замещает молодёжь. Минимумы по линиям держат запас даже под
+       формации с пятью защитниками или пятью полузащитниками. */
+    const MIN_BY_POS = { GK: 2, DEF: 6, MID: 6, FWD: 4 };
+    let guard = 0;
+    while (this.data.squad.length < 18 && guard++ < 40) {
+      const need = ['GK', 'DEF', 'MID', 'FWD'].find(pos =>
+        this.data.squad.filter(p => p.pos === pos).length < MIN_BY_POS[pos]);
+      if (!need) break;
+      const kid = genPlayer(need, rand(50, 62));
+      kid.age = randInt(17, 20);
+      this.data.squad.push(kid);
+      grew.push({ name: kid.name, age: kid.age, delta: 0, youth: true });
+    }
+
+    grew.sort((a, b) => b.delta - a.delta);
+    declined.sort((a, b) => a.delta - b.delta);
+    return { grew: grew.slice(0, 3), declined: declined.slice(0, 3), retired };
+  },
+
   endSeason() {
     const sorted = this.data.table.slice().sort((a, b) => b.pts - a.pts || (b.gf - b.ga) - (a.gf - a.ga));
     const rank = sorted.findIndex(r => r.id === 'user') + 1;
@@ -332,6 +441,10 @@ const Save = {
       record: { w: me.w, d: me.d, l: me.l, gf: me.gf, ga: me.ga },
       topScorer: scorer ? { name: scorer.name, goals: scorer.goals } : null
     };
+
+    summary.prize = this.seasonPrize(rank);
+    this.addCoins(summary.prize);
+    Object.assign(summary, this.ageSquad());
 
     // Голы копятся в карьерный итог, сезонный счётчик стартует заново.
     this.data.squad.forEach(p => { p.careerGoals += p.goals; p.goals = 0; });

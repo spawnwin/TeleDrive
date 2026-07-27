@@ -106,6 +106,7 @@
     <nav class="nav-grid stagger">
       <button class="nav-tile" data-nav="squad"><svg class="ic"><use href="#i-squad"/></svg>Состав и тактика</button>
       <button class="nav-tile" data-nav="league"><svg class="ic"><use href="#i-trophy"/></svg>Таблица лиги</button>
+      <button class="nav-tile" data-nav="training"><svg class="ic"><use href="#i-chart"/></svg>Тренировки</button>
       <button class="nav-tile" data-nav="transfers"><svg class="ic"><use href="#i-transfer"/></svg>Трансферы</button>
       <button class="nav-tile" data-nav="friendly"><svg class="ic"><use href="#i-ball"/></svg>Товарищеский</button>
       <button class="nav-tile" data-nav="shop"><svg class="ic"><use href="#i-shop"/></svg>Магазин</button>
@@ -229,6 +230,24 @@
     <button id="btn-refresh-market" class="act ghost cut-tr">
       <svg class="ic"><use href="#i-refresh"/></svg>Обновить рынок
     </button>
+  </section>
+
+  <!-- ================= ТРЕНИРОВКИ ================= -->
+  <section id="screen-training" class="screen">
+    <header class="subbar">
+      <button class="back-btn" data-nav="menu"><svg class="ic"><use href="#i-back"/></svg></button>
+      <h2>Тренировки</h2>
+      <div class="purse cut-tr"><svg class="ic ic-sm"><use href="#i-coin"/></svg><span class="num" id="training-coins">0</span></div>
+    </header>
+
+    <div class="block">
+      <p class="note">Тренировка поднимает основной навык игрока. Молодые прибавляют заметно быстрее ветеранов, а чем выше рейтинг — тем дороже занятие. Восстановление возвращает форму до сотни.</p>
+    </div>
+
+    <div class="block">
+      <div class="block-head"><h3>Состав</h3><span class="hint">цена · рейтинг</span></div>
+      <div id="training-list" class="squad-list"></div>
+    </div>
   </section>
 
   <!-- ================= МАГАЗИН ================= -->
@@ -408,6 +427,7 @@
         <div><b class="num" id="season-diff">0</b><span>Разница</span></div>
       </div>
       <div class="season-scorer" id="season-scorer"></div>
+      <div class="offseason" id="season-changes"></div>
       <div class="final-table" id="season-table"></div>
       <button class="act cut-tr" id="btn-season-continue">Новый сезон</button>
     </div>

@@ -57,6 +57,7 @@
     if (id === 'friendly') renderFriendly();
     if (id === 'league') renderLeague();
     if (id === 'squad') renderSquad();
+    if (id === 'training') renderTraining();
     if (id === 'transfers') renderTransfers();
     if (id === 'shop') renderShop(currentShopTab);
     if (id === 'customize') renderCustomize();
@@ -300,6 +301,55 @@
           if (refund === false) { showToast('Состав слишком мал для продажи'); return; }
           showToast(`Продан за ${refund} монет`);
           renderSquad();
+        });
+        list.appendChild(row);
+      });
+  }
+
+  // ---------------- ТРЕНИРОВКИ ----------------
+  function renderTraining() {
+    document.getElementById('training-coins').textContent = Save.data.coins;
+    const list = document.getElementById('training-list');
+    list.innerHTML = '';
+    const order = { GK: 0, DEF: 1, MID: 2, FWD: 3 };
+    Save.data.squad.slice()
+      .sort((a, b) => order[a.pos] - order[b.pos] || overall(b) - overall(a))
+      .forEach(p => {
+        const v = overall(p);
+        const cost = Save.trainingCost(p);
+        const rest = Save.restCost(p);
+        const row = document.createElement('div');
+        row.className = 'player-row';
+        row.innerHTML = `
+          <div class="player-pos ${p.pos}">${p.pos}</div>
+          <div class="player-info">
+            <b>${p.name}</b>
+            <div class="player-meta">
+              <span>${p.age} лет</span>
+              <span class="outlook a${p.age <= 21 ? 'y' : p.age <= 26 ? 'm' : p.age <= 30 ? 's' : 'v'}">${Save.trainingOutlook(p.age)}</span>
+              <span>форма <i>${p.fitness}%</i></span>
+            </div>
+          </div>
+          <div class="player-ovr ${ovrClass(v)}">${v}</div>
+          <div class="train-actions">
+            <button class="train-btn" ${Save.data.coins < cost ? 'disabled' : ''}>${cost}</button>
+            ${p.fitness >= 100 ? ''
+              : `<button class="rest-btn" ${Save.data.coins < rest ? 'disabled' : ''}>+форма ${rest}</button>`}
+          </div>`;
+        row.querySelector('.train-btn').addEventListener('click', () => {
+          const res = Save.trainPlayer(p.id);
+          if (!res) { showToast('Недостаточно монет'); return; }
+          showToast(res.delta > 0
+            ? `${res.name}: рейтинг +${res.delta}`
+            : `${res.name} потренировался, но рейтинг не вырос`);
+          renderTraining();
+        });
+        const restBtn = row.querySelector('.rest-btn');
+        if (restBtn) restBtn.addEventListener('click', () => {
+          const res = Save.restPlayer(p.id);
+          if (!res) { showToast('Недостаточно монет'); return; }
+          showToast(`${res.name} полностью восстановлен`);
+          renderTraining();
         });
         list.appendChild(row);
       });
@@ -622,9 +672,9 @@
     if (win) Save.unlockAchievement('first_win');
     if (win && score.home - score.away >= 3) Save.unlockAchievement('hat_trick');
 
-    let coins = 30 + score.home * 15;
+    let coins = 40 + score.home * 15;
     let xp = 40 + score.home * 12;
-    if (win) { coins += 60; xp += 40; } else if (draw) { coins += 20; xp += 15; }
+    if (win) { coins += 80; xp += 40; } else if (draw) { coins += 25; xp += 15; }
 
     Save.addXp(xp);
     Save.addCoins(coins);
@@ -683,7 +733,10 @@
   function showSeasonSummary(sum) {
     const verdict = document.getElementById('season-verdict');
     verdict.textContent = sum.rank === 1 ? 'Чемпион' : `Сезон ${sum.season} завершён`;
-    verdict.className = 'result-verdict ' + (sum.rank === 1 ? 'win' : sum.rank <= 3 ? 'draw' : 'loss');
+    // тревожный цвет — только за провал внизу таблицы, а не за середину
+    const total = sum.standings.length;
+    verdict.className = 'result-verdict ' +
+      (sum.rank <= 3 ? 'win' : sum.rank >= total - 1 ? 'loss' : 'draw');
 
     document.getElementById('season-place').textContent = sum.rank;
     document.getElementById('season-champ').innerHTML = sum.championIsUser
@@ -698,6 +751,22 @@
     sc.innerHTML = sum.topScorer
       ? `Лучший бомбардир клуба<b>${sum.topScorer.name} — ${sum.topScorer.goals}</b>`
       : 'Клуб остался без забивных игроков';
+
+    const changes = document.getElementById('season-changes');
+    changes.innerHTML = '';
+    const line = (cls, mark, name, note) => {
+      const d = document.createElement('div');
+      d.className = 'os-line ' + cls;
+      d.innerHTML = `<span class="os-mark">${mark}</span>
+        <span class="os-name">${name}</span><span class="os-note">${note}</span>`;
+      changes.appendChild(d);
+    };
+    line('up', '+' + sum.prize, 'Призовые за сезон', 'монет');
+    (sum.grew || []).forEach(p => p.youth
+      ? line('up', '·', p.name, `новичок, ${p.age} лет`)
+      : line('up', '+' + p.delta, p.name, `прогресс, ${p.age} лет`));
+    (sum.declined || []).forEach(p => line('down', p.delta, p.name, `спад, ${p.age} лет`));
+    (sum.retired || []).forEach(p => line('gone', '—', p.name, `завершил карьеру в ${p.age}`));
 
     const table = document.getElementById('season-table');
     table.innerHTML = '';
