@@ -12,6 +12,7 @@
 # Использование:
 #   sudo bash install.sh                 # только Node-сервер на :8787
 #   sudo bash install.sh --nginx         # плюс проксирование через nginx на :8080
+#   sudo bash install.sh --public --port 9100   # без прокси, сразу наружу
 #   sudo bash install.sh --port 9000     # другой порт для Node
 #   sudo bash install.sh --dry-run       # показать, что будет сделано
 
@@ -22,6 +23,7 @@ BRANCH="claude/football-simulator-browser-52jqnc"
 APP_DIR="/opt/futbolx"
 SERVICE="futbolx"
 NODE_PORT="8787"
+NODE_HOST="127.0.0.1"
 NGINX_PORT="8080"
 WITH_NGINX="no"
 DRY_RUN="no"
@@ -30,6 +32,7 @@ MARKER="# managed-by: futbolx-installer"
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --nginx)       WITH_NGINX="yes"; shift ;;
+    --public)      NODE_HOST="0.0.0.0"; shift ;;
     --port)        NODE_PORT="$2"; shift 2 ;;
     --nginx-port)  NGINX_PORT="$2"; shift 2 ;;
     --branch)      BRANCH="$2"; shift 2 ;;
@@ -107,7 +110,7 @@ Type=simple
 User=futbolx
 WorkingDirectory=$APP_DIR/football-simulator/server
 Environment=PORT=$NODE_PORT
-Environment=HOST=127.0.0.1
+Environment=HOST=$NODE_HOST
 Environment=DB_FILE=$APP_DIR/football-simulator/server/data/futbolx.json
 ExecStart=/usr/bin/node server.js
 Restart=on-failure
@@ -128,6 +131,13 @@ fi
 run systemctl daemon-reload
 run systemctl enable --now "$SERVICE"
 run sleep 2
+
+# Без прокси служба смотрит наружу сама — тогда её порт нужно открыть.
+if [[ "$NODE_HOST" == "0.0.0.0" ]] && command -v ufw >/dev/null 2>&1 \
+   && ufw status 2>/dev/null | grep -q "Status: active"; then
+  say "Открываем порт ${NODE_PORT} в ufw"
+  run ufw allow "${NODE_PORT}/tcp"
+fi
 
 # ---------- nginx (по желанию) ----------
 if [[ "$WITH_NGINX" == "yes" ]]; then
@@ -199,7 +209,9 @@ echo "  Логи:      journalctl -u ${SERVICE} -f"
 echo "  Обновить:  bash $APP_DIR/football-simulator/deploy/update.sh"
 if [[ "$WITH_NGINX" == "yes" ]]; then
   echo "  Игра:      http://${IP:-<адрес-сервера>}:${NGINX_PORT}"
+elif [[ "$NODE_HOST" == "0.0.0.0" ]]; then
+  echo "  Игра:      http://${IP:-<адрес-сервера>}:${NODE_PORT}"
 else
   echo "  Игра:      http://127.0.0.1:${NODE_PORT} (наружу порт не открыт —"
-  echo "             запустите с --nginx или откройте порт вручную)"
+  echo "             запустите с --public или --nginx)"
 fi
