@@ -1,16 +1,50 @@
 const DATA = {
-  clubs: [
-    /* Стартовый состав менеджера тянет примерно на 59, поэтому лига
-       разложена вокруг этого значения: снизу есть кого обыгрывать,
-       сверху — куда расти через трансферы. */
-    { id: 'volna', name: 'Волна Юга', power: 49, color: '#f43f5e' },
-    { id: 'ural', name: 'Уральский Кряж', power: 54, color: '#78716c' },
-    { id: 'tayga', name: 'Тайга ФК', power: 58, color: '#22c55e' },
-    { id: 'metel', name: 'Метель Норд', power: 62, color: '#e2e8f0' },
-    { id: 'vulkan', name: 'Вулкан Ультра', power: 67, color: '#f97316' },
-    { id: 'grom', name: 'Гром Столицы', power: 72, color: '#facc15' },
-    { id: 'legenda', name: 'Легенда X', power: 78, color: '#a855f7' }
+  /* Две лиги. Менеджер стартует во второй, где его состав (≈59) держится
+     в середине, и пробивается в высшую, где та же команда — аутсайдер. */
+  divisions: [
+    { id: 1, name: 'Высшая лига', short: 'Высшая' },
+    { id: 2, name: 'Первая лига', short: 'Первая' }
   ],
+
+  clubsByDivision: {
+    2: [
+      { id: 'volna', name: 'Волна Юга', power: 49, color: '#f43f5e' },
+      { id: 'ural', name: 'Уральский Кряж', power: 53, color: '#78716c' },
+      { id: 'tayga', name: 'Тайга ФК', power: 56, color: '#22c55e' },
+      { id: 'zarya', name: 'Заря Востока', power: 59, color: '#38bdf8' },
+      { id: 'metel', name: 'Метель Норд', power: 62, color: '#e2e8f0' },
+      { id: 'kamen', name: 'Каменный Вал', power: 65, color: '#a8a29e' },
+      { id: 'vulkan', name: 'Вулкан Ультра', power: 68, color: '#f97316' }
+    ],
+    1: [
+      { id: 'grom', name: 'Гром Столицы', power: 72, color: '#facc15' },
+      { id: 'sokol', name: 'Сокол Империал', power: 75, color: '#0ea5e9' },
+      { id: 'titan', name: 'Титан Металлург', power: 77, color: '#94a3b8' },
+      { id: 'orion', name: 'Орион', power: 79, color: '#c084fc' },
+      { id: 'burya', name: 'Буря Приморья', power: 81, color: '#2dd4bf' },
+      { id: 'korona', name: 'Корона', power: 84, color: '#fbbf24' },
+      { id: 'legenda', name: 'Легенда X', power: 87, color: '#a855f7' }
+    ]
+  },
+
+  /* Клубы для чемпионата мира — сильнее всего, что есть внутри страны. */
+  worldClubs: [
+    { id: 'w_atlas', name: 'Атлас Мадрид', power: 84, color: '#f8fafc' },
+    { id: 'w_marina', name: 'Марина Лиссабон', power: 86, color: '#16a34a' },
+    { id: 'w_nord', name: 'Нордвест Мюнхен', power: 88, color: '#ef4444' },
+    { id: 'w_lion', name: 'Лион Руж', power: 85, color: '#3b82f6' },
+    { id: 'w_sol', name: 'Соль Буэнос', power: 87, color: '#7dd3fc' },
+    { id: 'w_kaiser', name: 'Кайзер Верк', power: 90, color: '#1f2937' },
+    { id: 'w_sakura', name: 'Сакура Осака', power: 83, color: '#f9a8d4' }
+  ],
+
+  competitions: {
+    league: { name: 'Чемпионат', short: 'Лига' },
+    cup: { name: 'Кубок страны', short: 'Кубок' },
+    world: { name: 'Чемпионат мира', short: 'Мир' }
+  },
+
+  knockoutStages: ['1/4 финала', 'Полуфинал', 'Финал'],
 
   stadiums: [
     { id: 'city', name: 'Городская Арена', cost: 0, grass: '#1e6b3a', line: '#e8fff0', sky: '#12203a' },
@@ -67,7 +101,10 @@ const DATA = {
     { id: 'hat_trick', ic: 'attack', name: 'Разгром', desc: 'Выиграй матч с разницей в три мяча и больше' },
     { id: 'first_win', ic: 'medal', name: 'Первая победа', desc: 'Выиграй свой первый матч' },
     { id: 'intervention_used', ic: 'flame', name: 'Слово тренера', desc: 'Используй тренерское вмешательство' },
-    { id: 'league_complete', ic: 'trophy', name: 'Легенда Лиги', desc: 'Выиграй сезон Ультра-Лиги' },
+    { id: 'league_complete', ic: 'trophy', name: 'Чемпион', desc: 'Выиграй чемпионат своего дивизиона' },
+    { id: 'promoted', ic: 'chart', name: 'Повышение', desc: 'Выйди из Первой лиги в Высшую' },
+    { id: 'cup_win', ic: 'medal', name: 'Кубок взят', desc: 'Выиграй Кубок страны' },
+    { id: 'world_win', ic: 'star', name: 'Вершина мира', desc: 'Выиграй чемпионат мира' },
     { id: 'shopaholic', ic: 'shop', name: 'Модник', desc: 'Купи любой предмет в магазине' },
     { id: 'transfer_done', ic: 'transfer', name: 'Трансферное окно', desc: 'Подпиши игрока на трансферном рынке' },
     { id: 'clean_sheet', ic: 'shield', name: 'Сухой лист', desc: 'Не пропусти ни одного гола за матч' },
@@ -89,3 +126,10 @@ const DATA = {
     { id: 'FWD', name: 'Нападающий' }
   ]
 };
+
+/* Плоские списки для поиска клуба по id — интерфейсу и движку матча
+   безразлично, из какого турнира соперник. */
+DATA.clubs = DATA.clubsByDivision[1].concat(DATA.clubsByDivision[2]);
+DATA.everyClub = DATA.clubs.concat(DATA.worldClubs);
+DATA.findClub = id => DATA.everyClub.find(c => c.id === id) || null;
+DATA.leagueClubs = division => DATA.clubsByDivision[division] || DATA.clubsByDivision[2];

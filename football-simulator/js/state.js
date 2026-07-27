@@ -1,4 +1,76 @@
-const STORAGE_KEY = 'futbolx_manager_save_v1';
+const PROFILES_KEY = 'futbolx_profiles_v1';
+const SAVE_PREFIX = 'futbolx_save_';
+
+/* Профили менеджеров живут только в этом браузере: сервера у игры нет,
+   поэтому это разделение сохранений на устройстве, а не облачный аккаунт.
+   PIN защищает от чужих рук за тем же телефоном, не более того. */
+const Profiles = {
+  read() {
+    try {
+      const raw = localStorage.getItem(PROFILES_KEY);
+      const reg = raw ? JSON.parse(raw) : null;
+      if (reg && Array.isArray(reg.profiles)) return reg;
+    } catch (e) {}
+    return { profiles: [], activeId: null };
+  },
+
+  write(reg) {
+    try { localStorage.setItem(PROFILES_KEY, JSON.stringify(reg)); } catch (e) {}
+  },
+
+  list() { return this.read().profiles; },
+
+  activeId() { return this.read().activeId; },
+
+  find(id) { return this.list().find(p => p.id === id) || null; },
+
+  nameTaken(name) {
+    return this.list().some(p => p.name.toLowerCase() === name.trim().toLowerCase());
+  },
+
+  create(name, pin) {
+    const reg = this.read();
+    const profile = {
+      id: 'u' + Date.now().toString(36) + Math.floor(Math.random() * 1e4).toString(36),
+      name: name.trim(),
+      pin: pin || '',
+      clubName: '',
+      created: Date.now(),
+      lastPlayed: Date.now()
+    };
+    reg.profiles.push(profile);
+    this.write(reg);
+    return profile;
+  },
+
+  update(id, patch) {
+    const reg = this.read();
+    const p = reg.profiles.find(x => x.id === id);
+    if (!p) return;
+    Object.assign(p, patch);
+    this.write(reg);
+  },
+
+  remove(id) {
+    const reg = this.read();
+    reg.profiles = reg.profiles.filter(p => p.id !== id);
+    if (reg.activeId === id) reg.activeId = null;
+    this.write(reg);
+    try { localStorage.removeItem(SAVE_PREFIX + id); } catch (e) {}
+  },
+
+  setActive(id) {
+    const reg = this.read();
+    reg.activeId = id;
+    this.write(reg);
+  },
+
+  checkPin(id, pin) {
+    const p = this.find(id);
+    if (!p) return false;
+    return !p.pin || p.pin === pin;
+  }
+};
 
 function rand(a, b) { return a + Math.random() * (b - a); }
 function randInt(a, b) { return Math.floor(rand(a, b + 1)); }
@@ -58,8 +130,8 @@ function emptyTableRow(id, name, color) {
   return { id, name, color, pts: 0, w: 0, d: 0, l: 0, gf: 0, ga: 0, played: 0 };
 }
 
-function generateFixtures() {
-  const teamIds = ['user'].concat(DATA.clubs.map(c => c.id));
+function generateFixtures(division) {
+  const teamIds = ['user'].concat(DATA.leagueClubs(division).map(c => c.id));
   const n = teamIds.length;
   const arr = teamIds.slice(1); // rotate all but fixed index 0
   const fixed = teamIds[0];
@@ -77,10 +149,67 @@ function generateFixtures() {
   return rounds;
 }
 
+function buildTable(division, clubName) {
+  return ['user'].concat(DATA.leagueClubs(division).map(c => c.id)).map(id => {
+    if (id === 'user') return emptyTableRow('user', clubName, '#22d3ee');
+    const c = DATA.findClub(id);
+    return emptyTableRow(id, c.name, c.color);
+  });
+}
+
+/* Календарь сезона: туры чемпионата вперемешку со стадиями кубка, а раз в
+   четыре сезона — ещё и чемпионат мира. Один сквозной список избавляет
+   интерфейс от вопроса «какой матч следующий». */
+function buildCalendar(season) {
+  const worlds = season % 4 === 0;
+  const events = [];
+  let cup = 0, world = 0;
+  for (let r = 0; r < 7; r++) {
+    events.push({ type: 'league', round: r });
+    if ((r === 1 || r === 3 || r === 5) && cup < 3) events.push({ type: 'cup', stage: cup++ });
+    if (worlds && (r === 2 || r === 4 || r === 6) && world < 3) {
+      events.push({ type: 'world', stage: world++ });
+    }
+  }
+  return events;
+}
+
+function shuffled(list) {
+  const a = list.slice();
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+/* Сетка на восемь участников: 1/4 → 1/2 → финал. Одна и та же машинерия
+   обслуживает Кубок страны и чемпионат мира. */
+function makeBracket(teamIds) {
+  const order = shuffled(teamIds);
+  const ties = [];
+  for (let i = 0; i < order.length; i += 2) ties.push([order[i], order[i + 1]]);
+  return { stage: 0, ties: [ties], results: [], winner: null, userOut: false };
+}
+
+function buildCup(division) {
+  const pool = DATA.leagueClubs(division === 1 ? 2 : 1).slice(0, 4)
+    .concat(DATA.leagueClubs(division).slice(0, 3))
+    .map(c => c.id);
+  return makeBracket(['user'].concat(pool.slice(0, 7)));
+}
+
+function buildWorld() {
+  return makeBracket(['user'].concat(DATA.worldClubs.map(c => c.id)));
+}
+
 function defaultSave() {
   const basePower = 62;
+  const division = 2;
   return {
     clubName: 'FC Аврора',
+    created: false,          // команда ещё не собрана мастером создания
+    division,
     level: 1,
     xp: 0,
     coins: 300,
@@ -98,11 +227,13 @@ function defaultSave() {
     transferPool: [],
     season: 1,
     round: 0,
-    fixtures: generateFixtures(),
-    table: ['user'].concat(DATA.clubs.map(c => c.id)).map(id =>
-      id === 'user' ? emptyTableRow('user', 'FC Аврора', '#22d3ee')
-        : emptyTableRow(id, DATA.clubs.find(c => c.id === id).name, DATA.clubs.find(c => c.id === id).color)
-    ),
+    calendar: buildCalendar(1),
+    calendarIndex: 0,
+    fixtures: generateFixtures(division),
+    table: buildTable(division, 'FC Аврора'),
+    cup: buildCup(division),
+    world: null,
+    trophies: [],
     achievements: {},
     stats: { goals: 0, wins: 0, matches: 0 }
   };
@@ -110,30 +241,78 @@ function defaultSave() {
 
 const Save = {
   data: null,
+  profileId: null,
 
+  /* Загружает сохранение активного профиля. Без профиля возвращает null —
+     интерфейс в этом случае показывает вход. */
   load() {
+    const id = Profiles.activeId();
+    if (!id || !Profiles.find(id)) { this.data = null; this.profileId = null; return null; }
+    return this.loadProfile(id);
+  },
+
+  loadProfile(id) {
+    this.profileId = id;
     try {
-      const raw = localStorage.getItem(STORAGE_KEY);
+      const raw = localStorage.getItem(SAVE_PREFIX + id);
       this.data = raw ? Object.assign(defaultSave(), JSON.parse(raw)) : defaultSave();
     } catch (e) {
       this.data = defaultSave();
     }
-    if (!this.data.squad || !this.data.squad.length) this.data.squad = genSquad(62);
-    this.data.squad.forEach(normalizePlayer);
-    (this.data.transferPool || []).forEach(normalizePlayer);
-    if (!this.data.fixtures || !this.data.fixtures.length) this.data.fixtures = generateFixtures();
-    if (!this.data.table || !this.data.table.length) {
-      this.data.table = ['user'].concat(DATA.clubs.map(c => c.id)).map(id =>
-        id === 'user' ? emptyTableRow('user', this.data.clubName, '#22d3ee')
-          : emptyTableRow(id, DATA.clubs.find(c => c.id === id).name, DATA.clubs.find(c => c.id === id).color)
-      );
-    }
-    this.data.table.find(r => r.id === 'user').name = this.data.clubName;
+    this.repair();
     return this.data;
   },
 
+  /* Достраивает поля, которых не было в сохранениях прежних версий. */
+  repair() {
+    const d = this.data;
+    if (!d.squad || !d.squad.length) d.squad = genSquad(62);
+    d.squad.forEach(normalizePlayer);
+    (d.transferPool || []).forEach(normalizePlayer);
+    if (!d.division) d.division = 2;
+    if (!d.trophies) d.trophies = [];
+    if (!d.fixtures || !d.fixtures.length) d.fixtures = generateFixtures(d.division);
+    if (!d.table || !d.table.length) d.table = buildTable(d.division, d.clubName);
+    if (!d.calendar || !d.calendar.length) {
+      d.calendar = buildCalendar(d.season || 1);
+      d.calendarIndex = 0;
+    }
+    if (typeof d.calendarIndex !== 'number') d.calendarIndex = 0;
+    if (!d.cup) d.cup = buildCup(d.division);
+    if (!d.world && d.calendar.some(e => e.type === 'world')) d.world = buildWorld();
+    const me = d.table.find(r => r.id === 'user');
+    if (me) me.name = d.clubName;
+  },
+
   persist() {
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(this.data)); } catch (e) {}
+    if (!this.profileId || !this.data) return;
+    try {
+      localStorage.setItem(SAVE_PREFIX + this.profileId, JSON.stringify(this.data));
+      Profiles.update(this.profileId, {
+        clubName: this.data.clubName,
+        lastPlayed: Date.now()
+      });
+    } catch (e) {}
+  },
+
+  logout() {
+    this.persist();
+    Profiles.setActive(null);
+    this.data = null;
+    this.profileId = null;
+  },
+
+  /* Мастер создания команды: имя, цвет, схема и стиль. */
+  createTeam({ clubName, kit, formation, tacticStyle }) {
+    const d = this.data;
+    d.clubName = clubName;
+    d.kit = kit;
+    if (!d.ownedKits.includes(kit)) d.ownedKits.push(kit);
+    d.formation = formation;
+    d.tacticStyle = tacticStyle;
+    d.created = true;
+    d.table = buildTable(d.division, clubName);
+    this.persist();
   },
 
   xpForNextLevel(level) { return 100 + (level - 1) * 60; },
@@ -328,7 +507,8 @@ const Save = {
 
   clubPower(id) {
     if (id === 'user') return this.teamStrength();
-    const c = DATA.clubs.find(x => x.id === id);
+    const c = DATA.findClub(id);
+    if (!c) return { attack: 60, defense: 60 };
     return { attack: c.power + rand(-4, 4), defense: c.power + rand(-4, 4) };
   },
 
@@ -359,14 +539,128 @@ const Save = {
     }
   },
 
-  /* Возвращает итоги сезона, если он только что закончился, иначе null —
-     интерфейсу нужно показать финальную таблицу до обнуления. */
-  advanceRound() {
-    this.data.round++;
+  // ---------------- КАЛЕНДАРЬ И ТУРНИРЫ ----------------
+  currentEvent() { return this.data.calendar[this.data.calendarIndex] || null; },
+
+  bracketFor(type) { return type === 'cup' ? this.data.cup : this.data.world; },
+
+  /* Ближайший матч менеджера: тур чемпионата или стадия плей-офф. Если из
+     кубка вылетели, событие пропускается автоматически. */
+  nextFixture() {
+    let guard = 0;
+    while (guard++ < 40) {
+      const ev = this.currentEvent();
+      if (!ev) return null;
+
+      if (ev.type === 'league') {
+        this.data.round = ev.round;
+        const round = this.currentRoundFixtures();
+        if (round) {
+          for (const [h, a] of round) {
+            if (h === 'user' || a === 'user') {
+              return { kind: 'league', home: h, away: a, label: DATA.competitions.league.name };
+            }
+          }
+        }
+      } else {
+        const br = this.bracketFor(ev.type);
+        const tie = br && !br.userOut && (br.ties[ev.stage] || [])
+          .find(t => t[0] === 'user' || t[1] === 'user');
+        if (tie) {
+          return {
+            kind: ev.type, home: tie[0], away: tie[1], stage: ev.stage,
+            label: `${DATA.competitions[ev.type].name} · ${DATA.knockoutStages[ev.stage]}`
+          };
+        }
+      }
+      // событие не про нас — доигрываем его без участия менеджера
+      this.resolveEventWithoutUser(ev);
+      this.data.calendarIndex++;
+    }
+    return null;
+  },
+
+  resolveEventWithoutUser(ev) {
+    if (ev.type === 'league') {
+      this.data.round = ev.round;
+      this.playOtherFixturesThisRound();
+    } else {
+      const br = this.bracketFor(ev.type);
+      if (br) this.resolveBracketStage(br, ev.stage, null);
+    }
+  },
+
+  /* Разыгрывает стадию сетки. Матч менеджера приходит готовым счётом,
+     остальные пары считаются быстрым симулятором. Ничья в плей-офф
+     решается серией пенальти со смещением в сторону более сильных. */
+  resolveBracketStage(br, stage, userResult) {
+    const ties = br.ties[stage];
+    if (!ties) return;
+    const results = [];
+    const winners = [];
+
+    ties.forEach(([a, b]) => {
+      let ga, gb;
+      const isUserTie = a === 'user' || b === 'user';
+      if (isUserTie && userResult) {
+        ga = a === 'user' ? userResult.userGoals : userResult.oppGoals;
+        gb = b === 'user' ? userResult.userGoals : userResult.oppGoals;
+      } else {
+        const r = this.simulateQuickMatch(a, b);
+        ga = r.gh; gb = r.ga;
+      }
+      let winner, shootout = false;
+      if (ga === gb) {
+        shootout = true;
+        const pa = this.clubPower(a).attack, pb = this.clubPower(b).attack;
+        winner = Math.random() < pa / (pa + pb) ? a : b;
+      } else {
+        winner = ga > gb ? a : b;
+      }
+      results.push({ a, b, ga, gb, winner, shootout });
+      winners.push(winner);
+    });
+
+    br.results[stage] = results;
+    if (winners.length > 1) {
+      const next = [];
+      for (let i = 0; i < winners.length; i += 2) next.push([winners[i], winners[i + 1]]);
+      br.ties[stage + 1] = next;
+      br.stage = stage + 1;
+    } else {
+      br.winner = winners[0];
+      br.stage = stage + 1;
+    }
+    if (!winners.includes('user')) br.userOut = true;
+  },
+
+  /* Двигает календарь после матча менеджера. Возвращает итоги сезона,
+     если он на этом закончился. */
+  advanceAfterUserMatch(ev, userResult) {
+    if (ev.type === 'league') {
+      this.playOtherFixturesThisRound();
+    } else {
+      const br = this.bracketFor(ev.type);
+      if (br) {
+        this.resolveBracketStage(br, ev.stage, userResult);
+        if (br.winner === 'user') this.awardTrophy(ev.type);
+      }
+    }
+    this.data.calendarIndex++;
+
     let summary = null;
-    if (this.data.round >= this.data.fixtures.length) summary = this.endSeason();
+    if (this.data.calendarIndex >= this.data.calendar.length) summary = this.endSeason();
     this.persist();
     return summary;
+  },
+
+  awardTrophy(type) {
+    this.data.trophies.push({
+      type, season: this.data.season,
+      division: type === 'league' ? this.data.division : null
+    });
+    if (type === 'cup') this.unlockAchievement('cup_win');
+    if (type === 'world') this.unlockAchievement('world_win');
   },
 
   /* Призовые за место: сезон должен окупаться, иначе тренировкам и
@@ -426,43 +720,84 @@ const Save = {
   },
 
   endSeason() {
-    const sorted = this.data.table.slice().sort((a, b) => b.pts - a.pts || (b.gf - b.ga) - (a.gf - a.ga));
+    const d = this.data;
+    const sorted = d.table.slice().sort((a, b) => b.pts - a.pts || (b.gf - b.ga) - (a.gf - a.ga));
     const rank = sorted.findIndex(r => r.id === 'user') + 1;
-    if (rank === 1) this.unlockAchievement('league_complete');
+    if (rank === 1) {
+      this.unlockAchievement('league_complete');
+      this.awardTrophy('league');
+    }
 
     const me = sorted.find(r => r.id === 'user');
     const scorer = this.topScorers(1)[0] || null;
+    const division = DATA.divisions.find(x => x.id === d.division);
     const summary = {
-      season: this.data.season,
+      season: d.season,
       rank,
+      divisionName: division.name,
       champion: sorted[0].name,
       championIsUser: sorted[0].id === 'user',
       standings: sorted.map(r => ({ id: r.id, name: r.name, color: r.color, pts: r.pts })),
       record: { w: me.w, d: me.d, l: me.l, gf: me.gf, ga: me.ga },
-      topScorer: scorer ? { name: scorer.name, goals: scorer.goals } : null
+      topScorer: scorer ? { name: scorer.name, goals: scorer.goals } : null,
+      cupWinner: d.cup && d.cup.winner ? this.teamName(d.cup.winner) : null,
+      cupIsUser: d.cup && d.cup.winner === 'user',
+      worldWinner: d.world && d.world.winner ? this.teamName(d.world.winner) : null,
+      worldIsUser: d.world && d.world.winner === 'user'
     };
 
-    summary.prize = this.seasonPrize(rank);
+    /* Первые два места выводят в Высшую лигу, два последних отправляют
+       обратно — путь наверх и есть основная дуга карьеры. */
+    summary.movement = null;
+    if (d.division === 2 && rank <= 2) {
+      d.division = 1;
+      summary.movement = 'up';
+      this.unlockAchievement('promoted');
+    } else if (d.division === 1 && rank >= sorted.length - 1) {
+      d.division = 2;
+      summary.movement = 'down';
+    }
+    summary.newDivisionName = DATA.divisions.find(x => x.id === d.division).name;
+
+    summary.prize = this.seasonPrize(rank) * (d.division === 1 || summary.movement === 'up' ? 1.5 : 1);
+    summary.prize = Math.round(summary.prize);
     this.addCoins(summary.prize);
     Object.assign(summary, this.ageSquad());
 
     // Голы копятся в карьерный итог, сезонный счётчик стартует заново.
-    this.data.squad.forEach(p => { p.careerGoals += p.goals; p.goals = 0; });
-    this.data.season++;
-    this.data.round = 0;
-    this.data.fixtures = generateFixtures();
-    this.data.table = ['user'].concat(DATA.clubs.map(c => c.id)).map(id =>
-      id === 'user' ? emptyTableRow('user', this.data.clubName, '#22d3ee')
-        : emptyTableRow(id, DATA.clubs.find(c => c.id === id).name, DATA.clubs.find(c => c.id === id).color)
-    );
+    d.squad.forEach(p => { p.careerGoals += p.goals; p.goals = 0; });
+    d.season++;
+    d.round = 0;
+    d.fixtures = generateFixtures(d.division);
+    d.table = buildTable(d.division, d.clubName);
+    d.calendar = buildCalendar(d.season);
+    d.calendarIndex = 0;
+    d.cup = buildCup(d.division);
+    d.world = d.calendar.some(e => e.type === 'world') ? buildWorld() : null;
+
     // Новый сезон: соперники подрастают, состав выходит из отпуска здоровым.
-    DATA.clubs.forEach(c => { c.power = clampNum(c.power + randInt(-2, 3), 45, 88); });
-    this.data.squad.forEach(p => {
+    DATA.everyClub.forEach(c => { c.power = clampNum(c.power + randInt(-2, 3), 45, 92); });
+    d.squad.forEach(p => {
       p.injuredFor = 0; p.suspendedFor = 0; p.yellows = 0;
       p.fitness = 100;
     });
     this.persist();
     return summary;
+  },
+
+  teamName(id) {
+    if (id === 'user') return this.data.clubName;
+    const c = DATA.findClub(id);
+    return c ? c.name : '—';
+  },
+
+  teamColor(id) {
+    if (id === 'user') {
+      const k = DATA.kitColors.find(x => x.id === this.data.kit);
+      return k ? k.color : '#22d3ee';
+    }
+    const c = DATA.findClub(id);
+    return c ? c.color : '#879A8E';
   },
 
   // ---------------- TRANSFER MARKET ----------------

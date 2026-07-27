@@ -61,6 +61,103 @@
     <p class="boot-hint">Формируем состав</p>
   </section>
 
+  <!-- ================= ВХОД ================= -->
+  <section id="screen-auth" class="screen">
+    <div class="auth-head">
+      <h1 class="wordmark">FUTBOL<em>X</em></h1>
+      <p class="auth-sub">Футбольный менеджер</p>
+    </div>
+
+    <div class="mode-switch">
+      <button class="mode-btn active" data-mode="local">На устройстве</button>
+      <button class="mode-btn" data-mode="remote">С сервером</button>
+    </div>
+
+    <!-- локальные профили -->
+    <div id="auth-local">
+      <div class="block">
+        <div class="block-head"><h3>Профили</h3><span class="hint">на этом устройстве</span></div>
+        <div id="profile-list" class="profile-list"></div>
+      </div>
+
+      <div class="block">
+        <div class="block-head"><h3>Новый менеджер</h3></div>
+        <input id="new-profile-name" class="text-input" maxlength="24" placeholder="Имя менеджера">
+        <input id="new-profile-pin" class="text-input" maxlength="6" inputmode="numeric"
+               placeholder="PIN (необязательно)" style="margin-top:8px">
+        <button id="btn-create-profile" class="act cut-tr" style="margin-top:12px">
+          <svg class="ic"><use href="#i-check"/></svg>Создать
+        </button>
+      </div>
+
+      <p class="note auth-note">Профили и сохранения хранятся только в этом браузере. Очистка данных сайта удалит их.</p>
+    </div>
+
+    <!-- аккаунт на сервере -->
+    <div id="auth-remote" class="hidden">
+      <div class="block">
+        <div class="block-head"><h3>Адрес сервера</h3></div>
+        <div class="server-row">
+          <input id="server-url" class="text-input" placeholder="http://192.168.1.10:8787" inputmode="url">
+          <button id="btn-connect" class="rest-btn">Проверить</button>
+        </div>
+        <p id="server-status" class="note" style="margin-top:8px"></p>
+      </div>
+
+      <div class="block">
+        <div class="block-head"><h3>Аккаунт</h3></div>
+        <input id="account-name" class="text-input" maxlength="24" placeholder="Имя менеджера" autocomplete="username">
+        <input id="account-pass" class="text-input" type="password" maxlength="200"
+               placeholder="Пароль" autocomplete="current-password" style="margin-top:8px">
+        <div class="auth-actions">
+          <button id="btn-login" class="act cut-tr"><svg class="ic"><use href="#i-play"/></svg>Войти</button>
+          <button id="btn-register" class="act ghost cut-tr">Регистрация</button>
+        </div>
+      </div>
+
+      <p class="note auth-note">Сохранение хранится на вашем сервере, поэтому доступно с любого устройства. Пароль передаётся серверу и там хешируется.</p>
+    </div>
+  </section>
+
+  <!-- ================= СОЗДАНИЕ КОМАНДЫ ================= -->
+  <section id="screen-create-team" class="screen">
+    <div class="auth-head">
+      <h2 class="create-title">Создание клуба</h2>
+      <p class="auth-sub">Четыре решения — и можно выходить на поле</p>
+    </div>
+
+    <div class="block">
+      <div class="block-head"><h3>Название</h3></div>
+      <div class="crest-row">
+        <svg class="crest" id="create-crest" viewBox="0 0 48 48" style="width:56px;height:56px"></svg>
+        <input id="create-name" class="text-input" maxlength="18" placeholder="FC Аврора" value="FC Аврора">
+      </div>
+    </div>
+
+    <div class="block">
+      <div class="block-head"><h3>Цвет формы</h3></div>
+      <div id="create-kit" class="pill-row"></div>
+    </div>
+
+    <div class="block">
+      <div class="block-head"><h3>Схема</h3></div>
+      <div id="create-formation" class="pill-row"></div>
+    </div>
+
+    <div class="block">
+      <div class="block-head"><h3>Стиль игры</h3></div>
+      <div id="create-style" class="pill-row"></div>
+    </div>
+
+    <div class="block">
+      <p class="note">Клуб стартует в Первой лиге. Два первых места выводят в Высшую, два последних отправляют обратно.</p>
+    </div>
+
+    <button id="btn-create-team" class="act cut-tr">
+      <svg class="ic"><use href="#i-whistle"/></svg>Начать карьеру
+    </button>
+  </section>
+
   <!-- ================= ПАНЕЛЬ КЛУБА ================= -->
   <section id="screen-menu" class="screen">
     <header class="club-head stagger">
@@ -105,17 +202,26 @@
 
     <nav class="nav-grid stagger">
       <button class="nav-tile" data-nav="squad"><svg class="ic"><use href="#i-squad"/></svg>Состав и тактика</button>
-      <button class="nav-tile" data-nav="league"><svg class="ic"><use href="#i-trophy"/></svg>Таблица лиги</button>
+      <button class="nav-tile" data-nav="league"><svg class="ic"><use href="#i-trophy"/></svg>Чемпионат</button>
+      <button class="nav-tile" data-nav="cups"><svg class="ic"><use href="#i-medal"/></svg>Кубки</button>
       <button class="nav-tile" data-nav="training"><svg class="ic"><use href="#i-chart"/></svg>Тренировки</button>
       <button class="nav-tile" data-nav="transfers"><svg class="ic"><use href="#i-transfer"/></svg>Трансферы</button>
       <button class="nav-tile" data-nav="friendly"><svg class="ic"><use href="#i-ball"/></svg>Товарищеский</button>
       <button class="nav-tile" data-nav="shop"><svg class="ic"><use href="#i-shop"/></svg>Магазин</button>
       <button class="nav-tile" data-nav="customize"><svg class="ic"><use href="#i-kit"/></svg>Клуб и форма</button>
+      <button class="nav-tile" data-nav="trophies"><svg class="ic"><use href="#i-star"/></svg>Трофеи</button>
       <button class="nav-tile" data-nav="achievements"><svg class="ic"><use href="#i-medal"/></svg>Достижения</button>
       <button class="nav-tile" data-nav="howto"><svg class="ic"><use href="#i-help"/></svg>Как играть</button>
     </nav>
 
-    <p class="sign-off">Ультра-Лига · сезон <span class="num" id="menu-season-foot">1</span></p>
+    <div class="account-bar">
+      <div class="account-who">
+        <span id="account-label">Менеджер</span>
+        <i class="sync-dot" id="sync-dot" title="синхронизация"></i>
+      </div>
+      <button id="btn-logout" class="rest-btn">Выйти</button>
+    </div>
+    <p class="sign-off"><span id="menu-division">Первая лига</span> · сезон <span class="num" id="menu-season-foot">1</span></p>
   </section>
 
   <!-- ================= ТОВАРИЩЕСКИЙ МАТЧ ================= -->
@@ -230,6 +336,37 @@
     <button id="btn-refresh-market" class="act ghost cut-tr">
       <svg class="ic"><use href="#i-refresh"/></svg>Обновить рынок
     </button>
+  </section>
+
+  <!-- ================= КУБКИ ================= -->
+  <section id="screen-cups" class="screen">
+    <header class="subbar">
+      <button class="back-btn" data-nav="menu"><svg class="ic"><use href="#i-back"/></svg></button>
+      <h2>Кубки</h2>
+    </header>
+
+    <div class="shop-tabs">
+      <button class="cup-tab active" data-cup="cup">Кубок страны</button>
+      <button class="cup-tab" data-cup="world">Чемпионат мира</button>
+    </div>
+
+    <div id="bracket-wrap"></div>
+  </section>
+
+  <!-- ================= ТРОФЕИ ================= -->
+  <section id="screen-trophies" class="screen">
+    <header class="subbar">
+      <button class="back-btn" data-nav="menu"><svg class="ic"><use href="#i-back"/></svg></button>
+      <h2>Трофеи</h2>
+    </header>
+    <div class="block">
+      <div class="block-head"><h3>Витрина</h3><span class="hint" id="trophy-count"></span></div>
+      <div id="trophy-list" class="squad-list"></div>
+    </div>
+    <div class="block" id="leaderboard-block" style="display:none">
+      <div class="block-head"><h3>Таблица менеджеров</h3><span class="hint">с сервера</span></div>
+      <div id="leaderboard-list" class="squad-list"></div>
+    </div>
   </section>
 
   <!-- ================= ТРЕНИРОВКИ ================= -->
@@ -438,6 +575,7 @@
 </div>
 <script src="js/audio.js"></script>
 <script src="js/data.js"></script>
+<script src="js/api.js"></script>
 <script src="js/state.js"></script>
 <script src="js/game.js"></script>
 <script src="js/ui.js"></script>

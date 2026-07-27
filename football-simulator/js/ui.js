@@ -1,5 +1,4 @@
 (function () {
-  Save.load();
 
   let friendlyRivalId = DATA.clubs[0].id;
   let activeMatchCtx = null;
@@ -9,13 +8,8 @@
   const icon = (name, cls) =>
     `<svg class="ic${cls ? ' ' + cls : ''}"><use href="#i-${name}"/></svg>`;
 
-  const clubName = id => id === 'user'
-    ? Save.data.clubName
-    : (DATA.clubs.find(c => c.id === id) || {}).name || '—';
-
-  const clubColor = id => id === 'user'
-    ? kitHex()
-    : (DATA.clubs.find(c => c.id === id) || {}).color || '#879A8E';
+  const clubName = id => Save.teamName(id);
+  const clubColor = id => Save.teamColor(id);
 
   function kitHex() {
     const k = DATA.kitColors.find(k => k.id === Save.data.kit);
@@ -62,6 +56,10 @@
     if (id === 'shop') renderShop(currentShopTab);
     if (id === 'customize') renderCustomize();
     if (id === 'achievements') renderAchievements();
+    if (id === 'cups') renderCups();
+    if (id === 'trophies') renderTrophies();
+    if (id === 'auth') renderAuth();
+    if (id === 'create-team') renderCreateTeam();
   }
 
   document.querySelectorAll('[data-nav]').forEach(btn => {
@@ -102,6 +100,7 @@
   }
 
   function renderMenu() {
+    if (!Save.data) return;
     const d = Save.data;
     document.getElementById('menu-club-name').textContent = d.clubName;
     document.getElementById('menu-season').textContent = d.season;
@@ -109,6 +108,9 @@
     document.getElementById('menu-level').textContent = d.level;
     document.getElementById('menu-coins').textContent = d.coins;
     paintCrest(document.getElementById('menu-crest'));
+    paintAccountBar();
+    const divFoot = document.getElementById('menu-division');
+    if (divFoot) divFoot.textContent = DATA.divisions.find(x => x.id === d.division).name;
 
     const table = sortedTable();
     const pos = table.findIndex(r => r.id === 'user') + 1;
@@ -119,14 +121,16 @@
     document.getElementById('menu-strength').textContent =
       Math.round((s.attack + s.defense) / 2);
 
-    const fx = Save.userFixtureThisRound();
+    const fx = Save.nextFixture();
     const ctxEl = document.getElementById('fh-context');
     const roundEl = document.getElementById('fh-round');
     const ctaLabel = document.getElementById('fh-cta-label');
 
     if (fx) {
-      ctxEl.textContent = 'Следующий тур';
-      roundEl.textContent = `Тур ${d.round + 1} / ${d.fixtures.length}`;
+      ctxEl.textContent = fx.label;
+      roundEl.textContent = fx.kind === 'league'
+        ? `Тур ${d.round + 1} / ${d.fixtures.length}`
+        : DATA.knockoutStages[fx.stage];
       setFixtureSide('home', fx.home);
       setFixtureSide('away', fx.away);
       ctaLabel.textContent = 'Провести матч';
@@ -149,12 +153,13 @@
   }
 
   document.getElementById('btn-play-next').addEventListener('click', () => {
-    const fx = Save.userFixtureThisRound();
+    const fx = Save.nextFixture();
     if (fx) {
       launchMatch({
         opponentId: fx.home === 'user' ? fx.away : fx.home,
-        isLeague: true,
-        userIsHome: fx.home === 'user'
+        competition: fx.kind,
+        userIsHome: fx.home === 'user',
+        label: fx.label
       });
     } else {
       showScreen('friendly');
@@ -181,6 +186,8 @@
   // ---------------- ЛИГА ----------------
   function renderLeague() {
     document.getElementById('league-season').textContent = Save.data.season;
+    const divEl = document.getElementById('menu-division');
+    if (divEl) divEl.textContent = DATA.divisions.find(x => x.id === Save.data.division).name;
     document.getElementById('league-round').textContent =
       Math.min(Save.data.round + 1, Save.data.fixtures.length);
 
@@ -217,13 +224,7 @@
       row.className = 'fixture-row' + (mine ? ' mine' : '');
       row.innerHTML = `<span class="fr-teams">${clubName(h)} — ${clubName(a)}</span>`;
       if (mine) {
-        const btn = document.createElement('button');
-        btn.className = 'fr-play cut-tr';
-        btn.textContent = 'Играть';
-        btn.addEventListener('click', () => {
-          launchMatch({ opponentId: h === 'user' ? a : h, isLeague: true, userIsHome: h === 'user' });
-        });
-        row.appendChild(btn);
+        row.insertAdjacentHTML('beforeend', '<span class="fr-done">ваш матч</span>');
       } else {
         row.insertAdjacentHTML('beforeend', '<span class="fr-done">по расписанию</span>');
       }
@@ -501,6 +502,273 @@
       `${unlocked} из ${DATA.achievements.length}`;
   }
 
+
+  // ---------------- ВХОД И ПРОФИЛИ ----------------
+  let authMode = 'local';
+
+  function renderAuth() {
+    document.querySelectorAll('.mode-btn').forEach(b =>
+      b.classList.toggle('active', b.dataset.mode === authMode));
+    document.getElementById('auth-local').classList.toggle('hidden', authMode !== 'local');
+    document.getElementById('auth-remote').classList.toggle('hidden', authMode !== 'remote');
+    document.getElementById('server-url').value = Net.baseUrl;
+    renderProfiles();
+  }
+
+  function renderProfiles() {
+    const list = document.getElementById('profile-list');
+    const profiles = Profiles.list().sort((a, b) => b.lastPlayed - a.lastPlayed);
+    list.innerHTML = '';
+    if (!profiles.length) {
+      list.innerHTML = '<p class="profile-empty">Профилей пока нет — создайте первый.</p>';
+      return;
+    }
+    profiles.forEach(p => {
+      const row = document.createElement('div');
+      row.className = 'profile-row';
+      row.innerHTML = `
+        <svg class="pr-crest" viewBox="0 0 48 48">${crestMarkup(p.clubName || p.name, '#B6F24A')}</svg>
+        <div class="pr-info">
+          <b>${p.name}</b>
+          <small>${p.clubName ? p.clubName : 'клуб не создан'}${p.pin ? ' · PIN' : ''}</small>
+        </div>
+        <button class="pr-enter">Войти</button>
+        <button class="pr-del" aria-label="Удалить">✕</button>`;
+      row.querySelector('.pr-enter').addEventListener('click', () => enterProfile(p));
+      row.querySelector('.pr-del').addEventListener('click', () => {
+        if (confirm(`Удалить профиль «${p.name}» вместе с сохранением?`)) {
+          Profiles.remove(p.id);
+          renderProfiles();
+        }
+      });
+      list.appendChild(row);
+    });
+  }
+
+  function enterProfile(p) {
+    if (p.pin) {
+      const entered = prompt(`PIN для профиля «${p.name}»`);
+      if (entered === null) return;
+      if (!Profiles.checkPin(p.id, entered.trim())) { showToast('Неверный PIN'); return; }
+    }
+    Profiles.setActive(p.id);
+    Account.mode = 'local';
+    Save.loadProfile(p.id);
+    afterSignIn();
+  }
+
+  document.querySelectorAll('.mode-btn').forEach(btn => {
+    btn.addEventListener('click', () => { authMode = btn.dataset.mode; renderAuth(); });
+  });
+
+  document.getElementById('btn-create-profile').addEventListener('click', () => {
+    const name = document.getElementById('new-profile-name').value.trim();
+    const pin = document.getElementById('new-profile-pin').value.trim();
+    if (name.length < 3) { showToast('Имя не короче трёх символов'); return; }
+    if (Profiles.nameTaken(name)) { showToast('Такое имя уже есть'); return; }
+    const p = Profiles.create(name, pin);
+    Profiles.setActive(p.id);
+    Account.mode = 'local';
+    Save.loadProfile(p.id);
+    document.getElementById('new-profile-name').value = '';
+    document.getElementById('new-profile-pin').value = '';
+    afterSignIn();
+  });
+
+  document.getElementById('btn-connect').addEventListener('click', async () => {
+    const url = document.getElementById('server-url').value.trim();
+    const status = document.getElementById('server-status');
+    if (!url) { status.textContent = 'Укажите адрес сервера'; return; }
+    status.textContent = 'Проверяем…';
+    try {
+      await Account.connect(url);
+      status.textContent = 'Сервер отвечает — можно входить';
+    } catch (e) {
+      status.textContent = e.message;
+    }
+  });
+
+  async function remoteAuth(kind) {
+    const name = document.getElementById('account-name').value.trim();
+    const pass = document.getElementById('account-pass').value;
+    const status = document.getElementById('server-status');
+    if (!Net.enabled()) { status.textContent = 'Сначала укажите и проверьте адрес сервера'; return; }
+    if (!name || !pass) { showToast('Введите имя и пароль'); return; }
+    status.textContent = kind === 'login' ? 'Входим…' : 'Регистрируем…';
+    try {
+      if (kind === 'login') await Account.login(name, pass);
+      else await Account.register(name, pass);
+      document.getElementById('account-pass').value = '';
+      status.textContent = '';
+      afterSignIn();
+    } catch (e) {
+      status.textContent = e.message;
+    }
+  }
+
+  document.getElementById('btn-login').addEventListener('click', () => remoteAuth('login'));
+  document.getElementById('btn-register').addEventListener('click', () => remoteAuth('register'));
+
+  /* После входа: если клуб ещё не создан — мастер, иначе панель клуба. */
+  function afterSignIn() {
+    if (!Save.data) { showScreen('auth'); return; }
+    showScreen(Save.data.created ? 'menu' : 'create-team');
+  }
+
+  document.getElementById('btn-logout').addEventListener('click', async () => {
+    await Account.logout();
+    authMode = Net.enabled() ? 'remote' : 'local';
+    showScreen('auth');
+  });
+
+  // ---------------- СОЗДАНИЕ КОМАНДЫ ----------------
+  const draft = { clubName: 'FC Аврора', kit: 'cyan', formation: '4-4-2', tacticStyle: 'balance' };
+
+  function renderCreateTeam() {
+    const nameInput = document.getElementById('create-name');
+    nameInput.value = draft.clubName;
+    const repaint = () => {
+      document.getElementById('create-crest').innerHTML =
+        crestMarkup(draft.clubName || 'FC Аврора',
+          (DATA.kitColors.find(k => k.id === draft.kit) || {}).color || '#B6F24A');
+    };
+    nameInput.oninput = () => { draft.clubName = nameInput.value.trim(); repaint(); };
+    repaint();
+
+    pill(document.getElementById('create-kit'), DATA.kitColors, draft.kit,
+      id => { draft.kit = id; repaint(); });
+    pill(document.getElementById('create-formation'),
+      Object.keys(DATA.formations).map(id => ({ id, name: DATA.formations[id].label })),
+      draft.formation, id => draft.formation = id);
+    pill(document.getElementById('create-style'), DATA.tacticStyles, draft.tacticStyle,
+      id => draft.tacticStyle = id);
+  }
+
+  document.getElementById('btn-create-team').addEventListener('click', () => {
+    Save.createTeam({
+      clubName: draft.clubName || 'FC Аврора',
+      kit: draft.kit, formation: draft.formation, tacticStyle: draft.tacticStyle
+    });
+    Account.scheduleSync();
+    showToast('Клуб основан');
+    showScreen('menu');
+  });
+
+  // ---------------- КУБКИ ----------------
+  let cupTab = 'cup';
+  document.querySelectorAll('.cup-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.cup-tab').forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      cupTab = tab.dataset.cup;
+      renderCups();
+    });
+  });
+
+  function renderCups() {
+    if (!Save.data) return;
+    const wrap = document.getElementById('bracket-wrap');
+    const br = cupTab === 'cup' ? Save.data.cup : Save.data.world;
+    wrap.innerHTML = '';
+
+    if (!br) {
+      wrap.innerHTML = '<p class="locked-note">Чемпионат мира проводится раз в четыре сезона. ' +
+        'Ближайший — в сезоне ' + (Save.data.season + (4 - Save.data.season % 4) % 4 || 4) + '.</p>';
+      return;
+    }
+
+    if (br.winner) {
+      wrap.insertAdjacentHTML('beforeend', `
+        <div class="bracket-champion">
+          ${icon('trophy', 'ic-lg')}
+          <div><b>${clubName(br.winner)}</b><small>обладатель трофея</small></div>
+        </div>`);
+    }
+
+    br.ties.forEach((ties, stage) => {
+      const box = document.createElement('div');
+      box.className = 'bracket-stage';
+      box.innerHTML = `<h3>${DATA.knockoutStages[stage] || 'Стадия ' + (stage + 1)}</h3>`;
+      const res = br.results[stage];
+      ties.forEach(([a, b], i) => {
+        const r = res && res[i];
+        const tie = document.createElement('div');
+        tie.className = 'tie' + (a === 'user' || b === 'user' ? ' mine' : '');
+        tie.innerHTML =
+          side(a, r) + side(b, r) +
+          (r && r.shootout ? '<div class="tie-note">по пенальти</div>' : '') +
+          (!r ? '<div class="tie-pending">матч ещё не сыгран</div>' : '');
+        box.appendChild(tie);
+      });
+      wrap.appendChild(box);
+    });
+  }
+
+  function side(id, r) {
+    const goals = !r ? '' : (r.a === id ? r.ga : r.gb);
+    const cls = !r ? '' : (r.winner === id ? ' win' : ' lose');
+    return `<div class="tie-side${cls}">
+      <i class="club-dot" style="background:${clubColor(id)}"></i>
+      <span class="tn">${clubName(id)}</span>
+      <span class="tg">${goals}</span></div>`;
+  }
+
+  // ---------------- ТРОФЕИ ----------------
+  function renderTrophies() {
+    if (!Save.data) return;
+    const list = document.getElementById('trophy-list');
+    const trophies = Save.data.trophies || [];
+    document.getElementById('trophy-count').textContent = trophies.length
+      ? trophies.length + ' шт.' : 'пока пусто';
+    list.innerHTML = '';
+    if (!trophies.length) {
+      list.innerHTML = '<p class="locked-note">Витрина пуста. Выиграйте чемпионат, кубок или мировой турнир.</p>';
+    }
+    trophies.slice().reverse().forEach(t => {
+      const title = t.type === 'league'
+        ? 'Чемпион · ' + (DATA.divisions.find(d => d.id === t.division) || {}).name
+        : DATA.competitions[t.type].name;
+      const row = document.createElement('div');
+      row.className = 'player-row trophy-row';
+      row.innerHTML = `
+        <div class="player-pos">${icon('trophy', 'ic-sm')}</div>
+        <div class="player-info"><b>${title}</b>
+          <div class="player-meta"><span>сезон ${t.season}</span></div></div>`;
+      list.appendChild(row);
+    });
+
+    const block = document.getElementById('leaderboard-block');
+    if (!Account.isRemote()) { block.style.display = 'none'; return; }
+    block.style.display = '';
+    const lb = document.getElementById('leaderboard-list');
+    lb.innerHTML = '<p class="locked-note">Загружаем…</p>';
+    Net.leaderboard().then(data => {
+      lb.innerHTML = '';
+      if (!data.rows.length) { lb.innerHTML = '<p class="locked-note">Пока никого.</p>'; return; }
+      data.rows.forEach((r, i) => {
+        const row = document.createElement('div');
+        row.className = 'player-row';
+        row.innerHTML = `
+          <div class="player-pos">${i + 1}</div>
+          <div class="player-info"><b>${r.clubName}</b>
+            <div class="player-meta"><span>${r.manager}</span><span>сезон ${r.season}</span></div></div>
+          <div class="player-ovr ovr-hi">${r.trophies}</div>`;
+        lb.appendChild(row);
+      });
+    }).catch(e => { lb.innerHTML = `<p class="locked-note">${e.message}</p>`; });
+  }
+
+  function paintAccountBar() {
+    const label = document.getElementById('account-label');
+    const dot = document.getElementById('sync-dot');
+    if (!label) return;
+    label.textContent = Account.displayName() +
+      (Account.isRemote() ? ' · сервер' : ' · на устройстве');
+    dot.className = 'sync-dot ' + (Account.isRemote() ? Account.syncState === 'idle'
+      ? 'remote' : Account.syncState : '');
+  }
+  Account.onSyncChange = paintAccountBar;
+
   // ---------------- ЭФИР МАТЧА ----------------
   const EVENT_ICON = {
     goal: 'ball', save: 'shield', miss: 'miss', card: 'card',
@@ -652,13 +920,17 @@
     const draw = score.home === score.away;
     let seasonSummary = null;
 
-    if (ctx.isLeague) {
-      if (ctx.userIsHome) Save.recordResult('user', ctx.opponentId, score.home, score.away);
-      else Save.recordResult(ctx.opponentId, 'user', score.away, score.home);
-      Save.playOtherFixturesThisRound();
-      const top = sortedTable()[0];
-      if (top && top.id === 'user') Save.unlockAchievement('top_table');
-      seasonSummary = Save.advanceRound();
+    if (ctx.competition) {
+      const ev = Save.currentEvent();
+      if (ctx.competition === 'league') {
+        if (ctx.userIsHome) Save.recordResult('user', ctx.opponentId, score.home, score.away);
+        else Save.recordResult(ctx.opponentId, 'user', score.away, score.home);
+        const top = sortedTable()[0];
+        if (top && top.id === 'user') Save.unlockAchievement('top_table');
+      }
+      seasonSummary = Save.advanceAfterUserMatch(ev, {
+        userGoals: score.home, oppGoals: score.away
+      });
     }
     pendingSeasonSummary = seasonSummary;
 
@@ -726,7 +998,7 @@
       showSeasonSummary(pendingSeasonSummary);
       return;
     }
-    showScreen(activeMatchCtx && activeMatchCtx.isLeague ? 'league' : 'menu');
+    showScreen(activeMatchCtx && activeMatchCtx.competition ? 'menu' : 'menu');
   });
 
   // ---------------- ИТОГИ СЕЗОНА ----------------
@@ -788,16 +1060,32 @@
     showScreen('menu');
   });
 
+  /* Любое сохранение подхватывается фоновой отправкой на сервер. */
+  const basePersist = Save.persist.bind(Save);
+  Save.persist = function () { basePersist(); Account.scheduleSync(); };
+
   // ---------------- ЗАПУСК ----------------
-  window.addEventListener('load', () => {
+  window.addEventListener('load', async () => {
     MatchEngine.init();
+    Account.init();
+    document.body.addEventListener('pointerdown', () => SFX.unlock(), { once: true });
+
     let p = 0;
     const fill = document.getElementById('boot-fill');
     const iv = setInterval(() => {
       p += 9 + Math.random() * 11;
-      if (p >= 100) { p = 100; clearInterval(iv); setTimeout(() => showScreen('menu'), 260); }
+      if (p >= 100) p = 100;
       fill.style.width = p + '%';
+      if (p >= 100) clearInterval(iv);
     }, 85);
-    document.body.addEventListener('pointerdown', () => SFX.unlock(), { once: true });
+
+    // Пробуем восстановить серверную сессию, иначе — локальный профиль.
+    let signedIn = await Account.resume();
+    if (!signedIn) signedIn = !!Save.load();
+
+    setTimeout(() => {
+      if (signedIn && Save.data) afterSignIn();
+      else { authMode = Net.enabled() ? 'remote' : 'local'; showScreen('auth'); }
+    }, 900);
   });
 })();
