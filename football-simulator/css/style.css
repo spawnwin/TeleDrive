@@ -808,3 +808,10 @@ button { border: none; background: none; cursor: pointer; }
 
 .trophy-row .player-pos { background: rgba(182,242,74,.14); color: var(--lime); width: 34px; }
 .locked-note { color: var(--faint); font-size: 12.5px; padding: 10px 0; }
+
+.link-btn {
+  display: block; width: 100%; margin-top: var(--sp-3); padding: 10px;
+  font-size: 12.5px; font-weight: 600; color: var(--muted);
+  text-decoration: underline; text-underline-offset: 3px;
+}
+.link-btn:active { color: var(--lime); }

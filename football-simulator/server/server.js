@@ -211,8 +211,10 @@ const routes = {
     send(res, 200, { ok: true });
   },
 
+  /* service нужен клиенту: игра проверяет, что по адресу страницы отвечает
+     именно её бэкенд, а не посторонний сайт с похожим путём. */
   'GET /api/health': async (req, res) => {
-    send(res, 200, { ok: true, users: store.data.users.length });
+    send(res, 200, { ok: true, service: 'futbolx', users: store.data.users.length });
   }
 };
 

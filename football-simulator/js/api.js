@@ -66,8 +66,30 @@ const Account = {
   syncState: 'idle',    // idle | pending | error
   onSyncChange: null,
 
+  serverDetected: false,
+
   init() {
     this.mode = Net.enabled() && Net.token ? 'remote' : 'local';
+  },
+
+  /* Если страница открыта с самого бэкенда, адрес сервера подставляется сам —
+     игроку нечего настраивать. Проверяем метку service, чтобы не принять за
+     свой сервер посторонний сайт, который тоже ответил на /api/health. */
+  async autodetect() {
+    let origin = '';
+    try { origin = window.location.origin || ''; } catch (e) {}
+    if (!origin || !/^https?:/i.test(origin)) return false;
+    try {
+      const res = await fetch(origin.replace(/\/+$/, '') + '/api/health', { cache: 'no-store' });
+      if (!res.ok) return false;
+      const data = await res.json();
+      if (!data || data.service !== 'futbolx') return false;
+      Net.baseUrl = origin;
+      this.serverDetected = true;
+      return true;
+    } catch (e) {
+      return false;
+    }
   },
 
   /* Проверяет адрес сервера до того, как пользователь введёт пароль. */

@@ -506,7 +506,16 @@
   // ---------------- ВХОД И ПРОФИЛИ ----------------
   let authMode = 'local';
 
+  /* Когда игра открыта с собственного бэкенда, адрес подставлен сам:
+     обычному игроку показываем только имя и пароль, всю техническую часть
+     (переключатель режимов и поле адреса) прячем. */
   function renderAuth() {
+    const auto = Account.serverDetected;
+    document.getElementById('mode-switch').classList.toggle('hidden', auto);
+    document.getElementById('server-block').classList.toggle('hidden', auto);
+    document.getElementById('btn-play-local').classList.toggle('hidden', !auto);
+    document.getElementById('btn-use-account').classList.toggle('hidden', !auto);
+
     document.querySelectorAll('.mode-btn').forEach(b =>
       b.classList.toggle('active', b.dataset.mode === authMode));
     document.getElementById('auth-local').classList.toggle('hidden', authMode !== 'local');
@@ -606,6 +615,13 @@
     }
   }
 
+  document.getElementById('btn-play-local').addEventListener('click', () => {
+    authMode = 'local'; renderAuth();
+  });
+  document.getElementById('btn-use-account').addEventListener('click', () => {
+    authMode = 'remote'; renderAuth();
+  });
+
   document.getElementById('btn-login').addEventListener('click', () => remoteAuth('login'));
   document.getElementById('btn-register').addEventListener('click', () => remoteAuth('register'));
 
@@ -617,7 +633,7 @@
 
   document.getElementById('btn-logout').addEventListener('click', async () => {
     await Account.logout();
-    authMode = Net.enabled() ? 'remote' : 'local';
+    authMode = (Account.serverDetected || Net.enabled()) ? 'remote' : 'local';
     showScreen('auth');
   });
 
@@ -1079,13 +1095,19 @@
       if (p >= 100) clearInterval(iv);
     }, 85);
 
+    // Игра, открытая со своего сервера, подхватывает его адрес сама.
+    await Account.autodetect();
+
     // Пробуем восстановить серверную сессию, иначе — локальный профиль.
     let signedIn = await Account.resume();
     if (!signedIn) signedIn = !!Save.load();
 
     setTimeout(() => {
       if (signedIn && Save.data) afterSignIn();
-      else { authMode = Net.enabled() ? 'remote' : 'local'; showScreen('auth'); }
+      else {
+        authMode = (Account.serverDetected || Net.enabled()) ? 'remote' : 'local';
+        showScreen('auth');
+      }
     }, 900);
   });
 })();

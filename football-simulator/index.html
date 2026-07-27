@@ -68,7 +68,7 @@
       <p class="auth-sub">Футбольный менеджер</p>
     </div>
 
-    <div class="mode-switch">
+    <div class="mode-switch" id="mode-switch">
       <button class="mode-btn active" data-mode="local">На устройстве</button>
       <button class="mode-btn" data-mode="remote">С сервером</button>
     </div>
@@ -91,11 +91,12 @@
       </div>
 
       <p class="note auth-note">Профили и сохранения хранятся только в этом браузере. Очистка данных сайта удалит их.</p>
+      <button id="btn-use-account" class="link-btn hidden">Войти в аккаунт на сервере</button>
     </div>
 
     <!-- аккаунт на сервере -->
     <div id="auth-remote" class="hidden">
-      <div class="block">
+      <div class="block" id="server-block">
         <div class="block-head"><h3>Адрес сервера</h3></div>
         <div class="server-row">
           <input id="server-url" class="text-input" placeholder="http://192.168.1.10:8787" inputmode="url">
@@ -115,7 +116,8 @@
         </div>
       </div>
 
-      <p class="note auth-note">Сохранение хранится на вашем сервере, поэтому доступно с любого устройства. Пароль передаётся серверу и там хешируется.</p>
+      <p class="note auth-note" id="remote-note">Аккаунт открывается с любого устройства — сохранение хранится на сервере.</p>
+      <button id="btn-play-local" class="link-btn">Играть без аккаунта, только на этом устройстве</button>
     </div>
   </section>
 
