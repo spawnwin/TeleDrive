@@ -28,6 +28,10 @@ NGINX_PORT="8080"
 WITH_NGINX="no"
 DRY_RUN="no"
 MARKER="# managed-by: futbolx-installer"
+# Базе нужен модуль node:sqlite, он появился в Node 22.
+NODE_MIN_MAJOR=22
+NODE_PIN="v22.23.1"
+RUNTIME_DIR="/opt/futbolx-runtime"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -50,20 +54,72 @@ run()  { if [[ "$DRY_RUN" == "yes" ]]; then printf '    (dry-run) %s\n' "$*"; el
 [[ $EUID -eq 0 ]] || die "Запускать от root: sudo bash install.sh"
 
 # ---------- Node.js ----------
-need_node() {
-  command -v node >/dev/null 2>&1 || return 0
-  local major
-  major="$(node -p 'process.versions.node.split(".")[0]')"
-  [[ "$major" -lt 18 ]]
+node_major() {
+  local bin="$1"
+  [[ -x "$bin" ]] || return 1
+  "$bin" -p 'process.versions.node.split(".")[0]' 2>/dev/null
 }
 
-if need_node; then
-  say "Устанавливаем Node.js (нужна версия 18 и выше)"
+# Настоящее требование — модуль node:sqlite, а не номер версии: в части
+# сборок 22.x он ещё за флагом. Проверяем напрямую.
+node_has_sqlite() {
+  local bin="$1"
+  [[ -x "$bin" ]] || return 1
+  "$bin" -e 'require("node:sqlite")' >/dev/null 2>&1
+}
+
+command -v git >/dev/null 2>&1 || {
   run apt-get update -qq
-  run env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq nodejs git
-else
-  say "Node.js уже есть: $(node -v)"
-  command -v git >/dev/null 2>&1 || run env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq git
+  run env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq git
+}
+
+NODE_BIN=""
+SYS_NODE="$(command -v node || true)"
+if [[ -n "$SYS_NODE" ]]; then
+  SYS_MAJOR="$(node_major "$SYS_NODE" || echo 0)"
+  say "Системный Node.js: $("$SYS_NODE" -v)"
+  if [[ "${SYS_MAJOR:-0}" -ge "$NODE_MIN_MAJOR" ]] && node_has_sqlite "$SYS_NODE"; then
+    NODE_BIN="$SYS_NODE"
+    say "Системный Node подходит: модуль node:sqlite доступен"
+  fi
+fi
+
+# Системный Node не трогаем: его версию могут использовать другие проекты
+# на этом же сервере. Для игры ставим отдельную среду в свой каталог.
+if [[ -z "$NODE_BIN" ]]; then
+  if node_has_sqlite "$RUNTIME_DIR/bin/node"; then
+    NODE_BIN="$RUNTIME_DIR/bin/node"
+    say "Отдельная среда уже стоит: $("$NODE_BIN" -v)"
+  else
+    case "$(uname -m)" in
+      x86_64)  NARCH="linux-x64" ;;
+      aarch64) NARCH="linux-arm64" ;;
+      *) die "Неизвестная архитектура $(uname -m). Поставьте Node ${NODE_MIN_MAJOR}+ вручную." ;;
+    esac
+    TARBALL="node-${NODE_PIN}-${NARCH}.tar.xz"
+    say "Ставим Node ${NODE_PIN} только для игры в ${RUNTIME_DIR} (системный не меняем)"
+    if [[ "$DRY_RUN" == "yes" ]]; then
+      echo "    (dry-run) скачивание и распаковка $TARBALL"
+      NODE_BIN="$RUNTIME_DIR/bin/node"
+    else
+      command -v curl >/dev/null 2>&1 || env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq curl
+      command -v xz >/dev/null 2>&1 || env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq xz-utils
+      tmp="$(mktemp -d)"
+      curl -fsSL "https://nodejs.org/dist/${NODE_PIN}/${TARBALL}" -o "$tmp/$TARBALL"
+      curl -fsSL "https://nodejs.org/dist/${NODE_PIN}/SHASUMS256.txt" -o "$tmp/SHASUMS256.txt"
+      # Проверяем контрольную сумму: подменённый архив не должен попасть на сервер.
+      ( cd "$tmp" && grep " ${TARBALL}\$" SHASUMS256.txt | sha256sum -c - ) \
+        || die "Контрольная сумма Node не сошлась, установка прервана."
+      rm -rf "$RUNTIME_DIR"
+      mkdir -p "$RUNTIME_DIR"
+      tar -xJf "$tmp/$TARBALL" -C "$RUNTIME_DIR" --strip-components=1
+      rm -rf "$tmp"
+      NODE_BIN="$RUNTIME_DIR/bin/node"
+      node_has_sqlite "$NODE_BIN" \
+        || die "В Node ${NODE_PIN} нет модуля node:sqlite. Обновите NODE_PIN в скрипте."
+      say "Готово: $("$NODE_BIN" -v), модуль node:sqlite на месте"
+    fi
+  fi
 fi
 
 # ---------- код ----------
@@ -112,7 +168,7 @@ WorkingDirectory=$APP_DIR/football-simulator/server
 Environment=PORT=$NODE_PORT
 Environment=HOST=$NODE_HOST
 Environment=DB_FILE=$APP_DIR/football-simulator/server/data/futbolx.json
-ExecStart=/usr/bin/node server.js
+ExecStart=$NODE_BIN server.js
 Restart=on-failure
 RestartSec=3
 
@@ -193,8 +249,12 @@ fi
 # ---------- проверка ----------
 say "Проверяем, что сервер отвечает"
 if [[ "$DRY_RUN" != "yes" ]]; then
-  if curl -fsS --max-time 10 "http://127.0.0.1:${NODE_PORT}/api/health" >/dev/null; then
-    say "Служба работает."
+  if HEALTH="$(curl -fsS --max-time 10 "http://127.0.0.1:${NODE_PORT}/api/health")"; then
+    case "$HEALTH" in
+      *'"storage":"sqlite"'*) say "Служба работает, хранилище: SQLite." ;;
+      *'"storage":"json"'*)   warn "Служба работает, но хранилище JSON — node:sqlite недоступен." ;;
+      *)                      say "Служба работает." ;;
+    esac
   else
     warn "Служба не ответила. Логи: journalctl -u ${SERVICE} -n 50 --no-pager"
     exit 1

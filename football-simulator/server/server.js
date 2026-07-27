@@ -3,7 +3,7 @@
 const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
-const { Store } = require('./store');
+const { createStore } = require('./db');
 const {
   hashPassword, verifyPassword, issueToken, hashToken, newId,
   validateName, validatePassword, RateLimiter
@@ -17,7 +17,7 @@ const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;   // 30 дней
 const MAX_BODY = 512 * 1024;                        // сохранение игры ~150 КБ
 const ALLOW_ORIGIN = process.env.ALLOW_ORIGIN || '*';
 
-const store = new Store(DB_FILE);
+const store = createStore(DB_FILE);
 const loginLimiter = new RateLimiter({ windowMs: 15 * 60 * 1000, max: 10 });
 const registerLimiter = new RateLimiter({ windowMs: 60 * 60 * 1000, max: 5 });
 
@@ -214,7 +214,7 @@ const routes = {
   /* service нужен клиенту: игра проверяет, что по адресу страницы отвечает
      именно её бэкенд, а не посторонний сайт с похожим путём. */
   'GET /api/health': async (req, res) => {
-    send(res, 200, { ok: true, service: 'futbolx', users: store.data.users.length });
+    send(res, 200, { ok: true, service: 'futbolx', storage: store.kind, users: store.userCount() });
   }
 };
 

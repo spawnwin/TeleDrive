@@ -9,6 +9,7 @@ const os = require('node:os');
 const path = require('node:path');
 
 const DB = path.join(os.tmpdir(), 'futbolx-test-' + Date.now() + '.json');
+const SQLITE = DB.replace(/\.json$/, '.sqlite');
 process.env.DB_FILE = DB;
 
 const { server, store } = require('./server');
@@ -75,17 +76,22 @@ async function run() {
   });
 
   await test('пароль не хранится в открытом виде', async () => {
-    store.flush();
-    const raw = fs.readFileSync(DB, 'utf8');
-    assert.ok(!raw.includes('longenough1'), 'пароль найден в базе');
-    assert.ok(raw.includes('scrypt$'), 'нет scrypt-хеша');
+    const u = store.findUserByName('Менеджер Тест');
+    assert.ok(u, 'пользователь не найден');
+    assert.ok(u.passwordHash.startsWith('scrypt$'), 'ожидался scrypt-хеш');
+    assert.ok(!u.passwordHash.includes('longenough1'), 'пароль виден в хеше');
+    if (store.kind === 'sqlite') {
+      const raw = fs.readFileSync(SQLITE);
+      assert.ok(!raw.includes('longenough1'), 'пароль найден в файле базы');
+    }
   });
 
   await test('токен сессии хранится только хешем', async () => {
-    store.flush();
-    const raw = JSON.parse(fs.readFileSync(DB, 'utf8'));
-    assert.ok(raw.sessions.length > 0);
-    raw.sessions.forEach(s => {
+    const rows = store.kind === 'sqlite'
+      ? store.q.allSessions.all().map(r => ({ tokenHash: r.token_hash, token: r.token }))
+      : store.data.sessions;
+    assert.ok(rows.length > 0, 'сессий нет');
+    rows.forEach(s => {
       assert.strictEqual(s.tokenHash.length, 64, 'ожидался sha256');
       assert.ok(!s.token, 'сырой токен не должен храниться');
     });
@@ -170,9 +176,84 @@ async function run() {
     assert.ok(limited, 'перебор не был ограничен');
   });
 
+  if (store.kind === 'sqlite') {
+    await test('база: используется SQLite', async () => {
+      const r = await call('GET', '/api/health');
+      assert.strictEqual(r.data.storage, 'sqlite');
+      assert.ok(fs.existsSync(SQLITE), 'файл базы не создан');
+    });
+
+    await test('база: имя уникально на уровне СУБД', async () => {
+      const u = store.findUserByName('Жертва Перебора');
+      assert.ok(u);
+      assert.throws(() => store.addUser({
+        id: 'u_dup', name: u.name, nameKey: u.nameKey,
+        passwordHash: 'x', createdAt: Date.now()
+      }), 'дубликат имени прошёл в базу');
+    });
+
+    /* Проверка уровня хранилища: пользователь заводится напрямую, чтобы не
+       расходовать лимит регистраций, который к этому моменту уже исчерпан. */
+    await test('база: удаление пользователя каскадом чистит сессии и сохранение', async () => {
+      const id = 'u_cascade';
+      store.addUser({ id, name: 'Каскадный', nameKey: 'каскадный',
+                      passwordHash: 'scrypt$1$1$1$aa$bb', createdAt: Date.now() });
+      store.addSession({ tokenHash: 'c'.repeat(64), userId: id,
+                         createdAt: Date.now(), expiresAt: Date.now() + 6e4 });
+      store.putSave(id, { clubName: 'ФК Каскад', trophies: [] });
+      assert.ok(store.getSave(id), 'сохранение не записалось');
+
+      store.removeUser(id);
+      assert.strictEqual(store.getSave(id), null, 'сохранение осталось');
+      assert.strictEqual(store.findUserById(id), null, 'пользователь остался');
+      const left = store.q.allSessions.all().filter(r => r.user_id === id);
+      assert.strictEqual(left.length, 0, 'сессии остались');
+    });
+
+    await test('база: включён журнал WAL', async () => {
+      const mode = store.db.prepare('PRAGMA journal_mode').get();
+      assert.strictEqual(String(Object.values(mode)[0]).toLowerCase(), 'wal');
+    });
+
+    await test('база: таблица лидеров сортируется по трофеям', async () => {
+      const id = 'u_titled';
+      store.addUser({ id, name: 'Титулованный', nameKey: 'титулованный',
+                      passwordHash: 'scrypt$1$1$1$aa$bb', createdAt: Date.now() });
+      store.putSave(id, { clubName: 'ФК Титул', division: 1, season: 5,
+                          trophies: [1, 2, 3, 4], stats: { wins: 40, goals: 90 } });
+      const r = await call('GET', '/api/leaderboard');
+      assert.strictEqual(r.data.rows[0].clubName, 'ФК Титул');
+      assert.strictEqual(r.data.rows[0].trophies, 4);
+      assert.strictEqual(r.data.rows[0].manager, 'Титулованный');
+    });
+
+    await test('база: перенос из JSON выполняется один раз', async () => {
+      const { SqliteStore } = require('./db');
+      const jsonPath = path.join(os.tmpdir(), 'mig-' + Date.now() + '.json');
+      const sqlPath = jsonPath.replace(/\.json$/, '.sqlite');
+      fs.writeFileSync(jsonPath, JSON.stringify({
+        users: [{ id: 'u_old', name: 'Старый', nameKey: 'старый',
+                  passwordHash: 'scrypt$1$1$1$aa$bb', createdAt: 1 }],
+        sessions: [],
+        saves: { u_old: { save: { clubName: 'ФК Архив', trophies: [] }, updatedAt: 1 } }
+      }));
+      const s1 = new SqliteStore(sqlPath);
+      assert.strictEqual(s1.importFromJson(jsonPath), 1, 'перенос не выполнился');
+      assert.strictEqual(s1.importFromJson(jsonPath), 0, 'перенос повторился');
+      assert.strictEqual(s1.getSave('u_old').save.clubName, 'ФК Архив');
+      s1.close();
+      [sqlPath, sqlPath + '-wal', sqlPath + '-shm', jsonPath].forEach(f => {
+        try { fs.unlinkSync(f); } catch (e) {}
+      });
+    });
+  }
+
   server.close();
   store.flush();
-  try { fs.unlinkSync(DB); } catch (e) {}
+  if (store.close) store.close();
+  [DB, SQLITE, SQLITE + '-wal', SQLITE + '-shm'].forEach(f => {
+    try { fs.unlinkSync(f); } catch (e) {}
+  });
 
   const failed = results.filter(r => !r.ok);
   console.log(`\nИтог: ${results.length - failed.length} из ${results.length} прошли`);

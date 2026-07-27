@@ -45,6 +45,10 @@ class Store {
     fs.renameSync(tmp, this.file);
   }
 
+  userCount() { return this.data.users.length; }
+
+  close() { this.flush(); }
+
   // ---------- пользователи ----------
   findUserByName(name) {
     const key = String(name).trim().toLowerCase();
