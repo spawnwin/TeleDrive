@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
-<meta name="theme-color" content="#0b1020">
+<meta name="theme-color" content="#0B1310">
 <meta name="description" content="FUTBOL X — футбольный менеджер в браузере телефона: состав, тактика, лига, трансферы и live-матчи с тренерскими вмешательствами.">
 <title>FUTBOL X — Футбольный менеджер</title>
 <link rel="manifest" href="manifest.json">
@@ -12,115 +12,158 @@
 <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
+
+<!-- ================= ИКОНКИ ================= -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 4.5v15l12-7.5z"/></symbol>
+    <symbol id="i-trophy" viewBox="0 0 24 24"><path d="M7 4h10v5a5 5 0 0 1-10 0z"/><path d="M17 5h3v2a3 3 0 0 1-3 3M7 5H4v2a3 3 0 0 0 3 3"/><path d="M12 14v3m-4 3h8l-1-3H9z"/></symbol>
+    <symbol id="i-squad" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><path d="M3 20a6 6 0 0 1 12 0"/><path d="M16 6.5a2.8 2.8 0 0 1 0 5.5M18 20a5.6 5.6 0 0 0-2-4"/></symbol>
+    <symbol id="i-transfer" viewBox="0 0 24 24"><path d="M4 8h13l-3-3m3 3-3 3"/><path d="M20 16H7l3-3m-3 3 3 3"/></symbol>
+    <symbol id="i-shop" viewBox="0 0 24 24"><path d="M5 8h14l-1 11H6z"/><path d="M9 8V6a3 3 0 0 1 6 0v2"/></symbol>
+    <symbol id="i-kit" viewBox="0 0 24 24"><path d="M9 4 5 6l1 4h2v10h8V10h2l1-4-4-2"/><path d="M9 4a3 3 0 0 0 6 0"/></symbol>
+    <symbol id="i-medal" viewBox="0 0 24 24"><path d="M8 3l4 7 4-7"/><circle cx="12" cy="15.5" r="5.5"/></symbol>
+    <symbol id="i-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.6 2.6 0 0 1 5 .9c0 1.7-2.5 2-2.5 3.6"/><path d="M12 17.5v.01"/></symbol>
+    <symbol id="i-back" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></symbol>
+    <symbol id="i-pause" viewBox="0 0 24 24"><path d="M9 5v14M15 5v14"/></symbol>
+    <symbol id="i-coin" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 8v8m2-6.2c-.6-.5-3.6-1-3.6.9 0 1.7 3.6.9 3.6 2.6 0 1.9-3 1.4-3.6.9"/></symbol>
+    <symbol id="i-attack" viewBox="0 0 24 24"><path d="m5 6 6 6-6 6"/><path d="m13 6 6 6-6 6"/></symbol>
+    <symbol id="i-balance" viewBox="0 0 24 24"><path d="M12 5v15M8 20h8M5 8h14"/><path d="M5 8 2.5 13.5h5zM19 8l2.5 5.5h-5z"/></symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3l7 3v6c0 4.5-3 7.7-7 9-4-1.3-7-4.5-7-9V6z"/></symbol>
+    <symbol id="i-sub" viewBox="0 0 24 24"><path d="M5 8h10l-3-3m3 3-3 3"/><path d="M19 16H9l3-3m-3 3 3 3"/></symbol>
+    <symbol id="i-flame" viewBox="0 0 24 24"><path d="M12 3s5 4.5 5 9a5 5 0 0 1-10 0c0-2 1-3 1-3s.5 2 2 2c0-3 2-6 2-8z"/></symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.4-5.7"/><path d="M20 4v4h-4"/></symbol>
+    <symbol id="i-skip" viewBox="0 0 24 24"><path d="M5 5l9 7-9 7zM18 5v14"/></symbol>
+    <symbol id="i-star" viewBox="0 0 24 24"><path d="m12 4 2.4 4.9 5.4.8-3.9 3.8.9 5.4-4.8-2.6-4.8 2.6.9-5.4L4.2 9.7l5.4-.8z" fill="currentColor" stroke="none"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7"/></symbol>
+    <symbol id="i-whistle" viewBox="0 0 24 24"><circle cx="8" cy="14" r="5"/><path d="M13 12h8v-3l-9 1"/><path d="M8 9V5"/></symbol>
+    <symbol id="i-tv" viewBox="0 0 24 24"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="m8 3 4 4 4-4"/></symbol>
+    <symbol id="i-chart" viewBox="0 0 24 24"><path d="M4 20V4M4 20h16"/><path d="M8 16v-4m4 4V8m4 8v-6"/></symbol>
+    <symbol id="i-ball" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m12 7.5 3.4 2.5-1.3 4h-4.2l-1.3-4z"/><path d="M12 7.5V3m3.4 7 4.2-1.4M14.1 14l2.6 3.5M9.9 14l-2.6 3.5M8.6 10 4.4 8.6"/></symbol>
+  </defs>
+</svg>
+
 <div id="app">
 
   <!-- ================= ЗАГРУЗКА ================= -->
   <section id="screen-boot" class="screen active">
-    <div class="boot-logo">
-      <span class="boot-ball">⚽</span>
-      <h1>FUTBOL<span class="accent">X</span></h1>
-      <p class="boot-sub">Футбольный менеджер</p>
+    <div class="boot-mark">
+      <svg viewBox="0 0 100 100"><use href="#i-ball" x="14" y="14" width="72" height="72"
+        style="color:#B6F24A"/></svg>
     </div>
+    <h1 class="wordmark boot-word">FUTBOL<em>X</em></h1>
+    <p class="boot-sub">Футбольный менеджер</p>
     <div class="boot-bar"><div id="boot-fill" class="boot-fill"></div></div>
-    <p class="boot-hint">Формируем состав…</p>
+    <p class="boot-hint">Формируем состав</p>
   </section>
 
-  <!-- ================= ГЛАВНОЕ МЕНЮ ================= -->
+  <!-- ================= ПАНЕЛЬ КЛУБА ================= -->
   <section id="screen-menu" class="screen">
-    <header class="topbar">
-      <div class="profile-chip">
-        <span class="chip-icon">👤</span>
-        <div class="chip-text">
-          <b id="menu-club-name">FC Аврора</b>
-          <small>Ур. <span id="menu-level">1</span> · Сезон <span id="menu-season">1</span></small>
+    <header class="club-head stagger">
+      <svg class="crest" id="menu-crest" viewBox="0 0 48 48"></svg>
+      <div class="club-id">
+        <b id="menu-club-name">FC Аврора</b>
+        <div class="club-sub">
+          <span>Сезон <span class="num" id="menu-season">1</span></span>
+          <i class="dot"></i>
+          <span>Уровень <span class="num" id="menu-level">1</span></span>
         </div>
       </div>
-      <div class="coin-chip">🪙 <span id="menu-coins">0</span></div>
+      <div class="purse cut-tr"><svg class="ic ic-sm"><use href="#i-coin"/></svg><span class="num" id="menu-coins">0</span></div>
     </header>
 
-    <div class="menu-hero">
-      <h1>FUTBOL<span class="accent">X</span></h1>
-      <p>Управляй клубом. Матчи играются сами.</p>
+    <div class="strip stagger">
+      <div><b class="num accent" id="menu-position">—</b><small>Место в лиге</small></div>
+      <div><b class="num" id="menu-record">0-0-0</b><small>В · Н · П</small></div>
+      <div><b class="num" id="menu-strength">0</b><small>Рейтинг</small></div>
     </div>
 
-    <nav class="menu-grid">
-      <button class="menu-btn primary" data-nav="friendly">
-        <span class="mi">▶️</span>Товарищеский матч
+    <div class="fixture-hero stagger">
+      <div class="fh-top">
+        <span class="t-label" id="fh-context">Ближайший матч</span>
+        <span class="t-label" id="fh-round"></span>
+      </div>
+      <div class="fh-body">
+        <div class="fh-side">
+          <div class="fh-badge" id="fh-home-badge">A</div>
+          <div class="fh-name" id="fh-home-name">FC Аврора</div>
+        </div>
+        <span class="fh-vs">VS</span>
+        <div class="fh-side">
+          <div class="fh-badge" id="fh-away-badge">B</div>
+          <div class="fh-name" id="fh-away-name">Соперник</div>
+        </div>
+      </div>
+      <button class="fh-cta cut-tr" id="btn-play-next">
+        <svg class="ic"><use href="#i-play"/></svg><span id="fh-cta-label">Провести матч</span>
       </button>
-      <button class="menu-btn" data-nav="league">
-        <span class="mi">🏆</span>Лига
-      </button>
-      <button class="menu-btn" data-nav="squad">
-        <span class="mi">👥</span>Состав и тактика
-      </button>
-      <button class="menu-btn" data-nav="transfers">
-        <span class="mi">🤝</span>Трансферы
-      </button>
-      <button class="menu-btn" data-nav="shop">
-        <span class="mi">🛒</span>Магазин
-      </button>
-      <button class="menu-btn" data-nav="customize">
-        <span class="mi">🎨</span>Клуб и форма
-      </button>
-      <button class="menu-btn" data-nav="achievements">
-        <span class="mi">🥇</span>Достижения
-      </button>
-      <button class="menu-btn" data-nav="howto">
-        <span class="mi">❔</span>Как играть
-      </button>
+    </div>
+
+    <nav class="nav-grid stagger">
+      <button class="nav-tile" data-nav="squad"><svg class="ic"><use href="#i-squad"/></svg>Состав и тактика</button>
+      <button class="nav-tile" data-nav="league"><svg class="ic"><use href="#i-trophy"/></svg>Таблица лиги</button>
+      <button class="nav-tile" data-nav="transfers"><svg class="ic"><use href="#i-transfer"/></svg>Трансферы</button>
+      <button class="nav-tile" data-nav="friendly"><svg class="ic"><use href="#i-ball"/></svg>Товарищеский</button>
+      <button class="nav-tile" data-nav="shop"><svg class="ic"><use href="#i-shop"/></svg>Магазин</button>
+      <button class="nav-tile" data-nav="customize"><svg class="ic"><use href="#i-kit"/></svg>Клуб и форма</button>
+      <button class="nav-tile" data-nav="achievements"><svg class="ic"><use href="#i-medal"/></svg>Достижения</button>
+      <button class="nav-tile" data-nav="howto"><svg class="ic"><use href="#i-help"/></svg>Как играть</button>
     </nav>
 
-    <p class="menu-footer">v2.0 · Менеджер нового поколения</p>
+    <p class="sign-off">Ультра-Лига · сезон <span class="num" id="menu-season-foot">1</span></p>
   </section>
 
   <!-- ================= ТОВАРИЩЕСКИЙ МАТЧ ================= -->
   <section id="screen-friendly" class="screen">
     <header class="subbar">
-      <button class="back-btn" data-nav="menu">←</button>
+      <button class="back-btn" data-nav="menu"><svg class="ic"><use href="#i-back"/></svg></button>
       <h2>Товарищеский матч</h2>
     </header>
 
-    <div class="setup-card">
-      <h3>Соперник</h3>
+    <div class="block">
+      <div class="block-head"><h3>Соперник</h3></div>
       <div id="rival-list" class="pill-row"></div>
     </div>
 
-    <div class="setup-card">
-      <h3>Стадион</h3>
+    <div class="block">
+      <div class="block-head"><h3>Стадион</h3></div>
       <div id="stadium-list" class="pill-row"></div>
     </div>
 
-    <div class="setup-card">
-      <h3>Погода</h3>
+    <div class="block">
+      <div class="block-head"><h3>Погода</h3><span class="hint">влияет на игру</span></div>
       <div id="weather-list" class="pill-row"></div>
     </div>
 
-    <div class="setup-card info-card">
-      <p>Тактика и состав берутся из экрана «Состав и тактика». Товарищеский матч не влияет на таблицу лиги.</p>
+    <div class="block">
+      <p class="note">Состав и тактика берутся с экрана «Состав и тактика». Результат товарищеского матча не идёт в зачёт таблицы лиги.</p>
     </div>
 
-    <button id="btn-start-match" class="menu-btn primary big">⚽ НАЧАТЬ МАТЧ</button>
+    <button id="btn-start-match" class="act cut-tr">
+      <svg class="ic"><use href="#i-whistle"/></svg>Начать матч
+    </button>
   </section>
 
   <!-- ================= ЛИГА ================= -->
   <section id="screen-league" class="screen">
     <header class="subbar">
-      <button class="back-btn" data-nav="menu">←</button>
-      <h2>Ультра-Лига · Сезон <span id="league-season">1</span></h2>
+      <button class="back-btn" data-nav="menu"><svg class="ic"><use href="#i-back"/></svg></button>
+      <h2>Ультра-Лига · сезон <span class="num" id="league-season">1</span></h2>
     </header>
 
-    <div class="setup-card">
-      <h3>Таблица</h3>
+    <div class="block">
+      <div class="block-head"><h3>Турнирная таблица</h3><span class="hint">7 туров</span></div>
       <div class="table-wrap">
         <table class="league-table">
-          <thead><tr><th>#</th><th>Клуб</th><th>И</th><th>+/-</th><th>О</th></tr></thead>
+          <thead><tr><th>#</th><th>Клуб</th><th>И</th><th>Р</th><th>О</th></tr></thead>
           <tbody id="league-table-body"></tbody>
         </table>
       </div>
     </div>
 
-    <div class="setup-card">
-      <h3>Тур <span id="league-round">1</span> из 7</h3>
+    <div class="block">
+      <div class="block-head"><h3>Тур <span class="num" id="league-round">1</span></h3><span class="hint">из 7</span></div>
       <div id="league-fixtures" class="fixture-list"></div>
     </div>
   </section>
@@ -128,30 +171,38 @@
   <!-- ================= СОСТАВ И ТАКТИКА ================= -->
   <section id="screen-squad" class="screen">
     <header class="subbar">
-      <button class="back-btn" data-nav="menu">←</button>
+      <button class="back-btn" data-nav="menu"><svg class="ic"><use href="#i-back"/></svg></button>
       <h2>Состав и тактика</h2>
     </header>
 
-    <div class="setup-card">
-      <h3>Формация</h3>
+    <div class="block">
+      <div class="block-head"><h3>Формация</h3></div>
       <div id="formation-list" class="pill-row"></div>
     </div>
 
-    <div class="setup-card">
-      <h3>Стиль игры</h3>
+    <div class="block">
+      <div class="block-head"><h3>Стиль игры</h3></div>
       <div id="tactic-list" class="pill-row"></div>
     </div>
 
-    <div class="setup-card">
-      <h3>Сила команды</h3>
-      <div class="stat-bars">
-        <div class="stat-bar-row"><span>⚔️ Атака</span><div class="stat-bar"><div id="stat-attack-fill" class="stat-bar-fill atk"></div></div><b id="stat-attack-val">0</b></div>
-        <div class="stat-bar-row"><span>🛡️ Оборона</span><div class="stat-bar"><div id="stat-defense-fill" class="stat-bar-fill def"></div></div><b id="stat-defense-val">0</b></div>
+    <div class="block">
+      <div class="block-head"><h3>Сила стартового состава</h3></div>
+      <div class="meters">
+        <div class="meter-row">
+          <span class="mlabel"><svg class="ic ic-sm"><use href="#i-attack"/></svg>Атака</span>
+          <div class="meter"><div id="stat-attack-fill" class="meter-fill atk"></div></div>
+          <b id="stat-attack-val">0</b>
+        </div>
+        <div class="meter-row">
+          <span class="mlabel"><svg class="ic ic-sm"><use href="#i-shield"/></svg>Оборона</span>
+          <div class="meter"><div id="stat-defense-fill" class="meter-fill def"></div></div>
+          <b id="stat-defense-val">0</b>
+        </div>
       </div>
     </div>
 
-    <div class="setup-card">
-      <h3>Игроки</h3>
+    <div class="block">
+      <div class="block-head"><h3>Игроки</h3><span class="hint">★ — в старте</span></div>
       <div id="squad-list" class="squad-list"></div>
     </div>
   </section>
@@ -159,20 +210,25 @@
   <!-- ================= ТРАНСФЕРЫ ================= -->
   <section id="screen-transfers" class="screen">
     <header class="subbar">
-      <button class="back-btn" data-nav="menu">←</button>
-      <h2>Трансферный рынок</h2>
-      <div class="coin-chip small">🪙 <span id="transfers-coins">0</span></div>
+      <button class="back-btn" data-nav="menu"><svg class="ic"><use href="#i-back"/></svg></button>
+      <h2>Трансферы</h2>
+      <div class="purse cut-tr"><svg class="ic ic-sm"><use href="#i-coin"/></svg><span class="num" id="transfers-coins">0</span></div>
     </header>
-    <button id="btn-refresh-market" class="menu-btn" style="margin-bottom:12px;">🔄 Обновить рынок</button>
-    <div id="transfer-list" class="squad-list"></div>
+    <div class="block">
+      <div class="block-head"><h3>Свободные агенты</h3></div>
+      <div id="transfer-list" class="squad-list"></div>
+    </div>
+    <button id="btn-refresh-market" class="act ghost cut-tr">
+      <svg class="ic"><use href="#i-refresh"/></svg>Обновить рынок
+    </button>
   </section>
 
   <!-- ================= МАГАЗИН ================= -->
   <section id="screen-shop" class="screen">
     <header class="subbar">
-      <button class="back-btn" data-nav="menu">←</button>
+      <button class="back-btn" data-nav="menu"><svg class="ic"><use href="#i-back"/></svg></button>
       <h2>Магазин</h2>
-      <div class="coin-chip small">🪙 <span id="shop-coins">0</span></div>
+      <div class="purse cut-tr"><svg class="ic ic-sm"><use href="#i-coin"/></svg><span class="num" id="shop-coins">0</span></div>
     </header>
 
     <div class="shop-tabs">
@@ -185,81 +241,98 @@
     <div id="shop-grid" class="shop-grid"></div>
   </section>
 
-  <!-- ================= КАСТОМИЗАЦИЯ ================= -->
+  <!-- ================= КЛУБ И ФОРМА ================= -->
   <section id="screen-customize" class="screen">
     <header class="subbar">
-      <button class="back-btn" data-nav="menu">←</button>
+      <button class="back-btn" data-nav="menu"><svg class="ic"><use href="#i-back"/></svg></button>
       <h2>Клуб и форма</h2>
     </header>
-    <div class="setup-card">
-      <h3>Название клуба</h3>
+
+    <div class="block">
+      <div class="block-head"><h3>Эмблема</h3></div>
+      <div style="display:flex;align-items:center;gap:16px">
+        <svg class="crest" id="customize-crest" viewBox="0 0 48 48" style="width:60px;height:60px"></svg>
+        <p class="note" style="flex:1">Эмблема собирается из названия клуба и цвета формы.</p>
+      </div>
+    </div>
+
+    <div class="block">
+      <div class="block-head"><h3>Название клуба</h3></div>
       <input id="club-name-input" class="text-input" maxlength="18" placeholder="FC Аврора">
     </div>
-    <div class="setup-card">
-      <h3>Цвет формы</h3>
+    <div class="block">
+      <div class="block-head"><h3>Цвет формы</h3></div>
       <div id="kit-color-list" class="pill-row"></div>
     </div>
-    <div class="setup-card">
-      <h3>Мяч</h3>
+    <div class="block">
+      <div class="block-head"><h3>Мяч</h3></div>
       <div id="ball-skin-list" class="pill-row"></div>
     </div>
-    <button id="btn-save-customize" class="menu-btn primary big">💾 Сохранить</button>
+    <button id="btn-save-customize" class="act cut-tr">
+      <svg class="ic"><use href="#i-check"/></svg>Сохранить
+    </button>
   </section>
 
   <!-- ================= ДОСТИЖЕНИЯ ================= -->
   <section id="screen-achievements" class="screen">
     <header class="subbar">
-      <button class="back-btn" data-nav="menu">←</button>
+      <button class="back-btn" data-nav="menu"><svg class="ic"><use href="#i-back"/></svg></button>
       <h2>Достижения</h2>
     </header>
-    <div id="achievements-list" class="achv-list"></div>
+    <div class="block">
+      <div class="block-head"><h3>Прогресс</h3><span class="hint" id="achv-count"></span></div>
+      <div id="achievements-list" class="achv-list"></div>
+    </div>
   </section>
 
   <!-- ================= КАК ИГРАТЬ ================= -->
   <section id="screen-howto" class="screen">
     <header class="subbar">
-      <button class="back-btn" data-nav="menu">←</button>
+      <button class="back-btn" data-nav="menu"><svg class="ic"><use href="#i-back"/></svg></button>
       <h2>Как играть</h2>
     </header>
     <div class="howto-body">
-      <div class="howto-item"><span>👥</span><p><b>Состав и тактика</b> — выбери формацию и стиль игры (атака/баланс/оборона). Матчи симулируются автоматически на основе силы твоей команды.</p></div>
-      <div class="howto-item"><span>🏆</span><p><b>Лига</b> — сыграй 7 туров сезона против клубов Ультра-Лиги. Побеждай, чтобы возглавить таблицу.</p></div>
-      <div class="howto-item"><span>📺</span><p>Во время матча идёт <b>живой текстовый репортаж</b> и анимация на мини-поле — сиди и наслаждайся игрой.</p></div>
-      <div class="howto-item"><span>🔥</span><p><b>Тренерские вмешательства</b> — во время матча ты можешь произнести мотивационную речь, перестроить тактику или сделать замену, не трогая джойстик.</p></div>
-      <div class="howto-item"><span>🤝</span><p><b>Трансферы</b> — покупай и продавай игроков, усиливай состав монетами, заработанными в матчах.</p></div>
-      <div class="howto-item"><span>🎨</span><p>Настраивай клуб: название, цвет формы, мяч и стадион в «Магазине» и «Клуб и форма».</p></div>
+      <div class="howto-item"><svg class="ic"><use href="#i-squad"/></svg><p><b>Состав и тактика.</b> Выбери формацию и стиль игры. Матч считается автоматически по силе твоего стартового состава — джойстика здесь нет.</p></div>
+      <div class="howto-item"><svg class="ic"><use href="#i-trophy"/></svg><p><b>Лига.</b> Семь туров сезона против клубов Ультра-Лиги. Остальные матчи тура доигрываются сами, таблица живёт своей жизнью.</p></div>
+      <div class="howto-item"><svg class="ic"><use href="#i-tv"/></svg><p><b>Эфир матча.</b> Живой текстовый репортаж и тактическая камера. Скорость переключается на 1×, 2× и 4×, а весь матч можно домотать до финального свистка.</p></div>
+      <div class="howto-item"><svg class="ic"><use href="#i-flame"/></svg><p><b>Тренерские вмешательства.</b> Прямо по ходу матча: мотивационная речь, перестроение тактики и замена уставшего игрока в одно касание.</p></div>
+      <div class="howto-item"><svg class="ic"><use href="#i-transfer"/></svg><p><b>Трансферы.</b> Покупай свободных агентов и продавай лишних — монеты приносят победы и забитые голы.</p></div>
+      <div class="howto-item"><svg class="ic"><use href="#i-kit"/></svg><p><b>Клуб.</b> Название, цвет формы, мяч и стадион меняются в «Магазине» и «Клуб и форма». Эмблема перерисовывается сама.</p></div>
     </div>
   </section>
 
-  <!-- ================= МАТЧ ================= -->
+  <!-- ================= ЭФИР МАТЧА ================= -->
   <section id="screen-match" class="screen">
-    <div id="match-hud">
-      <div class="hud-score">
+    <div class="broadcast-bar">
+      <div class="bb-team">
+        <i class="club-dot" id="bb-home-dot"></i>
         <span id="hud-home-name">FC Аврора</span>
-        <b id="hud-score">0 : 0</b>
-        <span id="hud-away-name">Соперник</span>
       </div>
-      <div class="hud-time"><span id="hud-minute">0'</span></div>
-      <button id="btn-pause" class="hud-pause">⏸</button>
+      <div class="bb-score" id="hud-score">0:0</div>
+      <div class="bb-team away">
+        <span id="hud-away-name">Соперник</span>
+        <i class="club-dot" id="bb-away-dot"></i>
+      </div>
+      <div class="bb-clock num" id="hud-minute">0'</div>
+      <button class="bb-pause" id="btn-pause"><svg class="ic ic-sm"><use href="#i-pause"/></svg></button>
     </div>
 
     <canvas id="game-canvas"></canvas>
 
-    <div id="speed-bar">
-      <button class="speed-btn active" data-speed="1">1x</button>
-      <button class="speed-btn" data-speed="2">2x</button>
-      <button class="speed-btn" data-speed="4">4x</button>
-      <button id="btn-skip" class="speed-btn skip">⏭ Пропустить</button>
-    </div>
-
-    <div id="manager-bar">
-      <div class="mgr-row">
-        <button class="mgr-tactic-btn" data-tactic="attack">⚔️</button>
-        <button class="mgr-tactic-btn" data-tactic="balance">⚖️</button>
-        <button class="mgr-tactic-btn" data-tactic="defense">🛡️</button>
-        <button id="btn-sub" class="mgr-action-btn">🔄 Замена</button>
+    <div class="deck">
+      <div class="deck-row">
+        <button class="speed-btn active" data-speed="1">1×</button>
+        <button class="speed-btn" data-speed="2">2×</button>
+        <button class="speed-btn" data-speed="4">4×</button>
+        <button id="btn-skip" class="speed-btn skip"><svg class="ic ic-sm"><use href="#i-skip"/></svg>До свистка</button>
       </div>
-      <div class="mgr-row" id="intervention-row"></div>
+      <div class="deck-row">
+        <button class="mgr-tactic-btn" data-tactic="attack" aria-label="Атакующий стиль"><svg class="ic"><use href="#i-attack"/></svg></button>
+        <button class="mgr-tactic-btn" data-tactic="balance" aria-label="Сбалансированный стиль"><svg class="ic"><use href="#i-balance"/></svg></button>
+        <button class="mgr-tactic-btn" data-tactic="defense" aria-label="Оборонительный стиль"><svg class="ic"><use href="#i-shield"/></svg></button>
+        <button id="btn-sub" class="mgr-action-btn"><svg class="ic ic-sm"><use href="#i-sub"/></svg>Замена</button>
+      </div>
+      <div class="deck-row" id="intervention-row"></div>
     </div>
 
     <div id="commentary-feed"></div>
@@ -269,22 +342,22 @@
   <div id="overlay-pause" class="overlay hidden">
     <div class="overlay-card">
       <h2>Пауза</h2>
-      <button class="menu-btn primary" id="btn-resume">▶️ Продолжить</button>
-      <button class="menu-btn" id="btn-quit-match">🚪 Выйти в меню</button>
+      <button class="act cut-tr" id="btn-resume"><svg class="ic"><use href="#i-play"/></svg>Продолжить</button>
+      <button class="act ghost cut-tr" id="btn-quit-match">Выйти в меню</button>
     </div>
   </div>
 
-  <!-- ================= ФИНАЛ МАТЧА ================= -->
+  <!-- ================= ИТОГ МАТЧА ================= -->
   <div id="overlay-result" class="overlay hidden">
     <div class="overlay-card">
-      <h2 id="result-title">ПОБЕДА!</h2>
-      <p id="result-score" class="result-score">3 : 1</p>
+      <p class="result-verdict" id="result-title">Победа</p>
+      <p id="result-score" class="result-score">3:1</p>
       <div class="result-stats">
-        <div><b id="stat-xp">+0</b><span>Опыт</span></div>
-        <div><b id="stat-coins">+0</b><span>Монеты</span></div>
-        <div><b id="stat-goals">0</b><span>Голы</span></div>
+        <div><b class="num" id="stat-xp">+0</b><span>Опыт</span></div>
+        <div><b class="num" id="stat-coins">+0</b><span>Монеты</span></div>
+        <div><b class="num" id="stat-goals">0</b><span>Голы</span></div>
       </div>
-      <button class="menu-btn primary" id="btn-result-continue">Продолжить</button>
+      <button class="act cut-tr" id="btn-result-continue">Продолжить</button>
     </div>
   </div>
 

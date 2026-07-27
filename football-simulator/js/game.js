@@ -4,7 +4,9 @@ const MatchEngine = (() => {
   let W = 0, H = 0, dpr = Math.max(1, window.devicePixelRatio || 1);
 
   function resize() {
-    W = canvas.clientWidth; H = canvas.clientHeight;
+    const w = canvas.clientWidth, h = canvas.clientHeight;
+    if (!w || !h) return;           // экран матча ещё скрыт — размеры возьмём позже
+    W = w; H = h;
     canvas.width = W * dpr; canvas.height = H * dpr;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   }
@@ -127,11 +129,12 @@ const MatchEngine = (() => {
     const home = homeStrengthNow();
     const away = awayStrengthNow();
 
-    const pChanceHome = clamp(0.03 + (home.attack - away.defense) / 900, 0.008, 0.11);
-    const pChanceAway = clamp(0.03 + (away.attack - home.defense) / 900, 0.008, 0.11);
+    /* База момента подобрана так, чтобы равные команды выходили примерно
+       на 1.3 гола за матч, а не на регулярные нули. */
+    const pChanceHome = clamp(0.075 + (home.attack - away.defense) / 1100, 0.02, 0.14);
+    const pChanceAway = clamp(0.075 + (away.attack - home.defense) / 1100, 0.02, 0.14);
 
     state.momentum = clamp(state.momentum * 0.85 + ((pChanceHome - pChanceAway) * 6), -1, 1);
-    animateMomentum();
 
     if (Math.random() < pChanceHome) resolveChance('home', home, away);
     if (Math.random() < pChanceAway) resolveChance('away', away, home);
@@ -165,7 +168,7 @@ const MatchEngine = (() => {
     state.speechUsed = true;
     state.boosts.push({ side: 'home', type: 'atk', mul: 1.15, untilMinute: state.minute + 15 });
     state.boosts.push({ side: 'home', type: 'def', mul: 1.1, untilMinute: state.minute + 15 });
-    say('🔥 Тренер произносит мотивационную речь перед трибунами!', 'boost');
+    say('Тренер поднимает команду мотивационной речью у бровки', 'boost');
     Save.unlockAchievement('intervention_used');
     return true;
   }
@@ -174,7 +177,7 @@ const MatchEngine = (() => {
     if (state.ironwallUsed || !Save.owns('interventions', 'ironwall')) return false;
     state.ironwallUsed = true;
     state.boosts.push({ side: 'home', type: 'def', mul: 1.2, untilMinute: state.minute + 10 });
-    say('🛡️ Команда перестраивается в железную стену обороны!', 'boost');
+    say('Команда садится в глухую оборону — железная стена', 'boost');
     Save.unlockAchievement('intervention_used');
     return true;
   }
@@ -185,10 +188,10 @@ const MatchEngine = (() => {
     Save.persist();
     if (state.masterclassCharge) {
       state.masterclassCharge = false;
-      say('🧠 Тактический гений: команда мгновенно перестраивается без потерь!', 'boost');
+      say('Тактический разбор на ходу: перестроение без потери ритма', 'boost');
     } else {
       state.tacticPenaltyUntil = state.minute + 5;
-      say('🔄 Тренер меняет тактику — команде нужно немного времени на перестроение', 'info');
+      say('Смена тактики — команде нужно время на перестроение', 'info');
     }
   }
 
@@ -210,131 +213,222 @@ const MatchEngine = (() => {
     const allIdx = state.xi.all.indexOf(worst);
     if (allIdx !== -1) state.xi.all[allIdx] = inPlayer;
     state.subsUsed++;
-    say(`🔄 Замена: ${worst.name} уступает место ${inPlayer.name}`, 'info');
+    say(`Замена: ${worst.name} уступает место ${inPlayer.name}`, 'info');
     return true;
   }
 
-  // ---------------- ANIMATION ----------------
+  // ---------------- ТАКТИЧЕСКАЯ КАМЕРА ----------------
+  /* Горизонтальное поле: хозяева атакуют слева направо.
+     Оформление — телевизионный тактический план. */
   let animRaf = null;
+  let particles = [];
+  let ballTrail = [];
+
   function animateChance(side) {
     state.ballAnim.phase = 'attack';
     state.ballAnim.side = side;
     state.ballAnim.t = 0;
   }
-  function animateMomentum() {}
 
   function renderLoop() {
     animRaf = requestAnimationFrame(renderLoop);
     render();
   }
 
-  function drawPitch() {
-    const stadium = state.stadium;
-    ctx.fillStyle = stadium.sky; ctx.fillRect(0, 0, W, H * 0.12);
-    const g = ctx.createLinearGradient(0, H * 0.12, 0, H);
-    g.addColorStop(0, stadium.grass); g.addColorStop(1, shade(stadium.grass, -14));
-    ctx.fillStyle = g; ctx.fillRect(0, H * 0.12, W, H * 0.88);
-
-    ctx.save(); ctx.globalAlpha = 0.05;
-    const stripes = 8, top = H * 0.12, sh = (H - top) / stripes;
-    for (let i = 0; i < stripes; i += 2) { ctx.fillStyle = '#fff'; ctx.fillRect(0, top + i * sh, W, sh); }
-    ctx.restore();
-
-    ctx.strokeStyle = stadium.line; ctx.globalAlpha = 0.8; ctx.lineWidth = 2;
-    const pad = W * 0.06;
-    ctx.strokeRect(pad, top + 6, W - pad * 2, H - top - 12);
-    const cx = W / 2, cy = (top + H) / 2;
-    ctx.beginPath(); ctx.moveTo(pad, cy); ctx.lineTo(W - pad, cy); ctx.stroke();
-    ctx.beginPath(); ctx.arc(cx, cy, W * 0.11, 0, Math.PI * 2); ctx.stroke();
-    ctx.globalAlpha = 1;
-    return { cx, cy, top, pad };
-  }
-
   function shade(hex, pct) {
     const n = parseInt(hex.slice(1), 16);
     let r = (n >> 16) + pct, g = ((n >> 8) & 0xff) + pct, b = (n & 0xff) + pct;
-    r = clamp(r, 0, 255); g = clamp(g, 0, 255); b = clamp(b, 0, 255);
-    return `rgb(${r},${g},${b})`;
+    return `rgb(${clamp(r,0,255)},${clamp(g,0,255)},${clamp(b,0,255)})`;
   }
 
   function kitColorHex() {
     const k = DATA.kitColors.find(k => k.id === Save.data.kit);
-    return k ? k.color : '#22d3ee';
+    return k ? k.color : '#B6F24A';
   }
 
-  function drawDots(geo) {
-    const { cx, cy, top, pad } = geo;
-    const spanX = (W - pad * 2) * 0.8;
-    const homeColor = kitColorHex(), awayColor = state.rival.color;
-    const homeBiasY = clamp(state.momentum, -1, 1) * 14;
-    const homeRows = [
-      { n: DATA.formations[Save.data.formation].fwd, y: cy - 60 - homeBiasY },
-      { n: DATA.formations[Save.data.formation].mid, y: cy - 24 - homeBiasY },
-      { n: DATA.formations[Save.data.formation].def, y: cy + 40 - homeBiasY }
-    ];
-    homeRows.forEach(row => drawRow(row.n, row.y, cx, spanX, homeColor));
-    ctx.beginPath(); ctx.arc(cx, cy + 90 - homeBiasY, 8, 0, Math.PI * 2); ctx.fillStyle = '#334155'; ctx.fill();
-
-    const awayF = { def: 4, mid: 4, fwd: 2 };
-    const awayRows = [
-      { n: awayF.def, y: cy - 40 - homeBiasY },
-      { n: awayF.mid, y: cy + 24 - homeBiasY },
-      { n: awayF.fwd, y: cy + 60 - homeBiasY }
-    ];
-    awayRows.forEach(row => drawRow(row.n, row.y, cx, spanX, awayColor));
-    ctx.beginPath(); ctx.arc(cx, cy - 90 - homeBiasY, 8, 0, Math.PI * 2); ctx.fillStyle = '#1e293b'; ctx.fill();
+  function geometry() {
+    const padX = W * 0.035, top = H * 0.05, bottom = H - 14;
+    return {
+      L: padX, R: W - padX, T: top, B: bottom,
+      cx: W / 2, cy: (top + bottom) / 2
+    };
   }
 
-  function drawRow(n, y, cx, spanX, color) {
+  function drawPitch(g) {
+    const st = state.stadium;
+    ctx.fillStyle = '#060B09';
+    ctx.fillRect(0, 0, W, H);
+
+    const grad = ctx.createLinearGradient(0, g.T, 0, g.B);
+    grad.addColorStop(0, shade(st.grass, 8));
+    grad.addColorStop(1, shade(st.grass, -16));
+    ctx.fillStyle = grad;
+    ctx.fillRect(g.L, g.T, g.R - g.L, g.B - g.T);
+
+    // подстриженные полосы
+    ctx.save();
+    ctx.beginPath(); ctx.rect(g.L, g.T, g.R - g.L, g.B - g.T); ctx.clip();
+    const bands = 9, bw = (g.R - g.L) / bands;
+    ctx.globalAlpha = 0.05;
+    for (let i = 0; i < bands; i += 2) {
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(g.L + i * bw, g.T, bw, g.B - g.T);
+    }
+    ctx.restore();
+
+    // свет прожекторов
+    const bloom = ctx.createRadialGradient(g.cx, g.T, 0, g.cx, g.T, (g.R - g.L) * 0.62);
+    bloom.addColorStop(0, 'rgba(255,255,240,.10)');
+    bloom.addColorStop(1, 'rgba(255,255,240,0)');
+    ctx.fillStyle = bloom;
+    ctx.fillRect(g.L, g.T, g.R - g.L, g.B - g.T);
+
+    // разметка
+    ctx.strokeStyle = st.line;
+    ctx.globalAlpha = 0.55;
+    ctx.lineWidth = 1.4;
+    ctx.strokeRect(g.L, g.T, g.R - g.L, g.B - g.T);
+    ctx.beginPath(); ctx.moveTo(g.cx, g.T); ctx.lineTo(g.cx, g.B); ctx.stroke();
+    const rC = (g.B - g.T) * 0.20;
+    ctx.beginPath(); ctx.arc(g.cx, g.cy, rC, 0, Math.PI * 2); ctx.stroke();
+    ctx.beginPath(); ctx.arc(g.cx, g.cy, 2, 0, Math.PI * 2);
+    ctx.fillStyle = st.line; ctx.fill();
+
+    // штрафные и ворота
+    const boxW = (g.R - g.L) * 0.13, boxH = (g.B - g.T) * 0.52;
+    const sixW = boxW * 0.42, sixH = boxH * 0.5;
+    ctx.strokeRect(g.L, g.cy - boxH / 2, boxW, boxH);
+    ctx.strokeRect(g.R - boxW, g.cy - boxH / 2, boxW, boxH);
+    ctx.strokeRect(g.L, g.cy - sixH / 2, sixW, sixH);
+    ctx.strokeRect(g.R - sixW, g.cy - sixH / 2, sixW, sixH);
+    ctx.globalAlpha = 1;
+
+    const goalH = (g.B - g.T) * 0.22;
+    ctx.strokeStyle = '#F2F6F0'; ctx.lineWidth = 2.5;
+    ctx.beginPath(); ctx.moveTo(g.L, g.cy - goalH / 2); ctx.lineTo(g.L, g.cy + goalH / 2); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(g.R, g.cy - goalH / 2); ctx.lineTo(g.R, g.cy + goalH / 2); ctx.stroke();
+  }
+
+  function drawSquads(g) {
+    const f = DATA.formations[Save.data.formation];
+    const push = clamp(state.momentum, -1, 1) * (g.R - g.L) * 0.05;
+    const spanY = (g.B - g.T) * 0.78;
+    const width = g.R - g.L;
+
+    const home = kitColorHex();
+    const away = state.rival.color;
+
+    /* Линии команд заходят на чужую половину и переплетаются в центре —
+       так план читается как живой матч, а не как два отдельных блока. */
+    drawKeeper(g.L + width * 0.035 + push * 0.25, g.cy, home);
+    drawLine(f.def, g.L + width * 0.19 + push, g, spanY, home);
+    drawLine(f.mid, g.L + width * 0.38 + push, g, spanY, home);
+    drawLine(f.fwd, g.L + width * 0.57 + push, g, spanY * 0.66, home);
+
+    drawKeeper(g.R - width * 0.035 + push * 0.25, g.cy, away);
+    drawLine(4, g.R - width * 0.19 + push, g, spanY, away);
+    drawLine(4, g.R - width * 0.38 + push, g, spanY, away);
+    drawLine(2, g.R - width * 0.57 + push, g, spanY * 0.66, away);
+  }
+
+  function drawLine(n, x, g, spanY, color) {
     if (!n) return;
     for (let i = 0; i < n; i++) {
       const t = n === 1 ? 0.5 : i / (n - 1);
-      const x = cx - spanX / 2 + t * spanX;
-      ctx.beginPath(); ctx.arc(x, y, 6.5, 0, Math.PI * 2);
-      ctx.fillStyle = color; ctx.fill();
-      ctx.lineWidth = 1.2; ctx.strokeStyle = 'rgba(255,255,255,.5)'; ctx.stroke();
+      drawNode(x, g.cy - spanY / 2 + t * spanY, color);
     }
   }
 
-  let particles = [];
+  function drawKeeper(x, y, color) { drawNode(x, y, color, true); }
+
+  function drawNode(x, y, color, keeper) {
+    ctx.beginPath();
+    ctx.ellipse(x, y + 7, 6, 2.4, 0, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(0,0,0,.35)'; ctx.fill();
+
+    ctx.beginPath();
+    ctx.arc(x, y, keeper ? 5 : 5.8, 0, Math.PI * 2);
+    ctx.fillStyle = color;
+    ctx.fill();
+    ctx.lineWidth = 1.4;
+    ctx.strokeStyle = keeper ? 'rgba(6,11,9,.9)' : 'rgba(6,11,9,.55)';
+    ctx.stroke();
+  }
+
   function playGoalFx(side) {
-    for (let i = 0; i < 26; i++) {
-      particles.push({ x: W / 2, y: H / 2, vx: (Math.random() - 0.5) * 6, vy: (Math.random() - 0.5) * 6 - 1, life: 45, color: side === 'home' ? kitColorHex() : state.rival.color });
+    const g = geometry();
+    const x = side === 'home' ? g.R : g.L;
+    for (let i = 0; i < 30; i++) {
+      particles.push({
+        x, y: g.cy,
+        vx: (side === 'home' ? -1 : 1) * (1 + Math.random() * 4),
+        vy: (Math.random() - 0.5) * 6,
+        life: 42,
+        color: side === 'home' ? kitColorHex() : state.rival.color
+      });
     }
   }
 
   function drawParticles() {
     for (let i = particles.length - 1; i >= 0; i--) {
       const p = particles[i];
-      p.x += p.vx; p.y += p.vy; p.vy += 0.12; p.life--;
+      p.x += p.vx; p.y += p.vy; p.vy += 0.1; p.life--;
       if (p.life <= 0) { particles.splice(i, 1); continue; }
-      ctx.globalAlpha = p.life / 45;
-      ctx.fillStyle = p.color; ctx.beginPath(); ctx.arc(p.x, p.y, 4, 0, Math.PI * 2); ctx.fill();
+      ctx.globalAlpha = p.life / 42;
+      ctx.fillStyle = p.color;
+      ctx.fillRect(p.x, p.y, 3, 3);
       ctx.globalAlpha = 1;
     }
   }
 
-  function drawBall(geo) {
-    const { cx, cy } = geo;
-    let bx = cx, by = cy;
+  function drawBall(g) {
+    let bx = g.cx, by = g.cy;
     if (state.ballAnim.phase === 'attack') {
-      state.ballAnim.t = Math.min(1, (state.ballAnim.t || 0) + 0.06);
-      const dir = state.ballAnim.side === 'home' ? -1 : 1;
-      by = cy + dir * state.ballAnim.t * (H * 0.32);
+      state.ballAnim.t = Math.min(1, (state.ballAnim.t || 0) + 0.05);
+      const e = 1 - Math.pow(1 - state.ballAnim.t, 3);
+      const dir = state.ballAnim.side === 'home' ? 1 : -1;
+      bx = g.cx + dir * e * ((g.R - g.L) * 0.4);
+      by = g.cy + Math.sin(e * Math.PI) * (g.B - g.T) * 0.12 * dir;
       if (state.ballAnim.t >= 1) state.ballAnim.phase = 'idle';
     }
-    ctx.beginPath(); ctx.arc(bx, by, 6, 0, Math.PI * 2);
-    ctx.fillStyle = '#fefefe'; ctx.fill(); ctx.strokeStyle = '#333'; ctx.lineWidth = 1; ctx.stroke();
+
+    ballTrail.push({ x: bx, y: by });
+    if (ballTrail.length > 9) ballTrail.shift();
+    ballTrail.forEach((pt, i) => {
+      ctx.globalAlpha = (i / ballTrail.length) * 0.4;
+      ctx.beginPath(); ctx.arc(pt.x, pt.y, 2.4, 0, Math.PI * 2);
+      ctx.fillStyle = '#F2F6F0'; ctx.fill();
+    });
+    ctx.globalAlpha = 1;
+
+    ctx.beginPath(); ctx.arc(bx, by, 4, 0, Math.PI * 2);
+    ctx.fillStyle = '#F2F6F0'; ctx.fill();
+    ctx.strokeStyle = 'rgba(6,11,9,.6)'; ctx.lineWidth = 1; ctx.stroke();
+  }
+
+  function drawMomentum(g) {
+    const barW = (g.R - g.L) * 0.5, x0 = g.cx - barW / 2, y = g.B + 7;
+    ctx.fillStyle = 'rgba(233,241,234,.10)';
+    ctx.fillRect(x0, y, barW, 2);
+    const m = clamp(state.momentum, -1, 1);
+    const w = (barW / 2) * Math.abs(m);
+    ctx.fillStyle = m >= 0 ? kitColorHex() : state.rival.color;
+    if (m >= 0) ctx.fillRect(g.cx, y, w, 2);
+    else ctx.fillRect(g.cx - w, y, w, 2);
   }
 
   function render() {
     if (!state) return;
-    const geo = drawPitch();
-    drawDots(geo);
-    drawBall(geo);
+    // Холст может быть ещё не разложен (нулевая высота) — тогда геометрия
+    // вырождается в отрицательные радиусы и canvas бросает IndexSizeError.
+    if (W < 40 || H < 40) return;
+    const g = geometry();
+    drawPitch(g);
+    drawSquads(g);
+    drawBall(g);
     drawParticles();
+    drawMomentum(g);
   }
-
   // ---------------- LOOP / TIMING ----------------
   function scheduleNext() {
     if (!state.running || state.paused) return;
@@ -372,10 +466,10 @@ const MatchEngine = (() => {
       resize();
       state = buildState(opts);
       state.running = true; state.paused = false;
-      particles = [];
+      particles = []; ballTrail = [];
       SFX.crowdAmbience(true);
       SFX.whistle();
-      say('⚽ Судья дает стартовый свисток!', 'info');
+      say('Судья даёт стартовый свисток', 'info');
       if (animRaf) cancelAnimationFrame(animRaf);
       renderLoop();
       scheduleNext();

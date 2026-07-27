@@ -2,12 +2,56 @@
   Save.load();
 
   let friendlyRivalId = DATA.clubs[0].id;
-  let activeMatchCtx = null; // { isLeague, opponentId, userIsHome }
+  let activeMatchCtx = null;
+  let lastScore = { home: 0, away: 0 };
+
+  const icon = (name, cls) =>
+    `<svg class="ic${cls ? ' ' + cls : ''}"><use href="#i-${name}"/></svg>`;
+
+  const clubName = id => id === 'user'
+    ? Save.data.clubName
+    : (DATA.clubs.find(c => c.id === id) || {}).name || '—';
+
+  const clubColor = id => id === 'user'
+    ? kitHex()
+    : (DATA.clubs.find(c => c.id === id) || {}).color || '#879A8E';
+
+  function kitHex() {
+    const k = DATA.kitColors.find(k => k.id === Save.data.kit);
+    return k ? k.color : '#B6F24A';
+  }
+
+  function initials(name) {
+    const skip = /^(fc|фк|фс)$/i;
+    const words = name.trim().split(/\s+/).filter(w => !skip.test(w));
+    const src = words.length ? words : name.trim().split(/\s+/);
+    return src.slice(0, 2).map(w => w[0]).join('').toUpperCase() || 'FX';
+  }
+
+  /* Эмблема собирается процедурно: щит цветом формы + инициалы клуба. */
+  function crestMarkup(name, color) {
+    const ini = initials(name);
+    const small = ini.length > 1;
+    return `
+      <path d="M24 3 42 9v17c0 10-7.6 17.4-18 20C13.6 43.4 6 36 6 26V9z"
+            fill="${color}" opacity=".16"/>
+      <path d="M24 3 42 9v17c0 10-7.6 17.4-18 20C13.6 43.4 6 36 6 26V9z"
+            fill="none" stroke="${color}" stroke-width="2"/>
+      <path d="M6 20h36" stroke="${color}" stroke-width="1" opacity=".45"/>
+      <text x="24" y="${small ? 30 : 31}" text-anchor="middle"
+            font-size="${small ? 14 : 18}" font-weight="900"
+            letter-spacing="-.5" fill="${color}"
+            font-family="-apple-system, BlinkMacSystemFont, sans-serif">${ini}</text>`;
+  }
+
+  function paintCrest(el) {
+    if (el) el.innerHTML = crestMarkup(Save.data.clubName, kitHex());
+  }
 
   function showScreen(id) {
     document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
     const el = document.getElementById('screen-' + id);
-    if (el) el.classList.add('active');
+    if (el) { el.classList.add('active'); el.scrollTop = 0; }
     if (id === 'menu') renderMenu();
     if (id === 'friendly') renderFriendly();
     if (id === 'league') renderLeague();
@@ -37,9 +81,11 @@
       el.className = 'pill' + (item.id === selectedId ? ' selected' : '');
       const locked = opts && opts.lockedCheck && opts.lockedCheck(item);
       if (locked) el.classList.add('locked');
-      el.textContent = opts && opts.label ? opts.label(item) : item.name;
+      const label = opts && opts.label ? opts.label(item) : item.name;
+      el.innerHTML = (locked ? icon('lock', 'ic-sm') : (item.ic ? icon(item.ic, 'ic-sm') : '')) +
+        `<span>${label}</span>`;
       el.addEventListener('click', () => {
-        if (locked) { showToast('🔒 Открой в магазине'); return; }
+        if (locked) { showToast('Открывается в магазине'); return; }
         onPick(item.id);
         pill(container, items, item.id, onPick, opts);
       });
@@ -47,44 +93,111 @@
     });
   }
 
-  // ---------------- MENU ----------------
-  function renderMenu() {
-    document.getElementById('menu-club-name').textContent = Save.data.clubName;
-    document.getElementById('menu-level').textContent = Save.data.level;
-    document.getElementById('menu-season').textContent = Save.data.season;
-    document.getElementById('menu-coins').textContent = Save.data.coins;
+  // ---------------- ПАНЕЛЬ КЛУБА ----------------
+  function sortedTable() {
+    return Save.data.table.slice().sort((a, b) =>
+      b.pts - a.pts || (b.gf - b.ga) - (a.gf - a.ga) || b.gf - a.gf);
   }
 
-  // ---------------- FRIENDLY SETUP ----------------
+  function renderMenu() {
+    const d = Save.data;
+    document.getElementById('menu-club-name').textContent = d.clubName;
+    document.getElementById('menu-season').textContent = d.season;
+    document.getElementById('menu-season-foot').textContent = d.season;
+    document.getElementById('menu-level').textContent = d.level;
+    document.getElementById('menu-coins').textContent = d.coins;
+    paintCrest(document.getElementById('menu-crest'));
+
+    const table = sortedTable();
+    const pos = table.findIndex(r => r.id === 'user') + 1;
+    const me = table.find(r => r.id === 'user');
+    document.getElementById('menu-position').textContent = me.played ? pos : '—';
+    document.getElementById('menu-record').textContent = `${me.w}-${me.d}-${me.l}`;
+    const s = Save.teamStrength();
+    document.getElementById('menu-strength').textContent =
+      Math.round((s.attack + s.defense) / 2);
+
+    const fx = Save.userFixtureThisRound();
+    const ctxEl = document.getElementById('fh-context');
+    const roundEl = document.getElementById('fh-round');
+    const ctaLabel = document.getElementById('fh-cta-label');
+
+    if (fx) {
+      ctxEl.textContent = 'Следующий тур';
+      roundEl.textContent = `Тур ${d.round + 1} / ${d.fixtures.length}`;
+      setFixtureSide('home', fx.home);
+      setFixtureSide('away', fx.away);
+      ctaLabel.textContent = 'Провести матч';
+    } else {
+      ctxEl.textContent = 'Сезон завершён';
+      roundEl.textContent = '';
+      setFixtureSide('home', 'user');
+      setFixtureSide('away', DATA.clubs[0].id);
+      ctaLabel.textContent = 'Товарищеский матч';
+    }
+  }
+
+  function setFixtureSide(side, id) {
+    const badge = document.getElementById(`fh-${side}-badge`);
+    const name = document.getElementById(`fh-${side}-name`);
+    const color = clubColor(id);
+    badge.style.background = color;
+    badge.textContent = initials(clubName(id));
+    name.textContent = clubName(id);
+  }
+
+  document.getElementById('btn-play-next').addEventListener('click', () => {
+    const fx = Save.userFixtureThisRound();
+    if (fx) {
+      launchMatch({
+        opponentId: fx.home === 'user' ? fx.away : fx.home,
+        isLeague: true,
+        userIsHome: fx.home === 'user'
+      });
+    } else {
+      showScreen('friendly');
+    }
+  });
+
+  // ---------------- ТОВАРИЩЕСКИЙ ----------------
   function renderFriendly() {
-    pill(document.getElementById('rival-list'), DATA.clubs.map(c => ({ id: c.id, name: c.name })), friendlyRivalId, id => friendlyRivalId = id);
-    pill(document.getElementById('stadium-list'), DATA.stadiums, Save.data.stadiumId, id => { Save.data.stadiumId = id; Save.persist(); }, {
-      label: s => s.cost > 0 && !Save.owns('stadiums', s.id) ? `🔒 ${s.name}` : s.name,
-      lockedCheck: s => s.cost > 0 && !Save.owns('stadiums', s.id)
-    });
-    pill(document.getElementById('weather-list'), DATA.weathers, Save.data.weatherId, id => { Save.data.weatherId = id; Save.persist(); });
+    pill(document.getElementById('rival-list'),
+      DATA.clubs.map(c => ({ id: c.id, name: c.name })),
+      friendlyRivalId, id => friendlyRivalId = id);
+    pill(document.getElementById('stadium-list'), DATA.stadiums, Save.data.stadiumId,
+      id => { Save.data.stadiumId = id; Save.persist(); }, {
+        lockedCheck: s => s.cost > 0 && !Save.owns('stadiums', s.id)
+      });
+    pill(document.getElementById('weather-list'), DATA.weathers, Save.data.weatherId,
+      id => { Save.data.weatherId = id; Save.persist(); });
   }
 
   document.getElementById('btn-start-match').addEventListener('click', () => {
     launchMatch({ opponentId: friendlyRivalId, isLeague: false });
   });
 
-  // ---------------- LEAGUE ----------------
+  // ---------------- ЛИГА ----------------
   function renderLeague() {
     document.getElementById('league-season').textContent = Save.data.season;
-    document.getElementById('league-round').textContent = Math.min(Save.data.round + 1, Save.data.fixtures.length);
+    document.getElementById('league-round').textContent =
+      Math.min(Save.data.round + 1, Save.data.fixtures.length);
 
-    const sorted = Save.data.table.slice().sort((a, b) => b.pts - a.pts || (b.gf - b.ga) - (a.gf - a.ga) || b.gf - a.gf);
+    const table = sortedTable();
     const tbody = document.getElementById('league-table-body');
     tbody.innerHTML = '';
-    sorted.forEach((row, i) => {
+    table.forEach((row, i) => {
+      const gd = row.gf - row.ga;
       const tr = document.createElement('tr');
-      if (row.id === 'user') tr.className = 'me';
+      tr.className = [
+        row.id === 'user' ? 'me' : '',
+        i === 0 ? 'ucl' : '',
+        i >= table.length - 2 ? 'drop' : ''
+      ].filter(Boolean).join(' ');
       tr.innerHTML = `
         <td>${i + 1}</td>
-        <td><div class="club-cell"><span class="club-dot" style="background:${row.color}"></span>${row.name}</div></td>
+        <td><div class="club-cell"><i class="club-dot" style="background:${row.color}"></i>${row.name}</div></td>
         <td>${row.played}</td>
-        <td>${row.gf - row.ga >= 0 ? '+' : ''}${row.gf - row.ga}</td>
+        <td class="gd ${gd > 0 ? 'pos' : gd < 0 ? 'neg' : ''}">${gd > 0 ? '+' : ''}${gd}</td>
         <td class="pts">${row.pts}</td>`;
       tbody.appendChild(tr);
     });
@@ -93,97 +206,101 @@
     const wrap = document.getElementById('league-fixtures');
     wrap.innerHTML = '';
     if (!round) {
-      wrap.innerHTML = '<p style="color:#93a3c9;font-size:13px;">Сезон завершён — начинается новый!</p>';
+      wrap.innerHTML = '<p class="note">Сезон завершён — таблица обнулится, начнётся новый.</p>';
       return;
     }
     round.forEach(([h, a]) => {
-      const homeName = h === 'user' ? Save.data.clubName : DATA.clubs.find(c => c.id === h).name;
-      const awayName = a === 'user' ? Save.data.clubName : DATA.clubs.find(c => c.id === a).name;
-      const isMine = h === 'user' || a === 'user';
+      const mine = h === 'user' || a === 'user';
       const row = document.createElement('div');
-      row.className = 'fixture-row' + (isMine ? ' mine' : '');
-      row.innerHTML = `<span class="fr-teams">${homeName} — ${awayName}</span>`;
-      if (isMine) {
+      row.className = 'fixture-row' + (mine ? ' mine' : '');
+      row.innerHTML = `<span class="fr-teams">${clubName(h)} — ${clubName(a)}</span>`;
+      if (mine) {
         const btn = document.createElement('button');
-        btn.className = 'fr-play';
+        btn.className = 'fr-play cut-tr';
         btn.textContent = 'Играть';
         btn.addEventListener('click', () => {
           launchMatch({ opponentId: h === 'user' ? a : h, isLeague: true, userIsHome: h === 'user' });
         });
         row.appendChild(btn);
       } else {
-        const span = document.createElement('span');
-        span.className = 'fr-done'; span.textContent = 'по расписанию';
-        row.appendChild(span);
+        row.insertAdjacentHTML('beforeend', '<span class="fr-done">по расписанию</span>');
       }
       wrap.appendChild(row);
     });
   }
 
-  // ---------------- SQUAD & TACTICS ----------------
+  // ---------------- СОСТАВ ----------------
+  function ovrClass(v) { return v >= 70 ? 'ovr-hi' : v >= 60 ? 'ovr-mid' : 'ovr-lo'; }
+
   function renderSquad() {
     pill(document.getElementById('formation-list'),
       Object.keys(DATA.formations).map(id => ({ id, name: DATA.formations[id].label })),
       Save.data.formation, id => { Save.data.formation = id; Save.persist(); renderSquad(); });
 
     pill(document.getElementById('tactic-list'), DATA.tacticStyles, Save.data.tacticStyle,
-      id => { Save.data.tacticStyle = id; Save.persist(); renderSquad(); },
-      { label: t => `${t.icon} ${t.name}` });
+      id => { Save.data.tacticStyle = id; Save.persist(); renderSquad(); });
 
-    const strength = Save.teamStrength();
-    document.getElementById('stat-attack-fill').style.width = Math.min(100, strength.attack) + '%';
-    document.getElementById('stat-attack-val').textContent = Math.round(strength.attack);
-    document.getElementById('stat-defense-fill').style.width = Math.min(100, strength.defense) + '%';
-    document.getElementById('stat-defense-val').textContent = Math.round(strength.defense);
+    const s = Save.teamStrength();
+    document.getElementById('stat-attack-fill').style.width = Math.min(100, s.attack) + '%';
+    document.getElementById('stat-attack-val').textContent = Math.round(s.attack);
+    document.getElementById('stat-defense-fill').style.width = Math.min(100, s.defense) + '%';
+    document.getElementById('stat-defense-val').textContent = Math.round(s.defense);
 
-    const xiIds = new Set(strength.xi.all.map(p => p.id));
+    const xi = new Set(s.xi.all.map(p => p.id));
     const list = document.getElementById('squad-list');
     list.innerHTML = '';
     const order = { GK: 0, DEF: 1, MID: 2, FWD: 3 };
-    const squad = Save.data.squad.slice().sort((a, b) => order[a.pos] - order[b.pos] || overall(b) - overall(a));
-    squad.forEach(p => {
-      const row = document.createElement('div');
-      row.className = 'player-row';
-      row.innerHTML = `
-        <div class="player-pos ${p.pos}">${p.pos}</div>
-        <div class="player-info">
-          <b>${p.name} ${xiIds.has(p.id) ? '★' : ''}</b>
-          <div class="player-meta"><span>Форма ${p.fitness}%</span><span>Настрой ${p.morale}%</span></div>
-        </div>
-        <div class="player-ovr">${overall(p)}</div>
-        <button class="player-sell">Продать</button>`;
-      row.querySelector('.player-sell').addEventListener('click', () => {
-        const refund = Save.sellPlayer(p.id);
-        if (refund === false) { showToast('Нельзя продать — состав слишком мал'); return; }
-        showToast(`Продан за 🪙 ${refund}`);
-        renderSquad();
+    Save.data.squad.slice()
+      .sort((a, b) => order[a.pos] - order[b.pos] || overall(b) - overall(a))
+      .forEach(p => {
+        const v = overall(p);
+        const row = document.createElement('div');
+        row.className = 'player-row';
+        row.innerHTML = `
+          <div class="player-pos ${p.pos}">${p.pos}</div>
+          <div class="player-info">
+            <b>${p.name}${xi.has(p.id) ? icon('star', 'ic-sm xi') : ''}</b>
+            <div class="player-meta">
+              <span>форма <i>${p.fitness}%</i></span>
+              <span>настрой <i>${p.morale}%</i></span>
+              <span>${p.age} лет</span>
+            </div>
+          </div>
+          <div class="player-ovr ${ovrClass(v)}">${v}</div>
+          <button class="player-sell">Продать</button>`;
+        row.querySelector('.player-sell').addEventListener('click', () => {
+          const refund = Save.sellPlayer(p.id);
+          if (refund === false) { showToast('Состав слишком мал для продажи'); return; }
+          showToast(`Продан за ${refund} монет`);
+          renderSquad();
+        });
+        list.appendChild(row);
       });
-      list.appendChild(row);
-    });
   }
 
-  // ---------------- TRANSFERS ----------------
+  // ---------------- ТРАНСФЕРЫ ----------------
   function renderTransfers() {
     document.getElementById('transfers-coins').textContent = Save.data.coins;
     if (!Save.data.transferPool.length) Save.refreshTransferPool();
     const list = document.getElementById('transfer-list');
     list.innerHTML = '';
     Save.data.transferPool.forEach(p => {
+      const v = overall(p);
+      const affordable = Save.data.coins >= p.price;
       const row = document.createElement('div');
       row.className = 'player-row';
-      const affordable = Save.data.coins >= p.price;
       row.innerHTML = `
         <div class="player-pos ${p.pos}">${p.pos}</div>
         <div class="player-info">
           <b>${p.name}</b>
-          <div class="player-meta"><span>Возраст ${p.age}</span></div>
+          <div class="player-meta"><span>${p.age} лет</span><span>форма <i>${p.fitness}%</i></span></div>
         </div>
-        <div class="player-ovr">${overall(p)}</div>
-        <span class="player-price">🪙 ${p.price}</span>
+        <div class="player-ovr ${ovrClass(v)}">${v}</div>
+        <span class="player-price">${p.price}</span>
         <button class="player-buy" ${affordable ? '' : 'disabled'}>Купить</button>`;
       row.querySelector('.player-buy').addEventListener('click', () => {
-        if (Save.buyPlayer(p.id)) { showToast(`${p.name} в составе!`); renderTransfers(); }
-        else showToast('Недостаточно монет 🪙');
+        if (Save.buyPlayer(p.id)) { showToast(`${p.name} подписан`); renderTransfers(); }
+        else showToast('Недостаточно монет');
       });
       list.appendChild(row);
     });
@@ -192,9 +309,10 @@
   document.getElementById('btn-refresh-market').addEventListener('click', () => {
     Save.refreshTransferPool();
     renderTransfers();
+    showToast('Рынок обновлён');
   });
 
-  // ---------------- SHOP ----------------
+  // ---------------- МАГАЗИН ----------------
   let currentShopTab = 'kits';
   document.querySelectorAll('.shop-tab').forEach(tab => {
     tab.addEventListener('click', () => {
@@ -209,11 +327,21 @@
     document.getElementById('shop-coins').textContent = Save.data.coins;
     const grid = document.getElementById('shop-grid');
     grid.innerHTML = '';
-    let items, category, iconFn, equipKey;
-    if (tab === 'kits') { items = DATA.kitColors; category = 'kits'; iconFn = k => `<span class="si-icon" style="color:${k.color}">●</span>`; equipKey = 'kit'; }
-    else if (tab === 'balls') { items = DATA.ballSkins; category = 'balls'; iconFn = k => `<span class="si-icon">${k.icon}</span>`; equipKey = 'ball'; }
-    else if (tab === 'interventions') { items = DATA.interventions; category = 'interventions'; iconFn = k => `<span class="si-icon">${k.icon}</span>`; equipKey = null; }
-    else { items = DATA.stadiums; category = 'stadiums'; iconFn = () => `<span class="si-icon">🏟️</span>`; equipKey = null; }
+
+    let items, category, artFn, equipKey;
+    if (tab === 'kits') {
+      items = DATA.kitColors; category = 'kits'; equipKey = 'kit';
+      artFn = k => `<svg class="ic ic-lg" style="color:${k.color}"><use href="#i-kit"/></svg>`;
+    } else if (tab === 'balls') {
+      items = DATA.ballSkins; category = 'balls'; equipKey = 'ball';
+      artFn = b => `<svg class="ic ic-lg" style="color:${b.color}"><use href="#i-ball"/></svg>`;
+    } else if (tab === 'interventions') {
+      items = DATA.interventions; category = 'interventions'; equipKey = null;
+      artFn = i => icon(i.ic, 'ic-lg');
+    } else {
+      items = DATA.stadiums; category = 'stadiums'; equipKey = null;
+      artFn = s => `<span class="si-swatch" style="background:${s.grass}"></span>`;
+    }
 
     items.forEach(item => {
       const owned = item.cost === 0 || Save.owns(category, item.id);
@@ -221,21 +349,22 @@
       const card = document.createElement('div');
       card.className = 'shop-item';
       card.innerHTML = `
-        ${iconFn(item)}
+        <div class="si-art">${artFn(item)}</div>
         <div class="si-name">${item.name}</div>
-        <div style="font-size:11px;color:#93a3c9">${item.desc || (owned ? 'Куплено' : '🪙 ' + item.cost)}</div>
-        <button class="si-buy ${equipped ? 'equipped' : owned ? 'owned' : ''}">${equipped ? 'Экипировано' : owned ? (equipKey ? 'Выбрать' : 'Есть') : 'Купить'}</button>`;
-      const buyBtn = card.querySelector('.si-buy');
-      buyBtn.addEventListener('click', () => {
+        <div class="si-desc">${item.desc || ''}</div>
+        ${owned ? '' : `<div class="si-price">${item.cost} монет</div>`}
+        <button class="si-buy ${equipped ? 'equipped' : owned ? 'owned' : ''}">
+          ${equipped ? 'В деле' : owned ? (equipKey ? 'Выбрать' : 'Куплено') : 'Купить'}
+        </button>`;
+      card.querySelector('.si-buy').addEventListener('click', () => {
         if (!owned) {
           if (Save.buy(category, item.id, item.cost)) {
             Save.unlockAchievement('shopaholic');
             if (equipKey) Save.data[equipKey] = item.id;
             Save.persist();
             renderShop(tab);
-          } else {
-            showToast('Недостаточно монет 🪙');
-          }
+            showToast(`${item.name} — куплено`);
+          } else showToast('Недостаточно монет');
         } else if (equipKey && !equipped) {
           Save.data[equipKey] = item.id;
           Save.persist();
@@ -246,17 +375,25 @@
     });
   }
 
-  // ---------------- CUSTOMIZE ----------------
+  // ---------------- КЛУБ И ФОРМА ----------------
   function renderCustomize() {
-    document.getElementById('club-name-input').value = Save.data.clubName;
-    pill(document.getElementById('kit-color-list'), DATA.kitColors, Save.data.kit, id => Save.data.kit = id, {
-      label: k => Save.owns('kits', k.id) ? k.name : `🔒 ${k.name}`,
-      lockedCheck: k => !Save.owns('kits', k.id)
-    });
-    pill(document.getElementById('ball-skin-list'), DATA.ballSkins, Save.data.ball, id => Save.data.ball = id, {
-      label: b => Save.owns('balls', b.id) ? `${b.icon} ${b.name}` : `🔒 ${b.name}`,
-      lockedCheck: b => !Save.owns('balls', b.id)
-    });
+    const input = document.getElementById('club-name-input');
+    input.value = Save.data.clubName;
+    paintCrest(document.getElementById('customize-crest'));
+
+    input.oninput = () => {
+      const preview = document.getElementById('customize-crest');
+      preview.innerHTML = crestMarkup(input.value.trim() || 'FC Аврора', kitHex());
+    };
+
+    pill(document.getElementById('kit-color-list'), DATA.kitColors, Save.data.kit,
+      id => { Save.data.kit = id; paintCrest(document.getElementById('customize-crest')); }, {
+        lockedCheck: k => !Save.owns('kits', k.id)
+      });
+    pill(document.getElementById('ball-skin-list'), DATA.ballSkins, Save.data.ball,
+      id => Save.data.ball = id, {
+        lockedCheck: b => !Save.owns('balls', b.id)
+      });
   }
 
   document.getElementById('btn-save-customize').addEventListener('click', () => {
@@ -264,30 +401,35 @@
     Save.data.clubName = name || 'FC Аврора';
     Save.data.table.find(r => r.id === 'user').name = Save.data.clubName;
     Save.persist();
+    showToast('Клуб обновлён');
     showScreen('menu');
   });
 
-  // ---------------- ACHIEVEMENTS ----------------
+  // ---------------- ДОСТИЖЕНИЯ ----------------
   function renderAchievements() {
     const list = document.getElementById('achievements-list');
     list.innerHTML = '';
+    let unlocked = 0;
     DATA.achievements.forEach(a => {
-      const unlocked = !!Save.data.achievements[a.id];
+      const has = !!Save.data.achievements[a.id];
+      if (has) unlocked++;
       const el = document.createElement('div');
-      el.className = 'achv-item' + (unlocked ? ' unlocked' : '');
-      el.innerHTML = `<span class="ai-icon">${a.icon}</span><div><b>${a.name}</b><small>${a.desc}</small></div>`;
+      el.className = 'achv-item' + (has ? ' unlocked' : '');
+      el.innerHTML = `
+        <span class="ai-mark">${icon(has ? a.ic : 'lock', 'ic-sm')}</span>
+        <div><b>${a.name}</b><small>${a.desc}</small></div>`;
       list.appendChild(el);
     });
+    document.getElementById('achv-count').textContent =
+      `${unlocked} из ${DATA.achievements.length}`;
   }
 
-  // ---------------- MATCH ORCHESTRATION ----------------
-  const EVENT_ICON = { chance: '🔹', goal: '⚽', save: '🧤', miss: '❌', post: '🥅', card: '🟨', injury: '🚑', boost: '⚡', info: 'ℹ️' };
-
+  // ---------------- ЭФИР МАТЧА ----------------
   function pushCommentary(ev) {
     const feed = document.getElementById('commentary-feed');
     const div = document.createElement('div');
-    div.className = 'cfeed-item' + (ev.kind === 'goal' ? ' goal' : ev.kind === 'boost' ? ' boost' : '');
-    div.innerHTML = `<b>${ev.minute}'</b><span>${EVENT_ICON[ev.kind] || ''} ${ev.text}</span>`;
+    div.className = 'cfeed-item ' + (ev.kind || 'info');
+    div.innerHTML = `<span class="cmin">${ev.minute}'</span><span class="ctext">${ev.text}</span>`;
     feed.appendChild(div);
     feed.scrollTop = feed.scrollHeight;
   }
@@ -295,47 +437,61 @@
   function renderInterventionButtons() {
     const row = document.getElementById('intervention-row');
     row.innerHTML = '';
-    const owned = Save.data.ownedInterventions;
-    if (owned.includes('speech')) {
+    DATA.interventions.forEach(iv => {
+      if (iv.id === 'masterclass') return;           // пассивное, срабатывает при смене тактики
+      if (!Save.data.ownedInterventions.includes(iv.id)) return;
       const b = document.createElement('button');
-      b.className = 'mgr-intervention-btn'; b.textContent = '🔥 Речь';
+      b.className = 'mgr-intervention-btn';
+      b.innerHTML = icon(iv.ic, 'ic-sm') + iv.short;
       b.addEventListener('click', () => {
-        if (MatchEngine.useSpeech()) b.disabled = true; else showToast('Уже использовано в этом матче');
+        const ok = iv.id === 'speech' ? MatchEngine.useSpeech() : MatchEngine.useIronwall();
+        if (ok) b.disabled = true;
+        else showToast('Уже использовано в этом матче');
       });
       row.appendChild(b);
-    }
-    if (owned.includes('ironwall')) {
-      const b = document.createElement('button');
-      b.className = 'mgr-intervention-btn'; b.textContent = '🛡️ Стена';
-      b.addEventListener('click', () => {
-        if (MatchEngine.useIronwall()) b.disabled = true; else showToast('Уже использовано в этом матче');
-      });
-      row.appendChild(b);
-    }
+    });
   }
 
   function launchMatch(ctx) {
     activeMatchCtx = ctx;
+    lastScore = { home: 0, away: 0 };
     showScreen('match');
     document.getElementById('commentary-feed').innerHTML = '';
     document.getElementById('hud-home-name').textContent = Save.data.clubName;
-    const opp = DATA.clubs.find(c => c.id === ctx.opponentId);
-    document.getElementById('hud-away-name').textContent = opp.name;
-    document.getElementById('hud-score').textContent = '0 : 0';
+    document.getElementById('hud-away-name').textContent = clubName(ctx.opponentId);
+    document.getElementById('bb-home-dot').style.background = kitHex();
+    document.getElementById('bb-away-dot').style.background = clubColor(ctx.opponentId);
+    document.getElementById('hud-score').textContent = '0:0';
     document.getElementById('hud-minute').textContent = "0'";
-    document.querySelectorAll('.speed-btn[data-speed]').forEach(b => b.classList.toggle('active', b.dataset.speed === '1'));
-    document.querySelectorAll('.mgr-tactic-btn').forEach(b => b.classList.toggle('active', b.dataset.tactic === Save.data.tacticStyle));
+    document.getElementById('btn-sub').disabled = false;
+    document.querySelectorAll('.speed-btn[data-speed]')
+      .forEach(b => b.classList.toggle('active', b.dataset.speed === '1'));
+    document.querySelectorAll('.mgr-tactic-btn')
+      .forEach(b => b.classList.toggle('active', b.dataset.tactic === Save.data.tacticStyle));
     renderInterventionButtons();
+
     MatchEngine.init();
     MatchEngine.start({
       opponentId: ctx.opponentId,
       stadiumId: Save.data.stadiumId,
       weatherId: Save.data.weatherId,
       onCommentary: pushCommentary,
-      onScore: score => { document.getElementById('hud-score').textContent = `${score.home} : ${score.away}`; },
+      onScore: score => {
+        document.getElementById('hud-score').textContent = `${score.home}:${score.away}`;
+        if (score.home > lastScore.home) flashGoal();
+        lastScore = { home: score.home, away: score.away };
+      },
       onMinute: m => { document.getElementById('hud-minute').textContent = m + "'"; },
       onFinish: result => onMatchFinish(result, ctx)
     });
+  }
+
+  function flashGoal() {
+    const screen = document.getElementById('screen-match');
+    const flash = document.createElement('div');
+    flash.className = 'goal-flash';
+    screen.appendChild(flash);
+    setTimeout(() => flash.remove(), 520);
   }
 
   document.querySelectorAll('.speed-btn[data-speed]').forEach(btn => {
@@ -353,10 +509,10 @@
       btn.classList.add('active');
     });
   });
-  document.getElementById('btn-sub').addEventListener('click', (e) => {
+  document.getElementById('btn-sub').addEventListener('click', e => {
     if (MatchEngine.substitute()) {
-      if (MatchEngine.getSubsUsed() >= 3) e.target.disabled = true;
-    } else showToast('Нет доступных замен');
+      if (MatchEngine.getSubsUsed() >= 3) e.currentTarget.disabled = true;
+    } else showToast('Некого менять — все свежие');
   });
 
   document.getElementById('btn-pause').addEventListener('click', () => {
@@ -379,13 +535,12 @@
     const draw = score.home === score.away;
 
     if (ctx.isLeague) {
-      const oppId = ctx.opponentId;
-      if (ctx.userIsHome) Save.recordResult('user', oppId, score.home, score.away);
-      else Save.recordResult(oppId, 'user', score.away, score.home);
+      if (ctx.userIsHome) Save.recordResult('user', ctx.opponentId, score.home, score.away);
+      else Save.recordResult(ctx.opponentId, 'user', score.away, score.home);
       Save.playOtherFixturesThisRound();
       Save.advanceRound();
-      const sorted = Save.data.table.slice().sort((a, b) => b.pts - a.pts || (b.gf - b.ga) - (a.gf - a.ga));
-      if (sorted[0] && sorted[0].id === 'user') Save.unlockAchievement('top_table');
+      const top = sortedTable()[0];
+      if (top && top.id === 'user') Save.unlockAchievement('top_table');
     }
 
     Save.data.stats.matches++;
@@ -403,8 +558,10 @@
     Save.addXp(xp);
     Save.addCoins(coins);
 
-    document.getElementById('result-title').textContent = win ? '🏆 ПОБЕДА!' : draw ? '🤝 НИЧЬЯ' : '😔 ПОРАЖЕНИЕ';
-    document.getElementById('result-score').textContent = `${score.home} : ${score.away}`;
+    const title = document.getElementById('result-title');
+    title.textContent = win ? 'Победа' : draw ? 'Ничья' : 'Поражение';
+    title.className = 'result-verdict ' + (win ? 'win' : draw ? 'draw' : 'loss');
+    document.getElementById('result-score').textContent = `${score.home}:${score.away}`;
     document.getElementById('stat-xp').textContent = '+' + xp;
     document.getElementById('stat-coins').textContent = '+' + coins;
     document.getElementById('stat-goals').textContent = score.home;
@@ -418,16 +575,16 @@
     showScreen(activeMatchCtx && activeMatchCtx.isLeague ? 'league' : 'menu');
   });
 
-  // ---------------- BOOT SEQUENCE ----------------
+  // ---------------- ЗАПУСК ----------------
   window.addEventListener('load', () => {
     MatchEngine.init();
     let p = 0;
     const fill = document.getElementById('boot-fill');
     const iv = setInterval(() => {
-      p += 8 + Math.random() * 10;
-      if (p >= 100) { p = 100; clearInterval(iv); setTimeout(() => showScreen('menu'), 250); }
+      p += 9 + Math.random() * 11;
+      if (p >= 100) { p = 100; clearInterval(iv); setTimeout(() => showScreen('menu'), 260); }
       fill.style.width = p + '%';
-    }, 90);
+    }, 85);
     document.body.addEventListener('pointerdown', () => SFX.unlock(), { once: true });
   });
 })();
