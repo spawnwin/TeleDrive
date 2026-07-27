@@ -4,6 +4,7 @@
   let friendlyRivalId = DATA.clubs[0].id;
   let activeMatchCtx = null;
   let lastScore = { home: 0, away: 0 };
+  let pendingSeasonSummary = null;
 
   const icon = (name, cls) =>
     `<svg class="ic${cls ? ' ' + cls : ''}"><use href="#i-${name}"/></svg>`;
@@ -227,6 +228,28 @@
       }
       wrap.appendChild(row);
     });
+
+    renderScorers();
+  }
+
+  function renderScorers() {
+    const block = document.getElementById('scorers-block');
+    const list = document.getElementById('scorers-list');
+    const scorers = Save.topScorers(5);
+    block.style.display = scorers.length ? '' : 'none';
+    list.innerHTML = '';
+    scorers.forEach(p => {
+      const row = document.createElement('div');
+      row.className = 'player-row';
+      row.innerHTML = `
+        <div class="player-pos ${p.pos}">${p.pos}</div>
+        <div class="player-info">
+          <b>${p.name}</b>
+          <div class="player-meta"><span>матчей <i>${p.apps}</i></span></div>
+        </div>
+        <div class="player-ovr ovr-hi">${p.goals}</div>`;
+      list.appendChild(row);
+    });
   }
 
   // ---------------- СОСТАВ ----------------
@@ -254,15 +277,19 @@
       .sort((a, b) => order[a.pos] - order[b.pos] || overall(b) - overall(a))
       .forEach(p => {
         const v = overall(p);
+        const out = p.injuredFor ? `травма · ${p.injuredFor}` :
+                    p.suspendedFor ? `дисквалификация · ${p.suspendedFor}` : null;
         const row = document.createElement('div');
-        row.className = 'player-row';
+        row.className = 'player-row' + (out ? ' out' : '');
         row.innerHTML = `
           <div class="player-pos ${p.pos}">${p.pos}</div>
           <div class="player-info">
             <b>${p.name}${xi.has(p.id) ? icon('star', 'ic-sm xi') : ''}</b>
             <div class="player-meta">
-              <span>форма <i>${p.fitness}%</i></span>
-              <span>настрой <i>${p.morale}%</i></span>
+              ${out
+                ? `<span class="out-tag">${out}</span>`
+                : `<span>форма <i>${p.fitness}%</i></span><span>настрой <i>${p.morale}%</i></span>`}
+              ${p.goals ? `<span>голы <i>${p.goals}</i></span>` : ''}
               <span>${p.age} лет</span>
             </div>
           </div>
@@ -481,9 +508,25 @@
         if (score.home > lastScore.home) flashGoal();
         lastScore = { home: score.home, away: score.away };
       },
-      onMinute: m => { document.getElementById('hud-minute').textContent = m + "'"; },
+      onMinute: m => {
+        document.getElementById('hud-minute').textContent = m + "'";
+        paintLiveStats();
+      },
       onFinish: result => onMatchFinish(result, ctx)
     });
+    paintLiveStats();
+  }
+
+  function paintLiveStats() {
+    const s = MatchEngine.getStats();
+    if (!s) return;
+    document.getElementById('poss-home').textContent = s.possHome + '%';
+    document.getElementById('poss-away').textContent = (100 - s.possHome) + '%';
+    document.getElementById('poss-fill').style.width = s.possHome + '%';
+    document.getElementById('shots-home').textContent = s.home.shots;
+    document.getElementById('shots-away').textContent = s.away.shots;
+    document.getElementById('target-home').textContent = s.home.onTarget;
+    document.getElementById('target-away').textContent = s.away.onTarget;
   }
 
   function flashGoal() {
@@ -533,15 +576,19 @@
     const { score } = result;
     const win = score.home > score.away;
     const draw = score.home === score.away;
+    let seasonSummary = null;
 
     if (ctx.isLeague) {
       if (ctx.userIsHome) Save.recordResult('user', ctx.opponentId, score.home, score.away);
       else Save.recordResult(ctx.opponentId, 'user', score.away, score.home);
       Save.playOtherFixturesThisRound();
-      Save.advanceRound();
       const top = sortedTable()[0];
       if (top && top.id === 'user') Save.unlockAchievement('top_table');
+      seasonSummary = Save.advanceRound();
     }
+    pendingSeasonSummary = seasonSummary;
+
+    renderResultDetails(result, ctx);
 
     Save.data.stats.matches++;
     Save.data.stats.goals += score.home;
@@ -569,10 +616,83 @@
     Save.persist();
   }
 
+  function renderResultDetails(result, ctx) {
+    const oppName = clubName(ctx.opponentId);
+    const list = document.getElementById('result-scorers');
+    list.innerHTML = '';
+    result.scorers
+      .slice()
+      .sort((a, b) => a.minute - b.minute)
+      .forEach(g => {
+        const d = document.createElement('div');
+        if (g.side === 'home') d.className = 'mine';
+        d.innerHTML = `<span class="num">${g.minute}'</span>${g.name}`;
+        list.appendChild(d);
+      });
+    if (!result.scorers.length) {
+      list.innerHTML = '<div>Голов не было</div>';
+    }
+
+    const s = result.stats;
+    document.getElementById('result-match-stats').innerHTML = `
+      ${statRow(s.possHome + '%', 'Владение', (100 - s.possHome) + '%')}
+      ${statRow(s.home.shots, 'Удары', s.away.shots)}
+      ${statRow(s.home.onTarget, 'В створ', s.away.onTarget)}`;
+    document.getElementById('hud-away-name').textContent = oppName;
+  }
+
+  function statRow(a, label, b) {
+    return `<div class="ms-row"><b>${a}</b><span>${label}</span><b>${b}</b></div>`;
+  }
+
   document.getElementById('btn-result-continue').addEventListener('click', () => {
     document.getElementById('overlay-result').classList.add('hidden');
     MatchEngine.stop();
+    if (pendingSeasonSummary) {
+      showSeasonSummary(pendingSeasonSummary);
+      return;
+    }
     showScreen(activeMatchCtx && activeMatchCtx.isLeague ? 'league' : 'menu');
+  });
+
+  // ---------------- ИТОГИ СЕЗОНА ----------------
+  function showSeasonSummary(sum) {
+    const verdict = document.getElementById('season-verdict');
+    verdict.textContent = sum.rank === 1 ? 'Чемпион' : `Сезон ${sum.season} завершён`;
+    verdict.className = 'result-verdict ' + (sum.rank === 1 ? 'win' : sum.rank <= 3 ? 'draw' : 'loss');
+
+    document.getElementById('season-place').textContent = sum.rank;
+    document.getElementById('season-champ').innerHTML = sum.championIsUser
+      ? 'Титул остаётся дома'
+      : `Чемпион — <b>${sum.champion}</b>`;
+    document.getElementById('season-record').textContent =
+      `${sum.record.w}-${sum.record.d}-${sum.record.l}`;
+    const diff = sum.record.gf - sum.record.ga;
+    document.getElementById('season-diff').textContent = (diff > 0 ? '+' : '') + diff;
+
+    const sc = document.getElementById('season-scorer');
+    sc.innerHTML = sum.topScorer
+      ? `Лучший бомбардир клуба<b>${sum.topScorer.name} — ${sum.topScorer.goals}</b>`
+      : 'Клуб остался без забивных игроков';
+
+    const table = document.getElementById('season-table');
+    table.innerHTML = '';
+    sum.standings.forEach((r, i) => {
+      const row = document.createElement('div');
+      row.className = 'ft-row' + (r.id === 'user' ? ' me' : '');
+      row.innerHTML = `<span class="ft-pos">${i + 1}</span>
+        <i class="club-dot" style="background:${r.color}"></i>
+        <span class="ft-name">${r.name}</span><span class="ft-pts">${r.pts}</span>`;
+      table.appendChild(row);
+    });
+
+    document.getElementById('overlay-season').classList.remove('hidden');
+  }
+
+  document.getElementById('btn-season-continue').addEventListener('click', () => {
+    document.getElementById('overlay-season').classList.add('hidden');
+    pendingSeasonSummary = null;
+    showScreen('menu');
   });
 
   // ---------------- ЗАПУСК ----------------

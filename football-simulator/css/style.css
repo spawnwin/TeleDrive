@@ -351,6 +351,8 @@ button { border: none; background: none; cursor: pointer; }
 .player-meta { display: flex; gap: 10px; margin-top: 3px; font-size: 10.5px; color: var(--faint);
   font-variant-numeric: tabular-nums; }
 .player-meta i { font-style: normal; color: var(--muted); }
+.player-row.out .player-info b, .player-row.out .player-ovr { opacity: .45; }
+.out-tag { color: var(--flare); font-weight: 700; }
 .player-ovr {
   width: 30px; flex: 0 0 auto; text-align: center; font-weight: 900; font-size: 17px;
   letter-spacing: -.03em; font-variant-numeric: tabular-nums;
@@ -457,13 +459,74 @@ button { border: none; background: none; cursor: pointer; }
 }
 .bb-pause { flex: 0 0 auto; background: var(--surface); padding: 0 11px; color: var(--muted); }
 
-#game-canvas { width: 100%; height: 30vh; display: block; margin-top: 8px; }
+#game-canvas { width: 100%; height: 25vh; display: block; margin-top: 8px; }
 
 @keyframes goalFlash { from { opacity: .85; } to { opacity: 0; } }
 .goal-flash {
   position: absolute; inset: 0; background: var(--lime); pointer-events: none;
   z-index: 30; animation: goalFlash .5s ease-out forwards;
 }
+
+/* live statline — телевизионная плашка со статистикой */
+.statline {
+  margin: 8px 8px 0; padding: 9px 12px;
+  background: var(--surface); border: 1px solid var(--edge-soft);
+  display: flex; flex-direction: column; gap: 7px;
+}
+.stat-poss { display: flex; align-items: center; gap: 9px; }
+.stat-poss b { font-size: 12px; font-weight: 800; width: 34px; flex: 0 0 auto; }
+.stat-poss b:first-child { color: var(--lime); }
+.stat-poss b:last-child { text-align: right; color: var(--muted); }
+.poss-bar { flex: 1; height: 4px; background: rgba(233,241,234,.12); overflow: hidden; }
+.poss-fill { height: 100%; width: 50%; background: var(--lime); transition: width .4s ease; }
+.stat-counts {
+  display: flex; align-items: center; justify-content: center; gap: 7px;
+  font-size: 11px; color: var(--muted);
+}
+.stat-counts span.num { font-weight: 800; color: var(--chalk); min-width: 14px; text-align: center; }
+.stat-counts em {
+  font-style: normal; font-size: 9px; text-transform: uppercase;
+  letter-spacing: .12em; color: var(--faint);
+}
+.stat-counts .sep { width: 1px; height: 12px; background: var(--edge-soft); margin: 0 6px; min-width: 1px; }
+
+/* авторы голов и статистика в итоге матча */
+.scoreline { display: flex; flex-direction: column; gap: 3px; margin: -8px 0 16px; }
+.scoreline div { font-size: 12px; color: var(--muted); }
+.scoreline div.mine { color: var(--chalk); font-weight: 700; }
+.scoreline .num { color: var(--faint); font-weight: 800; margin-right: 5px; }
+
+.match-stats { display: flex; flex-direction: column; gap: 6px; margin-bottom: var(--sp-5); }
+.ms-row { display: flex; align-items: center; gap: 10px; font-size: 11.5px; }
+.ms-row b { width: 28px; flex: 0 0 auto; font-weight: 800; font-variant-numeric: tabular-nums; }
+.ms-row b:first-child { text-align: left; }
+.ms-row b:last-child { text-align: right; color: var(--muted); }
+.ms-row span {
+  flex: 1; font-size: 9px; text-transform: uppercase; letter-spacing: .12em; color: var(--faint);
+}
+
+/* итоги сезона */
+.season-rank { margin: 0 0 4px; display: flex; align-items: baseline; justify-content: center; gap: 8px; }
+.season-rank .num { font-size: 52px; font-weight: 900; letter-spacing: -.05em; line-height: 1; }
+.season-rank small { font-size: 11px; text-transform: uppercase; letter-spacing: .16em; color: var(--muted); }
+.season-champ { margin: 0 0 var(--sp-5); font-size: 12.5px; color: var(--muted); }
+.season-champ b { color: var(--lime); }
+.season-scorer {
+  margin-bottom: var(--sp-4); padding: 10px; background: var(--surface-2);
+  border-radius: var(--r-chip); font-size: 12px; color: var(--muted);
+}
+.season-scorer b { display: block; color: var(--chalk); font-size: 13.5px; margin-top: 2px; }
+.final-table { display: flex; flex-direction: column; margin-bottom: var(--sp-5); }
+.ft-row {
+  display: flex; align-items: center; gap: 8px; padding: 6px 0;
+  border-top: 1px solid var(--edge-soft); font-size: 12px;
+}
+.ft-row:first-child { border-top: none; }
+.ft-row.me { color: var(--lime); font-weight: 800; }
+.ft-row .ft-pos { width: 16px; color: var(--faint); font-weight: 800; font-variant-numeric: tabular-nums; }
+.ft-row.me .ft-pos { color: var(--lime); }
+.ft-row .ft-name { flex: 1; text-align: left; }
+.ft-row .ft-pts { font-weight: 800; font-variant-numeric: tabular-nums; }
 
 /* control deck */
 .deck { padding: 10px 8px 8px; display: flex; flex-direction: column; gap: 7px; }
@@ -560,7 +623,7 @@ button { border: none; background: none; cursor: pointer; }
   font-variant-numeric: tabular-nums; line-height: 1;
 }
 .result-stats {
-  display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px;
+  display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 1px;
   background: var(--edge-soft); border: 1px solid var(--edge-soft); margin-bottom: var(--sp-5);
 }
 .result-stats div { background: var(--surface); padding: 11px 6px; }

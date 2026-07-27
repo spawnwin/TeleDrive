@@ -166,6 +166,11 @@
       <div class="block-head"><h3>Тур <span class="num" id="league-round">1</span></h3><span class="hint">из 7</span></div>
       <div id="league-fixtures" class="fixture-list"></div>
     </div>
+
+    <div class="block" id="scorers-block">
+      <div class="block-head"><h3>Бомбардиры клуба</h3><span class="hint">за сезон</span></div>
+      <div id="scorers-list" class="squad-list"></div>
+    </div>
   </section>
 
   <!-- ================= СОСТАВ И ТАКТИКА ================= -->
@@ -319,6 +324,23 @@
 
     <canvas id="game-canvas"></canvas>
 
+    <div class="statline">
+      <div class="stat-poss">
+        <b class="num" id="poss-home">50%</b>
+        <div class="poss-bar"><div class="poss-fill" id="poss-fill"></div></div>
+        <b class="num" id="poss-away">50%</b>
+      </div>
+      <div class="stat-counts">
+        <span class="num" id="shots-home">0</span>
+        <em>удары</em>
+        <span class="num" id="shots-away">0</span>
+        <span class="sep"></span>
+        <span class="num" id="target-home">0</span>
+        <em>в створ</em>
+        <span class="num" id="target-away">0</span>
+      </div>
+    </div>
+
     <div class="deck">
       <div class="deck-row">
         <button class="speed-btn active" data-speed="1">1×</button>
@@ -352,12 +374,30 @@
     <div class="overlay-card">
       <p class="result-verdict" id="result-title">Победа</p>
       <p id="result-score" class="result-score">3:1</p>
+      <div class="scoreline" id="result-scorers"></div>
+      <div class="match-stats" id="result-match-stats"></div>
       <div class="result-stats">
         <div><b class="num" id="stat-xp">+0</b><span>Опыт</span></div>
         <div><b class="num" id="stat-coins">+0</b><span>Монеты</span></div>
         <div><b class="num" id="stat-goals">0</b><span>Голы</span></div>
       </div>
       <button class="act cut-tr" id="btn-result-continue">Продолжить</button>
+    </div>
+  </div>
+
+  <!-- ================= ИТОГИ СЕЗОНА ================= -->
+  <div id="overlay-season" class="overlay hidden">
+    <div class="overlay-card">
+      <p class="result-verdict win" id="season-verdict">Сезон завершён</p>
+      <p class="season-rank"><span class="num" id="season-place">1</span><small>место</small></p>
+      <p class="season-champ" id="season-champ"></p>
+      <div class="result-stats">
+        <div><b class="num" id="season-record">0-0-0</b><span>В · Н · П</span></div>
+        <div><b class="num" id="season-diff">0</b><span>Разница</span></div>
+      </div>
+      <div class="season-scorer" id="season-scorer"></div>
+      <div class="final-table" id="season-table"></div>
+      <button class="act cut-tr" id="btn-season-continue">Новый сезон</button>
     </div>
   </div>
 

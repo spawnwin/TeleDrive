@@ -21,8 +21,21 @@ function genPlayer(pos, basePower) {
     skill: Math.round(clamp01to100(skill)),
     age: randInt(18, 33),
     fitness: 100,
-    morale: randInt(65, 90)
+    morale: randInt(65, 90),
+    goals: 0,          // за текущий сезон
+    careerGoals: 0,
+    apps: 0,
+    injuredFor: 0,     // матчей вне игры
+    suspendedFor: 0,
+    yellows: 0         // в пределах одного матча
   };
+}
+
+/* Сейвы, сделанные до появления карточек и травм, донабирают поля. */
+function normalizePlayer(p) {
+  ['goals', 'careerGoals', 'apps', 'injuredFor', 'suspendedFor', 'yellows']
+    .forEach(k => { if (typeof p[k] !== 'number') p[k] = 0; });
+  return p;
 }
 
 function overall(p) {
@@ -106,6 +119,8 @@ const Save = {
       this.data = defaultSave();
     }
     if (!this.data.squad || !this.data.squad.length) this.data.squad = genSquad(62);
+    this.data.squad.forEach(normalizePlayer);
+    (this.data.transferPool || []).forEach(normalizePlayer);
     if (!this.data.fixtures || !this.data.fixtures.length) this.data.fixtures = generateFixtures();
     if (!this.data.table || !this.data.table.length) {
       this.data.table = ['user'].concat(DATA.clubs.map(c => c.id)).map(id =>
@@ -164,19 +179,47 @@ const Save = {
   },
 
   // ---------------- SQUAD / TACTICS ----------------
+  isAvailable(p) { return !p.injuredFor && !p.suspendedFor; },
+
+  /* Травмированные и дисквалифицированные в состав не попадают. Если линия
+     не набирается (продали всех вратарей, эпидемия травм), её добирают
+     лучшие из оставшихся — не по позиции, зато состав всегда полный. */
   bestXI() {
     const f = DATA.formations[this.data.formation];
-    const squad = this.data.squad;
-    const byPos = pos => squad.filter(p => p.pos === pos).sort((a, b) => effectiveRating(b) - effectiveRating(a));
-    const gk = byPos('GK').slice(0, 1);
-    const def = byPos('DEF').slice(0, f.def);
-    const mid = byPos('MID').slice(0, f.mid);
-    const fwd = byPos('FWD').slice(0, f.fwd);
+    const pool = this.data.squad.filter(p => this.isAvailable(p));
+    const used = new Set();
+    const rank = (a, b) => effectiveRating(b) - effectiveRating(a);
+
+    const take = (pos, n) => {
+      const list = pool.filter(p => p.pos === pos && !used.has(p.id)).sort(rank).slice(0, n);
+      list.forEach(p => used.add(p.id));
+      return list;
+    };
+    const fill = (arr, n) => {
+      while (arr.length < n) {
+        const sub = pool.filter(p => !used.has(p.id)).sort(rank)[0];
+        if (!sub) break;
+        used.add(sub.id);
+        arr.push(sub);
+      }
+      return arr;
+    };
+
+    const gk = fill(take('GK', 1), 1);
+    const def = fill(take('DEF', f.def), f.def);
+    const mid = fill(take('MID', f.mid), f.mid);
+    const fwd = fill(take('FWD', f.fwd), f.fwd);
     return { gk, def, mid, fwd, all: gk.concat(def, mid, fwd) };
   },
 
   teamStrength() {
     const xi = this.bestXI();
+    return Object.assign(this.strengthOfXI(xi), { xi });
+  },
+
+  /* Считает силу конкретного состава. Матч держит свой XI (замены, травмы,
+     удаления), поэтому сила должна считаться от него, а не от bestXI. */
+  strengthOfXI(xi) {
     const tactic = DATA.tacticStyles.find(t => t.id === this.data.tacticStyle);
     const weather = DATA.weathers.find(w => w.id === this.data.weatherId) || DATA.weathers[0];
     let atkSum = 0, atkW = 0, defSum = 0, defW = 0;
@@ -188,20 +231,34 @@ const Save = {
     const baseDef = defW ? defSum / defW : 50;
     return {
       attack: baseAtk * tactic.atkMul * weather.atkMul,
-      defense: baseDef * tactic.defMul * weather.defMul,
-      xi
+      defense: baseDef * tactic.defMul * weather.defMul
     };
   },
 
-  applyFatigue(xi) {
+  applyPostMatch(xi, won) {
     xi.all.forEach(p => {
       p.fitness = clamp01to100(p.fitness - randInt(6, 16));
-      p.morale = clamp01to100(p.morale + randInt(-3, 6));
+      p.morale = clamp01to100(p.morale + (won ? randInt(1, 9) : randInt(-6, 3)));
+      p.apps++;
     });
     this.data.squad.forEach(p => {
       if (!xi.all.includes(p)) p.fitness = clamp01to100(p.fitness + randInt(4, 10));
+      if (p.injuredFor) p.injuredFor--;
+      if (p.suspendedFor) p.suspendedFor--;
+      p.yellows = 0;
     });
     this.persist();
+  },
+
+  topScorers(limit) {
+    return this.data.squad
+      .filter(p => p.goals > 0)
+      .sort((a, b) => b.goals - a.goals || b.apps - a.apps)
+      .slice(0, limit || 5);
+  },
+
+  unavailableCount() {
+    return this.data.squad.filter(p => !this.isAvailable(p)).length;
   },
 
   // ---------------- LEAGUE ----------------
@@ -249,18 +306,35 @@ const Save = {
     }
   },
 
+  /* Возвращает итоги сезона, если он только что закончился, иначе null —
+     интерфейсу нужно показать финальную таблицу до обнуления. */
   advanceRound() {
     this.data.round++;
-    if (this.data.round >= this.data.fixtures.length) {
-      this.endSeason();
-    }
+    let summary = null;
+    if (this.data.round >= this.data.fixtures.length) summary = this.endSeason();
     this.persist();
+    return summary;
   },
 
   endSeason() {
     const sorted = this.data.table.slice().sort((a, b) => b.pts - a.pts || (b.gf - b.ga) - (a.gf - a.ga));
     const rank = sorted.findIndex(r => r.id === 'user') + 1;
     if (rank === 1) this.unlockAchievement('league_complete');
+
+    const me = sorted.find(r => r.id === 'user');
+    const scorer = this.topScorers(1)[0] || null;
+    const summary = {
+      season: this.data.season,
+      rank,
+      champion: sorted[0].name,
+      championIsUser: sorted[0].id === 'user',
+      standings: sorted.map(r => ({ id: r.id, name: r.name, color: r.color, pts: r.pts })),
+      record: { w: me.w, d: me.d, l: me.l, gf: me.gf, ga: me.ga },
+      topScorer: scorer ? { name: scorer.name, goals: scorer.goals } : null
+    };
+
+    // Голы копятся в карьерный итог, сезонный счётчик стартует заново.
+    this.data.squad.forEach(p => { p.careerGoals += p.goals; p.goals = 0; });
     this.data.season++;
     this.data.round = 0;
     this.data.fixtures = generateFixtures();
@@ -268,9 +342,14 @@ const Save = {
       id === 'user' ? emptyTableRow('user', this.data.clubName, '#22d3ee')
         : emptyTableRow(id, DATA.clubs.find(c => c.id === id).name, DATA.clubs.find(c => c.id === id).color)
     );
-    DATA.clubs.forEach(c => { c.power = clampNum(c.power + randInt(-2, 4), 45, 96); });
+    // Новый сезон: соперники подрастают, состав выходит из отпуска здоровым.
+    DATA.clubs.forEach(c => { c.power = clampNum(c.power + randInt(-2, 3), 45, 88); });
+    this.data.squad.forEach(p => {
+      p.injuredFor = 0; p.suspendedFor = 0; p.yellows = 0;
+      p.fitness = 100;
+    });
     this.persist();
-    return rank;
+    return summary;
   },
 
   // ---------------- TRANSFER MARKET ----------------

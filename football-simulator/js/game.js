@@ -69,6 +69,12 @@ const MatchEngine = (() => {
       subsUsed: 0,
       tacticPenaltyUntil: 0,
       xi: homeStrength.xi,
+      stats: {
+        home: { shots: 0, onTarget: 0, poss: 0 },
+        away: { shots: 0, onTarget: 0, poss: 0 }
+      },
+      scorers: [],
+      redCard: false,
       lastTacticSwitchMinute: -99,
       ballAnim: { x: 0.5, y: 0.5, phase: 'idle' },
       momentum: 0,
@@ -82,7 +88,7 @@ const MatchEngine = (() => {
   }
 
   function homeStrengthNow() {
-    const base = Save.teamStrength();
+    const base = Save.strengthOfXI(state.xi);
     let atk = base.attack, def = base.defense;
     for (const b of state.boosts) {
       if (b.side !== 'home' || b.untilMinute < state.minute) continue;
@@ -102,13 +108,43 @@ const MatchEngine = (() => {
     return { attack: atk, defense: def };
   }
 
-  function randomAttackerName(side) {
-    if (side === 'home') {
-      const pool = state.xi.fwd.concat(state.xi.mid);
-      const p = pick(pool.length ? pool : state.xi.all);
-      return p.name;
-    }
-    return choice(DATA.firstNames) + ' ' + choice(DATA.lastNames);
+  /* Автор гола — настоящий игрок стартового состава: нападающие бьют чаще
+     полузащитников, те чаще защитников. Гол пишется в его счёт. */
+  function creditScorer() {
+    const xi = state.xi;
+    const weighted = [];
+    xi.fwd.forEach(p => { for (let i = 0; i < 6; i++) weighted.push(p); });
+    xi.mid.forEach(p => { for (let i = 0; i < 3; i++) weighted.push(p); });
+    xi.def.forEach(p => weighted.push(p));
+    const p = weighted.length ? pick(weighted) : xi.all[0];
+    if (!p) return 'Неизвестный игрок';
+    p.goals++;
+    return p.name;
+  }
+
+  function removeFromXI(p) {
+    ['gk', 'def', 'mid', 'fwd', 'all'].forEach(group => {
+      const i = state.xi[group].indexOf(p);
+      if (i !== -1) state.xi[group].splice(i, 1);
+    });
+  }
+
+  function replaceInXI(out, inp) {
+    ['gk', 'def', 'mid', 'fwd', 'all'].forEach(group => {
+      const i = state.xi[group].indexOf(out);
+      if (i !== -1) state.xi[group][i] = inp;
+    });
+  }
+
+  function benchBest(pos) {
+    return Save.data.squad
+      .filter(p => Save.isAvailable(p) && !state.xi.all.includes(p) && (!pos || p.pos === pos))
+      .sort((a, b) => effectiveRating(b) - effectiveRating(a))[0] || null;
+  }
+
+  function manDownPenalty() {
+    state.boosts.push({ side: 'home', type: 'atk', mul: 0.85, untilMinute: 999 });
+    state.boosts.push({ side: 'home', type: 'def', mul: 0.88, untilMinute: 999 });
   }
 
   function say(text, kind) {
@@ -119,7 +155,11 @@ const MatchEngine = (() => {
     if (side === 'home') state.score.home++; else state.score.away++;
     state.onScore(Object.assign({}, state.score));
     const teamName = side === 'home' ? state.homeName : state.awayName;
-    say(fmt(pick(FLAVORS.goal), { team: teamName, player: randomAttackerName(side) }), 'goal');
+    const scorer = side === 'home'
+      ? creditScorer()
+      : choice(DATA.firstNames) + ' ' + choice(DATA.lastNames);
+    state.scorers.push({ side, name: scorer, minute: state.minute });
+    say(fmt(pick(FLAVORS.goal), { team: teamName, player: scorer }), 'goal');
     playGoalFx(side);
     SFX.goal();
     if (navigator.vibrate) navigator.vibrate(side === 'home' ? [40, 60, 90] : 40);
@@ -136,11 +176,52 @@ const MatchEngine = (() => {
 
     state.momentum = clamp(state.momentum * 0.85 + ((pChanceHome - pChanceAway) * 6), -1, 1);
 
+    // Владение: доля минут, проведённых с мячом, по соотношению сил.
+    const share = (home.attack + home.defense) /
+                  (home.attack + home.defense + away.attack + away.defense);
+    if (Math.random() < share) state.stats.home.poss++; else state.stats.away.poss++;
+
     if (Math.random() < pChanceHome) resolveChance('home', home, away);
     if (Math.random() < pChanceAway) resolveChance('away', away, home);
 
-    if (Math.random() < 0.01) say(pick(FLAVORS.card), 'card');
-    if (Math.random() < 0.0035) say(pick(FLAVORS.injury), 'injury');
+    if (Math.random() < 0.012) cardEvent();
+    if (Math.random() < 0.004) injuryEvent();
+  }
+
+  /* Жёлтая — предупреждение, вторая за матч превращается в удаление:
+     игрок пропускает следующий матч, а команда доигрывает в меньшинстве. */
+  function cardEvent() {
+    const p = pick(state.xi.all);
+    if (!p) return;
+    p.yellows++;
+    if (p.yellows >= 2 && !state.redCard) {
+      state.redCard = true;
+      p.suspendedFor = 1;
+      removeFromXI(p);
+      manDownPenalty();
+      say(`${p.name} получает вторую жёлтую и уходит с поля — играем в меньшинстве`, 'card');
+    } else {
+      say(`${p.name} получает жёлтую карточку`, 'card');
+    }
+  }
+
+  /* Травмированного меняет лучший доступный из запаса и тратит слот замены.
+     Если замен не осталось — доигрываем в меньшинстве. */
+  function injuryEvent() {
+    const fit = state.xi.all.filter(p => !p.injuredFor);
+    if (!fit.length) return;
+    const p = pick(fit);
+    p.injuredFor = randInt(2, 4);
+    const rep = state.subsUsed < 3 ? (benchBest(p.pos) || benchBest(null)) : null;
+    if (rep) {
+      replaceInXI(p, rep);
+      state.subsUsed++;
+      say(`${p.name} повредился, вместо него выходит ${rep.name}`, 'injury');
+    } else {
+      removeFromXI(p);
+      manDownPenalty();
+      say(`${p.name} повредился, замен не осталось — доигрываем вдесятером`, 'injury');
+    }
   }
 
   function resolveChance(side, atkTeam, defTeam) {
@@ -148,7 +229,9 @@ const MatchEngine = (() => {
     const team = side === 'home' ? state.homeName : state.awayName;
     say(fmt(pick(FLAVORS.chance), { team }), 'chance');
     animateChance(side);
+    state.stats[side].shots++;
     const onTarget = Math.random() < 0.62;
+    if (onTarget) state.stats[side].onTarget++;
     if (!onTarget) {
       if (Math.random() < 0.15) say(fmt(pick(FLAVORS.post), { team }), 'miss');
       else say(fmt(pick(FLAVORS.miss), { team }), 'miss');
@@ -202,16 +285,9 @@ const MatchEngine = (() => {
       if (p.fitness < worstScore) { worstScore = p.fitness; worst = p; }
     }
     if (!worst || worst.fitness > 70) return false;
-    const bench = Save.data.squad.filter(p => p.pos === worst.pos && !state.xi.all.includes(p))
-      .sort((a, b) => effectiveRating(b) - effectiveRating(a));
-    if (!bench.length) return false;
-    const inPlayer = bench[0];
-    ['gk', 'def', 'mid', 'fwd'].forEach(group => {
-      const idx = state.xi[group].indexOf(worst);
-      if (idx !== -1) state.xi[group][idx] = inPlayer;
-    });
-    const allIdx = state.xi.all.indexOf(worst);
-    if (allIdx !== -1) state.xi.all[allIdx] = inPlayer;
+    const inPlayer = benchBest(worst.pos);
+    if (!inPlayer) return false;
+    replaceInXI(worst, inPlayer);
     state.subsUsed++;
     say(`Замена: ${worst.name} уступает место ${inPlayer.name}`, 'info');
     return true;
@@ -454,10 +530,24 @@ const MatchEngine = (() => {
     if (state.timerHandle) clearTimeout(state.timerHandle);
     say(pick(FLAVORS.fulltime), 'info');
     SFX.whistle();
-    Save.applyFatigue(state.xi);
-    const result = { score: state.score };
+    Save.applyPostMatch(state.xi, state.score.home > state.score.away);
+    const result = {
+      score: state.score,
+      stats: publicStats(),
+      scorers: state.scorers.slice()
+    };
     if (animRaf) cancelAnimationFrame(animRaf);
     state.onFinish(result);
+  }
+
+  function publicStats() {
+    const s = state.stats;
+    const total = s.home.poss + s.away.poss;
+    return {
+      possHome: total ? Math.round(s.home.poss / total * 100) : 50,
+      home: { shots: s.home.shots, onTarget: s.home.onTarget },
+      away: { shots: s.away.shots, onTarget: s.away.onTarget }
+    };
   }
 
   return {
@@ -499,6 +589,7 @@ const MatchEngine = (() => {
     getSpeechUsed() { return state ? state.speechUsed : false },
     getIronwallUsed() { return state ? state.ironwallUsed : false },
     getSubsUsed() { return state ? state.subsUsed : 0 },
+    getStats() { return state ? publicStats() : null; },
     currentMinute() { return state ? state.minute : 0; }
   };
 })();
