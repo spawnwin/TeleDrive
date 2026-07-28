@@ -55,7 +55,8 @@ const Net = {
   pullSave() { return this.request('GET', '/api/save'); },
   pushSave(save) { return this.request('PUT', '/api/save', { save }); },
   leaderboard() { return this.request('GET', '/api/leaderboard'); },
-  rivals() { return this.request('GET', '/api/rivals'); }
+  rivals() { return this.request('GET', '/api/rivals'); },
+  news() { return this.request('GET', '/api/news'); }
 };
 
 /* Единая точка входа для интерфейса: он не должен знать, лежит ли

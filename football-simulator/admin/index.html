@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<title>FUTBOL X — панель управления</title>
+<link rel="icon" href="../icons/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="admin.css">
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+  <symbol id="a-people" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><path d="M3 20a6 6 0 0 1 12 0"/><path d="M16 6.5a2.8 2.8 0 0 1 0 5.5M18 20a5.6 5.6 0 0 0-2-4"/></symbol>
+  <symbol id="a-gauge" viewBox="0 0 24 24"><path d="M4 18a8 8 0 1 1 16 0"/><path d="m12 14 4-4"/></symbol>
+  <symbol id="a-sliders" viewBox="0 0 24 24"><path d="M4 8h10M18 8h2M4 16h4M12 16h8"/><circle cx="16" cy="8" r="2"/><circle cx="10" cy="16" r="2"/></symbol>
+  <symbol id="a-scroll" viewBox="0 0 24 24"><path d="M6 4h10v16H6z"/><path d="M9 8h4M9 12h4M9 16h2"/></symbol>
+  <symbol id="a-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6"/><path d="m16 16 4 4"/></symbol>
+  <symbol id="a-exit" viewBox="0 0 24 24"><path d="M14 4H6v16h8"/><path d="M18 12H10m8 0-3-3m3 3-3 3"/></symbol>
+  <symbol id="a-ban" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="m6.5 6.5 11 11"/></symbol>
+  <symbol id="a-key" viewBox="0 0 24 24"><circle cx="8" cy="12" r="4"/><path d="M12 12h9m-3 0v3m-3-3v2"/></symbol>
+  <symbol id="a-trash" viewBox="0 0 24 24"><path d="M5 7h14M9 7V5h6v2M7 7l1 13h8l1-13"/></symbol>
+  <symbol id="a-close" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+</defs></svg>
+
+<!-- ================= ВХОД ================= -->
+<section id="gate" class="gate">
+  <form class="gate-card" id="gate-form">
+    <p class="gate-eyebrow">FUTBOL X</p>
+    <h1>Панель управления</h1>
+    <p class="gate-sub">Вход только для администратора сервера.</p>
+    <input id="gate-pass" type="password" class="field" placeholder="Пароль панели"
+           autocomplete="current-password" required>
+    <button class="btn primary wide" id="gate-btn" type="submit">Войти</button>
+    <p class="gate-status hidden" id="gate-status"></p>
+    <p class="gate-hint">Пароль задаётся переменной <code>FUTBOLX_ADMIN_PASSWORD</code>.
+      Если она не задана, он был напечатан в журнале сервиса при первом запуске.</p>
+  </form>
+</section>
+
+<!-- ================= ПАНЕЛЬ ================= -->
+<div id="shell" class="shell hidden">
+  <header class="topbar">
+    <div class="brand"><b>FUTBOL<em>X</em></b><span>панель управления</span></div>
+    <nav class="tabs">
+      <button class="tab active" data-tab="overview"><svg class="ic"><use href="#a-gauge"/></svg>Сводка</button>
+      <button class="tab" data-tab="players"><svg class="ic"><use href="#a-people"/></svg>Менеджеры</button>
+      <button class="tab" data-tab="settings"><svg class="ic"><use href="#a-sliders"/></svg>Настройки</button>
+      <button class="tab" data-tab="audit"><svg class="ic"><use href="#a-scroll"/></svg>Журнал</button>
+    </nav>
+    <button class="btn ghost" id="btn-exit"><svg class="ic"><use href="#a-exit"/></svg>Выйти</button>
+  </header>
+
+  <main class="content">
+    <!-- ---------- Сводка ---------- -->
+    <section class="panel active" id="panel-overview">
+      <div class="panel-head">
+        <h2>Сводка</h2>
+        <button class="btn ghost sm" id="btn-refresh">Обновить</button>
+      </div>
+      <div class="metrics" id="metrics"></div>
+      <div class="two-col">
+        <div class="card">
+          <h3>Сервер</h3>
+          <dl class="kv" id="server-facts"></dl>
+        </div>
+        <div class="card">
+          <h3>Что сейчас включено</h3>
+          <dl class="kv" id="state-facts"></dl>
+        </div>
+      </div>
+    </section>
+
+    <!-- ---------- Менеджеры ---------- -->
+    <section class="panel" id="panel-players">
+      <div class="panel-head">
+        <h2>Менеджеры</h2>
+        <div class="filters">
+          <label class="search">
+            <svg class="ic"><use href="#a-search"/></svg>
+            <input id="pl-query" class="field bare" placeholder="Имя менеджера или клуб">
+          </label>
+          <select id="pl-sort" class="field slim">
+            <option value="recent">Недавно играли</option>
+            <option value="new">Новые аккаунты</option>
+            <option value="rating">По рейтингу</option>
+            <option value="trophies">По трофеям</option>
+            <option value="name">По имени</option>
+          </select>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table class="grid">
+          <thead><tr>
+            <th>Менеджер</th><th>Клуб</th><th>Лига</th>
+            <th class="num">Рейтинг</th><th class="num">Трофеи</th>
+            <th>Активность</th><th></th>
+          </tr></thead>
+          <tbody id="pl-rows"></tbody>
+        </table>
+      </div>
+      <div class="pager">
+        <button class="btn ghost sm" id="pl-prev">Назад</button>
+        <span id="pl-info" class="pager-info"></span>
+        <button class="btn ghost sm" id="pl-next">Вперёд</button>
+      </div>
+    </section>
+
+    <!-- ---------- Настройки ---------- -->
+    <section class="panel" id="panel-settings">
+      <div class="panel-head"><h2>Настройки</h2></div>
+      <div class="two-col">
+        <div class="card">
+          <h3>Доступ игроков</h3>
+          <label class="toggle">
+            <input type="checkbox" id="set-registration">
+            <span class="track"></span>
+            <span class="toggle-text"><b>Регистрация новых менеджеров</b>
+              <small>Выключите, чтобы закрыть сервер для новичков.</small></span>
+          </label>
+          <label class="toggle">
+            <input type="checkbox" id="set-rivals">
+            <span class="track"></span>
+            <span class="toggle-text"><b>Вызовы между менеджерами</b>
+              <small>Товарищеские матчи против живых игроков.</small></span>
+          </label>
+        </div>
+
+        <div class="card">
+          <h3>Объявление в игре</h3>
+          <p class="card-note">Показывается всем на панели клуба. Пустое поле убирает баннер.</p>
+          <textarea id="set-announce" class="field area" maxlength="400"
+                    placeholder="Например: в воскресенье в 03:00 сервер будет недоступен 20 минут"></textarea>
+          <div class="chips" id="set-motd">
+            <button type="button" class="chip" data-motd="info">Обычное</button>
+            <button type="button" class="chip" data-motd="warn">Предупреждение</button>
+            <button type="button" class="chip" data-motd="good">Хорошая новость</button>
+          </div>
+          <button class="btn primary" id="btn-save-settings">Сохранить</button>
+          <p class="inline-status hidden" id="settings-status"></p>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Пароль панели</h3>
+        <p class="card-note">Смена действует сразу. Если пароль задан переменной окружения,
+          он вернётся к ней после перезапуска сервиса.</p>
+        <div class="row-fields">
+          <input id="pw-old" type="password" class="field" placeholder="Текущий пароль" autocomplete="current-password">
+          <input id="pw-new" type="password" class="field" placeholder="Новый пароль, от 10 символов" autocomplete="new-password">
+          <button class="btn" id="btn-change-pw">Сменить</button>
+        </div>
+        <p class="inline-status hidden" id="pw-status"></p>
+      </div>
+    </section>
+
+    <!-- ---------- Журнал ---------- -->
+    <section class="panel" id="panel-audit">
+      <div class="panel-head">
+        <h2>Журнал действий</h2>
+        <button class="btn ghost sm" id="btn-audit-refresh">Обновить</button>
+      </div>
+      <div class="table-wrap">
+        <table class="grid">
+          <thead><tr><th>Когда</th><th>Действие</th><th>Кого касается</th><th>Подробности</th><th>Адрес</th></tr></thead>
+          <tbody id="audit-rows"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+</div>
+
+<!-- ================= КАРТОЧКА МЕНЕДЖЕРА ================= -->
+<div class="drawer-back hidden" id="drawer-back">
+  <aside class="drawer" id="drawer" role="dialog" aria-label="Карточка менеджера">
+    <header class="drawer-head">
+      <div>
+        <h2 id="dr-name">—</h2>
+        <p id="dr-club" class="drawer-sub">—</p>
+      </div>
+      <button class="icon-btn" id="dr-close" aria-label="Закрыть"><svg class="ic"><use href="#a-close"/></svg></button>
+    </header>
+    <div class="drawer-body" id="dr-body"></div>
+  </aside>
+</div>
+
+<div class="toasts" id="toasts"></div>
+
+<script src="admin.js"></script>
+</body>
+</html>

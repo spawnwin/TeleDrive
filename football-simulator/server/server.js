@@ -4,6 +4,7 @@ const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
 const { createStore } = require('./db');
+const { Admin } = require('./admin');
 const {
   hashPassword, verifyPassword, issueToken, hashToken, newId,
   validateName, validatePassword, RateLimiter
@@ -19,10 +20,16 @@ const ALLOW_ORIGIN = process.env.ALLOW_ORIGIN || '*';
 
 const store = createStore(DB_FILE);
 const loginLimiter = new RateLimiter({ windowMs: 15 * 60 * 1000, max: 10 });
-const registerLimiter = new RateLimiter({ windowMs: 60 * 60 * 1000, max: 5 });
+/* Считаются только состоявшиеся регистрации: опечатка в пароле или занятое
+   имя не должны съедать попытки. Один адрес — целая квартира или офис,
+   поэтому пяти в час мало. */
+const registerLimiter = new RateLimiter({ windowMs: 60 * 60 * 1000, max: 20 });
+
+const admin = new Admin(store);
 
 setInterval(() => {
   store.purgeExpiredSessions();
+  if (admin.available) store.purgeExpiredAdminSessions();
   loginLimiter.sweep();
   registerLimiter.sweep();
 }, 10 * 60 * 1000).unref();
@@ -76,6 +83,20 @@ function readJson(req) {
   });
 }
 
+/* Секунды ожидания словами: «через 12 минут» понятнее, чем «через 735 с». */
+function humanWait(seconds) {
+  if (seconds < 60) return seconds + ' с';
+  const min = Math.ceil(seconds / 60);
+  if (min < 60) return min + ' ' + ruPlural(min, ['минуту', 'минуты', 'минут']);
+  const hours = Math.ceil(min / 60);
+  return hours + ' ' + ruPlural(hours, ['час', 'часа', 'часов']);
+}
+
+function ruPlural(n, forms) {
+  const a = Math.abs(n) % 100, b = a % 10;
+  return forms[a > 10 && a < 20 ? 2 : b === 1 ? 0 : b >= 2 && b <= 4 ? 1 : 2];
+}
+
 function clientKey(req) {
   const fwd = req.headers['x-forwarded-for'];
   if (typeof fwd === 'string' && fwd.length) return fwd.split(',')[0].trim();
@@ -88,15 +109,23 @@ function bearer(req) {
   return m ? m[1] : null;
 }
 
-/* Возвращает пользователя по токену либо null. */
+/* Возвращает пользователя по токену либо null.
+   Заблокированный аккаунт равносилен отсутствию сессии: сессии ему стирают
+   при блокировке, но токен мог остаться на другом устройстве. */
 function authenticate(req) {
   const raw = bearer(req);
   if (!raw) return null;
   const session = store.findSession(hashToken(raw));
   if (!session) return null;
   const user = store.findUserById(session.userId);
-  if (!user) return null;
+  if (!user || user.banned) return null;
   return { user, session };
+}
+
+/* Значение настройки админки с запасным вариантом для JSON-хранилища. */
+function setting(name) {
+  if (!admin.available) return name === 'announcement' ? '' : true;
+  return admin.settings()[name];
 }
 
 function publicUser(user) {
@@ -106,8 +135,14 @@ function publicUser(user) {
 // ---------------- обработчики API ----------------
 const routes = {
   'POST /api/auth/register': async (req, res) => {
-    const gate = registerLimiter.check(clientKey(req));
-    if (!gate.allowed) return fail(res, 429, `Слишком много регистраций. Повторите через ${gate.retryAfter} с`);
+    if (!setting('registrationOpen')) {
+      return fail(res, 403, 'Регистрация новых менеджеров сейчас закрыта');
+    }
+    const gate = registerLimiter.peek(clientKey(req));
+    if (!gate.allowed) {
+      return fail(res, 429, 'Слишком много новых аккаунтов с этого адреса. ' +
+                            'Попробуйте через ' + humanWait(gate.retryAfter) + '.');
+    }
 
     const body = await readJson(req);
     const nameError = validateName(body.name);
@@ -125,6 +160,8 @@ const routes = {
       passwordHash: hashPassword(body.password),
       createdAt: Date.now()
     });
+
+    registerLimiter.count(clientKey(req));
 
     const token = issueToken();
     store.addSession({
@@ -144,12 +181,21 @@ const routes = {
     }
     const key = clientKey(req) + '|' + body.name.trim().toLowerCase();
     const gate = loginLimiter.check(key);
-    if (!gate.allowed) return fail(res, 429, `Слишком много попыток. Повторите через ${gate.retryAfter} с`);
+    if (!gate.allowed) {
+      return fail(res, 429, 'Слишком много попыток входа. Повторите через ' +
+                            humanWait(gate.retryAfter) + '.');
+    }
 
     const user = store.findUserByName(body.name);
     // Ответ одинаков и для несуществующего имени, и для неверного пароля.
     if (!user || !verifyPassword(body.password, user.passwordHash)) {
       return fail(res, 401, 'Неверное имя менеджера или пароль');
+    }
+    if (user.banned) {
+      loginLimiter.reset(key);
+      return fail(res, 403, user.banReason
+        ? 'Аккаунт заблокирован: ' + user.banReason
+        : 'Аккаунт заблокирован администратором');
     }
     loginLimiter.reset(key);
 
@@ -203,7 +249,15 @@ const routes = {
   'GET /api/rivals': async (req, res) => {
     const auth = authenticate(req);
     if (!auth) return fail(res, 401, 'Нужен вход');
+    if (!setting('rivalsOpen')) return fail(res, 403, 'Вызовы между менеджерами сейчас отключены');
     send(res, 200, { rows: store.rivals(auth.user.id, 30) });
+  },
+
+  /* Объявление от администратора: игра показывает его на панели клуба.
+     Открытый метод — баннер должен быть виден и до входа. */
+  'GET /api/news': async (req, res) => {
+    const s = admin.available ? admin.settings() : { announcement: '', motd: 'info' };
+    send(res, 200, { text: s.announcement || '', level: s.motd || 'info' });
   },
 
   'GET /api/leaderboard': async (req, res) => {
@@ -221,8 +275,107 @@ const routes = {
      именно её бэкенд, а не посторонний сайт с похожим путём. */
   'GET /api/health': async (req, res) => {
     send(res, 200, { ok: true, service: 'futbolx', storage: store.kind, users: store.userCount() });
+  },
+
+  // ---------------- панель управления ----------------
+  'POST /api/admin/login': async (req, res) => {
+    requireAdminAvailable();
+    const body = await readJson(req);
+    send(res, 200, admin.login(body.password, clientKey(req)));
+  },
+
+  'POST /api/admin/logout': async (req, res) => {
+    admin.logout(bearer(req));
+    send(res, 200, { ok: true });
+  },
+
+  'GET /api/admin/overview': async (req, res) => {
+    requireAdmin(req);
+    send(res, 200, admin.overview());
+  },
+
+  'GET /api/admin/players': async (req, res) => {
+    requireAdmin(req);
+    const q = queryOf(req);
+    send(res, 200, admin.players({
+      query: q.get('query') || '', page: q.get('page'),
+      limit: q.get('limit'), sort: q.get('sort') || 'recent'
+    }));
+  },
+
+  'GET /api/admin/player': async (req, res) => {
+    requireAdmin(req);
+    send(res, 200, admin.player(queryOf(req).get('id') || ''));
+  },
+
+  'POST /api/admin/player/ban': async (req, res) => {
+    requireAdmin(req);
+    const b = await readJson(req);
+    send(res, 200, admin.ban(b.id, !!b.banned, b.reason, clientKey(req)));
+  },
+
+  'POST /api/admin/player/password': async (req, res) => {
+    requireAdmin(req);
+    const b = await readJson(req);
+    send(res, 200, admin.resetPassword(b.id, b.password, clientKey(req)));
+  },
+
+  'POST /api/admin/player/save': async (req, res) => {
+    requireAdmin(req);
+    const b = await readJson(req);
+    send(res, 200, admin.patchSave(b.id, b.patch || {}, clientKey(req)));
+  },
+
+  'POST /api/admin/player/kick': async (req, res) => {
+    requireAdmin(req);
+    const b = await readJson(req);
+    send(res, 200, admin.kick(b.id, clientKey(req)));
+  },
+
+  'DELETE /api/admin/player': async (req, res) => {
+    requireAdmin(req);
+    send(res, 200, admin.remove(queryOf(req).get('id') || '', clientKey(req)));
+  },
+
+  'GET /api/admin/settings': async (req, res) => {
+    requireAdmin(req);
+    send(res, 200, admin.settings());
+  },
+
+  'POST /api/admin/settings': async (req, res) => {
+    requireAdmin(req);
+    send(res, 200, admin.saveSettings(await readJson(req), clientKey(req)));
+  },
+
+  'POST /api/admin/password': async (req, res) => {
+    requireAdmin(req);
+    const b = await readJson(req);
+    send(res, 200, admin.changePassword(b.oldPassword, b.newPassword, clientKey(req)));
+  },
+
+  'GET /api/admin/audit': async (req, res) => {
+    requireAdmin(req);
+    send(res, 200, { rows: admin.audit(queryOf(req).get('limit')) });
   }
 };
+
+function queryOf(req) {
+  return new URL(req.url, 'http://localhost').searchParams;
+}
+
+function requireAdminAvailable() {
+  if (admin.available) return;
+  throw Object.assign(
+    new Error('Панель управления работает только с базой SQLite (нужен Node 22+)'),
+    { status: 501 });
+}
+
+function requireAdmin(req) {
+  requireAdminAvailable();
+  if (!admin.authorized(bearer(req))) {
+    throw Object.assign(new Error('Нужен вход в панель управления'), { status: 401 });
+  }
+}
 
 // ---------------- статика ----------------
 const MIME = {
@@ -237,7 +390,8 @@ const MIME = {
 };
 
 function serveStatic(req, res, urlPath) {
-  const rel = urlPath === '/' ? '/index.html' : urlPath;
+  let rel = urlPath === '/' ? '/index.html' : urlPath;
+  if (rel.endsWith('/')) rel += 'index.html';
   // Не выпускаем запрос за пределы каталога игры.
   const target = path.normalize(path.join(STATIC_DIR, decodeURIComponent(rel)));
   if (!target.startsWith(STATIC_DIR)) return fail(res, 403, 'Доступ запрещён');
@@ -275,6 +429,16 @@ const server = http.createServer(async (req, res) => {
 
   if (url.pathname.startsWith('/api/')) return fail(res, 404, 'Такого метода нет');
   if (req.method !== 'GET') return fail(res, 405, 'Метод не поддерживается');
+
+  /* Каталог без косой черты уводим на версию с ней: иначе относительные
+     ссылки внутри страницы (admin.css) разрешаются на уровень выше. */
+  if (!path.extname(url.pathname) && !url.pathname.endsWith('/')) {
+    const dir = path.join(STATIC_DIR, url.pathname);
+    if (dir.startsWith(STATIC_DIR) && fs.existsSync(dir) && fs.statSync(dir).isDirectory()) {
+      res.writeHead(301, { Location: url.pathname + '/' + url.search });
+      return res.end();
+    }
+  }
   serveStatic(req, res, url.pathname);
 });
 

@@ -161,6 +161,18 @@ button { border: none; background: none; cursor: pointer; }
   text-transform: uppercase; letter-spacing: .14em; color: var(--muted); }
 .strip .accent { color: var(--lime); }
 
+/* ---------- объявление администратора ---------- */
+.announce {
+  display: flex; gap: 9px; align-items: flex-start; margin-bottom: var(--sp-4);
+  padding: 11px 13px; border-radius: var(--r-card);
+  font-size: 12.5px; line-height: 1.45;
+  background: var(--surface); border-left: 3px solid var(--muted); color: var(--chalk);
+}
+.announce.hidden { display: none; }
+.announce.info { border-left-color: var(--lime); }
+.announce.warn { border-left-color: var(--amber); }
+.announce.good { border-left-color: var(--lime); background: rgba(182,242,74,.08); }
+
 /* ---------- fixture hero ---------- */
 .fixture-hero {
   position: relative; overflow: hidden; margin-bottom: var(--sp-4);
@@ -722,6 +734,17 @@ button { border: none; background: none; cursor: pointer; }
 .create-title { font-size: 24px; font-weight: 900; letter-spacing: -.03em; margin: 0; }
 .auth-sub { color: var(--muted); font-size: 13px; margin: 6px 0 0; }
 .auth-note { margin-top: 4px; }
+/* Ответ сервера на вход и регистрацию — прямо под кнопками, где смотрит игрок */
+.auth-status {
+  margin: 11px 0 0; padding: 9px 11px; border-radius: var(--r-chip);
+  font-size: 12.5px; line-height: 1.4;
+}
+.auth-status.hidden { display: none; }
+.auth-status.info { background: rgba(233,241,234,.06); color: var(--muted); }
+.auth-status.error {
+  background: rgba(255,91,65,.12); border-left: 2px solid var(--flare); color: #FFB9AC;
+}
+.act[disabled] { opacity: .55; pointer-events: none; }
 
 .mode-switch {
   display: flex; gap: 6px; margin-bottom: var(--sp-5);

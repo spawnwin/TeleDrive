@@ -11,6 +11,9 @@ const path = require('node:path');
 const DB = path.join(os.tmpdir(), 'futbolx-test-' + Date.now() + '.json');
 const SQLITE = DB.replace(/\.json$/, '.sqlite');
 process.env.DB_FILE = DB;
+// Пароль панели задаём до загрузки сервера: иначе он сгенерируется случайным.
+const ADMIN_PASSWORD = 'test-admin-parol-123';
+process.env.FUTBOLX_ADMIN_PASSWORD = ADMIN_PASSWORD;
 
 const { server, store } = require('./server');
 
@@ -191,7 +194,184 @@ async function run() {
     assert.ok(limited, 'перебор не был ограничен');
   });
 
+  await test('неудачные попытки не съедают лимит регистраций', async () => {
+    // Двадцать отказов подряд: занятое имя и короткий пароль.
+    for (let i = 0; i < 20; i++) {
+      const r = await call('POST', '/api/auth/register',
+        { name: 'Менеджер Тест', password: 'longenough1' });
+      assert.notStrictEqual(r.status, 429, 'отказ засчитался как регистрация');
+    }
+    for (let i = 0; i < 10; i++) {
+      const r = await call('POST', '/api/auth/register', { name: 'Кто ' + i, password: '123' });
+      assert.strictEqual(r.status, 400, 'короткий пароль должен отклоняться, а не лимитироваться');
+    }
+    // Настоящая регистрация после всего этого обязана пройти.
+    const ok = await call('POST', '/api/auth/register',
+      { name: 'Пробился Сквозь', password: 'longenough1' });
+    assert.strictEqual(ok.status, 201);
+  });
+
+  await test('лимит считает только состоявшиеся регистрации', () => {
+    const { RateLimiter } = require('./auth');
+    const rl = new RateLimiter({ windowMs: 60 * 60 * 1000, max: 1 });
+    assert.deepStrictEqual(rl.peek('k'), { allowed: true, retryAfter: 0 });
+    assert.deepStrictEqual(rl.peek('k'), { allowed: true, retryAfter: 0 },
+      'peek не должен списывать попытку');
+    rl.count('k');
+    const gate = rl.peek('k');
+    assert.strictEqual(gate.allowed, false);
+    assert.ok(gate.retryAfter > 3500, 'осталось ждать почти час');
+  });
+
   if (store.kind === 'sqlite') {
+    // ---------------- панель управления ----------------
+    let adminToken = '';
+    const A = (method, path, body) => call(method, path, body, adminToken);
+
+    await test('панель: вход по неверному паролю отклонён', async () => {
+      const r = await call('POST', '/api/admin/login', { password: 'мимо' });
+      assert.strictEqual(r.status, 401);
+    });
+
+    await test('панель: вход по паролю выдаёт токен', async () => {
+      const r = await call('POST', '/api/admin/login', { password: ADMIN_PASSWORD });
+      assert.strictEqual(r.status, 200);
+      assert.ok(r.data.token, 'токен не выдан');
+      adminToken = r.data.token;
+    });
+
+    await test('панель: игровой токен не даёт прав администратора', async () => {
+      const player = await call('POST', '/api/auth/register',
+        { name: 'Обычный Игрок', password: 'longenough1' });
+      const r = await call('GET', '/api/admin/overview', undefined, player.data.token);
+      assert.strictEqual(r.status, 401, 'игровой токен пустили в админку');
+    });
+
+    await test('панель: сводка считает менеджеров', async () => {
+      const r = await A('GET', '/api/admin/overview');
+      assert.strictEqual(r.status, 200);
+      assert.ok(r.data.users > 0);
+      assert.strictEqual(r.data.storage, 'sqlite');
+      assert.strictEqual(typeof r.data.settings.registrationOpen, 'boolean');
+    });
+
+    await test('панель: поиск находит менеджера по имени', async () => {
+      const r = await A('GET', '/api/admin/players?query=' + encodeURIComponent('Обычный'));
+      assert.strictEqual(r.status, 200);
+      assert.ok(r.data.rows.some(x => x.name === 'Обычный Игрок'));
+    });
+
+    await test('панель: блокировка закрывает вход и объясняет причину', async () => {
+      const list = await A('GET', '/api/admin/players?query=' + encodeURIComponent('Обычный'));
+      const id = list.data.rows[0].id;
+
+      const banned = await A('POST', '/api/admin/player/ban', { id, banned: true, reason: 'проверка' });
+      assert.strictEqual(banned.data.banned, true);
+
+      const login = await call('POST', '/api/auth/login',
+        { name: 'Обычный Игрок', password: 'longenough1' });
+      assert.strictEqual(login.status, 403);
+      assert.match(login.data.error, /заблокирован/i);
+      assert.match(login.data.error, /проверка/);
+
+      const back = await A('POST', '/api/admin/player/ban', { id, banned: false });
+      assert.strictEqual(back.data.banned, false);
+      const ok = await call('POST', '/api/auth/login',
+        { name: 'Обычный Игрок', password: 'longenough1' });
+      assert.strictEqual(ok.status, 200, 'после снятия блокировки вход не вернулся');
+    });
+
+    await test('панель: блокировка обрывает уже открытую сессию', async () => {
+      const reg = await call('POST', '/api/auth/register',
+        { name: 'Живая Сессия', password: 'longenough1' });
+      const list = await A('GET', '/api/admin/players?query=' + encodeURIComponent('Живая'));
+      const id = list.data.rows[0].id;
+      assert.strictEqual((await call('GET', '/api/me', undefined, reg.data.token)).status, 200);
+      await A('POST', '/api/admin/player/ban', { id, banned: true, reason: '' });
+      assert.strictEqual((await call('GET', '/api/me', undefined, reg.data.token)).status, 401,
+        'старый токен продолжает работать после блокировки');
+    });
+
+    await test('панель: правит сохранение игрока', async () => {
+      const reg = await call('POST', '/api/auth/register',
+        { name: 'Правка Тест', password: 'longenough1' });
+      await call('PUT', '/api/save',
+        { save: { clubName: 'ФК Правка', division: 2, season: 1, coins: 100, rating: 55 } },
+        reg.data.token);
+      const list = await A('GET', '/api/admin/players?query=' + encodeURIComponent('Правка'));
+      const id = list.data.rows[0].id;
+
+      const r = await A('POST', '/api/admin/player/save',
+        { id, patch: { coins: 5000, division: 1, clubName: 'ФК Новый' } });
+      assert.strictEqual(r.status, 200);
+      assert.strictEqual(r.data.clubName, 'ФК Новый');
+      assert.strictEqual(r.data.division, 1);
+
+      // Игрок должен получить изменённое сохранение, а не старое.
+      const mine = await call('GET', '/api/save', undefined, reg.data.token);
+      assert.strictEqual(mine.data.save.coins, 5000);
+      assert.strictEqual(mine.data.save.clubName, 'ФК Новый');
+    });
+
+    await test('панель: правка не пропускает мусор в сохранение', async () => {
+      const list = await A('GET', '/api/admin/players?query=' + encodeURIComponent('Правка'));
+      const id = list.data.rows[0].id;
+      const r = await A('POST', '/api/admin/player/save',
+        { id, patch: { coins: -999, division: 77, season: 'абв' } });
+      assert.strictEqual(r.status, 200);
+      assert.strictEqual(r.data.division, 2, 'дивизион не ограничен диапазоном');
+      const mine = await A('GET', '/api/admin/player?id=' + encodeURIComponent(id));
+      assert.strictEqual(mine.data.save.coins, 0, 'отрицательные монеты просочились');
+    });
+
+    await test('панель: закрытая регистрация не пускает новичков', async () => {
+      await A('POST', '/api/admin/settings', { registrationOpen: false });
+      const r = await call('POST', '/api/auth/register',
+        { name: 'Поздний Гость', password: 'longenough1' });
+      assert.strictEqual(r.status, 403);
+      await A('POST', '/api/admin/settings', { registrationOpen: true });
+      const ok = await call('POST', '/api/auth/register',
+        { name: 'Поздний Гость', password: 'longenough1' });
+      assert.strictEqual(ok.status, 201);
+    });
+
+    await test('панель: объявление доезжает до игры', async () => {
+      await A('POST', '/api/admin/settings', { announcement: 'Матчи в 20:00', motd: 'good' });
+      const news = await call('GET', '/api/news');
+      assert.strictEqual(news.status, 200);
+      assert.strictEqual(news.data.text, 'Матчи в 20:00');
+      assert.strictEqual(news.data.level, 'good');
+      await A('POST', '/api/admin/settings', { announcement: '' });
+      assert.strictEqual((await call('GET', '/api/news')).data.text, '');
+    });
+
+    await test('панель: выключенные вызовы недоступны игрокам', async () => {
+      const reg = await call('POST', '/api/auth/register',
+        { name: 'Вызов Тест', password: 'longenough1' });
+      await A('POST', '/api/admin/settings', { rivalsOpen: false });
+      const off = await call('GET', '/api/rivals', undefined, reg.data.token);
+      assert.strictEqual(off.status, 403);
+      await A('POST', '/api/admin/settings', { rivalsOpen: true });
+      assert.strictEqual((await call('GET', '/api/rivals', undefined, reg.data.token)).status, 200);
+    });
+
+    await test('панель: журнал пишет, что делал администратор', async () => {
+      const r = await A('GET', '/api/admin/audit');
+      assert.strictEqual(r.status, 200);
+      const actions = r.data.rows.map(x => x.action);
+      for (const need of ['admin.login', 'player.ban', 'player.save', 'settings.update']) {
+        assert.ok(actions.includes(need), 'в журнале нет действия ' + need);
+      }
+    });
+
+    await test('панель: выход отзывает токен администратора', async () => {
+      await A('POST', '/api/admin/logout');
+      const r = await A('GET', '/api/admin/overview');
+      assert.strictEqual(r.status, 401);
+      const again = await call('POST', '/api/admin/login', { password: ADMIN_PASSWORD });
+      adminToken = again.data.token;
+    });
+
     await test('база: используется SQLite', async () => {
       const r = await call('GET', '/api/health');
       assert.strictEqual(r.data.storage, 'sqlite');

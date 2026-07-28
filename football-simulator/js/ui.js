@@ -146,6 +146,7 @@
       Math.round((s.attack + s.defense) / 2);
 
     formStrip(document.getElementById('menu-form'), Save.formGuide(5));
+    paintAnnounce();
 
     const fx = Save.nextFixture();
     const ctxEl = document.getElementById('fh-context');
@@ -169,6 +170,26 @@
       setFixtureSide('away', DATA.clubs[0].id);
       ctaLabel.textContent = 'Товарищеский матч';
     }
+  }
+
+  /* Объявление администратора. Тянем не чаще раза в две минуты: панель клуба
+     перерисовывается после каждого матча, а новость меняется редко. */
+  let announceCache = null;
+  let announceAt = 0;
+  function paintAnnounce() {
+    const box = document.getElementById('announce');
+    if (!box) return;
+    const show = () => {
+      const n = announceCache;
+      if (!n || !n.text) { box.classList.add('hidden'); return; }
+      document.getElementById('announce-text').textContent = n.text;
+      box.className = 'announce stagger ' + (n.level || 'info');
+    };
+    if (!Net.enabled()) { box.classList.add('hidden'); return; }
+    if (announceCache && Date.now() - announceAt < 120000) return show();
+    Net.news().then(n => {
+      announceCache = n; announceAt = Date.now(); show();
+    }).catch(() => { box.classList.add('hidden'); });
   }
 
   function setFixtureSide(side, id) {
@@ -548,6 +569,7 @@
     document.getElementById('auth-local').classList.toggle('hidden', authMode !== 'local');
     document.getElementById('auth-remote').classList.toggle('hidden', authMode !== 'remote');
     document.getElementById('server-url').value = Net.baseUrl;
+    authStatus('');
     renderProfiles();
   }
 
@@ -624,21 +646,40 @@
     }
   });
 
+  /* Строка ответа под кнопками входа. Раньше сообщения уходили в блок
+     «Адрес сервера», который на своём сервере скрыт, — и любая ошибка
+     регистрации оставалась невидимой: игрок жал кнопку, и ничего. */
+  function authStatus(text, kind) {
+    const el = document.getElementById('account-status');
+    el.textContent = text || '';
+    el.className = 'auth-status' + (text ? ' ' + (kind || 'info') : ' hidden');
+  }
+
   async function remoteAuth(kind) {
     const name = document.getElementById('account-name').value.trim();
     const pass = document.getElementById('account-pass').value;
-    const status = document.getElementById('server-status');
-    if (!Net.enabled()) { status.textContent = 'Сначала укажите и проверьте адрес сервера'; return; }
-    if (!name || !pass) { showToast('Введите имя и пароль'); return; }
-    status.textContent = kind === 'login' ? 'Входим…' : 'Регистрируем…';
+    if (!Net.enabled()) {
+      authStatus('Сначала укажите и проверьте адрес сервера', 'error');
+      return;
+    }
+    if (!name || !pass) {
+      authStatus('Введите имя менеджера и пароль', 'error');
+      return;
+    }
+    const buttons = [document.getElementById('btn-login'), document.getElementById('btn-register')];
+    buttons.forEach(b => b.disabled = true);
+    authStatus(kind === 'login' ? 'Входим…' : 'Регистрируем…', 'info');
     try {
       if (kind === 'login') await Account.login(name, pass);
       else await Account.register(name, pass);
       document.getElementById('account-pass').value = '';
-      status.textContent = '';
+      authStatus('');
       afterSignIn();
     } catch (e) {
-      status.textContent = e.message;
+      authStatus(e.message, 'error');
+      showToast(e.message);
+    } finally {
+      buttons.forEach(b => b.disabled = false);
     }
   }
 

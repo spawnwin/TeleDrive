@@ -85,6 +85,26 @@ class RateLimiter {
     return { allowed: true, retryAfter: 0 };
   }
 
+  /* Проверка без списания попытки: нужна там, где счётчик должен расти
+     только от удавшихся действий (регистрация), а не от каждой опечатки. */
+  peek(key) {
+    const now = Date.now();
+    const rec = this.hits.get(key);
+    if (!rec || now - rec.start > this.windowMs) return { allowed: true, retryAfter: 0 };
+    if (rec.count >= this.max) {
+      return { allowed: false, retryAfter: Math.ceil((this.windowMs - (now - rec.start)) / 1000) };
+    }
+    return { allowed: true, retryAfter: 0 };
+  }
+
+  /* Списывает одну попытку по ключу. Парная к peek. */
+  count(key) {
+    const now = Date.now();
+    const rec = this.hits.get(key);
+    if (!rec || now - rec.start > this.windowMs) this.hits.set(key, { start: now, count: 1 });
+    else rec.count++;
+  }
+
   reset(key) { this.hits.delete(key); }
 
   sweep() {

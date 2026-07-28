@@ -151,6 +151,24 @@ if [[ -f "$UNIT" ]] && ! grep -q "$MARKER" "$UNIT"; then
   die "$UNIT существует и создан не этим установщиком. Ничего не трогаю."
 fi
 
+# ---------- пароль панели управления ----------
+# Лежит отдельным файлом с правами 0600: в юните его видел бы любой,
+# кто может прочитать /etc/systemd/system. При повторном запуске
+# установщика пароль не меняется — иначе админ терял бы доступ.
+ENV_FILE="/etc/futbolx.env"
+if [[ "$DRY_RUN" == "yes" ]]; then
+  echo "    (dry-run) пароль панели в $ENV_FILE"
+  ADMIN_PASS="(dry-run)"
+elif [[ -f "$ENV_FILE" ]] && grep -q '^FUTBOLX_ADMIN_PASSWORD=' "$ENV_FILE"; then
+  ADMIN_PASS="$(grep '^FUTBOLX_ADMIN_PASSWORD=' "$ENV_FILE" | cut -d= -f2-)"
+  say "Пароль панели управления уже задан, оставляем прежний"
+else
+  ADMIN_PASS="$(head -c 12 /dev/urandom | base64 | tr -d '/+=' | head -c 14)"
+  printf 'FUTBOLX_ADMIN_PASSWORD=%s\n' "$ADMIN_PASS" > "$ENV_FILE"
+  chmod 600 "$ENV_FILE"
+  say "Создан пароль панели управления"
+fi
+
 say "Настраиваем службу ${SERVICE} на порту ${NODE_PORT}"
 if [[ "$DRY_RUN" == "yes" ]]; then
   echo "    (dry-run) запись $UNIT"
@@ -168,6 +186,7 @@ WorkingDirectory=$APP_DIR/football-simulator/server
 Environment=PORT=$NODE_PORT
 Environment=HOST=$NODE_HOST
 Environment=DB_FILE=$APP_DIR/football-simulator/server/data/futbolx.json
+EnvironmentFile=-$ENV_FILE
 ExecStart=$NODE_BIN server.js
 Restart=on-failure
 RestartSec=3
@@ -275,3 +294,18 @@ else
   echo "  Игра:      http://127.0.0.1:${NODE_PORT} (наружу порт не открыт —"
   echo "             запустите с --public или --nginx)"
 fi
+
+if [[ "$WITH_NGINX" == "yes" ]]; then
+  BASE_URL="http://${IP:-<адрес-сервера>}:${NGINX_PORT}"
+else
+  BASE_URL="http://${IP:-<адрес-сервера>}:${NODE_PORT}"
+fi
+echo
+echo "  ┌─ Панель управления ─────────────────────────────────"
+echo "  │  адрес:  ${BASE_URL}/admin"
+echo "  │  пароль: ${ADMIN_PASS}"
+echo "  │"
+echo "  │  Пароль лежит в ${ENV_FILE} (права 0600) и при"
+echo "  │  повторной установке не меняется. Сменить можно"
+echo "  │  прямо в панели или отредактировав этот файл."
+echo "  └─────────────────────────────────────────────────────"

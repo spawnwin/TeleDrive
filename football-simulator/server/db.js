@@ -52,7 +52,9 @@ class SqliteStore {
         name          TEXT NOT NULL,
         name_key      TEXT NOT NULL UNIQUE,
         password_hash TEXT NOT NULL,
-        created_at    INTEGER NOT NULL
+        created_at    INTEGER NOT NULL,
+        banned        INTEGER NOT NULL DEFAULT 0,
+        ban_reason    TEXT NOT NULL DEFAULT ''
       );
 
       CREATE TABLE IF NOT EXISTS sessions (
@@ -83,6 +85,27 @@ class SqliteStore {
       );
       CREATE INDEX IF NOT EXISTS idx_saves_board
         ON saves(trophies DESC, division ASC, wins DESC, goals DESC);
+
+      -- Вход в админку отдельный от игроков: свой токен и свой срок жизни,
+      -- чтобы утечка игрового токена не давала прав на управление.
+      CREATE TABLE IF NOT EXISTS admin_sessions (
+        token_hash TEXT PRIMARY KEY,
+        created_at INTEGER NOT NULL,
+        expires_at INTEGER NOT NULL,
+        client     TEXT NOT NULL DEFAULT ''
+      );
+
+      -- Журнал действий: что админ сделал, с кем и когда. Пишется всегда,
+      -- иначе разобраться в спорной ситуации потом нечем.
+      CREATE TABLE IF NOT EXISTS audit (
+        id       INTEGER PRIMARY KEY AUTOINCREMENT,
+        at       INTEGER NOT NULL,
+        action   TEXT NOT NULL,
+        target   TEXT NOT NULL DEFAULT '',
+        detail   TEXT NOT NULL DEFAULT '',
+        client   TEXT NOT NULL DEFAULT ''
+      );
+      CREATE INDEX IF NOT EXISTS idx_audit_at ON audit(at DESC);
     `);
 
     // Колонки появились позже схемы v1 — на старой базе добавляем на месте.
@@ -92,6 +115,13 @@ class SqliteStore {
     }
     if (!cols.includes('form')) {
       this.db.exec("ALTER TABLE saves ADD COLUMN form TEXT NOT NULL DEFAULT ''");
+    }
+    const ucols = this.db.prepare('PRAGMA table_info(users)').all().map(c => c.name);
+    if (!ucols.includes('banned')) {
+      this.db.exec('ALTER TABLE users ADD COLUMN banned INTEGER NOT NULL DEFAULT 0');
+    }
+    if (!ucols.includes('ban_reason')) {
+      this.db.exec("ALTER TABLE users ADD COLUMN ban_reason TEXT NOT NULL DEFAULT ''");
     }
 
     const row = this.db.prepare("SELECT value FROM meta WHERE key = 'schema_version'").get();
@@ -165,7 +195,8 @@ class SqliteStore {
   toUser(row) {
     return {
       id: row.id, name: row.name, nameKey: row.name_key,
-      passwordHash: row.password_hash, createdAt: row.created_at
+      passwordHash: row.password_hash, createdAt: row.created_at,
+      banned: !!row.banned, banReason: row.ban_reason || ''
     };
   }
 
@@ -250,6 +281,187 @@ class SqliteStore {
       wins: r.wins,
       goals: r.goals
     }));
+  }
+
+  // ---------- админка ----------
+  /* Настройки живут в meta: их немного, а отдельная таблица ради трёх
+     строк только усложнила бы перенос базы. */
+  getSetting(key, fallback) {
+    const row = this.db.prepare('SELECT value FROM meta WHERE key = ?').get('set_' + key);
+    return row ? row.value : fallback;
+  }
+
+  setSetting(key, value) {
+    this.db.prepare(`INSERT INTO meta(key, value) VALUES(?, ?)
+                     ON CONFLICT(key) DO UPDATE SET value = excluded.value`)
+      .run('set_' + key, String(value));
+  }
+
+  addAdminSession(s) {
+    this.db.prepare(`INSERT INTO admin_sessions(token_hash, created_at, expires_at, client)
+                     VALUES(?, ?, ?, ?)`)
+      .run(s.tokenHash, s.createdAt, s.expiresAt, s.client || '');
+    return s;
+  }
+
+  findAdminSession(tokenHash) {
+    const row = this.db.prepare('SELECT * FROM admin_sessions WHERE token_hash = ?').get(tokenHash);
+    if (!row) return null;
+    if (row.expires_at < Date.now()) {
+      this.removeAdminSession(tokenHash);
+      return null;
+    }
+    return { tokenHash: row.token_hash, createdAt: row.created_at, expiresAt: row.expires_at };
+  }
+
+  removeAdminSession(tokenHash) {
+    this.db.prepare('DELETE FROM admin_sessions WHERE token_hash = ?').run(tokenHash);
+  }
+
+  purgeExpiredAdminSessions() {
+    this.db.prepare('DELETE FROM admin_sessions WHERE expires_at < ?').run(Date.now());
+  }
+
+  logAction(entry) {
+    this.db.prepare(`INSERT INTO audit(at, action, target, detail, client)
+                     VALUES(?, ?, ?, ?, ?)`)
+      .run(Date.now(), entry.action, entry.target || '', entry.detail || '', entry.client || '');
+  }
+
+  auditLog(limit) {
+    return this.db.prepare('SELECT * FROM audit ORDER BY at DESC LIMIT ?')
+      .all(limit || 100)
+      .map(r => ({ id: r.id, at: r.at, action: r.action, target: r.target,
+                   detail: r.detail, client: r.client }));
+  }
+
+  /* Сводка для панели. Всё считается запросами, а не разбором сохранений. */
+  overview() {
+    const one = (sql, ...args) => Object.values(this.db.prepare(sql).get(...args) || {})[0] || 0;
+    const day = Date.now() - 24 * 60 * 60 * 1000;
+    const week = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    return {
+      users: one('SELECT COUNT(*) FROM users'),
+      banned: one('SELECT COUNT(*) FROM users WHERE banned = 1'),
+      newToday: one('SELECT COUNT(*) FROM users WHERE created_at > ?', day),
+      sessions: one('SELECT COUNT(*) FROM sessions WHERE expires_at > ?', Date.now()),
+      clubs: one('SELECT COUNT(*) FROM saves'),
+      activeDay: one('SELECT COUNT(*) FROM saves WHERE updated_at > ?', day),
+      activeWeek: one('SELECT COUNT(*) FROM saves WHERE updated_at > ?', week),
+      matches: one('SELECT COALESCE(SUM(wins), 0) FROM saves'),
+      goals: one('SELECT COALESCE(SUM(goals), 0) FROM saves'),
+      trophies: one('SELECT COALESCE(SUM(trophies), 0) FROM saves'),
+      avgRating: Math.round(one('SELECT COALESCE(AVG(rating), 0) FROM saves WHERE rating > 0')),
+      dbBytes: (() => { try { return fs.statSync(this.file).size; } catch (e) { return 0; } })()
+    };
+  }
+
+  /* Список игроков с поиском и постраничностью. Поиск идёт и по имени
+     менеджера, и по названию клуба — админ помнит то одно, то другое. */
+  players({ query, limit, offset, sort } = {}) {
+    const q = '%' + String(query || '').trim().toLowerCase() + '%';
+    const orders = {
+      recent:   's.updated_at DESC',
+      new:      'u.created_at DESC',
+      name:     'u.name_key ASC',
+      rating:   's.rating DESC',
+      trophies: 's.trophies DESC, s.wins DESC'
+    };
+    const order = orders[sort] || orders.recent;
+    const where = `WHERE u.name_key LIKE ? OR LOWER(COALESCE(s.club_name, '')) LIKE ?`;
+    const rows = this.db.prepare(`
+      SELECT u.id, u.name, u.created_at, u.banned, u.ban_reason,
+             s.club_name, s.division, s.season, s.rating, s.trophies,
+             s.wins, s.goals, s.updated_at
+      FROM users u LEFT JOIN saves s ON s.user_id = u.id
+      ${where}
+      ORDER BY ${order} NULLS LAST
+      LIMIT ? OFFSET ?`).all(q, q, limit || 25, offset || 0);
+    const total = Object.values(this.db.prepare(`
+      SELECT COUNT(*) FROM users u LEFT JOIN saves s ON s.user_id = u.id ${where}`)
+      .get(q, q))[0];
+    return { total, rows: rows.map(r => this.toPlayerRow(r)) };
+  }
+
+  toPlayerRow(r) {
+    return {
+      id: r.id, name: r.name, createdAt: r.created_at,
+      banned: !!r.banned, banReason: r.ban_reason || '',
+      clubName: r.club_name || null,
+      division: r.division || null, season: r.season || null,
+      rating: r.rating || 0, trophies: r.trophies || 0,
+      wins: r.wins || 0, goals: r.goals || 0,
+      updatedAt: r.updated_at || null
+    };
+  }
+
+  /* Карточка игрока: строка списка плюс то, что лежит в самом сохранении. */
+  playerDetail(id) {
+    const row = this.db.prepare(`
+      SELECT u.id, u.name, u.created_at, u.banned, u.ban_reason,
+             s.club_name, s.division, s.season, s.rating, s.trophies,
+             s.wins, s.goals, s.updated_at
+      FROM users u LEFT JOIN saves s ON s.user_id = u.id
+      WHERE u.id = ?`).get(id);
+    if (!row) return null;
+    const base = this.toPlayerRow(row);
+    const entry = this.getSave(id);
+    const save = entry ? entry.save : null;
+    base.sessions = Object.values(this.db.prepare(
+      'SELECT COUNT(*) FROM sessions WHERE user_id = ? AND expires_at > ?').get(id, Date.now()))[0];
+    base.save = save && {
+      coins: save.coins || 0,
+      level: save.level || 1,
+      xp: save.xp || 0,
+      squad: Array.isArray(save.squad) ? save.squad.length : 0,
+      created: !!save.created,
+      formation: save.formation || '—',
+      tacticStyle: save.tacticStyle || '—',
+      history: Array.isArray(save.history) ? save.history.length : 0,
+      stats: save.stats || {}
+    };
+    return base;
+  }
+
+  setBanned(id, banned, reason) {
+    this.db.prepare('UPDATE users SET banned = ?, ban_reason = ? WHERE id = ?')
+      .run(banned ? 1 : 0, reason || '', id);
+    // Блокировка должна действовать сразу, а не после истечения токена.
+    if (banned) this.removeUserSessions(id);
+  }
+
+  setPasswordHash(id, hash) {
+    this.db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hash, id);
+    this.removeUserSessions(id);
+  }
+
+  /* Правка сохранения из админки. Меняем только разрешённые поля и
+     перезаписываем витрину, чтобы список и таблица лидеров совпали с игрой. */
+  patchSave(id, patch) {
+    const entry = this.getSave(id);
+    if (!entry) return null;
+    const save = entry.save;
+    const num = (v, min, max) => {
+      const n = Math.round(Number(v));
+      return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : null;
+    };
+    if (patch.coins !== undefined) {
+      const v = num(patch.coins, 0, 99999999); if (v !== null) save.coins = v;
+    }
+    if (patch.level !== undefined) {
+      const v = num(patch.level, 1, 999); if (v !== null) save.level = v;
+    }
+    if (patch.division !== undefined) {
+      const v = num(patch.division, 1, 2); if (v !== null) save.division = v;
+    }
+    if (patch.season !== undefined) {
+      const v = num(patch.season, 1, 9999); if (v !== null) save.season = v;
+    }
+    if (patch.clubName !== undefined) {
+      const name = String(patch.clubName).trim().slice(0, 18);
+      if (name) save.clubName = name;
+    }
+    return this.putSave(id, save);
   }
 
   // ---------- служебное ----------
