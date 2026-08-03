@@ -174,12 +174,13 @@ export const GET = withJsonApi(async function GET() {
       }
     }
     const redacted = await applyLastSeenPrivacy(me.id, peers)
-    const byId = new Map(redacted.map((p) => [p.id, p]))
+    const byId = new Map(redacted.map((p) => [p.id, p] as const))
     for (const c of ordered) {
-      c.members = (c.members || []).map((mem: { id: string }) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      c.members = (c.members || []).map((mem: any) => {
         if (mem.id === me.id) return mem
         const r = byId.get(mem.id)
-        return r ? { ...mem, online: r.online, lastSeen: r.lastSeen } : mem
+        return r ? { ...mem, online: !!r.online, lastSeen: r.lastSeen ?? mem.lastSeen } : mem
       })
     }
   } catch (e) {
