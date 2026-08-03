@@ -11,7 +11,7 @@ import {
   MAX_LISTING_PRICE_COINS,
   serializeListingImages,
 } from '@/lib/marketplace'
-import { createFeedSharePost } from '@/lib/feed-share'
+import { createFeedSharePost } from '@/lib/feed-share-server'
 
 function serialize(listing: {
   id: string

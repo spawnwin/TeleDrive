@@ -8,7 +8,7 @@ import { withJsonApi } from '@/lib/with-json-api'
 import { UPLOADS_DIR } from '@/lib/uploads-path'
 import { fetchInstagramVideoInfo, isInstagramUrl } from '@/lib/instagram-video'
 import { getInstagramSessionCookie } from '@/lib/scraper-settings'
-import { createFeedSharePost } from '@/lib/feed-share'
+import { createFeedSharePost } from '@/lib/feed-share-server'
 
 const MAX_SIZE = 200 * 1024 * 1024 // 200MB, matches the regular video upload limit
 

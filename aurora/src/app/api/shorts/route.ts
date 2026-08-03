@@ -3,7 +3,7 @@ import { db } from '@/lib/db'
 import { getCurrentUser } from '@/lib/auth'
 import { parseVideoUrl } from '@/lib/video-url'
 import { withJsonApi } from '@/lib/with-json-api'
-import { createFeedSharePost } from '@/lib/feed-share'
+import { createFeedSharePost } from '@/lib/feed-share-server'
 
 function serializeShort(s: any, isLiked = false) {
   return {

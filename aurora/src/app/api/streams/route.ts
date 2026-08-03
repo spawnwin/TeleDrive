@@ -5,7 +5,7 @@ import { getCurrentUser } from '@/lib/auth'
 import { withJsonApi } from '@/lib/with-json-api'
 import { getPlatformFlags } from '@/lib/platform-settings'
 import { areUsersBlocked } from '@/lib/user-blocks'
-import { createFeedSharePost } from '@/lib/feed-share'
+import { createFeedSharePost } from '@/lib/feed-share-server'
 
 // GET /api/streams — currently live streams, for the discovery grid.
 // ?gameId=<id> narrows to one Twitch-style category (see /api/streams/games).

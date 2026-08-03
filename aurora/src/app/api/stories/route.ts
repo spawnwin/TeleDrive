@@ -13,7 +13,7 @@ import {
   type StoryVisibility,
 } from '@/lib/story-visibility'
 import { withJsonApi } from '@/lib/with-json-api'
-import { createFeedSharePost } from '@/lib/feed-share'
+import { createFeedSharePost } from '@/lib/feed-share-server'
 
 const STORY_TYPES = new Set(['photo', 'video', 'text'])
 
