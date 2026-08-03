@@ -18,6 +18,30 @@ export async function isSavedContact(ownerId: string, peerId: string): Promise<b
   return !!row
 }
 
+/** Accepted friendship between two users (either direction). */
+export async function areAcceptedFriends(a: string, b: string): Promise<boolean> {
+  const row = await db.friendship.findFirst({
+    where: {
+      status: 'accepted',
+      OR: [
+        { requesterId: a, addresseeId: b },
+        { requesterId: b, addresseeId: a },
+      ],
+    },
+    select: { id: true },
+  })
+  return !!row
+}
+
+/**
+ * In Aurora, «Контакты» = friends (+ optional saved contact names).
+ * Privacy option «contacts» therefore includes accepted friends.
+ */
+export async function isContactForPrivacy(ownerId: string, peerId: string): Promise<boolean> {
+  if (await isSavedContact(ownerId, peerId)) return true
+  return areAcceptedFriends(ownerId, peerId)
+}
+
 export async function getUserPrivacy(userId: string): Promise<{
   lastSeenVisibility: Visibility
   whoCanMessage: Visibility
@@ -48,7 +72,7 @@ export async function assertCanMessage(
     return { ok: false, error: 'Невозможно отправить сообщение', status: 403 }
   }
   const privacy = await getUserPrivacy(toUserId)
-  const isContact = await isSavedContact(toUserId, fromUserId)
+  const isContact = await isContactForPrivacy(toUserId, fromUserId)
   if (
     !canMessageUser({
       whoCanMessage: privacy.whoCanMessage,
@@ -77,7 +101,7 @@ export async function assertCanCall(
     return { ok: false, error: 'Пользователь заблокирован', status: 403 }
   }
   const privacy = await getUserPrivacy(toUserId)
-  const isContact = await isSavedContact(toUserId, fromUserId)
+  const isContact = await isContactForPrivacy(toUserId, fromUserId)
   if (
     !canCallUser({
       whoCanCall: privacy.whoCanCall,
@@ -102,7 +126,7 @@ export async function applyLastSeenPrivacy<
   const ids = users.map((u) => u.id).filter((id) => id !== viewerId)
   if (!ids.length) return users
 
-  const [privacyRows, contactRows, blockRows] = await Promise.all([
+  const [privacyRows, contactRows, friendRows, blockRows] = await Promise.all([
     db.user.findMany({
       where: { id: { in: ids } },
       select: { id: true, lastSeenVisibility: true },
@@ -110,6 +134,16 @@ export async function applyLastSeenPrivacy<
     db.contact.findMany({
       where: { ownerId: { in: ids }, peerId: viewerId },
       select: { ownerId: true },
+    }),
+    db.friendship.findMany({
+      where: {
+        status: 'accepted',
+        OR: [
+          { requesterId: viewerId, addresseeId: { in: ids } },
+          { addresseeId: viewerId, requesterId: { in: ids } },
+        ],
+      },
+      select: { requesterId: true, addresseeId: true },
     }),
     db.userBlock.findMany({
       where: {
@@ -126,6 +160,9 @@ export async function applyLastSeenPrivacy<
     privacyRows.map((r) => [r.id, parseVisibility(r.lastSeenVisibility)] as const),
   )
   const contactOwners = new Set(contactRows.map((c) => c.ownerId))
+  const friendPeers = new Set(
+    friendRows.map((f) => (f.requesterId === viewerId ? f.addresseeId : f.requesterId)),
+  )
   const blockedIds = new Set<string>()
   for (const b of blockRows) {
     blockedIds.add(b.blockerId === viewerId ? b.blockedId : b.blockerId)
@@ -137,7 +174,7 @@ export async function applyLastSeenPrivacy<
     const allowed = canSeeLastSeen({
       visibility: visibility.get(u.id) || 'everyone',
       isSelf: false,
-      isContact: contactOwners.has(u.id),
+      isContact: contactOwners.has(u.id) || friendPeers.has(u.id),
     })
     return redactPresenceFields(u, allowed)
   })

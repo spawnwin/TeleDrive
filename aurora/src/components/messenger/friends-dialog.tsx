@@ -19,6 +19,7 @@ import { useI18n } from '@/hooks/use-i18n'
 import { cn } from '@/lib/utils'
 import { countOnlineFriends, isFriendOnline, sortFriendsByOnline } from '@/lib/friends-client'
 import { openPrivateChatWithUser } from '@/lib/open-private-chat'
+import { formatLastSeen } from '@/lib/format'
 import type { FriendshipState } from './friend-button'
 import { toast } from 'sonner'
 
@@ -142,7 +143,7 @@ export function FriendsDialog({
       >
         <DialogHeader className="px-5 pt-[max(1.25rem,env(safe-area-inset-top))]">
           <DialogTitle className="flex items-center gap-2">
-            <span className="flex-1">{t('friends.title')}</span>
+            <span className="flex-1">{t('nav.contacts')}</span>
             <Button
               variant="ghost"
               size="icon"
@@ -335,7 +336,11 @@ function FriendRow({
   friendship: FriendshipState
   onUpdate: () => void
 }) {
-  const { t } = useI18n()
+  const { t, lang } = useI18n()
+  const statusText =
+    friendship.status === 'accepted'
+      ? formatLastSeen(user.lastSeen, online, lang)
+      : `@${user.username}`
 
   return (
     <div className="flex items-center gap-2 rounded-xl px-2 py-2 transition hover:bg-muted/60">
@@ -351,7 +356,16 @@ function FriendRow({
       </button>
       <button type="button" onClick={onProfile} className="min-w-0 flex-1 text-left">
         <p className="truncate text-sm font-medium">{user.name}</p>
-        <p className="truncate text-xs text-muted-foreground">@{user.username}</p>
+        <p
+          className={cn(
+            'truncate text-xs',
+            online && friendship.status === 'accepted'
+              ? 'text-emerald-500'
+              : 'text-muted-foreground',
+          )}
+        >
+          {statusText}
+        </p>
       </button>
       <div className="flex shrink-0 items-center gap-1">
         {friendship.status === 'accepted' && (
