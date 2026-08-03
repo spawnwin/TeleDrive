@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/auth'
 import { db } from '@/lib/db'
-import { getFriendshipView } from '@/lib/friends'
+import { getFriendshipView, isBlockedEitherWay } from '@/lib/friends'
 import { withJsonApi } from '@/lib/with-json-api'
 
 export const PATCH = withJsonApi(async function PATCH(
@@ -36,6 +36,12 @@ export const PATCH = withJsonApi(async function PATCH(
     }
     if (friendship.addresseeId !== me.id) {
       return NextResponse.json({ error: 'Только получатель может принять заявку' }, { status: 403 })
+    }
+    const peerId =
+      friendship.requesterId === me.id ? friendship.addresseeId : friendship.requesterId
+    if (await isBlockedEitherWay(me.id, peerId)) {
+      await db.friendship.delete({ where: { id } })
+      return NextResponse.json({ error: 'Пользователь недоступен' }, { status: 403 })
     }
     const updated = await db.friendship.update({
       where: { id },

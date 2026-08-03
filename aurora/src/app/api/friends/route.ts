@@ -52,6 +52,8 @@ export const GET = withJsonApi(async function GET() {
 
   for (const f of friendships) {
     const user = getFriendFromFriendship(f, me.id)
+    // Skip peers we have a mutual block with (legacy rows before block tore friendships down)
+    if (await isBlockedEitherWay(me.id, user.id)) continue
     if (f.status === 'accepted') {
       friends.push({ ...user, friendshipId: f.id })
     } else if (f.status === 'pending') {

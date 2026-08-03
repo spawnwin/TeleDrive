@@ -3,6 +3,7 @@ import { db } from '@/lib/db'
 import { getCurrentUser } from '@/lib/auth'
 import { withJsonApi } from '@/lib/with-json-api'
 import { DEFAULT_LIMITED_SUPPLY, formatGiftSerial } from '@/lib/gifts'
+import { areUsersBlocked } from '@/lib/user-blocks'
 
 export const GET = withJsonApi(async function GET(
   _req: NextRequest,
@@ -12,6 +13,9 @@ export const GET = withJsonApi(async function GET(
   if (!me) return NextResponse.json({ error: 'Не авторизован' }, { status: 401 })
 
   const { id: userId } = await params
+  if (userId !== me.id && (await areUsersBlocked(me.id, userId))) {
+    return NextResponse.json({ error: 'Пользователь недоступен' }, { status: 403 })
+  }
 
   const gifts = await db.giftSent.findMany({
     where: {
