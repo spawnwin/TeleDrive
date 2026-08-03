@@ -5,6 +5,7 @@ import { withJsonApi } from '@/lib/with-json-api'
 import { getPlatformFlags } from '@/lib/platform-settings'
 import { areUsersBlocked } from '@/lib/user-blocks'
 import { assertCanMessage } from '@/lib/privacy-server'
+import { serializeWallPosts, wallAuthorSelect, type WallPostRow } from '@/lib/wall-feed'
 
 // List wall posts for a user profile (newest first).
 export const GET = withJsonApi(async function GET(
@@ -28,33 +29,16 @@ export const GET = withJsonApi(async function GET(
   const take = Math.min(50, Math.max(1, Number(url.searchParams.get('take') || 50)))
   const cursor = url.searchParams.get('cursor')
 
-  const posts = await db.wallPost.findMany({
+  const posts = (await db.wallPost.findMany({
     where: { profileId: id },
     orderBy: { createdAt: 'desc' },
     take,
     ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
-    include: {
-      author: {
-        select: { id: true, name: true, username: true, avatarColor: true, avatarUrl: true },
-      },
-    },
-  })
+    include: { author: { select: wallAuthorSelect } },
+  })) as WallPostRow[]
 
   return NextResponse.json({
-    posts: posts.map((p) => ({
-      id: p.id,
-      type: p.type,
-      content: p.content,
-      attachmentUrl: p.attachmentUrl,
-      attachmentName: p.attachmentName,
-      attachmentMime: p.attachmentMime,
-      attachmentDuration: p.attachmentDuration,
-      attachmentCoverUrl: p.attachmentCoverUrl,
-      createdAt: p.createdAt,
-      author: p.author,
-      mine: p.authorId === me.id,
-      onMyWall: p.profileId === me.id,
-    })),
+    posts: await serializeWallPosts(me.id, posts),
     nextCursor: posts.length === take ? posts[posts.length - 1]?.id : null,
   })
 })
@@ -128,11 +112,7 @@ export const POST = withJsonApi(async function POST(
       attachmentDuration,
       attachmentCoverUrl,
     },
-    include: {
-      author: {
-        select: { id: true, name: true, username: true, avatarColor: true, avatarUrl: true },
-      },
-    },
+    include: { author: { select: wallAuthorSelect } },
   })
 
   // Notify the profile owner — posting on someone's wall previously left no
@@ -149,20 +129,6 @@ export const POST = withJsonApi(async function POST(
     }).catch(() => {})
   }
 
-  return NextResponse.json({
-    post: {
-      id: post.id,
-      type: post.type,
-      content: post.content,
-      attachmentUrl: post.attachmentUrl,
-      attachmentName: post.attachmentName,
-      attachmentMime: post.attachmentMime,
-      attachmentDuration: post.attachmentDuration,
-      attachmentCoverUrl: post.attachmentCoverUrl,
-      createdAt: post.createdAt,
-      author: post.author,
-      mine: true,
-      onMyWall: id === me.id,
-    },
-  })
+  const [serialized] = await serializeWallPosts(me.id, [post as WallPostRow])
+  return NextResponse.json({ post: serialized })
 })

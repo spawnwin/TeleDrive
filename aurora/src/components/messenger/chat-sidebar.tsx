@@ -24,6 +24,7 @@ import {
   Mic,
   MessageSquare,
   Clapperboard,
+  Newspaper,
   Coins,
   UserCircle,
   Trash2,
@@ -260,7 +261,7 @@ export function ChatSidebar({
   }, [refreshPendingFriendRequests])
 
   useEffect(() => {
-    if (view === 'shorts' && selectionMode) exitSelection()
+    if ((view === 'shorts' || view === 'feed') && selectionMode) exitSelection()
   }, [view, selectionMode, exitSelection])
 
   useEffect(() => {
@@ -688,7 +689,7 @@ export function ChatSidebar({
         )}
       </div>
 
-      {/* Mode toggle: Чаты / Шорты — desktop */}
+      {/* Mode toggle: Чаты / Лента / Шорты — desktop */}
       <div className="hidden px-3 pt-3 xl:block">
         <div className="flex rounded-2xl bg-muted/70 p-1">
           <button
@@ -702,6 +703,18 @@ export function ChatSidebar({
           >
             <MessageSquare className="h-3.5 w-3.5" />
             {t('nav.chats')}
+          </button>
+          <button
+            onClick={() => setView('feed')}
+            className={cn(
+              'flex flex-1 items-center justify-center gap-1.5 rounded-xl py-2 text-sm font-medium transition',
+              view === 'feed'
+                ? 'bg-background text-foreground shadow-sm'
+                : 'text-muted-foreground hover:text-foreground',
+            )}
+          >
+            <Newspaper className="h-3.5 w-3.5" />
+            {t('nav.feed')}
           </button>
           <button
             onClick={() => setView('shorts')}

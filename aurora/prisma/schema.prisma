@@ -134,6 +134,7 @@ model User {
   // Profile wall (VK-style): posts received on this user's wall + posts authored elsewhere
   wallPostsReceived      WallPost[] @relation("WallPostsReceived")
   wallPostsAuthored      WallPost[] @relation("WallPostsAuthored")
+  wallPostLikes          WallPostLike[]
 
   // P2P coin transfers between users
   transfersSent          CoinTransfer[] @relation("TransferSender")
@@ -975,27 +976,45 @@ model EmojiStatus {
   createdAt DateTime @default(now())
 }
 
-// ===== VKontakte-style profile wall =====
+// ===== VKontakte-style profile wall / friends feed =====
 // Posts left on a user's profile wall by themselves or other users.
-// Supports text, images, voice messages, and drawings (canvas PNG).
+// Own-wall posts (profileId === authorId) also appear in friends' news feed.
+// Supports text, images, voice messages, drawings, and music.
 model WallPost {
   id            String   @id @default(cuid())
   profileId     String   // user whose wall this post is on
   authorId      String   // user who wrote the post
   content       String?  // text body (optional when an attachment is present)
-  type          String   @default("text") // text | image | voice | drawing
+  type          String   @default("text") // text | image | voice | drawing | music
   attachmentUrl String?  // /uploads/... path for media posts
   attachmentName String? // original filename / label
   attachmentMime String? // mime type for playback decisions
   attachmentDuration Int? // seconds, for voice
   attachmentCoverUrl String? // cover art for music tracks
+  likes         Int      @default(0)
+  editedAt      DateTime?
   createdAt     DateTime @default(now())
 
   profile User @relation("WallPostsReceived", fields: [profileId], references: [id], onDelete: Cascade)
   author  User @relation("WallPostsAuthored", fields: [authorId], references: [id], onDelete: Cascade)
+  likeRows WallPostLike[]
 
   @@index([profileId, createdAt])
-  @@index([authorId])
+  @@index([authorId, createdAt])
+  @@index([createdAt])
+}
+
+model WallPostLike {
+  id        String   @id @default(cuid())
+  postId    String
+  userId    String
+  createdAt DateTime @default(now())
+
+  post WallPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, userId])
+  @@index([userId])
 }
 
 // ===== P2P Marketplace (Avito-style, inside the messenger) =====

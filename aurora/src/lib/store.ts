@@ -115,7 +115,7 @@ interface AppState {
   notificationSoundEnabled: boolean
   messageSoundEnabled: boolean
   callSoundEnabled: boolean
-  view: 'chats' | 'shorts' | 'marketplace'
+  view: 'chats' | 'feed' | 'shorts' | 'marketplace'
   profileUserId: string | null
   browserUrl: string | null
   videoPlayerUrl: string | null
@@ -171,7 +171,7 @@ interface AppState {
   setNotificationSoundEnabled: (v: boolean) => void
   setMessageSoundEnabled: (v: boolean) => void
   setCallSoundEnabled: (v: boolean) => void
-  setView: (v: 'chats' | 'shorts' | 'marketplace') => void
+  setView: (v: 'chats' | 'feed' | 'shorts' | 'marketplace') => void
   setProfileUserId: (id: string | null) => void
   openBrowser: (url: string) => void
   closeBrowser: () => void

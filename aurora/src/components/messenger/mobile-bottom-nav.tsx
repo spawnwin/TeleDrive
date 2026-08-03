@@ -2,12 +2,12 @@
 
 import { useEffect, useRef } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Clapperboard, MessageCircle, Search, Users, X } from 'lucide-react'
+import { Clapperboard, MessageCircle, Newspaper, Search, Users, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { UnreadBadge } from './unread-indicator'
 import { Avatar } from './avatar'
 
-type MobileTab = 'chats' | 'shorts' | 'contacts'
+type MobileTab = 'chats' | 'feed' | 'shorts' | 'contacts'
 
 interface MobileBottomNavProps {
   activeTab: MobileTab
@@ -27,6 +27,7 @@ interface MobileBottomNavProps {
   searchQuery?: string
   onSearchQueryChange?: (query: string) => void
   onChats: () => void
+  onFeed: () => void
   onShorts: () => void
   onContacts: () => void
   onSettings?: () => void
@@ -53,6 +54,7 @@ export function MobileBottomNav({
   searchQuery = '',
   onSearchQueryChange,
   onChats,
+  onFeed,
   onShorts,
   onContacts,
   onSettings,
@@ -63,6 +65,7 @@ export function MobileBottomNav({
   const inputRef = useRef<HTMLInputElement>(null)
   const items = [
     { id: 'contacts' as const, icon: Users, onClick: onContacts, label: labels.contacts },
+    { id: 'feed' as const, icon: Newspaper, onClick: onFeed, label: labels.feed },
     { id: 'shorts' as const, icon: Clapperboard, onClick: onShorts, label: labels.shorts },
     { id: 'chats' as const, icon: MessageCircle, onClick: onChats, label: labels.chats },
   ]
@@ -151,7 +154,7 @@ export function MobileBottomNav({
             >
               <div
                 className={cn(
-                  'flex min-w-0 flex-1 items-stretch justify-between rounded-full px-1.5 py-1',
+                  'flex min-w-0 flex-1 items-stretch justify-between rounded-full px-1 py-1',
                   glass,
                 )}
               >
@@ -164,7 +167,7 @@ export function MobileBottomNav({
                       onClick={onClick}
                       aria-label={label}
                       aria-current={active ? 'page' : undefined}
-                      className="relative flex min-w-0 flex-1 touch-manipulation flex-col items-center justify-center gap-0.5 rounded-full px-1 py-0.5 transition-opacity active:opacity-60"
+                      className="relative flex min-w-0 flex-1 touch-manipulation flex-col items-center justify-center gap-0.5 rounded-full px-0.5 py-0.5 transition-opacity active:opacity-60"
                     >
                       <span className="relative flex h-[22px] w-[22px] items-center justify-center">
                         <Icon
@@ -200,7 +203,7 @@ export function MobileBottomNav({
                     onClick={onProfile || onSettings}
                     aria-label={onProfile ? profileLabel : settingsLabel}
                     aria-current={undefined}
-                    className="relative flex min-w-0 flex-1 touch-manipulation flex-col items-center justify-center gap-0.5 rounded-full px-1 py-0.5 transition-opacity active:opacity-60"
+                    className="relative flex min-w-0 flex-1 touch-manipulation flex-col items-center justify-center gap-0.5 rounded-full px-0.5 py-0.5 transition-opacity active:opacity-60"
                   >
                     <span className="flex h-[22px] w-[22px] items-center justify-center overflow-hidden rounded-full ring-2 ring-primary/40">
                       <Avatar

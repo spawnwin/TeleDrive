@@ -10,6 +10,7 @@ import { ChatInfoPanel } from './chat-info-panel'
 import { SettingsDialog } from './settings-dialog'
 import { AuthScreen } from './auth-screen'
 import { ShortsFeed } from '@/components/shorts/shorts-feed'
+import { FriendsFeed } from './friends-feed'
 import { UserProfileDialog } from './user-profile-dialog'
 import { CoinsDialog } from './coins-dialog'
 import { PremiumDialog } from './premium-dialog'
@@ -169,7 +170,7 @@ export function Messenger() {
       }
       return
     }
-    if (view === 'shorts') {
+    if (view === 'shorts' || view === 'feed') {
       setView('chats')
       return
     }
@@ -495,6 +496,10 @@ export function Messenger() {
       setView('shorts')
       url.searchParams.delete('view')
     }
+    if (viewParam === 'feed') {
+      setView('feed')
+      url.searchParams.delete('view')
+    }
     if (actionParam === 'new_chat') {
       setView('chats')
       // Trigger the "new chat" flow by posting a message the sidebar listens for.
@@ -596,10 +601,12 @@ export function Messenger() {
 
   // Hooks must run unconditionally (before any early return).
   const isShortsMode = view === 'shorts'
+  const isFeedMode = view === 'feed'
+  const isImmersiveMode = isShortsMode || isFeedMode
   const swipeBackToChatsEnabled =
     !!currentUser &&
     bootstrapped &&
-    (isShortsMode ||
+    (isImmersiveMode ||
       showFriends ||
       showSettings ||
       showCoins ||
@@ -704,7 +711,9 @@ export function Messenger() {
     ? 'contacts'
     : isShortsMode
       ? 'shorts'
-      : 'chats'
+      : isFeedMode
+        ? 'feed'
+        : 'chats'
 
   return (
     <div className="relative flex h-[100dvh] w-full overflow-hidden bg-background">
@@ -720,7 +729,7 @@ export function Messenger() {
         {/* Sidebar */}
         <aside
           className={`${
-            isShortsMode
+            isImmersiveMode
               ? 'hidden xl:flex'
               : activeChatId
                 ? 'hidden xl:flex'
@@ -744,12 +753,12 @@ export function Messenger() {
         {/* Main area */}
         <main
           className={`${
-            isShortsMode ? 'flex' : activeChatId ? 'flex' : 'hidden xl:flex'
+            isImmersiveMode ? 'flex' : activeChatId ? 'flex' : 'hidden xl:flex'
           } min-w-0 flex-1 flex-col overflow-hidden`}
         >
           <div
             className={`${
-              isShortsMode ? 'hidden' : 'flex'
+              isImmersiveMode ? 'hidden' : 'flex'
             } min-h-0 min-w-0 flex-1 flex-col`}
           >
             <ChatView
@@ -760,13 +769,16 @@ export function Messenger() {
               onShowInfo={() => setShowInfo((v) => !v)}
             />
           </div>
+          {isFeedMode && (
+            <FriendsFeed onBack={() => setView('chats')} />
+          )}
           {isShortsMode && (
             <ShortsFeed onBack={() => setView('chats')} />
           )}
         </main>
 
         {/* Info panel (only in chats mode) */}
-        {!isShortsMode && (
+        {!isImmersiveMode && (
           <ChatInfoPanel open={showInfo} onClose={() => setShowInfo(false)} />
         )}
 
@@ -784,6 +796,7 @@ export function Messenger() {
           unreadCount={mobileUnreadCount}
           labels={{
             chats: translate(lang, 'nav.chats'),
+            feed: translate(lang, 'nav.feed'),
             shorts: translate(lang, 'nav.shorts'),
             contacts: translate(lang, 'nav.contacts'),
           }}
@@ -803,6 +816,12 @@ export function Messenger() {
             closeMobileSearch()
             setShowFriends(false)
             setView('chats')
+          }}
+          onFeed={() => {
+            closeMobileSearch()
+            setShowFriends(false)
+            setActiveChat(null)
+            setView('feed')
           }}
           onShorts={() => {
             closeMobileSearch()

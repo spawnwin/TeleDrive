@@ -14,6 +14,8 @@ import {
   Eraser,
   Download,
   Music,
+  Heart,
+  Check,
 } from 'lucide-react'
 import { Avatar } from './avatar'
 import { Button } from '@/components/ui/button'
@@ -52,6 +54,9 @@ interface WallPost {
   attachmentMime: string | null
   attachmentDuration: number | null
   attachmentCoverUrl: string | null
+  likes: number
+  likedByMe: boolean
+  editedAt: string | null
   createdAt: string
   author: WallAuthor
   mine: boolean
@@ -240,6 +245,53 @@ export function ProfileWall({ profileId, isSelf, blocked }: ProfileWallProps) {
       setPosts((p) => p.filter((x) => x.id !== postId))
     } catch (err) {
       toast.error(err instanceof Error ? err.message : t('misc.error'))
+    }
+  }
+
+  const toggleLike = async (postId: string) => {
+    setPosts((prev) =>
+      prev.map((p) =>
+        p.id === postId
+          ? {
+              ...p,
+              likedByMe: !p.likedByMe,
+              likes: Math.max(0, (p.likes || 0) + (p.likedByMe ? -1 : 1)),
+            }
+          : p,
+      ),
+    )
+    try {
+      const res = await fetch(`/api/feed/${encodeURIComponent(postId)}/like`, {
+        method: 'POST',
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error || t('misc.error'))
+      setPosts((prev) =>
+        prev.map((p) =>
+          p.id === postId
+            ? { ...p, likedByMe: !!data.likedByMe, likes: Number(data.likes) || 0 }
+            : p,
+        ),
+      )
+    } catch (err) {
+      void load()
+      toast.error(err instanceof Error ? err.message : t('misc.error'))
+    }
+  }
+
+  const saveEdit = async (postId: string, content: string) => {
+    const res = await fetch(
+      `/api/users/${encodeURIComponent(profileId)}/wall/${encodeURIComponent(postId)}`,
+      {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content }),
+      },
+    )
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) throw new Error(data.error || t('misc.error'))
+    if (data.post) {
+      setPosts((prev) => prev.map((p) => (p.id === postId ? (data.post as WallPost) : p)))
     }
   }
 
@@ -446,6 +498,8 @@ export function ProfileWall({ profileId, isSelf, blocked }: ProfileWallProps) {
               post={p}
               canDelete={p.mine || p.onMyWall || isSelf}
               onDelete={() => remove(p.id)}
+              onLike={() => void toggleLike(p.id)}
+              onSaveEdit={(content) => saveEdit(p.id, content)}
               onOpenAuthor={() => setProfileUserId(p.author.id)}
             />
           ))}
@@ -525,14 +579,38 @@ function WallPostCard({
   post,
   canDelete,
   onDelete,
+  onLike,
+  onSaveEdit,
   onOpenAuthor,
 }: {
   post: WallPost
   canDelete: boolean
   onDelete: () => void
+  onLike: () => void
+  onSaveEdit: (content: string) => Promise<void>
   onOpenAuthor: () => void
 }) {
   const { t } = useI18n()
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState(post.content || '')
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    if (!editing) setDraft(post.content || '')
+  }, [post.content, editing])
+
+  const save = async () => {
+    setSaving(true)
+    try {
+      await onSaveEdit(draft)
+      setEditing(false)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : t('misc.error'))
+    } finally {
+      setSaving(false)
+    }
+  }
+
   return (
     <div className="rounded-xl border border-border bg-card/60 p-3">
       <div className="mb-2 flex items-center gap-2">
@@ -552,9 +630,20 @@ function WallPostCard({
           <p className="truncate text-sm font-medium">{post.author.name}</p>
           <p className="text-[11px] text-muted-foreground">
             {new Date(post.createdAt).toLocaleString()}
+            {post.editedAt ? ` · ${t('wall.edited')}` : ''}
           </p>
         </button>
-        {canDelete && (
+        {post.mine && !editing && (
+          <button
+            type="button"
+            onClick={() => setEditing(true)}
+            className="flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground transition hover:bg-muted hover:text-foreground"
+            title={t('wall.edit')}
+          >
+            <Pencil className="h-3.5 w-3.5" />
+          </button>
+        )}
+        {canDelete && !editing && (
           <button
             type="button"
             onClick={onDelete}
@@ -566,7 +655,41 @@ function WallPostCard({
         )}
       </div>
 
-      {post.content && <p className="mb-2 whitespace-pre-wrap break-words text-sm">{post.content}</p>}
+      {editing ? (
+        <div className="mb-2 space-y-2">
+          <Textarea
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            className="min-h-[72px] resize-none"
+            rows={3}
+          />
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setEditing(false)
+                setDraft(post.content || '')
+              }}
+              className="rounded-lg px-3 py-1.5 text-xs text-muted-foreground hover:bg-muted"
+            >
+              {t('misc.cancel')}
+            </button>
+            <button
+              type="button"
+              disabled={saving}
+              onClick={() => void save()}
+              className="inline-flex items-center gap-1 rounded-lg bg-[#3390ec] px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50"
+            >
+              {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+              {t('wall.save')}
+            </button>
+          </div>
+        </div>
+      ) : (
+        post.content && (
+          <p className="mb-2 whitespace-pre-wrap break-words text-sm">{post.content}</p>
+        )
+      )}
 
       {post.type === 'image' && post.attachmentUrl && (
         <img
@@ -625,6 +748,22 @@ function WallPostCard({
           )
         })()
       )}
+
+      <div className="mt-2 flex items-center gap-1 border-t border-border/60 pt-2">
+        <button
+          type="button"
+          onClick={onLike}
+          className={cn(
+            'inline-flex items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-xs font-medium transition',
+            post.likedByMe
+              ? 'bg-rose-500/10 text-rose-500'
+              : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+          )}
+        >
+          <Heart className={cn('h-4 w-4', post.likedByMe && 'fill-current')} />
+          {(post.likes || 0) > 0 ? post.likes : t('wall.like')}
+        </button>
+      </div>
     </div>
   )
 }
