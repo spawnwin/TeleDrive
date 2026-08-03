@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getCurrentUser } from '@/lib/auth'
 import { withJsonApi } from '@/lib/with-json-api'
+import { areUsersBlocked } from '@/lib/user-blocks'
 
 // Toggle like on a short
 export const POST = withJsonApi(async function POST(
@@ -14,6 +15,9 @@ export const POST = withJsonApi(async function POST(
   const { id } = await params
   const short = await db.short.findUnique({ where: { id } })
   if (!short) return NextResponse.json({ error: 'Шортс не найден' }, { status: 404 })
+  if (short.creatorId !== me.id && (await areUsersBlocked(me.id, short.creatorId))) {
+    return NextResponse.json({ error: 'Недоступно' }, { status: 403 })
+  }
 
   const existing = await db.shortLike.findUnique({
     where: { shortId_userId: { shortId: id, userId: me.id } },

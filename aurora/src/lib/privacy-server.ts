@@ -102,7 +102,7 @@ export async function applyLastSeenPrivacy<
   const ids = users.map((u) => u.id).filter((id) => id !== viewerId)
   if (!ids.length) return users
 
-  const [privacyRows, contactRows] = await Promise.all([
+  const [privacyRows, contactRows, blockRows] = await Promise.all([
     db.user.findMany({
       where: { id: { in: ids } },
       select: { id: true, lastSeenVisibility: true },
@@ -111,15 +111,29 @@ export async function applyLastSeenPrivacy<
       where: { ownerId: { in: ids }, peerId: viewerId },
       select: { ownerId: true },
     }),
+    db.userBlock.findMany({
+      where: {
+        OR: [
+          { blockerId: viewerId, blockedId: { in: ids } },
+          { blockerId: { in: ids }, blockedId: viewerId },
+        ],
+      },
+      select: { blockerId: true, blockedId: true },
+    }),
   ])
 
   const visibility = new Map(
     privacyRows.map((r) => [r.id, parseVisibility(r.lastSeenVisibility)] as const),
   )
   const contactOwners = new Set(contactRows.map((c) => c.ownerId))
+  const blockedIds = new Set<string>()
+  for (const b of blockRows) {
+    blockedIds.add(b.blockerId === viewerId ? b.blockedId : b.blockerId)
+  }
 
   return users.map((u) => {
     if (u.id === viewerId) return u
+    if (blockedIds.has(u.id)) return redactPresenceFields(u, false)
     const allowed = canSeeLastSeen({
       visibility: visibility.get(u.id) || 'everyone',
       isSelf: false,

@@ -8,6 +8,7 @@ import {
 } from '@/lib/contacts'
 import { withJsonApi } from '@/lib/with-json-api'
 import { applyLastSeenPrivacy } from '@/lib/privacy-server'
+import { areUsersBlocked } from '@/lib/user-blocks'
 
 export const GET = withJsonApi(async function GET() {
   const me = await getCurrentUser()
@@ -73,6 +74,9 @@ export const POST = withJsonApi(async function POST(req: NextRequest) {
   })
   if (!peer) {
     return NextResponse.json({ error: 'Пользователь не найден' }, { status: 404 })
+  }
+  if (await areUsersBlocked(me.id, peerId)) {
+    return NextResponse.json({ error: 'Пользователь недоступен' }, { status: 403 })
   }
 
   const contact = await upsertContactName(

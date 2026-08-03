@@ -180,7 +180,8 @@ export const GET = withJsonApi(async function GET() {
       c.members = (c.members || []).map((mem: any) => {
         if (mem.id === me.id) return mem
         const r = byId.get(mem.id)
-        return r ? { ...mem, online: !!r.online, lastSeen: r.lastSeen ?? mem.lastSeen } : mem
+        // Never fall back to mem.lastSeen — null means deliberately hidden
+        return r ? { ...mem, online: !!r.online, lastSeen: r.lastSeen ?? null } : mem
       })
     }
   } catch (e) {

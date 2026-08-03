@@ -7,6 +7,7 @@ import {
   upsertContactName,
 } from '@/lib/contacts'
 import { withJsonApi } from '@/lib/with-json-api'
+import { areUsersBlocked } from '@/lib/user-blocks'
 
 export const PATCH = withJsonApi(async function PATCH(
   req: NextRequest,
@@ -23,6 +24,9 @@ export const PATCH = withJsonApi(async function PATCH(
   const peer = await db.user.findUnique({ where: { id: peerId }, select: { id: true } })
   if (!peer) {
     return NextResponse.json({ error: 'Пользователь не найден' }, { status: 404 })
+  }
+  if (await areUsersBlocked(me.id, peerId)) {
+    return NextResponse.json({ error: 'Пользователь недоступен' }, { status: 403 })
   }
 
   const body = await req.json().catch(() => ({}))

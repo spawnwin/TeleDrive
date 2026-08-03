@@ -4,6 +4,7 @@ import { getCurrentUser } from '@/lib/auth'
 import { isPremiumActive } from '@/lib/coins'
 import { getFriendshipView } from '@/lib/friends'
 import { withJsonApi } from '@/lib/with-json-api'
+import { areUsersBlocked } from '@/lib/user-blocks'
 
 export const GET = withJsonApi(async function GET(req: NextRequest) {
   const me = await getCurrentUser()
@@ -26,7 +27,7 @@ export const GET = withJsonApi(async function GET(req: NextRequest) {
         ).map((s) => s.creatorId)
       : []
 
-  const shorts = await db.short.findMany({
+  const shortsRaw = await db.short.findMany({
     where: {
       isHidden: false,
       OR: [
@@ -40,7 +41,7 @@ export const GET = withJsonApi(async function GET(req: NextRequest) {
           : {}),
     },
     orderBy: [{ isFeatured: 'desc' }, { createdAt: 'desc' }],
-    take,
+    take: Math.min(40, Math.max(take * 2, take)),
     ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
     include: {
       creator: {
@@ -62,6 +63,12 @@ export const GET = withJsonApi(async function GET(req: NextRequest) {
       },
     },
   })
+
+  const blockedCreators = new Set<string>()
+  for (const sid of [...new Set(shortsRaw.map((s) => s.creatorId))]) {
+    if (sid !== me.id && (await areUsersBlocked(me.id, sid))) blockedCreators.add(sid)
+  }
+  const shorts = shortsRaw.filter((s) => !blockedCreators.has(s.creatorId)).slice(0, take)
 
   const creatorIds = [...new Set(shorts.map((s) => s.creatorId))]
   const friendships =

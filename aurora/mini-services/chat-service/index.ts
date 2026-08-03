@@ -209,11 +209,21 @@ io.on('connection', (socket) => {
     })
   })
 
-  socket.on('message:reaction', (data: ReactionEvent) => {
+  socket.on('message:reaction', async (data: ReactionEvent) => {
     const userId = getAuthUserId(socket)
     if (!userId || data.userId !== userId) return
     if (!inChat(socket, data.chatId)) return
-    socket.to(`chat:${data.chatId}`).emit('message:reaction', data)
+    // Ensure the message actually lives in this chat (prevents injecting
+    // reaction events for arbitrary messageIds into a room the attacker is in).
+    const info = await getMessageInfo(data.messageId)
+    if (!info || info.chatId !== data.chatId) return
+    socket.to(`chat:${data.chatId}`).emit('message:reaction', {
+      messageId: data.messageId,
+      chatId: data.chatId,
+      emoji: data.emoji,
+      userId,
+      action: data.action === 'removed' ? 'removed' : 'added',
+    })
   })
 
   // --- Comments (Telegram-style replies under channel/group posts) ---

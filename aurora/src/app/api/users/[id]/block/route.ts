@@ -26,15 +26,25 @@ export const POST = withJsonApi(async function POST(
     update: {},
   })
 
-  // Tear down any friendship / pending request so blocked peers disappear from friends list
-  await db.friendship.deleteMany({
-    where: {
-      OR: [
-        { requesterId: me.id, addresseeId: id },
-        { requesterId: id, addresseeId: me.id },
-      ],
-    },
-  })
+  // Tear down friendship + contacts so blocked peers disappear from lists/presence
+  await Promise.all([
+    db.friendship.deleteMany({
+      where: {
+        OR: [
+          { requesterId: me.id, addresseeId: id },
+          { requesterId: id, addresseeId: me.id },
+        ],
+      },
+    }),
+    db.contact.deleteMany({
+      where: {
+        OR: [
+          { ownerId: me.id, peerId: id },
+          { ownerId: id, peerId: me.id },
+        ],
+      },
+    }),
+  ])
 
   return NextResponse.json({ ok: true, blocked: true })
 })

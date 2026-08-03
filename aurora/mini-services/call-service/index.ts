@@ -1,6 +1,12 @@
 import { createServer } from 'http'
 import { Server, Socket } from 'socket.io'
-import { verifySessionToken, isCallsEnabled, canCallUser, isChatMember } from '../shared/ws-auth'
+import {
+  verifySessionToken,
+  isCallsEnabled,
+  canCallUser,
+  isChatMember,
+  canJoinStreamRoom,
+} from '../shared/ws-auth'
 import { sendCallPushNotification, sendCallCancelPush } from '../shared/push-call'
 import { endLiveStreamsForUser } from '../shared/end-live-streams'
 
@@ -514,7 +520,12 @@ io.on('connection', (socket) => {
     // below never runs for either the host or viewers, and the client sits
     // on "Подключение к эфиру..." forever.
     const isStreamRoom = data.roomId.startsWith('stream-')
-    if (!isStreamRoom && !(await isChatMember(authUserId, data.chatId))) return
+    if (isStreamRoom) {
+      const gate = await canJoinStreamRoom(authUserId, data.roomId)
+      if (!gate.ok) return
+    } else if (!(await isChatMember(authUserId, data.chatId))) {
+      return
+    }
     socket.join(`group:${data.roomId}`)
     let members = roomMembers.get(data.roomId)
     if (!members) {

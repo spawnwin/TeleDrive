@@ -140,6 +140,31 @@ export async function getMessageReactions(messageId: string): Promise<CommentRea
 }
 
 
+/** Can user join a live stream signaling room? */
+export async function canJoinStreamRoom(
+  userId: string,
+  roomId: string,
+): Promise<{ ok: boolean; error?: string }> {
+  if (!userId || !roomId || !INTERNAL_API_SECRET) return { ok: false, error: 'unavailable' }
+  try {
+    const res = await fetch(`${INTERNAL_API_URL}/api/internal/check-stream-access`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-internal-secret': INTERNAL_API_SECRET,
+      },
+      body: JSON.stringify({ userId, roomId }),
+    })
+    if (!res.ok) return { ok: false, error: 'check_failed' }
+    const data = (await res.json()) as { allowed?: boolean; error?: string }
+    if (!data.allowed) return { ok: false, error: data.error || 'forbidden' }
+    return { ok: true }
+  } catch (err) {
+    console.error('[ws-auth] canJoinStreamRoom failed:', err)
+    return { ok: false, error: 'check_failed' }
+  }
+}
+
 /** Privacy + block gate before delivering a call invite. */
 export async function canCallUser(fromUserId: string, toUserId: string): Promise<{ ok: boolean; error?: string }> {
   if (!fromUserId || !toUserId || !INTERNAL_API_SECRET) return { ok: false, error: 'unavailable' }
