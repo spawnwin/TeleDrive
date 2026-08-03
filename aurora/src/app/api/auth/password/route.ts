@@ -40,6 +40,7 @@ export const POST = withJsonApi(async function POST(req: NextRequest) {
     const { cookies } = await import('next/headers')
     const jar = await cookies()
     const currentToken =
+      jar.get('messenger_session')?.value ||
       jar.get('aurora_session')?.value ||
       jar.get('session')?.value ||
       jar.get('token')?.value ||

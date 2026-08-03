@@ -9,6 +9,7 @@ import {
   getYandexMusicApiForUser,
 } from '@/lib/yandex-music'
 import { withJsonApi } from '@/lib/with-json-api'
+import { clientIp, rateLimit } from '@/lib/rate-limit'
 
 export const GET = withJsonApi(async function GET() {
   const me = await getCurrentUser()
@@ -34,6 +35,10 @@ export const GET = withJsonApi(async function GET() {
 export const POST = withJsonApi(async function POST(req: NextRequest) {
   const me = await getCurrentUser()
   if (!me) return NextResponse.json({ error: 'Не авторизован' }, { status: 401 })
+
+  if (!rateLimit(`ym-connect:${me.id}:${clientIp(req)}`, 8, 15 * 60 * 1000)) {
+    return NextResponse.json({ error: 'Слишком много попыток' }, { status: 429 })
+  }
 
   const body = await req.json().catch(() => ({}))
   const token = typeof body.token === 'string' ? body.token.trim() : ''

@@ -18,9 +18,12 @@ export function getYandexMusicApi(): Promise<YMApi> {
   if (!envApiPromise) {
     envApiPromise = (async () => {
       const api = createApi()
+      // Shared env token is OFF by default — it would give every user
+      // full tracks / likes from one account. Opt in with YANDEX_MUSIC_SHARE_ENV=1.
+      const share = process.env.YANDEX_MUSIC_SHARE_ENV === '1'
       const token = process.env.YANDEX_MUSIC_TOKEN
       const uid = process.env.YANDEX_MUSIC_UID
-      if (token && uid) {
+      if (share && token && uid) {
         try {
           await initApi(api, token, String(uid))
         } catch (e) {
@@ -34,7 +37,10 @@ export function getYandexMusicApi(): Promise<YMApi> {
 }
 
 export function isEnvYandexAuthed(): boolean {
-  return !!(process.env.YANDEX_MUSIC_TOKEN && process.env.YANDEX_MUSIC_UID)
+  return (
+    process.env.YANDEX_MUSIC_SHARE_ENV === '1' &&
+    !!(process.env.YANDEX_MUSIC_TOKEN && process.env.YANDEX_MUSIC_UID)
+  )
 }
 
 export async function readUserYandexCredentials(userId: string): Promise<{
@@ -61,6 +67,9 @@ export async function saveUserYandexCredentials(
   token: string,
   uid: string,
 ): Promise<void> {
+  if (process.env.NODE_ENV === 'production' && !process.env.TOKEN_ENCRYPTION_KEY && !process.env.YANDEX_TOKEN_KEY) {
+    console.warn('[yandex-music] TOKEN_ENCRYPTION_KEY is not set — storing token sealed with fallback secret')
+  }
   await db.user.update({
     where: { id: userId },
     data: {
@@ -77,7 +86,7 @@ export async function clearUserYandexCredentials(userId: string): Promise<void> 
   })
 }
 
-/** Prefer the user's linked Yandex account; fall back to env / anonymous. */
+/** Prefer the user's linked Yandex account; otherwise anonymous preview only. */
 export async function getYandexMusicApiForUser(userId: string): Promise<{
   api: YMApi
   source: 'user' | 'env' | 'anon'
@@ -88,14 +97,15 @@ export async function getYandexMusicApiForUser(userId: string): Promise<{
     try {
       const api = createApi()
       await initApi(api, creds.token, creds.uid)
-      // Cheap account ping to detect expired tokens early.
       await (api as YandexApiExtended).getAccountStatus()
       return { api, source: 'user' }
     } catch (e) {
-      console.warn('[yandex-music] user token init failed', String(e))
-      return { api: await getYandexMusicApi(), source: isEnvYandexAuthed() ? 'env' : 'anon', expired: true }
+      console.warn('[yandex-music] user token init failed — clearing', String(e))
+      await clearUserYandexCredentials(userId).catch(() => {})
+      return { api: await getYandexMusicApi(), source: 'anon', expired: true }
     }
   }
+  // Env shared token only when explicitly enabled.
   if (isEnvYandexAuthed()) {
     return { api: await getYandexMusicApi(), source: 'env' }
   }

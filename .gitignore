@@ -8,7 +8,7 @@ keys
 *.env
 .vercel
 lab/
-sessions/
+/sessions/
 *.crt
 dump\.rdb
 *.log

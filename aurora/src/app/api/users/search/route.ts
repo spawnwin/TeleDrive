@@ -68,5 +68,8 @@ export const GET = withJsonApi(async function GET(req: NextRequest) {
       (u.username.toLowerCase().includes(q) || u.name.toLowerCase().includes(q)),
   )
 
-  return NextResponse.json({ users })
+  const { applyLastSeenPrivacy } = await import('@/lib/privacy-server')
+  const redacted = await applyLastSeenPrivacy(me.id, users)
+
+  return NextResponse.json({ users: redacted })
 })

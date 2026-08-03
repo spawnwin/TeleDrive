@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getCurrentUser } from '@/lib/auth'
-import { areUsersBlocked } from '@/lib/user-blocks'
 import { withJsonApi } from '@/lib/with-json-api'
 import { isVideoFile, isVoiceFile, resolveVideoMime, resolveVoiceMime } from '@/lib/media-type'
 import { serializeReplyTo } from '@/lib/message-reply'
@@ -173,8 +172,12 @@ export const POST = withJsonApi(async function POST(
       where: { chatId: id, userId: { not: me.id } },
       select: { userId: true },
     })
-    if (otherMember && (await areUsersBlocked(me.id, otherMember.userId))) {
-      return NextResponse.json({ error: 'Невозможно отправить сообщение' }, { status: 403 })
+    if (otherMember) {
+      const { assertCanMessage } = await import('@/lib/privacy-server')
+      const gate = await assertCanMessage(me.id, otherMember.userId)
+      if (!gate.ok) {
+        return NextResponse.json({ error: gate.error }, { status: gate.status })
+      }
     }
   }
 

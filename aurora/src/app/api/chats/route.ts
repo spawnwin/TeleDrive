@@ -164,6 +164,28 @@ export const GET = withJsonApi(async function GET() {
   const rest = chats.filter((c) => c.type !== 'saved')
   const ordered = [...saved, ...rest]
 
+  // Redact online/lastSeen per each peer's privacy settings
+  try {
+    const { applyLastSeenPrivacy } = await import('@/lib/privacy-server')
+    const peers: Array<{ id: string; online?: boolean | null; lastSeen?: Date | string | null }> = []
+    for (const c of ordered) {
+      for (const mem of c.members || []) {
+        if (mem.id !== me.id) peers.push(mem)
+      }
+    }
+    const redacted = await applyLastSeenPrivacy(me.id, peers)
+    const byId = new Map(redacted.map((p) => [p.id, p]))
+    for (const c of ordered) {
+      c.members = (c.members || []).map((mem: { id: string }) => {
+        if (mem.id === me.id) return mem
+        const r = byId.get(mem.id)
+        return r ? { ...mem, online: r.online, lastSeen: r.lastSeen } : mem
+      })
+    }
+  } catch (e) {
+    console.warn('[GET /api/chats] lastSeen privacy', e)
+  }
+
   return NextResponse.json({ chats: ordered })
   } catch (err) {
     console.error('[GET /api/chats]', err)
@@ -200,23 +222,10 @@ export const POST = withJsonApi(async function POST(req: Request) {
       return NextResponse.json({ error: 'Пользователь заблокирован' }, { status: 403 })
     }
 
-    const targetPrivacy = await db.user.findUnique({
-      where: { id: targetUserId },
-      select: { whoCanMessage: true },
-    })
-    const who = targetPrivacy?.whoCanMessage || 'everyone'
-    if (who === 'nobody') {
-      return NextResponse.json({ error: 'Пользователь ограничил личные сообщения' }, { status: 403 })
-    }
-    if (who === 'contacts') {
-      const { getContactForPeer } = await import('@/lib/contacts')
-      const contact = await getContactForPeer(targetUserId, me.id)
-      if (!contact) {
-        return NextResponse.json(
-          { error: 'Пользователь принимает сообщения только от контактов' },
-          { status: 403 },
-        )
-      }
+    const { assertCanMessage } = await import('@/lib/privacy-server')
+    const gate = await assertCanMessage(me.id, targetUserId)
+    if (!gate.ok) {
+      return NextResponse.json({ error: gate.error }, { status: gate.status })
     }
 
     // Look for an existing private chat with this pair

@@ -85,10 +85,23 @@ export const GET = withJsonApi(async function GET() {
     return a.name.localeCompare(b.name)
   })
 
+  const { applyLastSeenPrivacy } = await import('@/lib/privacy-server')
+  const presenceUsers = [
+    ...friendsNamed,
+    ...incomingNamed.map((r) => r.user),
+    ...outgoingNamed.map((r) => r.user),
+  ]
+  const redacted = await applyLastSeenPrivacy(me.id, presenceUsers)
+  const byId = new Map(redacted.map((u) => [u.id, u]))
+  const patch = <T extends { id: string }>(u: T): T => {
+    const r = byId.get(u.id)
+    return r ? ({ ...u, online: r.online, lastSeen: r.lastSeen } as T) : u
+  }
+
   return NextResponse.json({
-    friends: friendsNamed,
-    incoming: incomingNamed,
-    outgoing: outgoingNamed,
+    friends: friendsNamed.map(patch),
+    incoming: incomingNamed.map((r) => ({ ...r, user: patch(r.user) })),
+    outgoing: outgoingNamed.map((r) => ({ ...r, user: patch(r.user) })),
   })
 })
 

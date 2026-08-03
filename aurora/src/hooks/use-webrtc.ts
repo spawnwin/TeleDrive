@@ -435,6 +435,13 @@ export function useWebRTC(opts: UseWebRTCOptions) {
       }
       setError(null)
       try {
+        // Privacy / block gate before requesting mic/camera
+        const gateRes = await fetch(`/api/users/${encodeURIComponent(peerId)}/can-call`)
+        const gate = await gateRes.json().catch(() => ({}))
+        if (!gateRes.ok || !gate.canCall) {
+          setError(typeof gate.error === 'string' ? gate.error : 'Звонок недоступен')
+          return
+        }
         // Get user media
         const stream = await navigator.mediaDevices.getUserMedia({
           audio: true,

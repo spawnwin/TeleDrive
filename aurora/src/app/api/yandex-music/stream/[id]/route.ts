@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/auth'
 import { getYandexTrackStreamUrl } from '@/lib/yandex-music'
+import { clientIp, rateLimit } from '@/lib/rate-limit'
 
 /**
  * Proxy a Yandex Music track as audio/mpeg without saving it to disk.
  * Supports Range so the in-chat player can seek.
  * Uses the listener's linked Yandex token when available (full track);
- * otherwise falls back to env token or anonymous preview (~30s).
+ * otherwise anonymous preview (~30s).
  */
 export async function GET(
   req: NextRequest,
@@ -14,6 +15,13 @@ export async function GET(
 ) {
   const me = await getCurrentUser()
   if (!me) return new NextResponse('Unauthorized', { status: 401 })
+
+  if (!rateLimit(`ym-stream:${me.id}`, 90, 60 * 1000)) {
+    return NextResponse.json({ error: 'Слишком много запросов' }, { status: 429 })
+  }
+  if (!rateLimit(`ym-stream-ip:${clientIp(req)}`, 180, 60 * 1000)) {
+    return NextResponse.json({ error: 'Слишком много запросов' }, { status: 429 })
+  }
 
   const { id } = await params
   if (!/^\d+$/.test(id)) {

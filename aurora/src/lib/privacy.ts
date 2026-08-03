@@ -29,3 +29,22 @@ export function canMessageUser(opts: {
   if (opts.whoCanMessage === 'contacts') return opts.isContact
   return true
 }
+
+export function canCallUser(opts: {
+  whoCanCall: Visibility
+  isSelf: boolean
+  isContact: boolean
+}): boolean {
+  if (opts.isSelf) return true
+  if (opts.whoCanCall === 'nobody') return false
+  if (opts.whoCanCall === 'contacts') return opts.isContact
+  return true
+}
+
+export function redactPresenceFields<T extends { online?: boolean | null; lastSeen?: Date | string | null }>(
+  row: T,
+  allowed: boolean,
+): T {
+  if (allowed) return row
+  return { ...row, online: false, lastSeen: null }
+}

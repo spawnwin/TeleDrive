@@ -1,13 +1,11 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect } from 'react'
 import { Loader2, Music, Pause, Play } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useI18n } from '@/hooks/use-i18n'
 import type { ChatMusicMetadata } from '@/lib/music-message'
 import { musicItemFromMeta, useMusicPlayerStore } from '@/lib/music-player-store'
-
-const MUSIC_PLAY_EVENT = 'aurora:music-play'
 
 function formatTime(s: number) {
   if (!Number.isFinite(s) || s < 0) return '0:00'
@@ -22,10 +20,12 @@ interface ChatMusicPlayerProps {
   mine?: boolean
   messageId?: string
   className?: string
-  /** Other tracks in the same chat — used as play-next queue. */
   queue?: ChatMusicMetadata[]
 }
 
+/**
+ * Chat bubble UI only — playback lives in GlobalMusicBar / music-player-store.
+ */
 export function ChatMusicPlayer({
   meta,
   mine = false,
@@ -34,105 +34,51 @@ export function ChatMusicPlayer({
   queue = [],
 }: ChatMusicPlayerProps) {
   const { t } = useI18n()
-  const audioRef = useRef<HTMLAudioElement>(null)
   const playerId = messageId || meta.trackId
-  const streamSrc = `/api/yandex-music/stream/${encodeURIComponent(meta.trackId)}`
-  const [playing, setPlaying] = useState(false)
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState(false)
-  const [preview, setPreview] = useState(false)
-  const [current, setCurrent] = useState(0)
-  const [duration, setDuration] = useState(meta.durationSec || 0)
-
-  const storePlaying = useMusicPlayerStore((s) => s.playing)
-  const storeTrackKey = useMusicPlayerStore((s) => s.queue[s.index]?.key)
   const playQueue = useMusicPlayerStore((s) => s.playQueue)
   const setStorePlaying = useMusicPlayerStore((s) => s.setPlaying)
+  const seekTo = useMusicPlayerStore((s) => s.seekTo)
+  const storePlaying = useMusicPlayerStore((s) => s.playing)
+  const storeTrackKey = useMusicPlayerStore((s) => s.queue[s.index]?.key)
+  const storeCurrent = useMusicPlayerStore((s) => s.current)
+  const storeDuration = useMusicPlayerStore((s) => s.duration)
+  const storePreview = useMusicPlayerStore((s) => s.preview)
+  const storeLoading = useMusicPlayerStore((s) => s.loading)
 
-  const isActiveInStore = storeTrackKey === playerId
+  const isActive = storeTrackKey === playerId
+  const playing = isActive && storePlaying
+  const current = isActive ? storeCurrent : 0
+  const duration = isActive && storeDuration > 0 ? storeDuration : meta.durationSec || 0
+  const preview = isActive ? storePreview : false
+  const loading = isActive && storeLoading
 
   useEffect(() => {
-    setPlaying(false)
-    setLoading(false)
-    setError(false)
-    setPreview(false)
-    setCurrent(0)
-    setDuration(meta.durationSec || 0)
-    const a = audioRef.current
-    if (!a) return
-    a.pause()
-    a.currentTime = 0
-    a.load()
-
-    fetch(streamSrc, { headers: { Range: 'bytes=0-1' }, credentials: 'same-origin' })
+    // One shared Range probe cache per track id (avoid N bubbles × probe).
+    if (!meta.trackId) return
+    const cacheKey = `ym-preview:${meta.trackId}`
+    try {
+      const cached = sessionStorage.getItem(cacheKey)
+      if (cached != null) return
+    } catch {
+      /* ignore */
+    }
+    const ctrl = new AbortController()
+    fetch(`/api/yandex-music/stream/${encodeURIComponent(meta.trackId)}`, {
+      headers: { Range: 'bytes=0-1' },
+      credentials: 'same-origin',
+      signal: ctrl.signal,
+    })
       .then((r) => {
-        setPreview(r.headers.get('X-Aurora-Preview') === '1')
+        const isPreview = r.headers.get('X-Aurora-Preview') === '1'
+        try {
+          sessionStorage.setItem(cacheKey, isPreview ? '1' : '0')
+        } catch {
+          /* ignore */
+        }
       })
       .catch(() => {})
-  }, [meta.trackId, meta.durationSec, streamSrc])
-
-  useEffect(() => {
-    const a = audioRef.current
-    if (!a) return
-    const onTime = () => setCurrent(a.currentTime)
-    const onMeta = () => {
-      if (Number.isFinite(a.duration) && a.duration > 0) setDuration(a.duration)
-    }
-    const onPlay = () => {
-      setPlaying(true)
-      setLoading(false)
-      setError(false)
-    }
-    const onPause = () => setPlaying(false)
-    const onEnded = () => {
-      setPlaying(false)
-      setCurrent(0)
-    }
-    const onWaiting = () => setLoading(true)
-    const onPlaying = () => setLoading(false)
-    const onError = () => {
-      setPlaying(false)
-      setLoading(false)
-      setError(true)
-    }
-    a.addEventListener('timeupdate', onTime)
-    a.addEventListener('loadedmetadata', onMeta)
-    a.addEventListener('play', onPlay)
-    a.addEventListener('pause', onPause)
-    a.addEventListener('ended', onEnded)
-    a.addEventListener('waiting', onWaiting)
-    a.addEventListener('playing', onPlaying)
-    a.addEventListener('error', onError)
-    return () => {
-      a.removeEventListener('timeupdate', onTime)
-      a.removeEventListener('loadedmetadata', onMeta)
-      a.removeEventListener('play', onPlay)
-      a.removeEventListener('pause', onPause)
-      a.removeEventListener('ended', onEnded)
-      a.removeEventListener('waiting', onWaiting)
-      a.removeEventListener('playing', onPlaying)
-      a.removeEventListener('error', onError)
-    }
-  }, [streamSrc])
-
-  useEffect(() => {
-    const onOther = (event: Event) => {
-      const detail = (event as CustomEvent<{ id?: string }>).detail
-      if (detail?.id === playerId) return
-      audioRef.current?.pause()
-      setPlaying(false)
-    }
-    window.addEventListener(MUSIC_PLAY_EVENT, onOther)
-    return () => window.removeEventListener(MUSIC_PLAY_EVENT, onOther)
-  }, [playerId])
-
-  // When global bar owns playback for this track, pause the in-bubble audio.
-  useEffect(() => {
-    if (isActiveInStore && storePlaying) {
-      audioRef.current?.pause()
-      setPlaying(false)
-    }
-  }, [isActiveInStore, storePlaying])
+    return () => ctrl.abort()
+  }, [meta.trackId])
 
   const openYandexSettings = () => {
     window.dispatchEvent(
@@ -140,12 +86,14 @@ export function ChatMusicPlayer({
     )
   }
 
-  const toggle = async () => {
-    // Prefer global mini-player + queue when there are sibling tracks.
+  const toggle = () => {
     const items =
       queue.length > 0
         ? queue.map((m, i) =>
-            musicItemFromMeta(m, messageId && m.trackId === meta.trackId ? playerId : `${m.trackId}-${i}`),
+            musicItemFromMeta(
+              m,
+              messageId && m.trackId === meta.trackId ? playerId : `${m.trackId}-${i}`,
+            ),
           )
         : [musicItemFromMeta(meta, playerId)]
     const startIndex = Math.max(
@@ -153,49 +101,31 @@ export function ChatMusicPlayer({
       items.findIndex((i) => i.key === playerId || i.trackId === meta.trackId),
     )
 
-    window.dispatchEvent(new CustomEvent(MUSIC_PLAY_EVENT, { detail: { id: playerId } }))
+    window.dispatchEvent(new CustomEvent('aurora:music-play', { detail: { id: playerId } }))
     window.dispatchEvent(new CustomEvent('aurora:voice-play', { detail: { id: `music-${playerId}` } }))
 
-    if (isActiveInStore && storePlaying) {
+    if (isActive && storePlaying) {
       setStorePlaying(false)
       return
     }
-
     playQueue(items, startIndex >= 0 ? startIndex : 0)
-    // Also try local play as fallback if global bar is not mounted.
-    const a = audioRef.current
-    if (!a) return
-    if (playing) {
-      a.pause()
-      setPlaying(false)
-      return
-    }
-    a.volume = 1
-    a.muted = false
-    setLoading(true)
-    setError(false)
-    try {
-      // Global bar will take over; keep bubble visual in sync briefly.
-      setPlaying(true)
-    } catch {
-      setPlaying(false)
-      setError(true)
-    } finally {
-      setLoading(false)
-    }
   }
 
   const seek = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const a = audioRef.current
-    const dur = duration > 0 ? duration : meta.durationSec
-    if (!a || !dur) return
+    if (!isActive || !duration) return
     const ratio = Number(e.target.value) / 100
-    a.currentTime = ratio * dur
-    setCurrent(a.currentTime)
+    seekTo(ratio * duration)
   }
 
-  const showPlaying = playing || (isActiveInStore && storePlaying)
   const progress = duration > 0 ? Math.min(100, (current / duration) * 100) : 0
+  let showPreview = preview
+  if (!isActive) {
+    try {
+      showPreview = sessionStorage.getItem(`ym-preview:${meta.trackId}`) === '1'
+    } catch {
+      showPreview = false
+    }
+  }
 
   return (
     <div
@@ -219,12 +149,8 @@ export function ChatMusicPlayer({
         <button
           type="button"
           onClick={toggle}
-          className={cn(
-            'relative h-14 w-14 shrink-0 overflow-hidden rounded-2xl shadow-md transition active:scale-95',
-            error && 'ring-2 ring-rose-400/80',
-          )}
-          aria-label={showPlaying ? 'Pause' : 'Play'}
-          title={error ? 'Не удалось воспроизвести' : undefined}
+          className="relative h-14 w-14 shrink-0 overflow-hidden rounded-2xl shadow-md transition active:scale-95"
+          aria-label={playing ? 'Pause' : 'Play'}
         >
           {meta.coverUrl ? (
             <img
@@ -232,23 +158,23 @@ export function ChatMusicPlayer({
               alt=""
               className={cn(
                 'h-full w-full object-cover transition-transform duration-700',
-                showPlaying && 'scale-105',
+                playing && 'scale-105',
               )}
             />
           ) : (
             <span
               className={cn(
                 'flex h-full w-full items-center justify-center bg-gradient-to-br from-rose-500 to-primary text-white',
-                showPlaying && 'animate-pulse',
+                playing && 'animate-pulse',
               )}
             >
               <Music className="h-6 w-6" />
             </span>
           )}
-          <span className="absolute inset-0 flex items-center justify-center bg-black/45 text-white backdrop-blur-[1px] transition">
+          <span className="absolute inset-0 flex items-center justify-center bg-black/45 text-white backdrop-blur-[1px]">
             {loading ? (
               <Loader2 className="h-5 w-5 animate-spin" />
-            ) : showPlaying ? (
+            ) : playing ? (
               <Pause className="h-5 w-5 fill-current" />
             ) : (
               <Play className="h-5 w-5 translate-x-0.5 fill-current" />
@@ -260,15 +186,10 @@ export function ChatMusicPlayer({
           <p className={cn('truncate text-[15px] font-semibold leading-tight tracking-tight', mine && 'text-white')}>
             {meta.title}
           </p>
-          <p
-            className={cn(
-              'mt-0.5 truncate text-[12px]',
-              mine ? 'text-white/75' : 'text-muted-foreground',
-            )}
-          >
+          <p className={cn('mt-0.5 truncate text-[12px]', mine ? 'text-white/75' : 'text-muted-foreground')}>
             {meta.artist}
           </p>
-          {preview && (
+          {showPreview && (
             <button
               type="button"
               onClick={openYandexSettings}
@@ -295,6 +216,7 @@ export function ChatMusicPlayer({
               max={100}
               value={progress}
               onChange={seek}
+              disabled={!isActive}
               className={cn(
                 'h-1.5 min-w-0 flex-1 cursor-pointer appearance-none rounded-full',
                 mine ? 'bg-white/25 accent-white' : 'bg-primary/20 accent-primary',
@@ -311,8 +233,6 @@ export function ChatMusicPlayer({
           </div>
         </div>
       </div>
-      {/* Keep a hidden audio for preview-header probe; actual playback is GlobalMusicBar */}
-      <audio ref={audioRef} src={streamSrc} preload="none" playsInline className="hidden" />
     </div>
   )
 }

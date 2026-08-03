@@ -41,7 +41,7 @@ export const POST = withJsonApi(async function POST(req: NextRequest) {
   await db.user.delete({ where: { id: me.id } })
 
   const jar = await cookies()
-  for (const name of ['aurora_session', 'session', 'token']) {
+  for (const name of ['messenger_session', 'aurora_session', 'session', 'token']) {
     try {
       jar.delete(name)
     } catch {
