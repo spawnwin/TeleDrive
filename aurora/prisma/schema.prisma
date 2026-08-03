@@ -135,6 +135,7 @@ model User {
   wallPostsReceived      WallPost[] @relation("WallPostsReceived")
   wallPostsAuthored      WallPost[] @relation("WallPostsAuthored")
   wallPostLikes          WallPostLike[]
+  wallPostComments       WallPostComment[]
 
   // P2P coin transfers between users
   transfersSent          CoinTransfer[] @relation("TransferSender")
@@ -992,12 +993,15 @@ model WallPost {
   attachmentDuration Int? // seconds, for voice
   attachmentCoverUrl String? // cover art for music tracks
   likes         Int      @default(0)
+  comments      Int      @default(0)
+  commentsClosed Boolean @default(false)
   editedAt      DateTime?
   createdAt     DateTime @default(now())
 
   profile User @relation("WallPostsReceived", fields: [profileId], references: [id], onDelete: Cascade)
   author  User @relation("WallPostsAuthored", fields: [authorId], references: [id], onDelete: Cascade)
   likeRows WallPostLike[]
+  commentRows WallPostComment[]
 
   @@index([profileId, createdAt])
   @@index([authorId, createdAt])
@@ -1014,6 +1018,20 @@ model WallPostLike {
   user User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([postId, userId])
+  @@index([userId])
+}
+
+model WallPostComment {
+  id        String   @id @default(cuid())
+  postId    String
+  userId    String
+  content   String
+  createdAt DateTime @default(now())
+
+  post WallPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([postId, createdAt])
   @@index([userId])
 }
 

@@ -4,7 +4,7 @@ import { getCurrentUser } from '@/lib/auth'
 import { withJsonApi } from '@/lib/with-json-api'
 import { serializeWallPosts, wallAuthorSelect, type WallPostRow } from '@/lib/wall-feed'
 
-/** Edit own feed/wall post text. */
+/** Edit own feed/wall post text and/or open/close comments. */
 export const PATCH = withJsonApi(async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ postId: string }> },
@@ -15,25 +15,42 @@ export const PATCH = withJsonApi(async function PATCH(
   const { postId } = await params
   const post = await db.wallPost.findUnique({ where: { id: postId } })
   if (!post) return NextResponse.json({ error: 'Запись не найдена' }, { status: 404 })
-  if (post.authorId !== me.id) {
-    return NextResponse.json({ error: 'Недостаточно прав' }, { status: 403 })
-  }
 
   const body = await req.json().catch(() => ({}))
-  const content = typeof body?.content === 'string' ? body.content.trim() : null
-  if (content === null) {
-    return NextResponse.json({ error: 'Укажите текст' }, { status: 400 })
+  const hasContent = typeof body?.content === 'string'
+  const hasClosed = typeof body?.commentsClosed === 'boolean'
+
+  if (!hasContent && !hasClosed) {
+    return NextResponse.json({ error: 'Нечего обновлять' }, { status: 400 })
   }
-  if (content.length > 10000) {
-    return NextResponse.json({ error: 'Запись слишком длинная' }, { status: 400 })
+
+  const data: { content?: string | null; editedAt?: Date; commentsClosed?: boolean } = {}
+
+  if (hasContent) {
+    if (post.authorId !== me.id) {
+      return NextResponse.json({ error: 'Недостаточно прав' }, { status: 403 })
+    }
+    const content = (body.content as string).trim()
+    if (content.length > 10000) {
+      return NextResponse.json({ error: 'Запись слишком длинная' }, { status: 400 })
+    }
+    if (!content && !post.attachmentUrl) {
+      return NextResponse.json({ error: 'Пустая запись' }, { status: 400 })
+    }
+    data.content = content || null
+    data.editedAt = new Date()
   }
-  if (!content && !post.attachmentUrl) {
-    return NextResponse.json({ error: 'Пустая запись' }, { status: 400 })
+
+  if (hasClosed) {
+    if (post.authorId !== me.id && post.profileId !== me.id) {
+      return NextResponse.json({ error: 'Недостаточно прав' }, { status: 403 })
+    }
+    data.commentsClosed = body.commentsClosed as boolean
   }
 
   const updated = await db.wallPost.update({
     where: { id: postId },
-    data: { content: content || null, editedAt: new Date() },
+    data,
     include: { author: { select: wallAuthorSelect } },
   })
 

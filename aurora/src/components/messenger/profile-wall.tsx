@@ -36,6 +36,7 @@ import { resolveMediaUrl } from '@/lib/media-url'
 import { MusicPickerDialog } from './music-picker-dialog'
 import { ChatMusicPlayer } from './chat-music-player'
 import { buildChatMusicMetadata } from '@/lib/music-message'
+import { WallPostComments } from './wall-post-comments'
 
 interface WallAuthor {
   id: string
@@ -56,11 +57,14 @@ interface WallPost {
   attachmentCoverUrl: string | null
   likes: number
   likedByMe: boolean
+  comments: number
+  commentsClosed: boolean
   editedAt: string | null
   createdAt: string
   author: WallAuthor
   mine: boolean
   onMyWall: boolean
+  canModerate?: boolean
 }
 
 interface ProfileWallProps {
@@ -500,6 +504,19 @@ export function ProfileWall({ profileId, isSelf, blocked }: ProfileWallProps) {
               onDelete={() => remove(p.id)}
               onLike={() => void toggleLike(p.id)}
               onSaveEdit={(content) => saveEdit(p.id, content)}
+              onMetaChange={(meta) =>
+                setPosts((prev) =>
+                  prev.map((x) =>
+                    x.id === p.id
+                      ? {
+                          ...x,
+                          comments: meta.comments,
+                          commentsClosed: meta.commentsClosed,
+                        }
+                      : x,
+                  ),
+                )
+              }
               onOpenAuthor={() => setProfileUserId(p.author.id)}
             />
           ))}
@@ -581,6 +598,7 @@ function WallPostCard({
   onDelete,
   onLike,
   onSaveEdit,
+  onMetaChange,
   onOpenAuthor,
 }: {
   post: WallPost
@@ -588,12 +606,14 @@ function WallPostCard({
   onDelete: () => void
   onLike: () => void
   onSaveEdit: (content: string) => Promise<void>
+  onMetaChange: (meta: { comments: number; commentsClosed: boolean }) => void
   onOpenAuthor: () => void
 }) {
   const { t } = useI18n()
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(post.content || '')
   const [saving, setSaving] = useState(false)
+  const [commentsOpen, setCommentsOpen] = useState(false)
 
   useEffect(() => {
     if (!editing) setDraft(post.content || '')
@@ -749,20 +769,31 @@ function WallPostCard({
         })()
       )}
 
-      <div className="mt-2 flex items-center gap-1 border-t border-border/60 pt-2">
-        <button
-          type="button"
-          onClick={onLike}
-          className={cn(
-            'inline-flex items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-xs font-medium transition',
-            post.likedByMe
-              ? 'bg-rose-500/10 text-rose-500'
-              : 'text-muted-foreground hover:bg-muted hover:text-foreground',
-          )}
-        >
-          <Heart className={cn('h-4 w-4', post.likedByMe && 'fill-current')} />
-          {(post.likes || 0) > 0 ? post.likes : t('wall.like')}
-        </button>
+      <div className="mt-2 flex flex-col gap-1 border-t border-border/60 pt-2">
+        <div className="flex flex-wrap items-center gap-1">
+          <button
+            type="button"
+            onClick={onLike}
+            className={cn(
+              'inline-flex items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-xs font-medium transition',
+              post.likedByMe
+                ? 'bg-rose-500/10 text-rose-500'
+                : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+            )}
+          >
+            <Heart className={cn('h-4 w-4', post.likedByMe && 'fill-current')} />
+            {(post.likes || 0) > 0 ? post.likes : t('wall.like')}
+          </button>
+        </div>
+        <WallPostComments
+          postId={post.id}
+          commentsCount={post.comments || 0}
+          commentsClosed={!!post.commentsClosed}
+          canModerate={!!(post.canModerate ?? (post.mine || post.onMyWall))}
+          open={commentsOpen}
+          onOpenChange={setCommentsOpen}
+          onMetaChange={onMetaChange}
+        />
       </div>
     </div>
   )
