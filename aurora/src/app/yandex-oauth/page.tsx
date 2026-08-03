@@ -10,7 +10,7 @@ import { Loader2, Music2 } from 'lucide-react'
  */
 export default function YandexOAuthPage() {
   const router = useRouter()
-  const [status, setStatus] = useState<'working' | 'ok' | 'error'>('working')
+  const [status, setStatus] = useState<'working' | 'ok' | 'error' | 'need-login'>('working')
   const [message, setMessage] = useState('Подключаем Яндекс Музыку…')
 
   useEffect(() => {
@@ -19,14 +19,26 @@ export default function YandexOAuthPage() {
       try {
         const hash = typeof window !== 'undefined' ? window.location.hash.replace(/^#/, '') : ''
         const params = new URLSearchParams(hash)
-        const token =
-          params.get('access_token') ||
-          new URLSearchParams(window.location.search).get('access_token')
-        if (!token) {
+        const search = new URLSearchParams(window.location.search)
+        const token = params.get('access_token') || search.get('access_token')
+        const oauthError = params.get('error') || search.get('error')
+
+        if (oauthError) {
           setStatus('error')
-          setMessage('Токен не найден. Откройте авторизацию из настроек ещё раз.')
+          setMessage(
+            oauthError === 'access_denied'
+              ? 'Доступ отклонён. Разрешите приложение и попробуйте снова.'
+              : `Ошибка OAuth: ${oauthError}`,
+          )
           return
         }
+
+        if (!token) {
+          setStatus('error')
+          setMessage('Токен не найден. Откройте авторизацию из Настройки → Яндекс Музыка.')
+          return
+        }
+
         const res = await fetch('/api/yandex-music/connect', {
           method: 'POST',
           credentials: 'include',
@@ -34,15 +46,38 @@ export default function YandexOAuthPage() {
           body: JSON.stringify({ token }),
         })
         const data = await res.json().catch(() => ({}))
+
+        if (res.status === 401) {
+          if (cancelled) return
+          setStatus('need-login')
+          setMessage('Сначала войдите в Aurora, затем снова откройте авторизацию Яндекс Музыки.')
+          // Keep token briefly in sessionStorage so settings can finish after login
+          try {
+            sessionStorage.setItem('aurora:pendingYandexToken', token)
+          } catch {
+            /* ignore */
+          }
+          return
+        }
+
         if (!res.ok) {
           throw new Error(typeof data.error === 'string' ? data.error : 'Ошибка подключения')
         }
         if (cancelled) return
         setStatus('ok')
         setMessage('Готово! Яндекс Музыка подключена.')
-        // Clean token from address bar
         window.history.replaceState(null, '', '/yandex-oauth')
-        setTimeout(() => router.replace('/'), 1200)
+        try {
+          sessionStorage.removeItem('aurora:pendingYandexToken')
+        } catch {
+          /* ignore */
+        }
+        setTimeout(() => {
+          window.dispatchEvent(
+            new CustomEvent('aurora:open-settings', { detail: { page: 'yandex' } }),
+          )
+          router.replace('/')
+        }, 900)
       } catch (e) {
         if (cancelled) return
         setStatus('error')
@@ -64,10 +99,14 @@ export default function YandexOAuthPage() {
         )}
       </div>
       <p className="text-lg font-semibold">Aurora × Яндекс Музыка</p>
-      <p className={`max-w-sm text-sm ${status === 'error' ? 'text-rose-400' : 'text-white/70'}`}>
+      <p
+        className={`max-w-sm text-sm ${
+          status === 'error' || status === 'need-login' ? 'text-rose-400' : 'text-white/70'
+        }`}
+      >
         {message}
       </p>
-      {status === 'error' && (
+      {(status === 'error' || status === 'need-login') && (
         <button
           type="button"
           onClick={() => router.replace('/')}

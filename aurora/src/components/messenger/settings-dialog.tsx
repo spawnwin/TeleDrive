@@ -440,12 +440,47 @@ export function SettingsDialog({
       fetch('/api/yandex-music/connect')
         .then((r) => r.json().catch(() => ({})))
         .then((d) => {
-          setYandexConnected(!!d.connected)
+          const connected = !!d.connected
+          setYandexConnected(connected)
           setYandexUid(typeof d.uid === 'string' ? d.uid : null)
+          if (d.expired) {
+            setYandexError(t('music.tokenExpired'))
+          }
+          if (currentUser && currentUser.yandexMusicConnected !== connected) {
+            setCurrentUser({ ...currentUser, yandexMusicConnected: connected })
+          }
         })
         .catch(() => {})
+      // Finish OAuth if token was saved while logged out
+      try {
+        const pending = sessionStorage.getItem('aurora:pendingYandexToken')
+        if (pending && pending.length >= 16) {
+          setYandexBusy(true)
+          fetch('/api/yandex-music/connect', {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ token: pending }),
+          })
+            .then((r) => r.json().then((d) => ({ ok: r.ok, d })))
+            .then(({ ok, d }) => {
+              if (ok) {
+                setYandexConnected(true)
+                setYandexUid(typeof d.uid === 'string' ? d.uid : null)
+                sessionStorage.removeItem('aurora:pendingYandexToken')
+                toast.success(t('music.connectSuccess'))
+                if (currentUser) {
+                  setCurrentUser({ ...currentUser, yandexMusicConnected: true })
+                }
+              }
+            })
+            .finally(() => setYandexBusy(false))
+        }
+      } catch {
+        /* ignore */
+      }
     }
-  }, [open, currentUser, initialPage])
+  }, [open, currentUser, initialPage, setCurrentUser, t])
 
   const handleAvatarPick = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]

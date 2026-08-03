@@ -298,12 +298,19 @@ export function useWebRTC(opts: UseWebRTCOptions) {
     })
 
     // Call rejected by remote peer
-    socket.on('call:reject', (data: { callId: string; reason?: string }) => {
+    socket.on('call:reject', (data: { callId: string; reason?: string; message?: string }) => {
       if (currentCallRef.current?.callId !== data.callId) return
       clearRingTimeout()
       stopIncomingCallRing()
       cleanupCall()
       setCall(null)
+      if (data.reason === 'privacy' || data.reason === 'blocked') {
+        setError(data.message || (data.reason === 'blocked' ? 'Пользователь заблокирован' : 'Звонок недоступен'))
+      } else if (data.reason === 'rate_limited') {
+        setError('Слишком много звонков. Подождите немного.')
+      } else if (data.reason === 'calls_disabled') {
+        setError('Звонки временно отключены')
+      }
       callbacksRef.current.onCallEnded?.(data.callId, data.reason || 'rejected')
     })
 
