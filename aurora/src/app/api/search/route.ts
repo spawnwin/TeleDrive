@@ -5,6 +5,7 @@ import { withJsonApi } from '@/lib/with-json-api'
 import { normalizeChannelSlug } from '@/lib/channels'
 import { getFriendshipView } from '@/lib/friends'
 import { getContactDisplayNameMap } from '@/lib/contacts'
+import { applyLastSeenPrivacy } from '@/lib/privacy-server'
 
 const USER_LIMIT = 20
 const CHAT_LIMIT = 15
@@ -162,8 +163,9 @@ export const GET = withJsonApi(async function GET(req: NextRequest) {
   }
 
   const contactNames = await getContactDisplayNameMap(me.id, userIds)
+  const redactedUsers = await applyLastSeenPrivacy(me.id, matchedUsers)
 
-  const users = matchedUsers.map((u) => ({
+  const users = redactedUsers.map((u) => ({
     ...u,
     originalName: u.name,
     name: contactNames.get(u.id) || u.name,

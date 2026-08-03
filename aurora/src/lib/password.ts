@@ -1,32 +1,42 @@
 /**
- * Password helpers for Aurora. Uses bcryptjs (available on VPS).
+ * Password helpers for Aurora.
+ * Canonical format matches login/register: scrypt via `@/lib/auth`.
+ * bcrypt hashes (from an earlier password-change bug) still verify.
  */
 
+import { hash as hashAuth, verifyPassword as verifyAuthPassword } from '@/lib/auth'
+
 type BcryptLike = {
-  hash: (data: string, rounds: number) => Promise<string>
   compare: (data: string, encrypted: string) => Promise<boolean>
 }
 
-let cached: BcryptLike | null = null
+let cachedBcrypt: BcryptLike | null = null
 
 async function getBcrypt(): Promise<BcryptLike> {
-  if (cached) return cached
-  // Dynamic import keeps the dependency explicit for bundlers.
+  if (cachedBcrypt) return cachedBcrypt
   const mod = (await import('bcryptjs')) as unknown as BcryptLike & {
     default?: BcryptLike
   }
-  cached = (mod.default || mod) as BcryptLike
-  return cached
+  cachedBcrypt = (mod.default || mod) as BcryptLike
+  return cachedBcrypt
 }
 
 export async function hashPassword(plain: string): Promise<string> {
-  const bcrypt = await getBcrypt()
-  return bcrypt.hash(plain, 10)
+  return hashAuth(plain)
 }
 
-export async function verifyPassword(plain: string, hash: string): Promise<boolean> {
-  const bcrypt = await getBcrypt()
-  return bcrypt.compare(plain, hash)
+export async function verifyPassword(plain: string, hashed: string): Promise<boolean> {
+  if (!hashed) return false
+  // bcrypt leftover from earlier password-change path
+  if (hashed.startsWith('$2a$') || hashed.startsWith('$2b$') || hashed.startsWith('$2y$')) {
+    try {
+      const bcrypt = await getBcrypt()
+      return bcrypt.compare(plain, hashed)
+    } catch {
+      return false
+    }
+  }
+  return verifyAuthPassword(plain, hashed)
 }
 
 export function validatePasswordStrength(plain: string): string | null {

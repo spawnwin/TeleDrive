@@ -139,7 +139,9 @@ export const GET = withJsonApi(async function GET(
   let online = user.online
   if (!isSelf) {
     const { canSeeLastSeen, parseVisibility } = await import('@/lib/privacy')
-    const isContact = !!contact || !!(await getContactForPeer(targetUserId, me.id))
+    // whoCanSee lastSeen is decided by the TARGET's contact list (have they saved me?),
+    // not by whether I saved them as a contact.
+    const isContact = !!(await getContactForPeer(targetUserId, me.id))
     const visibility = parseVisibility(
       (user as { lastSeenVisibility?: string }).lastSeenVisibility,
     )

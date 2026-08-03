@@ -7,6 +7,7 @@ import {
   upsertContactName,
 } from '@/lib/contacts'
 import { withJsonApi } from '@/lib/with-json-api'
+import { applyLastSeenPrivacy } from '@/lib/privacy-server'
 
 export const GET = withJsonApi(async function GET() {
   const me = await getCurrentUser()
@@ -30,6 +31,12 @@ export const GET = withJsonApi(async function GET() {
     orderBy: { updatedAt: 'desc' },
   })
 
+  const peers = await applyLastSeenPrivacy(
+    me.id,
+    rows.map((c) => c.peer),
+  )
+  const peerById = new Map(peers.map((p) => [p.id, p]))
+
   return NextResponse.json({
     contacts: rows.map((c) => ({
       id: c.id,
@@ -37,7 +44,7 @@ export const GET = withJsonApi(async function GET() {
       firstName: c.firstName,
       lastName: c.lastName,
       displayName: formatContactDisplayName(c),
-      peer: c.peer,
+      peer: peerById.get(c.peerId) || c.peer,
     })),
   })
 })

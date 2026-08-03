@@ -3,6 +3,7 @@ import { db } from '@/lib/db'
 import { getCurrentUser } from '@/lib/auth'
 import { withJsonApi } from '@/lib/with-json-api'
 import { areUsersBlocked } from '@/lib/user-blocks'
+import { assertCanMessage } from '@/lib/privacy-server'
 
 const EARTH_KM = 6371
 const DEFAULT_RADIUS_KM = 2.5
@@ -35,7 +36,11 @@ function clampCoord(n: unknown, min: number, max: number): number | null {
 
 async function getOrCreatePrivateChat(meId: string, otherId: string) {
   if (await areUsersBlocked(meId, otherId)) {
-    return { ok: false as const, error: 'Пользователь заблокирован' }
+    return { ok: false as const, error: 'Пользователь заблокирован', status: 403 as const }
+  }
+  const canMsg = await assertCanMessage(meId, otherId)
+  if (!canMsg.ok) {
+    return { ok: false as const, error: canMsg.error, status: canMsg.status }
   }
   const existing = await db.chat.findFirst({
     where: {
@@ -85,7 +90,7 @@ export const POST = withJsonApi(async function POST(req: NextRequest) {
 
     const chatRes = await getOrCreatePrivateChat(me.id, presence.userId)
     if (!chatRes.ok) {
-      return NextResponse.json({ error: chatRes.error }, { status: 400 })
+      return NextResponse.json({ error: chatRes.error }, { status: chatRes.status || 403 })
     }
 
     const waveText = presence.anonymous

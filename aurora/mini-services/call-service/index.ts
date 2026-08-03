@@ -464,7 +464,16 @@ io.on('connection', (socket) => {
     if (!userId || data.fromUserId !== userId) return
     // Verify the inviter is a member of the chat
     if (!(await isChatMember(userId, data.chatId))) return
+    if (!(await isCallsEnabled())) {
+      socket.emit('group:invite-denied', {
+        roomId: data.roomId,
+        chatId: data.chatId,
+        reason: 'calls_disabled',
+      })
+      return
+    }
 
+    let delivered = 0
     for (const pid of data.participantIds) {
       if (!pid || pid === userId) continue
       // Respect whoCanCall / blocklist the same as 1:1 invites
@@ -475,6 +484,14 @@ io.on('connection', (socket) => {
       for (const sid of sockets) {
         io.to(sid).emit('group:invite', data)
       }
+      delivered += 1
+    }
+    if (delivered === 0) {
+      socket.emit('group:invite-denied', {
+        roomId: data.roomId,
+        chatId: data.chatId,
+        reason: 'no_recipients',
+      })
     }
   })
 

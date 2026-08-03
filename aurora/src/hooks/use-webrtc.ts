@@ -316,6 +316,8 @@ export function useWebRTC(opts: UseWebRTCOptions) {
         setError(data.message || 'Звонок отклонён')
       } else if (data.reason === 'unauthorized') {
         setError('Не удалось начать звонок')
+      } else if (data.reason === 'missed' || data.reason === 'accepted_elsewhere' || data.reason === 'rejected_elsewhere') {
+        // Normal no-answer / multi-device — not an error toast
       } else if (data.message) {
         setError(data.message)
       } else if (data.reason) {
