@@ -1038,6 +1038,7 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
     const el = scrollRef.current
     const toBottom = () => {
       el.scrollTop = el.scrollHeight
+      isAtBottomRef.current = true
     }
     toBottom()
     // Re-anchor after async media (images, voice players) expands the content.
@@ -1052,6 +1053,70 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
     setShowScrollFab(false)
     setBelowViewportUnread(0)
   }, [activeChatId])
+
+  // When a chat opens / finishes loading, pin the viewport to the latest
+  // message. Mobile often mounts the transcript while the pane is still
+  // `hidden` (zero height) or before images expand — a single scrollTop set
+  // is not enough, so we retry + ResizeObserver until layout settles.
+  useEffect(() => {
+    if (!activeChatId || loadingMessages || searchQuery || showFavorites) return
+    if (pendingMessageJump?.chatId === activeChatId) return
+
+    const el = scrollRef.current
+    if (!el) return
+
+    let stopPinning = false
+    isAtBottomRef.current = true
+    setShowScrollFab(false)
+    setBelowViewportUnread(0)
+
+    const pin = () => {
+      if (stopPinning) return
+      el.scrollTop = el.scrollHeight
+      isAtBottomRef.current = true
+    }
+
+    pin()
+    const raf = requestAnimationFrame(() => {
+      pin()
+      requestAnimationFrame(pin)
+    })
+    const timers = [32, 80, 160, 320, 640, 1200].map((ms) => window.setTimeout(pin, ms))
+
+    const onUserScrollIntent = () => {
+      const atBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - BOTTOM_THRESHOLD
+      if (!atBottom) stopPinning = true
+    }
+    el.addEventListener('wheel', onUserScrollIntent, { passive: true })
+    el.addEventListener('touchmove', onUserScrollIntent, { passive: true })
+
+    const ro = new ResizeObserver(() => {
+      if (!stopPinning) pin()
+    })
+    ro.observe(el)
+    const inner = el.firstElementChild
+    if (inner) ro.observe(inner)
+
+    const release = window.setTimeout(() => {
+      stopPinning = true
+    }, 1500)
+
+    return () => {
+      stopPinning = true
+      cancelAnimationFrame(raf)
+      timers.forEach((id) => clearTimeout(id))
+      clearTimeout(release)
+      ro.disconnect()
+      el.removeEventListener('wheel', onUserScrollIntent)
+      el.removeEventListener('touchmove', onUserScrollIntent)
+    }
+  }, [
+    activeChatId,
+    loadingMessages,
+    searchQuery,
+    showFavorites,
+    pendingMessageJump?.chatId,
+  ])
 
   // Clear stale typing indicators
   useEffect(() => {
@@ -2446,13 +2511,14 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
             'relative z-[1] h-full touch-pan-y overflow-x-hidden overflow-y-auto overscroll-x-none overscroll-y-contain px-2 py-3 sm:px-4 sm:py-4',
           )}
         >
-        <div className="relative min-h-full">
+        {/* justify-end keeps short threads glued to the bottom (Telegram-style). */}
+        <div className="relative flex min-h-full flex-col justify-end">
         {loadingMessages ? (
-          <div className="flex h-full items-center justify-center">
+          <div className="flex flex-1 items-center justify-center py-10">
             <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
           </div>
         ) : messages.length === 0 ? (
-          <div className="flex h-full min-h-[14rem] flex-col items-center justify-center gap-3 overflow-hidden px-6 text-center">
+          <div className="flex flex-1 min-h-[14rem] flex-col items-center justify-center gap-3 overflow-hidden px-6 text-center">
             <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-full bg-primary/10 ring-4 ring-primary/5">
               {isSavedChat ? (
                 <div className="flex h-16 w-16 items-center justify-center rounded-full bg-primary">
