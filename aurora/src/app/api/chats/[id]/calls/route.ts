@@ -45,8 +45,12 @@ export const POST = withJsonApi(async function POST(
     return NextResponse.json({ error: 'callId и peerId обязательны' }, { status: 400 })
   }
 
+  // Who started the call (never trust a client-supplied peer as message sender).
+  const isInitiator = body?.isInitiator !== false
+  const initiatorId = isInitiator ? me.id : otherMemberId
+
   // Enforce call privacy / blocks when the initiator records an outgoing call.
-  if (body?.isInitiator !== false) {
+  if (isInitiator) {
     const gate = await assertCanCall(me.id, otherMemberId)
     if (!gate.ok && status !== 'declined') {
       // Still allow recording declined/missed from callee side; initiator
@@ -65,13 +69,21 @@ export const POST = withJsonApi(async function POST(
     return NextResponse.json({ message: { id: existing.id, duplicate: true } })
   }
 
-  const senderId = body?.isInitiator === false ? otherMemberId : me.id
-  const metadata = JSON.stringify({ callId, callType, status, durationSec, peerId })
+  // Always attribute the row to the authenticated recorder — spoofing the peer
+  // as senderId previously let clients forge messages from the other user.
+  const metadata = JSON.stringify({
+    callId,
+    callType,
+    status,
+    durationSec,
+    peerId,
+    initiatorId,
+  })
 
   const message = await db.message.create({
     data: {
       chatId: id,
-      senderId,
+      senderId: me.id,
       content: '',
       type: 'call',
       metadata,

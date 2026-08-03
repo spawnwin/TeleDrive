@@ -8,6 +8,7 @@ import { formatContactDisplayName, getContactForPeer } from '@/lib/contacts'
 import { resolveUserByIdOrUsername } from '@/lib/resolve-user'
 import { recordProfileVisit } from '@/lib/profile-visits'
 import { withJsonApi } from '@/lib/with-json-api'
+import { areUsersBlocked } from '@/lib/user-blocks'
 
 export const GET = withJsonApi(async function GET(
   req: NextRequest,
@@ -65,6 +66,11 @@ export const GET = withJsonApi(async function GET(
   if (isSelf) {
     mediaCounts = await getProfileMediaCounts(null, user.id, !!user.avatarUrl)
   } else {
+    // Mutual block — no profile leak and no "who viewed" harassment.
+    if (await areUsersBlocked(me.id, targetUserId)) {
+      return NextResponse.json({ error: 'Пользователь недоступен' }, { status: 403 })
+    }
+
     void recordProfileVisit(targetUserId, me.id).catch(() => {})
 
     const block = await db.userBlock.findUnique({

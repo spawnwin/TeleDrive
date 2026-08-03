@@ -285,6 +285,24 @@ export const POST = withJsonApi(async function POST(
   let finalAttachmentMime = attachmentMime
   let finalAttachmentSize = attachmentSize
   let finalDurationSec = durationSec
+  let finalMetadata: string | null =
+    type === 'share' || type === 'music'
+      ? typeof shareMetadata === 'string'
+        ? shareMetadata
+        : shareMetadata
+          ? JSON.stringify(shareMetadata)
+          : null
+      : null
+
+  if (replyToId) {
+    const reply = await db.message.findUnique({
+      where: { id: replyToId },
+      select: { id: true, chatId: true },
+    })
+    if (!reply || reply.chatId !== id) {
+      return NextResponse.json({ error: 'Ответ только на сообщения этого чата' }, { status: 400 })
+    }
+  }
 
   if (forwardedFromId) {
     const original = await db.message.findUnique({
@@ -312,6 +330,18 @@ export const POST = withJsonApi(async function POST(
       finalDurationSec = original.durationSec
       type = original.type
     }
+    // Preserve music/share/gift/call metadata on forward
+    if (!finalMetadata && original.metadata) {
+      finalMetadata = original.metadata
+      if (
+        original.type === 'music' ||
+        original.type === 'share' ||
+        original.type === 'gift' ||
+        original.type === 'call'
+      ) {
+        type = original.type
+      }
+    }
   }
 
   const message = await db.message.create({
@@ -327,7 +357,7 @@ export const POST = withJsonApi(async function POST(
       attachmentSize: finalAttachmentSize ? Number(finalAttachmentSize) : null,
       durationSec: finalDurationSec ? Number(finalDurationSec) : null,
       type,
-      metadata: type === 'share' || type === 'music' ? (typeof shareMetadata === 'string' ? shareMetadata : JSON.stringify(shareMetadata)) : null,
+      metadata: finalMetadata,
       albumId,
       topicId,
     },

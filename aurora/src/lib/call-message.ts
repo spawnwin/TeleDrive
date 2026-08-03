@@ -7,6 +7,8 @@ export interface CallMessageMetadata {
   status: CallRecordStatus
   durationSec: number
   peerId: string
+  /** User who started the call (preferred for labels). */
+  initiatorId?: string
 }
 
 export function parseCallMetadata(raw: string | null | undefined): CallMessageMetadata | null {
@@ -24,6 +26,7 @@ export function parseCallMetadata(raw: string | null | undefined): CallMessageMe
       status,
       durationSec: Math.max(0, Number(data.durationSec) || 0),
       peerId: String(data.peerId),
+      initiatorId: data.initiatorId ? String(data.initiatorId) : undefined,
     }
   } catch {
     return null
@@ -64,12 +67,15 @@ export function getCallMessageLabel(
   messageSenderId: string,
   t: (key: string) => string,
 ): string {
-  const mine = messageSenderId === viewerId
+  // Prefer initiatorId (new markers). Legacy rows used senderId = initiator.
+  const viewerIsInitiator = meta.initiatorId
+    ? meta.initiatorId === viewerId
+    : messageSenderId === viewerId
   const isVideo = meta.callType === 'video'
   const prefix = isVideo ? '📹 ' : '📞 '
 
   let key: LabelKey
-  if (mine) {
+  if (viewerIsInitiator) {
     if (meta.status === 'answered') key = 'call.outgoing'
     else if (meta.status === 'declined') key = 'call.declined'
     else if (meta.status === 'cancelled') key = 'call.cancelled'

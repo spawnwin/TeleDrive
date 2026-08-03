@@ -285,7 +285,23 @@ export const POST = withJsonApi(async function POST(req: Request) {
 
   if (type === 'group') {
     if (!title) return NextResponse.json({ error: 'Укажите название группы' }, { status: 400 })
-    const memberIds: string[] = body.memberIds ?? []
+    const rawMemberIds: string[] = Array.isArray(body.memberIds) ? body.memberIds : []
+    const uniqueMemberIds = [...new Set(rawMemberIds.filter((id) => typeof id === 'string' && id && id !== me.id))]
+    // Only add real, non-banned, non-blocked users (blocks previously bypassed via group spam).
+    const allowedMembers: string[] = []
+    if (uniqueMemberIds.length > 0) {
+      const users = await db.user.findMany({
+        where: { id: { in: uniqueMemberIds } },
+        select: { id: true, isBanned: true },
+      })
+      const byId = new Map(users.map((u) => [u.id, u]))
+      for (const id of uniqueMemberIds) {
+        const u = byId.get(id)
+        if (!u || u.isBanned) continue
+        if (await areUsersBlocked(me.id, id)) continue
+        allowedMembers.push(id)
+      }
+    }
     const isForum = !!body.isForum
     const { normalizeChannelSlug } = await import('@/lib/channels')
     let normalizedSlug: string | null = null
@@ -310,9 +326,7 @@ export const POST = withJsonApi(async function POST(req: Request) {
         members: {
           create: [
             { userId: me.id, role: 'owner' },
-            ...memberIds
-              .filter((id) => id !== me.id)
-              .map((id) => ({ userId: id, role: 'member' as const })),
+            ...allowedMembers.map((id) => ({ userId: id, role: 'member' as const })),
           ],
         },
       },

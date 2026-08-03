@@ -45,7 +45,9 @@ export function CallMessageRow({ msg, viewerId, t }: CallMessageRowProps) {
   const meta = parseCallMetadata(msg.metadata)
   if (!meta) return null
 
-  const mine = msg.senderId === viewerId
+  const mine = meta.initiatorId
+    ? meta.initiatorId === viewerId
+    : msg.senderId === viewerId
   const label = getCallMessageLabel(meta, viewerId, msg.senderId, t)
   const missed = meta.status === 'missed' || meta.status === 'cancelled' || meta.status === 'declined'
 

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getCurrentUser } from '@/lib/auth'
 import { withJsonApi } from '@/lib/with-json-api'
+import { canViewerSeeStory } from '@/lib/story-visibility'
 
 export const POST = withJsonApi(async function POST(
   _req: NextRequest,
@@ -13,11 +14,21 @@ export const POST = withJsonApi(async function POST(
   const { id } = await params
   const story = await db.story.findUnique({
     where: { id },
-    select: { id: true, userId: true, expiresAt: true, likes: true },
+    select: {
+      id: true,
+      userId: true,
+      expiresAt: true,
+      likes: true,
+      visibility: true,
+      audienceIds: true,
+    },
   })
   if (!story) return NextResponse.json({ error: 'Статус не найден' }, { status: 404 })
   if (story.expiresAt.getTime() <= Date.now()) {
     return NextResponse.json({ error: 'Статус истёк' }, { status: 410 })
+  }
+  if (!(await canViewerSeeStory(me.id, story))) {
+    return NextResponse.json({ error: 'Статус недоступен' }, { status: 403 })
   }
   if (story.userId === me.id) {
     return NextResponse.json({ error: 'Нельзя лайкнуть свой статус' }, { status: 400 })

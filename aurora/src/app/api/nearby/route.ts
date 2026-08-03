@@ -192,8 +192,27 @@ export const GET = withJsonApi(async function GET(req: NextRequest) {
     take: 80,
   })
 
+  const candidateIds = [...new Set(rows.map((r) => r.userId))]
+  const blockedRows =
+    candidateIds.length > 0
+      ? await db.userBlock.findMany({
+          where: {
+            OR: [
+              { blockerId: me.id, blockedId: { in: candidateIds } },
+              { blockerId: { in: candidateIds }, blockedId: me.id },
+            ],
+          },
+          select: { blockerId: true, blockedId: true },
+        })
+      : []
+  const blockedIds = new Set<string>()
+  for (const b of blockedRows) {
+    blockedIds.add(b.blockerId === me.id ? b.blockedId : b.blockerId)
+  }
+
   const people = rows
     .map((row) => {
+      if (blockedIds.has(row.userId)) return null
       const distanceKm = haversineKm(lat, lng, row.lat, row.lng)
       if (distanceKm > radiusKm) return null
       const offset = relativeMeters(lat, lng, row.lat, row.lng)

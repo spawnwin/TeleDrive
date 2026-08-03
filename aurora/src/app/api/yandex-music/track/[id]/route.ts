@@ -6,6 +6,7 @@ import { getCurrentUser } from '@/lib/auth'
 import { withJsonApi } from '@/lib/with-json-api'
 import { UPLOADS_DIR } from '@/lib/uploads-path'
 import { getYandexTrackStreamUrl, coverUrl } from '@/lib/yandex-music'
+import { clientIp, rateLimit } from '@/lib/rate-limit'
 
 // Fetch a Yandex Music track, save the mp3 + cover locally, and return the
 // local URLs + metadata so the client can create a wall `music` post.
@@ -16,7 +17,17 @@ export const GET = withJsonApi(async function GET(
   const me = await getCurrentUser()
   if (!me) return NextResponse.json({ error: 'Не авторизован' }, { status: 401 })
 
+  if (!rateLimit(`ym-track:${me.id}`, 12, 60 * 1000)) {
+    return NextResponse.json({ error: 'Слишком много запросов' }, { status: 429 })
+  }
+  if (!rateLimit(`ym-track-ip:${clientIp(req)}`, 24, 60 * 1000)) {
+    return NextResponse.json({ error: 'Слишком много запросов' }, { status: 429 })
+  }
+
   const { id } = await params
+  if (!/^\d+$/.test(id)) {
+    return NextResponse.json({ error: 'Invalid track id' }, { status: 400 })
+  }
 
   // Resolve a direct mp3 URL (full track when token is configured, else preview).
   const stream = await getYandexTrackStreamUrl(id, me.id)

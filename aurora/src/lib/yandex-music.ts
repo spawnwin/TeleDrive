@@ -136,10 +136,48 @@ export async function resolveYandexAccount(token: string): Promise<{
 }
 
 /** Yandex cover URIs use `%%` as a size placeholder. */
+const YANDEX_COVER_HOSTS = new Set([
+  'avatars.yandex.net',
+  'avatars.mds.yandex.net',
+  'music.yandex.ru',
+  'music.yandex.net',
+  'yastatic.net',
+])
+
+/** Build a cover URL; only Yandex CDN hosts are allowed (blocks SSRF via client cover=). */
 export function coverUrl(uri?: string | null, size = '200x200'): string | null {
   if (!uri) return null
-  if (/^https?:\/\//i.test(uri)) return uri.replace('%%', size)
-  return `https://${uri.replace('%%', size)}`
+  const replaced = uri.replace('%%', size)
+  if (/^https?:\/\//i.test(replaced)) {
+    try {
+      const u = new URL(replaced)
+      if (u.protocol !== 'https:' && u.protocol !== 'http:') return null
+      const host = u.hostname.toLowerCase()
+      if (
+        !YANDEX_COVER_HOSTS.has(host) &&
+        !host.endsWith('.yandex.net') &&
+        !host.endsWith('.yandex.ru') &&
+        !host.endsWith('.yastatic.net')
+      ) {
+        return null
+      }
+      return u.toString()
+    } catch {
+      return null
+    }
+  }
+  // Relative CDN path from the API (e.g. avatars.yandex.net/get-music-content/...)
+  const hostGuess = replaced.split('/')[0]?.toLowerCase() || ''
+  if (
+    hostGuess &&
+    (YANDEX_COVER_HOSTS.has(hostGuess) ||
+      hostGuess.endsWith('.yandex.net') ||
+      hostGuess.endsWith('.yandex.ru') ||
+      hostGuess.endsWith('.yastatic.net'))
+  ) {
+    return `https://${replaced}`
+  }
+  return null
 }
 
 export interface YandexTrack {
