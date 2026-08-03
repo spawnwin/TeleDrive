@@ -111,7 +111,7 @@ export async function resolveYandexAccount(token: string): Promise<{
   const api = createApi()
   // uid is required by ym-api.init shape; real uid comes from account/status.
   await initApi(api, token.trim(), '1')
-  const status = (await api.getAccountStatus()) as {
+  const status = (await (api as YandexApiExtended).getAccountStatus()) as {
     account?: { uid?: number | string; displayName?: string; login?: string }
   }
   const uid = status?.account?.uid
@@ -261,7 +261,8 @@ export async function searchYandexTracks(
   limit = 30,
 ): Promise<{ tracks: YandexTrack[]; source: 'user' | 'env' | 'anon'; expired?: boolean }> {
   const { api, source, expired } = await getYandexMusicApiForUser(userId)
-  const result = await api.searchTracks(query, 0)
+  const ym = api as YandexApiExtended
+  const result = await ym.searchTracks(query, 0)
   const raw = (result?.tracks as { results?: unknown[]; items?: unknown[] } | undefined) || {}
   const items = (raw.results || raw.items || []) as {
     id: string | number

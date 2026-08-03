@@ -1,6 +1,5 @@
 /**
- * Password helpers for Aurora. Prefer bcryptjs (deployed on VPS); fall back to bcrypt.
- * Overlay builds may not typecheck these packages — resolve at runtime.
+ * Password helpers for Aurora. Uses bcryptjs (available on VPS).
  */
 
 type BcryptLike = {
@@ -12,17 +11,12 @@ let cached: BcryptLike | null = null
 
 async function getBcrypt(): Promise<BcryptLike> {
   if (cached) return cached
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const mod = require('bcryptjs') as BcryptLike
-    cached = mod
-    return mod
-  } catch {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const mod = require('bcrypt') as BcryptLike
-    cached = mod
-    return mod
+  // Dynamic import keeps the dependency explicit for bundlers.
+  const mod = (await import('bcryptjs')) as unknown as BcryptLike & {
+    default?: BcryptLike
   }
+  cached = (mod.default || mod) as BcryptLike
+  return cached
 }
 
 export async function hashPassword(plain: string): Promise<string> {
