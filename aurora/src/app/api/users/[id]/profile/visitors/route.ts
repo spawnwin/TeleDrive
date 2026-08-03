@@ -33,7 +33,10 @@ export const GET = withJsonApi(async function GET(
     },
   })
 
-  const visitors = []
+  const visitors: Array<{
+    user: { id: string; name: string; username: string; avatarColor: string; avatarUrl: string | null }
+    visitedAt: Date
+  }> = []
   for (const v of visits) {
     if (await areUsersBlocked(me.id, v.visitor.id)) continue
     visitors.push({ user: v.visitor, visitedAt: v.visitedAt })
