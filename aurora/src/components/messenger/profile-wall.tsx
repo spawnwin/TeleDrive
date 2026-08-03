@@ -31,6 +31,9 @@ import { toast } from 'sonner'
 import { uploadFileWithRetry } from '@/lib/upload-client'
 import { VoicePlayer } from './voice-player'
 import { resolveMediaUrl } from '@/lib/media-url'
+import { MusicPickerDialog } from './music-picker-dialog'
+import { ChatMusicPlayer } from './chat-music-player'
+import { buildChatMusicMetadata } from '@/lib/music-message'
 
 interface WallAuthor {
   id: string
@@ -86,6 +89,7 @@ export function ProfileWall({ profileId, isSelf, blocked }: ProfileWallProps) {
     duration: number
     title: string
     artist: string
+    trackId: string
   } | null>(null)
 
   const canPost = !blocked && !!currentUser
@@ -461,44 +465,32 @@ export function ProfileWall({ profileId, isSelf, blocked }: ProfileWallProps) {
           setShowMusicPicker(false)
           musicInputRef.current?.click()
         }}
+        onOpenYandexSettings={() => {
+          window.dispatchEvent(
+            new CustomEvent('aurora:open-settings', { detail: { page: 'yandex' } }),
+          )
+        }}
         onPickYandex={async (track) => {
           setShowMusicPicker(false)
-          setSending(true)
-          try {
-            const params = new URLSearchParams({
-              title: track.title,
-              artist: track.artist,
-              duration: String(track.durationSec),
-              cover: track.coverUrl || '',
-            })
-            const res = await fetch(
-              `/api/yandex-music/track/${encodeURIComponent(track.id)}?${params}`,
-            )
-            const data = await res.json()
-            if (!res.ok) throw new Error(data.error || t('misc.error'))
-            // Clear any other attachments and set the ready Yandex track.
-            setImageFile(null)
-            if (imagePreview) URL.revokeObjectURL(imagePreview)
-            setImagePreview(null)
-            setMusicFile(null)
-            if (musicPreview) URL.revokeObjectURL(musicPreview)
-            setMusicPreview(null)
-            setVoiceBlob(null)
-            setVoiceSecs(0)
-            setYmTrack({
-              url: data.url,
-              coverUrl: data.coverUrl || null,
-              name: data.name,
-              mime: data.mime,
-              duration: data.duration || 0,
-              title: data.title || track.title,
-              artist: data.artist || track.artist,
-            })
-          } catch (err) {
-            toast.error(err instanceof Error ? err.message : t('misc.error'))
-          } finally {
-            setSending(false)
-          }
+          // Stream-only — no MP3 download to disk.
+          setImageFile(null)
+          if (imagePreview) URL.revokeObjectURL(imagePreview)
+          setImagePreview(null)
+          setMusicFile(null)
+          if (musicPreview) URL.revokeObjectURL(musicPreview)
+          setMusicPreview(null)
+          setVoiceBlob(null)
+          setVoiceSecs(0)
+          setYmTrack({
+            url: `yandex:${track.id}`,
+            coverUrl: track.coverUrl,
+            name: `${track.artist} — ${track.title}`,
+            mime: 'application/x-yandex-music',
+            duration: track.durationSec || 0,
+            title: track.title,
+            artist: track.artist,
+            trackId: track.id,
+          })
         }}
       />
     </div>
@@ -600,11 +592,38 @@ function WallPostCard({
         />
       )}
       {post.type === 'music' && post.attachmentUrl && (
-        <MusicPlayer
-          url={post.attachmentUrl}
-          name={post.attachmentName || 'track'}
-          coverUrl={post.attachmentCoverUrl}
-        />
+        (() => {
+          const yandexId =
+            post.attachmentMime === 'application/x-yandex-music' &&
+            post.attachmentUrl.startsWith('yandex:')
+              ? post.attachmentUrl.slice('yandex:'.length)
+              : post.attachmentUrl.startsWith('/api/yandex-music/stream/')
+                ? post.attachmentUrl.split('/').pop() || null
+                : null
+          if (yandexId) {
+            const parts = (post.attachmentName || '').split(' — ')
+            const artist = parts.length > 1 ? parts[0] : '—'
+            const title = parts.length > 1 ? parts.slice(1).join(' — ') : post.attachmentName || 'Track'
+            return (
+              <ChatMusicPlayer
+                meta={buildChatMusicMetadata({
+                  id: yandexId,
+                  title,
+                  artist,
+                  coverUrl: post.attachmentCoverUrl,
+                  durationSec: post.attachmentDuration || 0,
+                })}
+              />
+            )
+          }
+          return (
+            <MusicPlayer
+              url={post.attachmentUrl}
+              name={post.attachmentName || 'track'}
+              coverUrl={post.attachmentCoverUrl}
+            />
+          )
+        })()
       )}
     </div>
   )
@@ -931,178 +950,6 @@ function DrawingDialog({
             </Button>
           </div>
         </div>
-      </DialogContent>
-    </Dialog>
-  )
-}
-
-interface YandexTrack {
-  id: string
-  title: string
-  artist: string
-  durationSec: number
-  coverUrl: string | null
-}
-
-function MusicPickerDialog({
-  open,
-  onOpenChange,
-  onPickFile,
-  onPickYandex,
-}: {
-  open: boolean
-  onOpenChange: (v: boolean) => void
-  onPickFile: () => void
-  onPickYandex: (track: YandexTrack) => void
-}) {
-  const { t } = useI18n()
-  const [tab, setTab] = useState<'file' | 'yandex'>('yandex')
-  const [query, setQuery] = useState('')
-  const [results, setResults] = useState<YandexTrack[]>([])
-  const [searching, setSearching] = useState(false)
-  const [fetchingId, setFetchingId] = useState<string | null>(null)
-
-  useEffect(() => {
-    if (!open) {
-      setQuery('')
-      setResults([])
-      setTab('yandex')
-    }
-  }, [open])
-
-  // Debounced search.
-  useEffect(() => {
-    if (!open || tab !== 'yandex') return
-    const q = query.trim()
-    if (!q) {
-      setResults([])
-      return
-    }
-    let cancelled = false
-    setSearching(true)
-    const timer = setTimeout(() => {
-      fetch(`/api/yandex-music/search?q=${encodeURIComponent(q)}`)
-        .then((r) => (r.ok ? r.json() : Promise.reject(r)))
-        .then((data) => {
-          if (!cancelled) setResults(data.tracks || [])
-        })
-        .catch(() => {
-          if (!cancelled) setResults([])
-        })
-        .finally(() => {
-          if (!cancelled) setSearching(false)
-        })
-    }, 400)
-    return () => {
-      cancelled = true
-      clearTimeout(timer)
-    }
-  }, [query, open, tab])
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Music className="h-4 w-4" />
-            {t('wall.musicTitle')}
-          </DialogTitle>
-        </DialogHeader>
-
-        <div className="flex gap-1 rounded-lg bg-muted/60 p-1">
-          <button
-            type="button"
-            onClick={() => setTab('yandex')}
-            className={cn(
-              'flex-1 rounded-md px-3 py-1.5 text-xs font-medium transition',
-              tab === 'yandex' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground',
-            )}
-          >
-            {t('wall.tabYandex')}
-          </button>
-          <button
-            type="button"
-            onClick={() => setTab('file')}
-            className={cn(
-              'flex-1 rounded-md px-3 py-1.5 text-xs font-medium transition',
-              tab === 'file' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground',
-            )}
-          >
-            {t('wall.tabFile')}
-          </button>
-        </div>
-
-        {tab === 'file' ? (
-          <div className="py-6 text-center">
-            <Button onClick={onPickFile} className="gap-2">
-              <ImagePlus className="h-4 w-4" />
-              {t('wall.chooseFile')}
-            </Button>
-            <p className="mt-2 text-xs text-muted-foreground">{t('wall.fileHint')}</p>
-          </div>
-        ) : (
-          <div className="space-y-2">
-            <input
-              type="text"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder={t('wall.searchPlaceholder')}
-              className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-violet-500"
-              autoFocus
-            />
-            <div className="max-h-[360px] space-y-1 overflow-y-auto">
-              {searching && (
-                <div className="flex justify-center py-4">
-                  <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-                </div>
-              )}
-              {!searching && query.trim() && results.length === 0 && (
-                <p className="py-4 text-center text-sm text-muted-foreground">
-                  {t('wall.noResults')}
-                </p>
-              )}
-              {!searching && !query.trim() && (
-                <p className="py-4 text-center text-sm text-muted-foreground">
-                  {t('wall.searchHint')}
-                </p>
-              )}
-              {results.map((tr) => (
-                <button
-                  key={tr.id}
-                  type="button"
-                  disabled={!!fetchingId}
-                  onClick={() => {
-                    setFetchingId(tr.id)
-                    onPickYandex(tr)
-                  }}
-                  className="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left transition hover:bg-muted disabled:opacity-50"
-                >
-                  {tr.coverUrl ? (
-                    <img
-                      src={tr.coverUrl}
-                      alt=""
-                      className="h-11 w-11 shrink-0 rounded object-cover"
-                    />
-                  ) : (
-                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded bg-muted">
-                      <Music className="h-4 w-4 text-muted-foreground" />
-                    </div>
-                  )}
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium">{tr.title}</p>
-                    <p className="truncate text-xs text-muted-foreground">{tr.artist}</p>
-                  </div>
-                  <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">
-                    {formatTime(tr.durationSec)}
-                  </span>
-                  {fetchingId === tr.id && (
-                    <Loader2 className="h-4 w-4 animate-spin text-violet-500" />
-                  )}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
       </DialogContent>
     </Dialog>
   )

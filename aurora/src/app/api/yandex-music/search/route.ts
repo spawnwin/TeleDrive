@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/auth'
 import { withJsonApi } from '@/lib/with-json-api'
-import { getYandexMusicApi, coverUrl, type YandexTrack } from '@/lib/yandex-music'
+import { searchYandexTracks } from '@/lib/yandex-music'
 
 export const GET = withJsonApi(async function GET(req: NextRequest) {
   const me = await getCurrentUser()
@@ -10,25 +10,14 @@ export const GET = withJsonApi(async function GET(req: NextRequest) {
   const q = req.nextUrl.searchParams.get('q')?.trim()
   if (!q) return NextResponse.json({ tracks: [] })
 
-  const api = await getYandexMusicApi()
-  const result = await api.searchTracks(q, 0)
-  // ym-api returns `tracks.results` (legacy builds used `items`).
-  const raw = (result?.tracks as { results?: unknown[]; items?: unknown[] } | undefined) || {}
-  const items = (raw.results || raw.items || []) as {
-    id: string | number
-    title: string
-    artists?: { name: string }[]
-    durationMs?: number
-    coverUri?: string
-  }[]
-
-  const tracks: YandexTrack[] = items.slice(0, 30).map((t) => ({
-    id: String(t.id),
-    title: t.title,
-    artist: (t.artists || []).map((a) => a.name).join(', ') || '—',
-    durationSec: Math.round((t.durationMs || 0) / 1000),
-    coverUrl: coverUrl(t.coverUri, '200x200'),
-  }))
-
-  return NextResponse.json({ tracks })
+  try {
+    const result = await searchYandexTracks(me.id, q, 30)
+    return NextResponse.json(result)
+  } catch (e) {
+    console.error('[yandex-music/search]', e)
+    return NextResponse.json(
+      { tracks: [], error: e instanceof Error ? e.message : 'Search failed' },
+      { status: 502 },
+    )
+  }
 })

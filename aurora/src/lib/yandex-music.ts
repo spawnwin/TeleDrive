@@ -1,5 +1,6 @@
 import { YMApi } from 'yandex-music-api'
 import { db } from '@/lib/db'
+import { openSecret, sealSecret } from '@/lib/secret-box'
 
 // Env-based singleton (anonymous or shared server token).
 let envApiPromise: Promise<YMApi> | null = null
@@ -36,22 +37,63 @@ export function isEnvYandexAuthed(): boolean {
   return !!(process.env.YANDEX_MUSIC_TOKEN && process.env.YANDEX_MUSIC_UID)
 }
 
-/** Prefer the user's linked Yandex account; fall back to env / anonymous. */
-export async function getYandexMusicApiForUser(userId: string): Promise<{
-  api: YMApi
-  source: 'user' | 'env' | 'anon'
-}> {
+export async function readUserYandexCredentials(userId: string): Promise<{
+  token: string
+  uid: string
+} | null> {
   const user = await db.user.findUnique({
     where: { id: userId },
     select: { yandexMusicToken: true, yandexMusicUid: true },
   })
-  if (user?.yandexMusicToken && user?.yandexMusicUid) {
+  if (!user?.yandexMusicToken || !user?.yandexMusicUid) return null
+  try {
+    const token = openSecret(user.yandexMusicToken)
+    if (!token) return null
+    return { token, uid: user.yandexMusicUid }
+  } catch (e) {
+    console.warn('[yandex-music] failed to open user token', String(e))
+    return null
+  }
+}
+
+export async function saveUserYandexCredentials(
+  userId: string,
+  token: string,
+  uid: string,
+): Promise<void> {
+  await db.user.update({
+    where: { id: userId },
+    data: {
+      yandexMusicToken: sealSecret(token.trim()),
+      yandexMusicUid: String(uid),
+    },
+  })
+}
+
+export async function clearUserYandexCredentials(userId: string): Promise<void> {
+  await db.user.update({
+    where: { id: userId },
+    data: { yandexMusicToken: null, yandexMusicUid: null },
+  })
+}
+
+/** Prefer the user's linked Yandex account; fall back to env / anonymous. */
+export async function getYandexMusicApiForUser(userId: string): Promise<{
+  api: YMApi
+  source: 'user' | 'env' | 'anon'
+  expired?: boolean
+}> {
+  const creds = await readUserYandexCredentials(userId)
+  if (creds) {
     try {
       const api = createApi()
-      await initApi(api, user.yandexMusicToken, user.yandexMusicUid)
+      await initApi(api, creds.token, creds.uid)
+      // Cheap account ping to detect expired tokens early.
+      await (api as YandexApiExtended).getAccountStatus()
       return { api, source: 'user' }
     } catch (e) {
       console.warn('[yandex-music] user token init failed', String(e))
+      return { api: await getYandexMusicApi(), source: isEnvYandexAuthed() ? 'env' : 'anon', expired: true }
     }
   }
   if (isEnvYandexAuthed()) {
@@ -98,6 +140,14 @@ export interface YandexTrack {
   coverUrl: string | null
 }
 
+export interface YandexPlaylist {
+  kind: string
+  title: string
+  trackCount: number
+  coverUrl: string | null
+  uid: string
+}
+
 type DownloadInfo = {
   codec?: string
   preview?: boolean
@@ -121,6 +171,32 @@ type YandexApiExtended = YMApi & {
     }>
   >
   getAccountStatus: () => Promise<unknown>
+  searchTracks: (query: string, page?: number) => Promise<unknown>
+  getUserPlaylists?: () => Promise<
+    Array<{
+      kind?: string | number
+      title?: string
+      trackCount?: number
+      cover?: { uri?: string }
+      owner?: { uid?: string | number }
+      uid?: string | number
+    }>
+  >
+  getPlaylist?: (
+    user: string | number,
+    kind: string | number,
+  ) => Promise<{
+    tracks?: Array<{
+      track?: {
+        id: string | number
+        title: string
+        artists?: { name: string }[]
+        durationMs?: number
+        coverUri?: string
+      }
+      id?: string | number
+    }>
+  }>
 }
 
 export async function getYandexTrackStreamUrl(
@@ -179,23 +255,55 @@ function mapRawTrack(t: {
   }
 }
 
+export async function searchYandexTracks(
+  userId: string,
+  query: string,
+  limit = 30,
+): Promise<{ tracks: YandexTrack[]; source: 'user' | 'env' | 'anon'; expired?: boolean }> {
+  const { api, source, expired } = await getYandexMusicApiForUser(userId)
+  const result = await api.searchTracks(query, 0)
+  const raw = (result?.tracks as { results?: unknown[]; items?: unknown[] } | undefined) || {}
+  const items = (raw.results || raw.items || []) as {
+    id: string | number
+    title: string
+    artists?: { name: string }[]
+    durationMs?: number
+    coverUri?: string
+  }[]
+  return {
+    tracks: items.slice(0, limit).map(mapRawTrack),
+    source,
+    expired,
+  }
+}
+
 /** Liked tracks for the authenticated Yandex account (user or env). */
 export async function getYandexLikedTracks(
   userId: string,
   limit = 40,
-): Promise<{ tracks: YandexTrack[]; source: 'user' | 'env' | 'anon'; connected: boolean }> {
-  const { api, source } = await getYandexMusicApiForUser(userId)
+  offset = 0,
+): Promise<{
+  tracks: YandexTrack[]
+  source: 'user' | 'env' | 'anon'
+  connected: boolean
+  expired?: boolean
+  total: number
+  hasMore: boolean
+}> {
+  const { api, source, expired } = await getYandexMusicApiForUser(userId)
   if (source === 'anon') {
-    return { tracks: [], source, connected: false }
+    return { tracks: [], source, connected: false, expired, total: 0, hasMore: false }
   }
   const ym = api as YandexApiExtended
   const liked = await ym.getLikedTracks()
-  const metas = (liked?.library?.tracks || []).slice(0, limit)
+  const metas = liked?.library?.tracks || []
+  const total = metas.length
+  const slice = metas.slice(offset, offset + limit)
   const tracks: YandexTrack[] = []
 
   const batchSize = 8
-  for (let i = 0; i < metas.length; i += batchSize) {
-    const batch = metas.slice(i, i + batchSize)
+  for (let i = 0; i < slice.length; i += batchSize) {
+    const batch = slice.slice(i, i + batchSize)
     const resolved = await Promise.all(
       batch.map(async (m) => {
         try {
@@ -213,7 +321,71 @@ export async function getYandexLikedTracks(
     }
   }
 
-  return { tracks, source, connected: true }
+  return {
+    tracks,
+    source,
+    connected: true,
+    expired,
+    total,
+    hasMore: offset + limit < total,
+  }
+}
+
+export async function getYandexPlaylists(userId: string): Promise<{
+  playlists: YandexPlaylist[]
+  source: 'user' | 'env' | 'anon'
+  connected: boolean
+  expired?: boolean
+}> {
+  const { api, source, expired } = await getYandexMusicApiForUser(userId)
+  if (source === 'anon') {
+    return { playlists: [], source, connected: false, expired }
+  }
+  const ym = api as YandexApiExtended
+  if (typeof ym.getUserPlaylists !== 'function') {
+    return { playlists: [], source, connected: true, expired }
+  }
+  try {
+    const list = await ym.getUserPlaylists()
+    const playlists = (list || [])
+      .filter((p) => p && p.kind != null)
+      .map((p) => ({
+        kind: String(p.kind),
+        title: p.title || `Плейлист ${p.kind}`,
+        trackCount: Number(p.trackCount) || 0,
+        coverUrl: coverUrl(p.cover?.uri, '200x200'),
+        uid: String(p.owner?.uid || p.uid || ''),
+      }))
+    return { playlists, source, connected: true, expired }
+  } catch (e) {
+    console.warn('[yandex-music] getUserPlaylists failed', String(e))
+    return { playlists: [], source, connected: true, expired }
+  }
+}
+
+export async function getYandexPlaylistTracks(
+  userId: string,
+  ownerUid: string,
+  kind: string,
+  limit = 50,
+): Promise<{ tracks: YandexTrack[]; connected: boolean }> {
+  const { api, source } = await getYandexMusicApiForUser(userId)
+  if (source === 'anon') return { tracks: [], connected: false }
+  const ym = api as YandexApiExtended
+  if (typeof ym.getPlaylist !== 'function') return { tracks: [], connected: true }
+  try {
+    const pl = await ym.getPlaylist(ownerUid, kind)
+    const raw = (pl?.tracks || []).slice(0, limit)
+    const tracks: YandexTrack[] = []
+    for (const row of raw) {
+      const t = row.track
+      if (t) tracks.push(mapRawTrack(t))
+    }
+    return { tracks, connected: true }
+  } catch (e) {
+    console.warn('[yandex-music] getPlaylist failed', String(e))
+    return { tracks: [], connected: true }
+  }
 }
 
 export { mapRawTrack }

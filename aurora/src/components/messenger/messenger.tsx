@@ -15,6 +15,7 @@ import { CoinsDialog } from './coins-dialog'
 import { PremiumDialog } from './premium-dialog'
 import { InAppBrowser } from './in-app-browser'
 import { EnhancedVideoPlayer } from './enhanced-video-player'
+import { GlobalMusicBar } from './global-music-bar'
 import { MarketplaceDialog } from './marketplace-dialog'
 import { StreamsDialog } from './streams-dialog'
 import { FriendsDialog } from './friends-dialog'
@@ -869,6 +870,7 @@ export function Messenger() {
       />
       {browserUrl && <InAppBrowser />}
       <EnhancedVideoPlayer />
+      <GlobalMusicBar />
       <MarketplaceDialog open={showP2PMarketplace} onOpenChange={setShowP2PMarketplace} />
       <StreamsDialog open={showStreams} onOpenChange={setShowStreams} />
       <NearbyDialog open={showNearby} onOpenChange={setShowNearby} />

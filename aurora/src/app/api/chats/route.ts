@@ -200,6 +200,25 @@ export const POST = withJsonApi(async function POST(req: Request) {
       return NextResponse.json({ error: 'Пользователь заблокирован' }, { status: 403 })
     }
 
+    const targetPrivacy = await db.user.findUnique({
+      where: { id: targetUserId },
+      select: { whoCanMessage: true },
+    })
+    const who = targetPrivacy?.whoCanMessage || 'everyone'
+    if (who === 'nobody') {
+      return NextResponse.json({ error: 'Пользователь ограничил личные сообщения' }, { status: 403 })
+    }
+    if (who === 'contacts') {
+      const { getContactForPeer } = await import('@/lib/contacts')
+      const contact = await getContactForPeer(targetUserId, me.id)
+      if (!contact) {
+        return NextResponse.json(
+          { error: 'Пользователь принимает сообщения только от контактов' },
+          { status: 403 },
+        )
+      }
+    }
+
     // Look for an existing private chat with this pair
     const existing = await db.chat.findFirst({
       where: {

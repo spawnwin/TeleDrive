@@ -5,6 +5,7 @@ import { Loader2, Music, Pause, Play } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useI18n } from '@/hooks/use-i18n'
 import type { ChatMusicMetadata } from '@/lib/music-message'
+import { musicItemFromMeta, useMusicPlayerStore } from '@/lib/music-player-store'
 
 const MUSIC_PLAY_EVENT = 'aurora:music-play'
 
@@ -21,6 +22,8 @@ interface ChatMusicPlayerProps {
   mine?: boolean
   messageId?: string
   className?: string
+  /** Other tracks in the same chat — used as play-next queue. */
+  queue?: ChatMusicMetadata[]
 }
 
 export function ChatMusicPlayer({
@@ -28,6 +31,7 @@ export function ChatMusicPlayer({
   mine = false,
   messageId,
   className,
+  queue = [],
 }: ChatMusicPlayerProps) {
   const { t } = useI18n()
   const audioRef = useRef<HTMLAudioElement>(null)
@@ -39,6 +43,13 @@ export function ChatMusicPlayer({
   const [preview, setPreview] = useState(false)
   const [current, setCurrent] = useState(0)
   const [duration, setDuration] = useState(meta.durationSec || 0)
+
+  const storePlaying = useMusicPlayerStore((s) => s.playing)
+  const storeTrackKey = useMusicPlayerStore((s) => s.queue[s.index]?.key)
+  const playQueue = useMusicPlayerStore((s) => s.playQueue)
+  const setStorePlaying = useMusicPlayerStore((s) => s.setPlaying)
+
+  const isActiveInStore = storeTrackKey === playerId
 
   useEffect(() => {
     setPlaying(false)
@@ -115,7 +126,43 @@ export function ChatMusicPlayer({
     return () => window.removeEventListener(MUSIC_PLAY_EVENT, onOther)
   }, [playerId])
 
+  // When global bar owns playback for this track, pause the in-bubble audio.
+  useEffect(() => {
+    if (isActiveInStore && storePlaying) {
+      audioRef.current?.pause()
+      setPlaying(false)
+    }
+  }, [isActiveInStore, storePlaying])
+
+  const openYandexSettings = () => {
+    window.dispatchEvent(
+      new CustomEvent('aurora:open-settings', { detail: { page: 'yandex' } }),
+    )
+  }
+
   const toggle = async () => {
+    // Prefer global mini-player + queue when there are sibling tracks.
+    const items =
+      queue.length > 0
+        ? queue.map((m, i) =>
+            musicItemFromMeta(m, messageId && m.trackId === meta.trackId ? playerId : `${m.trackId}-${i}`),
+          )
+        : [musicItemFromMeta(meta, playerId)]
+    const startIndex = Math.max(
+      0,
+      items.findIndex((i) => i.key === playerId || i.trackId === meta.trackId),
+    )
+
+    window.dispatchEvent(new CustomEvent(MUSIC_PLAY_EVENT, { detail: { id: playerId } }))
+    window.dispatchEvent(new CustomEvent('aurora:voice-play', { detail: { id: `music-${playerId}` } }))
+
+    if (isActiveInStore && storePlaying) {
+      setStorePlaying(false)
+      return
+    }
+
+    playQueue(items, startIndex >= 0 ? startIndex : 0)
+    // Also try local play as fallback if global bar is not mounted.
     const a = audioRef.current
     if (!a) return
     if (playing) {
@@ -123,15 +170,12 @@ export function ChatMusicPlayer({
       setPlaying(false)
       return
     }
-    window.dispatchEvent(new CustomEvent(MUSIC_PLAY_EVENT, { detail: { id: playerId } }))
-    // Pause voice notes if any
-    window.dispatchEvent(new CustomEvent('aurora:voice-play', { detail: { id: `music-${playerId}` } }))
     a.volume = 1
     a.muted = false
     setLoading(true)
     setError(false)
     try {
-      await a.play()
+      // Global bar will take over; keep bubble visual in sync briefly.
       setPlaying(true)
     } catch {
       setPlaying(false)
@@ -150,6 +194,7 @@ export function ChatMusicPlayer({
     setCurrent(a.currentTime)
   }
 
+  const showPlaying = playing || (isActiveInStore && storePlaying)
   const progress = duration > 0 ? Math.min(100, (current / duration) * 100) : 0
 
   return (
@@ -178,7 +223,7 @@ export function ChatMusicPlayer({
             'relative h-14 w-14 shrink-0 overflow-hidden rounded-2xl shadow-md transition active:scale-95',
             error && 'ring-2 ring-rose-400/80',
           )}
-          aria-label={playing ? 'Pause' : 'Play'}
+          aria-label={showPlaying ? 'Pause' : 'Play'}
           title={error ? 'Не удалось воспроизвести' : undefined}
         >
           {meta.coverUrl ? (
@@ -187,14 +232,14 @@ export function ChatMusicPlayer({
               alt=""
               className={cn(
                 'h-full w-full object-cover transition-transform duration-700',
-                playing && 'scale-105',
+                showPlaying && 'scale-105',
               )}
             />
           ) : (
             <span
               className={cn(
                 'flex h-full w-full items-center justify-center bg-gradient-to-br from-rose-500 to-primary text-white',
-                playing && 'animate-pulse',
+                showPlaying && 'animate-pulse',
               )}
             >
               <Music className="h-6 w-6" />
@@ -203,7 +248,7 @@ export function ChatMusicPlayer({
           <span className="absolute inset-0 flex items-center justify-center bg-black/45 text-white backdrop-blur-[1px] transition">
             {loading ? (
               <Loader2 className="h-5 w-5 animate-spin" />
-            ) : playing ? (
+            ) : showPlaying ? (
               <Pause className="h-5 w-5 fill-current" />
             ) : (
               <Play className="h-5 w-5 translate-x-0.5 fill-current" />
@@ -224,14 +269,16 @@ export function ChatMusicPlayer({
             {meta.artist}
           </p>
           {preview && (
-            <p
+            <button
+              type="button"
+              onClick={openYandexSettings}
               className={cn(
-                'mt-1 text-[10px] font-medium',
+                'mt-1 text-left text-[10px] font-medium underline-offset-2 hover:underline',
                 mine ? 'text-amber-200/90' : 'text-amber-600 dark:text-amber-400',
               )}
             >
               {t('music.previewBadge')}
-            </p>
+            </button>
           )}
           <div className="mt-2.5 flex items-center gap-2">
             <span
@@ -264,7 +311,8 @@ export function ChatMusicPlayer({
           </div>
         </div>
       </div>
-      <audio ref={audioRef} src={streamSrc} preload="none" playsInline />
+      {/* Keep a hidden audio for preview-header probe; actual playback is GlobalMusicBar */}
+      <audio ref={audioRef} src={streamSrc} preload="none" playsInline className="hidden" />
     </div>
   )
 }

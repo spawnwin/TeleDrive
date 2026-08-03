@@ -32,6 +32,7 @@ export const GET = withJsonApi(async function GET(
     premiumUntil: true,
     emojiStatus: true,
     createdAt: true,
+    lastSeenVisibility: true,
   })
 
   if (!user) {
@@ -133,11 +134,28 @@ export const GET = withJsonApi(async function GET(
 
   const displayName = contact?.displayName || user.name
 
+  // Privacy: hide last seen / online when restricted
+  let lastSeen: Date | string | null = user.lastSeen
+  let online = user.online
+  if (!isSelf) {
+    const { canSeeLastSeen, parseVisibility } = await import('@/lib/privacy')
+    const isContact = !!contact || !!(await getContactForPeer(targetUserId, me.id))
+    const visibility = parseVisibility(
+      (user as { lastSeenVisibility?: string }).lastSeenVisibility,
+    )
+    if (!canSeeLastSeen({ visibility, isSelf: false, isContact })) {
+      lastSeen = null
+      online = false
+    }
+  }
+
   return NextResponse.json({
     profile: {
       ...user,
       name: displayName,
       originalName: user.name,
+      lastSeen,
+      online,
       contact,
       isPremium: isPremiumActive(user),
       isSelf,

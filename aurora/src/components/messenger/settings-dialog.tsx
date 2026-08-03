@@ -34,6 +34,8 @@ import {
   LogOut,
   EllipsisVertical,
   X,
+  MonitorSmartphone,
+  Ban,
   Music2,
 } from 'lucide-react'
 import { Avatar } from './avatar'
@@ -106,6 +108,13 @@ import { StorageManager } from './storage-manager'
 import { AvatarCropDialog } from './avatar-crop-dialog'
 import { ChatWallpaperDialog } from './chat-wallpaper-dialog'
 import { CreatorPremiumDialog } from '../shorts/creator-premium-dialog'
+import {
+  BlocksPanel,
+  DeleteAccountPanel,
+  PasswordPanel,
+  PrivacyVisibilityPanel,
+  SessionsPanel,
+} from './settings-security-panels'
 
 type SettingsPage =
   | 'main'
@@ -120,6 +129,10 @@ type SettingsPage =
   | 'data'
   | 'bots'
   | 'yandex'
+  | 'sessions'
+  | 'blocks'
+  | 'password'
+  | 'delete-account'
 
 interface SettingsDialogProps {
   open: boolean
@@ -139,8 +152,13 @@ const COLOR_OPTIONS = [
 ]
 
 /** Same client_id as ym-api / unofficial Yandex Music clients. */
-const YANDEX_OAUTH_URL =
-  'https://oauth.yandex.ru/authorize?response_type=token&client_id=23cabbbdc6cd418abb4b39c32c41195d'
+function yandexOauthUrl() {
+  const redirect =
+    typeof window !== 'undefined'
+      ? `${window.location.origin}/yandex-oauth`
+      : 'https://aurro.ru/yandex-oauth'
+  return `https://oauth.yandex.ru/authorize?response_type=token&client_id=23cabbbdc6cd418abb4b39c32c41195d&redirect_uri=${encodeURIComponent(redirect)}`
+}
 
 /** Telegram-style menu row: colored icon square, label, hint, chevron. */
 function MenuRow({
@@ -694,6 +712,10 @@ export function SettingsDialog({
     data: t('settings.data'),
     bots: t('settings.bots'),
     yandex: t('music.settingsTitle'),
+    sessions: t('sessions.title'),
+    blocks: t('blocks.title'),
+    password: t('password.title'),
+    'delete-account': t('deleteAccount.title'),
   }
 
   const currentLangLabel = languages.find((l) => l.code === lang)?.label
@@ -904,6 +926,20 @@ export function SettingsDialog({
                     onClick={() => setPage('privacy')}
                   />
                   <MenuRow
+                    icon={<MonitorSmartphone className="h-5 w-5" />}
+                    color="#5c6bc0"
+                    label={t('sessions.title')}
+                    hint={t('sessions.menuHint')}
+                    onClick={() => setPage('sessions')}
+                  />
+                  <MenuRow
+                    icon={<Ban className="h-5 w-5" />}
+                    color="#e53935"
+                    label={t('blocks.title')}
+                    hint={t('blocks.menuHint')}
+                    onClick={() => setPage('blocks')}
+                  />
+                  <MenuRow
                     icon={<Palette className="h-5 w-5" />}
                     color="#8e24aa"
                     label={t('settings.appearance')}
@@ -1064,6 +1100,23 @@ export function SettingsDialog({
                   {saving ? t('settings.saving') : t('settings.save')}
                 </Button>
 
+                <div className="mt-4 space-y-1 rounded-2xl bg-[var(--tg-secondary-bg)] overflow-hidden">
+                  <MenuRow
+                    icon={<KeyRound className="h-5 w-5" />}
+                    color="#5c6bc0"
+                    label={t('password.title')}
+                    hint={t('password.menuHint')}
+                    onClick={() => setPage('password')}
+                  />
+                  <MenuRow
+                    icon={<Trash2 className="h-5 w-5" />}
+                    color="#e53935"
+                    label={t('deleteAccount.title')}
+                    hint={t('deleteAccount.menuHint')}
+                    onClick={() => setPage('delete-account')}
+                  />
+                </div>
+
                 <button
                   type="button"
                   onClick={handleLogout}
@@ -1178,11 +1231,17 @@ export function SettingsDialog({
                     disabled={generating}
                   />
                 </div>
+                <PrivacyVisibilityPanel />
                 <div className="mt-3">
                   <TwoFactorPanel />
                 </div>
               </>
             )}
+
+            {page === 'sessions' && <SessionsPanel />}
+            {page === 'blocks' && <BlocksPanel />}
+            {page === 'password' && <PasswordPanel />}
+            {page === 'delete-account' && <DeleteAccountPanel />}
 
             {page === 'appearance' && (
               <>
@@ -1404,7 +1463,7 @@ export function SettingsDialog({
                         {t('music.tokenHowTo')}
                       </p>
                       <a
-                        href={YANDEX_OAUTH_URL}
+                            href={yandexOauthUrl()}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="inline-flex text-[13px] font-medium text-[var(--tg-button)] hover:underline"

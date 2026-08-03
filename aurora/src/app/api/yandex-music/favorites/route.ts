@@ -1,14 +1,17 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/auth'
 import { getYandexLikedTracks } from '@/lib/yandex-music'
 import { withJsonApi } from '@/lib/with-json-api'
 
-export const GET = withJsonApi(async function GET() {
+export const GET = withJsonApi(async function GET(req: NextRequest) {
   const me = await getCurrentUser()
   if (!me) return NextResponse.json({ error: 'Не авторизован' }, { status: 401 })
 
+  const limit = Math.min(100, Math.max(1, Number(req.nextUrl.searchParams.get('limit')) || 40))
+  const offset = Math.max(0, Number(req.nextUrl.searchParams.get('offset')) || 0)
+
   try {
-    const result = await getYandexLikedTracks(me.id, 50)
+    const result = await getYandexLikedTracks(me.id, limit, offset)
     return NextResponse.json(result)
   } catch (e) {
     console.error('[yandex-music/favorites]', e)
@@ -17,6 +20,8 @@ export const GET = withJsonApi(async function GET() {
         tracks: [],
         connected: false,
         source: 'anon',
+        total: 0,
+        hasMore: false,
         error: e instanceof Error ? e.message : 'Не удалось загрузить избранное',
       },
       { status: 502 },

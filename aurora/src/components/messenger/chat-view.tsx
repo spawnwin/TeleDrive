@@ -2579,6 +2579,9 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
                       canEditOthers={canEditOthers}
                       canPin={canPinMessages}
                       isPinned={pinnedMessage?.id === msg.id}
+                      musicQueue={messages
+                        .map((m) => parseChatMusicMetadata(m.metadata))
+                        .filter((m): m is NonNullable<typeof m> => !!m)}
                       isRead={
                         mine &&
                         activeChat.type === 'private' &&
@@ -3498,6 +3501,7 @@ interface MessageBubbleProps {
   encryptedLabel?: string
   t: (k: string) => string
   lang: string
+  musicQueue?: import('@/lib/music-message').ChatMusicMetadata[]
 }
 
 function MessageBubble({
@@ -3531,6 +3535,7 @@ function MessageBubble({
   encryptedLabel,
   t,
   lang,
+  musicQueue,
 }: MessageBubbleProps) {
   const [showQuickReactions, setShowQuickReactions] = useState(false)
   const [imageOpen, setImageOpen] = useState(false)
@@ -3812,6 +3817,7 @@ function MessageBubble({
                   meta={musicMeta}
                   mine={mine}
                   messageId={msg.id}
+                  queue={musicQueue && musicQueue.length > 0 ? musicQueue : [musicMeta]}
                 />
               )
             })()}

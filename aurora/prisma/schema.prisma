@@ -9,11 +9,14 @@ datasource db {
 }
 
 model Session {
-  id        String   @id @default(cuid())
-  token     String   @unique
-  userId    String
-  createdAt DateTime @default(now())
-  expiresAt DateTime
+  id           String   @id @default(cuid())
+  token        String   @unique
+  userId       String
+  createdAt    DateTime @default(now())
+  expiresAt    DateTime
+  userAgent    String?
+  ip           String?
+  lastActiveAt DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -58,9 +61,13 @@ model User {
   // Cloud storage
   storageUsed  Int      @default(0) // bytes
   storageQuota Int      @default(1073741824) // 1GB default, premium 10GB
-  // Linked Yandex Music account (token never sent to the client)
+  // Linked Yandex Music account (token never sent to the client; stored sealed when TOKEN_ENCRYPTION_KEY is set)
   yandexMusicToken String?
   yandexMusicUid   String?
+  // Privacy (Telegram-style)
+  lastSeenVisibility String @default("everyone") // everyone | contacts | nobody
+  whoCanMessage      String @default("everyone") // everyone | contacts | nobody
+  whoCanCall         String @default("everyone") // everyone | contacts | nobody
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 

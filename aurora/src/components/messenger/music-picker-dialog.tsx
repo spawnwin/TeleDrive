@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Heart, Loader2, Music } from 'lucide-react'
+import { Heart, ListMusic, Loader2, Music } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -12,7 +12,7 @@ import {
 import { useI18n } from '@/hooks/use-i18n'
 import { useAppStore } from '@/lib/store'
 import { cn } from '@/lib/utils'
-import type { YandexTrack } from '@/lib/yandex-music'
+import type { YandexPlaylist, YandexTrack } from '@/lib/yandex-music'
 
 function formatTime(s: number) {
   if (!Number.isFinite(s) || s < 0) return '0:00'
@@ -33,6 +33,8 @@ interface MusicPickerDialogProps {
   onOpenYandexSettings?: () => void
 }
 
+type BrowseMode = 'favorites' | 'playlists' | 'playlist-tracks'
+
 export function MusicPickerDialog({
   open,
   onOpenChange,
@@ -50,10 +52,45 @@ export function MusicPickerDialog({
   const [favorites, setFavorites] = useState<YandexTrack[]>([])
   const [favoritesConnected, setFavoritesConnected] = useState(false)
   const [favoritesLoaded, setFavoritesLoaded] = useState(false)
+  const [favoritesHasMore, setFavoritesHasMore] = useState(false)
+  const [favoritesOffset, setFavoritesOffset] = useState(0)
+  const [playlists, setPlaylists] = useState<YandexPlaylist[]>([])
+  const [activePlaylist, setActivePlaylist] = useState<YandexPlaylist | null>(null)
+  const [playlistTracks, setPlaylistTracks] = useState<YandexTrack[]>([])
+  const [browse, setBrowse] = useState<BrowseMode>('favorites')
   const [searching, setSearching] = useState(false)
   const [loadingFavorites, setLoadingFavorites] = useState(false)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [loadingPlaylists, setLoadingPlaylists] = useState(false)
   const [fetchingId, setFetchingId] = useState<string | null>(null)
   const [fullTracks, setFullTracks] = useState(!!currentUser?.yandexMusicConnected)
+  const [tokenExpired, setTokenExpired] = useState(false)
+
+  const loadFavorites = (offset: number, append: boolean) => {
+    const req = append ? setLoadingMore : setLoadingFavorites
+    req(true)
+    fetch(`/api/yandex-music/favorites?limit=40&offset=${offset}`)
+      .then((r) => r.json().catch(() => ({})))
+      .then((data) => {
+        const tracks = Array.isArray(data.tracks) ? data.tracks : []
+        setFavorites((prev) => (append ? [...prev, ...tracks] : tracks))
+        setFavoritesConnected(!!data.connected)
+        setFavoritesHasMore(!!data.hasMore)
+        setFavoritesOffset(offset + tracks.length)
+        setFullTracks(!!data.connected || data.source === 'env')
+        setTokenExpired(!!data.expired)
+      })
+      .catch(() => {
+        if (!append) {
+          setFavorites([])
+          setFavoritesConnected(false)
+        }
+      })
+      .finally(() => {
+        req(false)
+        setFavoritesLoaded(true)
+      })
+  }
 
   useEffect(() => {
     if (!open) {
@@ -61,42 +98,21 @@ export function MusicPickerDialog({
       setResults([])
       setTab('yandex')
       setFetchingId(null)
+      setBrowse('favorites')
+      setActivePlaylist(null)
+      setPlaylistTracks([])
       return
     }
-    let cancelled = false
-    setLoadingFavorites(true)
     setFavoritesLoaded(false)
-    fetch('/api/yandex-music/favorites')
-      .then((r) => r.json().catch(() => ({})))
-      .then((data) => {
-        if (cancelled) return
-        setFavorites(Array.isArray(data.tracks) ? data.tracks : [])
-        setFavoritesConnected(!!data.connected)
-        setFullTracks(!!data.connected || data.source === 'env')
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setFavorites([])
-          setFavoritesConnected(false)
-        }
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setLoadingFavorites(false)
-          setFavoritesLoaded(true)
-        }
-      })
+    loadFavorites(0, false)
 
     fetch('/api/yandex-music/connect')
       .then((r) => r.json().catch(() => ({})))
       .then((data) => {
-        if (!cancelled) setFullTracks(!!data.fullTracks)
+        setFullTracks(!!data.fullTracks)
+        setTokenExpired(!!data.expired)
       })
       .catch(() => {})
-
-    return () => {
-      cancelled = true
-    }
   }, [open])
 
   useEffect(() => {
@@ -112,7 +128,10 @@ export function MusicPickerDialog({
       fetch(`/api/yandex-music/search?q=${encodeURIComponent(q)}`)
         .then((r) => (r.ok ? r.json() : Promise.reject(r)))
         .then((data) => {
-          if (!cancelled) setResults(data.tracks || [])
+          if (!cancelled) {
+            setResults(data.tracks || [])
+            if (data.expired) setTokenExpired(true)
+          }
         })
         .catch(() => {
           if (!cancelled) setResults([])
@@ -127,8 +146,40 @@ export function MusicPickerDialog({
     }
   }, [query, open, tab])
 
-  const showFavorites = tab === 'yandex' && !query.trim()
-  const list = showFavorites ? favorites : results
+  const openPlaylists = () => {
+    setBrowse('playlists')
+    setLoadingPlaylists(true)
+    fetch('/api/yandex-music/playlists')
+      .then((r) => r.json().catch(() => ({})))
+      .then((data) => {
+        setPlaylists(Array.isArray(data.playlists) ? data.playlists : [])
+        if (data.expired) setTokenExpired(true)
+      })
+      .catch(() => setPlaylists([]))
+      .finally(() => setLoadingPlaylists(false))
+  }
+
+  const openPlaylist = (pl: YandexPlaylist) => {
+    setActivePlaylist(pl)
+    setBrowse('playlist-tracks')
+    setLoadingPlaylists(true)
+    setPlaylistTracks([])
+    const qs = new URLSearchParams({ kind: pl.kind, uid: pl.uid || '' })
+    fetch(`/api/yandex-music/playlists?${qs}`)
+      .then((r) => r.json().catch(() => ({})))
+      .then((data) => setPlaylistTracks(Array.isArray(data.tracks) ? data.tracks : []))
+      .catch(() => setPlaylistTracks([]))
+      .finally(() => setLoadingPlaylists(false))
+  }
+
+  const showBrowse = tab === 'yandex' && !query.trim()
+  const list = !showBrowse
+    ? results
+    : browse === 'playlist-tracks'
+      ? playlistTracks
+      : browse === 'favorites'
+        ? favorites
+        : []
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -175,9 +226,9 @@ export function MusicPickerDialog({
           </div>
         ) : (
           <div className="space-y-2">
-            {!fullTracks && (
+            {(!fullTracks || tokenExpired) && (
               <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs leading-snug text-amber-700 dark:text-amber-200/90">
-                {t('music.previewHint')}{' '}
+                {tokenExpired ? t('music.tokenExpired') : t('music.previewHint')}{' '}
                 {onOpenYandexSettings ? (
                   <button
                     type="button"
@@ -204,27 +255,66 @@ export function MusicPickerDialog({
               autoFocus
             />
 
-            {showFavorites && (
-              <div className="flex items-center gap-1.5 px-0.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                <Heart className="h-3 w-3 text-rose-400" />
-                {t('music.favorites')}
+            {showBrowse && (
+              <div className="flex gap-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setBrowse('favorites')
+                    setActivePlaylist(null)
+                  }}
+                  className={cn(
+                    'flex items-center gap-1 rounded-lg px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide',
+                    browse === 'favorites' || browse === 'playlist-tracks'
+                      ? 'bg-primary/10 text-primary'
+                      : 'text-muted-foreground hover:bg-muted',
+                  )}
+                >
+                  <Heart className="h-3 w-3" />
+                  {t('music.favorites')}
+                </button>
+                <button
+                  type="button"
+                  onClick={openPlaylists}
+                  className={cn(
+                    'flex items-center gap-1 rounded-lg px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide',
+                    browse === 'playlists' ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-muted',
+                  )}
+                >
+                  <ListMusic className="h-3 w-3" />
+                  {t('music.playlists')}
+                </button>
               </div>
             )}
 
+            {showBrowse && browse === 'playlist-tracks' && activePlaylist && (
+              <button
+                type="button"
+                onClick={() => {
+                  setBrowse('playlists')
+                  setActivePlaylist(null)
+                }}
+                className="text-left text-xs text-primary hover:underline"
+              >
+                ← {activePlaylist.title}
+              </button>
+            )}
+
             <div className="max-h-[min(360px,50dvh)] space-y-1 overflow-y-auto overscroll-contain">
-              {(searching || (showFavorites && loadingFavorites)) && (
+              {(searching ||
+                (showBrowse && browse === 'favorites' && loadingFavorites) ||
+                (showBrowse && (browse === 'playlists' || browse === 'playlist-tracks') && loadingPlaylists)) && (
                 <div className="flex justify-center py-6">
                   <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
                 </div>
               )}
 
-              {!searching && !showFavorites && query.trim() && results.length === 0 && (
-                <p className="py-6 text-center text-sm text-muted-foreground">
-                  {t('wall.noResults')}
-                </p>
+              {!searching && !showBrowse && query.trim() && results.length === 0 && (
+                <p className="py-6 text-center text-sm text-muted-foreground">{t('wall.noResults')}</p>
               )}
 
-              {showFavorites &&
+              {showBrowse &&
+                browse === 'favorites' &&
                 favoritesLoaded &&
                 !loadingFavorites &&
                 !favoritesConnected && (
@@ -245,7 +335,8 @@ export function MusicPickerDialog({
                   </div>
                 )}
 
-              {showFavorites &&
+              {showBrowse &&
+                browse === 'favorites' &&
                 favoritesLoaded &&
                 !loadingFavorites &&
                 favoritesConnected &&
@@ -255,8 +346,40 @@ export function MusicPickerDialog({
                   </p>
                 )}
 
+              {showBrowse && browse === 'playlists' && !loadingPlaylists && playlists.length === 0 && (
+                <p className="py-6 text-center text-sm text-muted-foreground">{t('music.playlistsEmpty')}</p>
+              )}
+
+              {showBrowse &&
+                browse === 'playlists' &&
+                !loadingPlaylists &&
+                playlists.map((pl) => (
+                  <button
+                    key={`${pl.uid}:${pl.kind}`}
+                    type="button"
+                    onClick={() => openPlaylist(pl)}
+                    className="flex w-full items-center gap-3 rounded-xl px-2 py-2 text-left transition hover:bg-muted"
+                  >
+                    {pl.coverUrl ? (
+                      <img src={pl.coverUrl} alt="" className="h-12 w-12 shrink-0 rounded-lg object-cover" />
+                    ) : (
+                      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-primary/20 to-rose-500/20">
+                        <ListMusic className="h-5 w-5 text-primary" />
+                      </div>
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-semibold">{pl.title}</p>
+                      <p className="truncate text-xs text-muted-foreground">
+                        {pl.trackCount} {t('music.tracks')}
+                      </p>
+                    </div>
+                  </button>
+                ))}
+
               {!searching &&
                 !loadingFavorites &&
+                !loadingPlaylists &&
+                (browse !== 'playlists' || !showBrowse) &&
                 list.map((tr) => (
                   <button
                     key={tr.id}
@@ -295,6 +418,18 @@ export function MusicPickerDialog({
                     )}
                   </button>
                 ))}
+
+              {showBrowse && browse === 'favorites' && favoritesHasMore && (
+                <button
+                  type="button"
+                  disabled={loadingMore}
+                  onClick={() => loadFavorites(favoritesOffset, true)}
+                  className="flex w-full items-center justify-center gap-2 rounded-xl py-2.5 text-sm text-primary hover:bg-muted disabled:opacity-50"
+                >
+                  {loadingMore ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                  {t('music.loadMore')}
+                </button>
+              )}
             </div>
           </div>
         )}
