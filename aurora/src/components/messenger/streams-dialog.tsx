@@ -5,6 +5,7 @@ import { Radio, Loader2, Video, Users, Camera, MonitorPlay, History, Heart, Penc
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Checkbox } from '@/components/ui/checkbox'
 import {
   Dialog,
   DialogContent,
@@ -74,6 +75,7 @@ export function StreamsDialog({ open, onOpenChange }: StreamsDialogProps) {
   const [showGoLive, setShowGoLive] = useState(false)
   const [title, setTitle] = useState('')
   const [goLiveGameId, setGoLiveGameId] = useState<string>('')
+  const [shareToFeed, setShareToFeed] = useState(true)
   const [starting, setStarting] = useState(false)
   const [activeStream, setActiveStream] = useState<StreamSummary | null>(null)
   const [isHost, setIsHost] = useState(false)
@@ -85,6 +87,27 @@ export function StreamsDialog({ open, onOpenChange }: StreamsDialogProps) {
   useEffect(() => {
     setScreenSupported(typeof navigator !== 'undefined' && !!navigator.mediaDevices?.getDisplayMedia)
   }, [])
+
+  // Open a specific live stream from a feed share card.
+  useEffect(() => {
+    const handler = async (e: Event) => {
+      const streamId = (e as CustomEvent<{ streamId?: string }>).detail?.streamId
+      if (!streamId) return
+      try {
+        const res = await fetch('/api/streams')
+        const data = await res.json().catch(() => ({}))
+        const found = (data.streams || []).find((s: StreamSummary) => s.id === streamId)
+        if (found) {
+          setActiveStream(found)
+          setIsHost(found.host?.id === currentUser?.id)
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+    window.addEventListener('aurora:open-streams', handler)
+    return () => window.removeEventListener('aurora:open-streams', handler)
+  }, [currentUser?.id])
 
   const load = async (gameId?: string | null) => {
     setLoading(true)
@@ -189,7 +212,11 @@ export function StreamsDialog({ open, onOpenChange }: StreamsDialogProps) {
       const res = await fetch('/api/streams', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: title.trim(), gameId: goLiveGameId || null }),
+        body: JSON.stringify({
+          title: title.trim(),
+          gameId: goLiveGameId || null,
+          shareToFeed,
+        }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || t('misc.error'))
@@ -198,6 +225,7 @@ export function StreamsDialog({ open, onOpenChange }: StreamsDialogProps) {
       setShowGoLive(false)
       setTitle('')
       setGoLiveGameId('')
+      setShareToFeed(true)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : t('misc.error'))
     } finally {
@@ -497,6 +525,18 @@ export function StreamsDialog({ open, onOpenChange }: StreamsDialogProps) {
                 {t('streams.sourceScreen')}
               </button>
             </div>
+
+            <label className="mt-4 flex cursor-pointer items-start gap-2.5">
+              <Checkbox
+                checked={shareToFeed}
+                onCheckedChange={(v) => setShareToFeed(v === true)}
+                className="mt-0.5"
+              />
+              <div>
+                <p className="text-sm font-medium">{t('feed.shareToFeed')}</p>
+                <p className="text-xs text-muted-foreground">{t('feed.shareToFeedHint')}</p>
+              </div>
+            </label>
 
             <Button
               onClick={goLive}

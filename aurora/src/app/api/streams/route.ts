@@ -5,6 +5,7 @@ import { getCurrentUser } from '@/lib/auth'
 import { withJsonApi } from '@/lib/with-json-api'
 import { getPlatformFlags } from '@/lib/platform-settings'
 import { areUsersBlocked } from '@/lib/user-blocks'
+import { createFeedSharePost } from '@/lib/feed-share'
 
 // GET /api/streams — currently live streams, for the discovery grid.
 // ?gameId=<id> narrows to one Twitch-style category (see /api/streams/games).
@@ -92,6 +93,17 @@ export const POST = withJsonApi(async function POST(req: NextRequest) {
       game: { select: { id: true, slug: true, title: true, titleEn: true, color: true } },
     },
   })
+
+  if (body?.shareToFeed === true) {
+    await createFeedSharePost({
+      userId: me.id,
+      kind: 'stream',
+      targetId: stream.id,
+      title: stream.title,
+      content: stream.game ? `${stream.title} · ${stream.game.title}` : stream.title,
+      coverUrl: me.avatarUrl,
+    })
+  }
 
   return NextResponse.json({
     stream: {

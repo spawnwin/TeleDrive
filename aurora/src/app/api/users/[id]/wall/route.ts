@@ -78,7 +78,7 @@ export const POST = withJsonApi(async function POST(
 
   const body = await req.json().catch(() => ({}))
   const content = (typeof body?.content === 'string' ? body.content : '').trim()
-  const type = ['text', 'image', 'voice', 'drawing', 'music'].includes(body?.type)
+  const type = ['text', 'image', 'voice', 'drawing', 'music', 'share'].includes(body?.type)
     ? body.type
     : 'text'
   const attachmentUrl = typeof body?.attachmentUrl === 'string' ? body.attachmentUrl : null

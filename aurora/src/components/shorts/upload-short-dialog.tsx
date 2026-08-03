@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Slider } from '@/components/ui/slider'
 import { Progress } from '@/components/ui/progress'
+import { Checkbox } from '@/components/ui/checkbox'
 import {
   Dialog,
   DialogContent,
@@ -68,6 +69,7 @@ export function UploadShortDialog({
   // Instagram-tab state — the video is downloaded and re-hosted server-side.
   const [igUrl, setIgUrl] = useState('')
   const [igImporting, setIgImporting] = useState(false)
+  const [shareToFeed, setShareToFeed] = useState(false)
 
   // Upload-tab processing state
   const [file, setFile] = useState<File | null>(null)
@@ -89,6 +91,7 @@ export function UploadShortDialog({
     setExternalUrl('')
     setIgUrl('')
     setIgImporting(false)
+    setShareToFeed(false)
     setVideoUrl(null)
     setVideoName('')
     setPreview(null)
@@ -279,6 +282,7 @@ export function UploadShortDialog({
             title: title.trim(),
             description: description.trim(),
             tags: tags.split(',').map((tg) => tg.trim()).filter(Boolean),
+            shareToFeed,
           }),
         })
         const data = await res.json()
@@ -409,6 +413,7 @@ export function UploadShortDialog({
           duetMode: parentShort ? (duetMode || 'reply') : undefined,
           challengeTitle:
             parentShort && duetMode === 'challenge' ? parentShort.title : undefined,
+          shareToFeed,
         }),
       })
       const data = await res.json()
@@ -712,10 +717,22 @@ export function UploadShortDialog({
             </div>
           )}
 
+          <label className="mt-4 flex cursor-pointer items-start gap-2.5">
+            <Checkbox
+              checked={shareToFeed}
+              onCheckedChange={(v) => setShareToFeed(v === true)}
+              className="mt-0.5"
+            />
+            <div>
+              <p className="text-sm font-medium">{t('feed.shareToFeed')}</p>
+              <p className="text-xs text-muted-foreground">{t('feed.shareToFeedHint')}</p>
+            </div>
+          </label>
+
           <Button
             onClick={publish}
             disabled={busy || igImporting}
-            className="mt-5 w-full bg-gradient-to-r from-violet-500 to-cyan-400 text-white"
+            className="mt-4 w-full bg-gradient-to-r from-violet-500 to-cyan-400 text-white"
           >
             {igImporting ? (
               <>

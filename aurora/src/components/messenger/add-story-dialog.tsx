@@ -56,6 +56,7 @@ export function AddStoryDialog({ open, onOpenChange, onCreated }: AddStoryDialog
   const [visibility, setVisibility] = useState<StoryVisibility>('contacts')
   const [addToProfile, setAddToProfile] = useState(true)
   const [saveToGallery, setSaveToGallery] = useState(true)
+  const [shareToFeed, setShareToFeed] = useState(false)
   const [showOptions, setShowOptions] = useState(false)
   const [audienceQuery, setAudienceQuery] = useState('')
   const [audienceResults, setAudienceResults] = useState<AudienceUser[]>([])
@@ -75,6 +76,7 @@ export function AddStoryDialog({ open, onOpenChange, onCreated }: AddStoryDialog
     setVisibility('contacts')
     setAddToProfile(true)
     setSaveToGallery(true)
+    setShareToFeed(false)
     setShowOptions(false)
     setAudienceQuery('')
     setAudienceResults([])
@@ -172,6 +174,7 @@ export function AddStoryDialog({ open, onOpenChange, onCreated }: AddStoryDialog
           audienceIds: selectedAudience.map((u) => u.id),
           addToProfile: false,
           saveToGallery: false,
+          shareToFeed,
         }
       } else {
         if (!mediaUrl) {
@@ -188,6 +191,7 @@ export function AddStoryDialog({ open, onOpenChange, onCreated }: AddStoryDialog
           audienceIds: selectedAudience.map((u) => u.id),
           addToProfile: toGallery,
           saveToGallery: toGallery,
+          shareToFeed,
         }
       }
 
@@ -417,52 +421,67 @@ export function AddStoryDialog({ open, onOpenChange, onCreated }: AddStoryDialog
                   </div>
                 )}
 
-                {isMediaMode && (
-                  <div className="space-y-2.5">
-                    <label className="flex cursor-pointer items-start gap-2.5">
-                      <Checkbox
-                        checked={addToProfile}
-                        onCheckedChange={(v) => setAddToProfile(v === true)}
-                        className="mt-0.5"
-                      />
-                      <div>
-                        <p className="text-sm font-medium">{t('stories.addToProfile')}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {t('stories.addToProfileHint')}
-                        </p>
-                      </div>
-                    </label>
-                    <label className="flex cursor-pointer items-start gap-2.5">
-                      <Checkbox
-                        checked={saveToGallery}
-                        onCheckedChange={(v) => setSaveToGallery(v === true)}
-                        className="mt-0.5"
-                      />
-                      <div>
-                        <p className="text-sm font-medium">{t('stories.saveToGallery')}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {t('stories.saveToGalleryHint')}
-                        </p>
-                      </div>
-                    </label>
-                  </div>
-                )}
+                <div className="space-y-2.5">
+                  {isMediaMode && (
+                    <>
+                      <label className="flex cursor-pointer items-start gap-2.5">
+                        <Checkbox
+                          checked={addToProfile}
+                          onCheckedChange={(v) => setAddToProfile(v === true)}
+                          className="mt-0.5"
+                        />
+                        <div>
+                          <p className="text-sm font-medium">{t('stories.addToProfile')}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {t('stories.addToProfileHint')}
+                          </p>
+                        </div>
+                      </label>
+                      <label className="flex cursor-pointer items-start gap-2.5">
+                        <Checkbox
+                          checked={saveToGallery}
+                          onCheckedChange={(v) => setSaveToGallery(v === true)}
+                          className="mt-0.5"
+                        />
+                        <div>
+                          <p className="text-sm font-medium">{t('stories.saveToGallery')}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {t('stories.saveToGalleryHint')}
+                          </p>
+                        </div>
+                      </label>
+                    </>
+                  )}
+                </div>
               </div>
             )}
           </div>
         </div>
 
-        <div className="flex gap-2 border-t px-4 pb-[max(0.75rem,calc(5.75rem+env(safe-area-inset-bottom)))] xl:pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 shrink-0">
-          <Button variant="outline" className="flex-1" onClick={() => handleClose(false)}>
-            {t('misc.cancel')}
-          </Button>
-          <Button
-            className="flex-1 bg-gradient-to-r from-violet-500 to-cyan-400 text-white"
-            onClick={handlePublish}
-            disabled={uploading}
-          >
-            {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : t('stories.publish')}
-          </Button>
+        <div className="shrink-0 space-y-2 border-t px-4 pb-[max(0.75rem,calc(5.75rem+env(safe-area-inset-bottom)))] xl:pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3">
+          <label className="flex cursor-pointer items-start gap-2.5">
+            <Checkbox
+              checked={shareToFeed}
+              onCheckedChange={(v) => setShareToFeed(v === true)}
+              className="mt-0.5"
+            />
+            <div>
+              <p className="text-sm font-medium">{t('feed.shareToFeed')}</p>
+              <p className="text-xs text-muted-foreground">{t('feed.shareToFeedHint')}</p>
+            </div>
+          </label>
+          <div className="flex gap-2">
+            <Button variant="outline" className="flex-1" onClick={() => handleClose(false)}>
+              {t('misc.cancel')}
+            </Button>
+            <Button
+              className="flex-1 bg-gradient-to-r from-violet-500 to-cyan-400 text-white"
+              onClick={handlePublish}
+              disabled={uploading}
+            >
+              {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : t('stories.publish')}
+            </Button>
+          </div>
         </div>
       </DialogContent>
     </Dialog>

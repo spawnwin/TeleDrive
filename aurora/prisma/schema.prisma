@@ -986,7 +986,7 @@ model WallPost {
   profileId     String   // user whose wall this post is on
   authorId      String   // user who wrote the post
   content       String?  // text body (optional when an attachment is present)
-  type          String   @default("text") // text | image | voice | drawing | music
+  type          String   @default("text") // text | image | voice | drawing | music | share
   attachmentUrl String?  // /uploads/... path for media posts
   attachmentName String? // original filename / label
   attachmentMime String? // mime type for playback decisions

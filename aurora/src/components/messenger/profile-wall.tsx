@@ -37,6 +37,8 @@ import { MusicPickerDialog } from './music-picker-dialog'
 import { ChatMusicPlayer } from './chat-music-player'
 import { buildChatMusicMetadata } from '@/lib/music-message'
 import { WallPostComments } from './wall-post-comments'
+import { openFeedShareTarget, parseFeedShareRef } from '@/lib/feed-share'
+import { Clapperboard, Radio, Store, CircleDot } from 'lucide-react'
 
 interface WallAuthor {
   id: string
@@ -48,7 +50,7 @@ interface WallAuthor {
 
 interface WallPost {
   id: string
-  type: 'text' | 'image' | 'voice' | 'drawing' | 'music'
+  type: 'text' | 'image' | 'voice' | 'drawing' | 'music' | 'share'
   content: string | null
   attachmentUrl: string | null
   attachmentName: string | null
@@ -706,10 +708,60 @@ function WallPostCard({
           </div>
         </div>
       ) : (
-        post.content && (
+        post.content &&
+        post.type !== 'share' && (
           <p className="mb-2 whitespace-pre-wrap break-words text-sm">{post.content}</p>
         )
       )}
+
+      {post.type === 'share' && (() => {
+        const ref = parseFeedShareRef(post.attachmentUrl, post.attachmentMime)
+        if (!ref) return null
+        const kindLabel =
+          ref.kind === 'story'
+            ? t('feed.shareKind.story')
+            : ref.kind === 'short'
+              ? t('feed.shareKind.short')
+              : ref.kind === 'stream'
+                ? t('feed.shareKind.stream')
+                : t('feed.shareKind.listing')
+        const KindIcon =
+          ref.kind === 'story'
+            ? CircleDot
+            : ref.kind === 'short'
+              ? Clapperboard
+              : ref.kind === 'stream'
+                ? Radio
+                : Store
+        return (
+          <button
+            type="button"
+            onClick={() => openFeedShareTarget(ref.kind, ref.id)}
+            className="mb-2 w-full overflow-hidden rounded-xl border border-border bg-muted/40 text-left transition hover:bg-muted/70"
+          >
+            {post.attachmentCoverUrl && (
+              <img src={post.attachmentCoverUrl} alt="" className="max-h-56 w-full object-cover" />
+            )}
+            <div className="flex items-start gap-2.5 p-3">
+              <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#3390ec]/15 text-[#3390ec]">
+                <KindIcon className="h-4 w-4" />
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                  {kindLabel}
+                </p>
+                <p className="truncate text-sm font-semibold">
+                  {post.attachmentName || kindLabel}
+                </p>
+                {post.content && post.content !== post.attachmentName && (
+                  <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">{post.content}</p>
+                )}
+                <p className="mt-1 text-[11px] font-medium text-[#3390ec]">{t('feed.openShare')}</p>
+              </div>
+            </div>
+          </button>
+        )
+      })()}
 
       {post.type === 'image' && post.attachmentUrl && (
         <img

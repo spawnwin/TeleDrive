@@ -338,6 +338,27 @@ export function ChatSidebar({
     if (currentUser) void refreshStories()
   }, [currentUser?.id])
 
+  // Open a story from a feed share card.
+  useEffect(() => {
+    const handler = async (e: Event) => {
+      const storyId = (e as CustomEvent<{ storyId?: string }>).detail?.storyId
+      if (!storyId) return
+      try {
+        await refreshStories()
+        const res = await fetch('/api/stories/feed')
+        const data = await readJsonResponse<{ users?: StoryFeedUser[] }>(res)
+        const users = data?.users || []
+        if (users.length) setStoryFeed(users)
+        const idx = users.findIndex((u) => u.stories?.some((s) => s.id === storyId))
+        if (idx >= 0) setStoryViewerIndex(idx)
+      } catch {
+        /* ignore */
+      }
+    }
+    window.addEventListener('aurora:open-story', handler)
+    return () => window.removeEventListener('aurora:open-story', handler)
+  }, [])
+
   const storyByUserId = useMemo(() => {
     const map = new Map<string, StoryFeedUser>()
     for (const u of storyFeed) map.set(u.id, u)

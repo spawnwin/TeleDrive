@@ -599,6 +599,18 @@ export function Messenger() {
     return () => window.removeEventListener('aurora:incoming-call-open', handler)
   }, [currentUser])
 
+  // Feed share cards → open streams / marketplace overlays
+  useEffect(() => {
+    const onStreams = () => setShowStreams(true)
+    const onMarketplace = () => setShowP2PMarketplace(true)
+    window.addEventListener('aurora:open-streams', onStreams)
+    window.addEventListener('aurora:open-marketplace', onMarketplace)
+    return () => {
+      window.removeEventListener('aurora:open-streams', onStreams)
+      window.removeEventListener('aurora:open-marketplace', onMarketplace)
+    }
+  }, [])
+
   // Hooks must run unconditionally (before any early return).
   const isShortsMode = view === 'shorts'
   const isFeedMode = view === 'feed'

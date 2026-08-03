@@ -21,6 +21,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Switch } from '@/components/ui/switch'
+import { Checkbox } from '@/components/ui/checkbox'
 import {
   Dialog,
   DialogContent,
@@ -89,6 +90,7 @@ export function MarketplaceDialog({ open, onOpenChange }: MarketplaceDialogProps
   const [formPrice, setFormPrice] = useState('')
   const [formCategory, setFormCategory] = useState<string>('other')
   const [formDigital, setFormDigital] = useState(false)
+  const [shareToFeed, setShareToFeed] = useState(true)
   const [formImages, setFormImages] = useState<string[]>([])
   const [uploadingImage, setUploadingImage] = useState(false)
   const [publishing, setPublishing] = useState(false)
@@ -117,12 +119,34 @@ export function MarketplaceDialog({ open, onOpenChange }: MarketplaceDialogProps
     if (open && view === 'browse') load()
   }, [open, view, load])
 
+  // Open a listing from a feed share card.
+  useEffect(() => {
+    const handler = async (e: Event) => {
+      const listingId = (e as CustomEvent<{ listingId?: string }>).detail?.listingId
+      if (!listingId) return
+      try {
+        const res = await fetch(`/api/marketplace/${encodeURIComponent(listingId)}`)
+        const data = await res.json().catch(() => ({}))
+        if (res.ok && data.listing) {
+          setSelected(data.listing as Listing)
+          setView('detail')
+          setEditing(false)
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+    window.addEventListener('aurora:open-marketplace', handler)
+    return () => window.removeEventListener('aurora:open-marketplace', handler)
+  }, [])
+
   const resetForm = () => {
     setFormTitle('')
     setFormDescription('')
     setFormPrice('')
     setFormCategory('other')
     setFormDigital(false)
+    setShareToFeed(true)
     setFormImages([])
   }
 
@@ -160,6 +184,7 @@ export function MarketplaceDialog({ open, onOpenChange }: MarketplaceDialogProps
           category: formCategory,
           images: formImages,
           isDigital: formDigital,
+          shareToFeed,
         }),
       })
       const data = await res.json()
@@ -562,6 +587,17 @@ export function MarketplaceDialog({ open, onOpenChange }: MarketplaceDialogProps
                 <span className="text-sm">{t('marketplace.digitalLabel')}</span>
                 <Switch checked={formDigital} onCheckedChange={setFormDigital} />
               </div>
+              <label className="flex cursor-pointer items-start gap-2.5 rounded-lg bg-muted/50 px-3 py-2.5">
+                <Checkbox
+                  checked={shareToFeed}
+                  onCheckedChange={(v) => setShareToFeed(v === true)}
+                  className="mt-0.5"
+                />
+                <div>
+                  <p className="text-sm font-medium">{t('feed.shareToFeed')}</p>
+                  <p className="text-xs text-muted-foreground">{t('feed.shareToFeedHint')}</p>
+                </div>
+              </label>
               <Button
                 onClick={publish}
                 disabled={publishing}

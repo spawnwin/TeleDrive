@@ -3,6 +3,7 @@ import { db } from '@/lib/db'
 import { getCurrentUser } from '@/lib/auth'
 import { parseVideoUrl } from '@/lib/video-url'
 import { withJsonApi } from '@/lib/with-json-api'
+import { createFeedSharePost } from '@/lib/feed-share'
 
 function serializeShort(s: any, isLiked = false) {
   return {
@@ -99,6 +100,7 @@ export const POST = withJsonApi(async function POST(req: NextRequest) {
     parentShortId,
     duetMode,
     challengeTitle,
+    shareToFeed,
   } = body ?? {}
 
   if (!title || !title.trim()) {
@@ -188,6 +190,17 @@ export const POST = withJsonApi(async function POST(req: NextRequest) {
       },
     },
   })
+
+  if (shareToFeed === true) {
+    await createFeedSharePost({
+      userId: me.id,
+      kind: 'short',
+      targetId: short.id,
+      title: short.title,
+      content: short.description || short.title,
+      coverUrl: short.thumbnailUrl,
+    })
+  }
 
   return NextResponse.json({
     short: serializeShort(short, false),

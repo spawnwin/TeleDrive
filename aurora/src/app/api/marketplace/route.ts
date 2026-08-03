@@ -11,6 +11,7 @@ import {
   MAX_LISTING_PRICE_COINS,
   serializeListingImages,
 } from '@/lib/marketplace'
+import { createFeedSharePost } from '@/lib/feed-share'
 
 function serialize(listing: {
   id: string
@@ -99,6 +100,7 @@ export const POST = withJsonApi(async function POST(req: NextRequest) {
     ? body.images.filter((u: unknown) => typeof u === 'string').slice(0, MAX_LISTING_IMAGES)
     : []
   const isDigital = !!body?.isDigital
+  const shareToFeed = body?.shareToFeed === true
 
   if (!title) return NextResponse.json({ error: 'Введите название' }, { status: 400 })
   if (!MARKETPLACE_CATEGORIES.includes(category as never)) {
@@ -126,6 +128,20 @@ export const POST = withJsonApi(async function POST(req: NextRequest) {
       seller: { select: { id: true, name: true, username: true, avatarColor: true, avatarUrl: true } },
     },
   })
+
+  if (shareToFeed) {
+    const imgs = serializeListingImages(listing.images)
+    await createFeedSharePost({
+      userId: me.id,
+      kind: 'listing',
+      targetId: listing.id,
+      title: listing.title,
+      content: `${listing.title} · ${listing.priceCoins} ₽${
+        listing.description ? `\n${listing.description}` : ''
+      }`,
+      coverUrl: imgs[0] || null,
+    })
+  }
 
   return NextResponse.json({ listing: serialize(listing) })
 })
