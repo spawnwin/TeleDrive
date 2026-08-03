@@ -16,19 +16,25 @@ export const GET = withJsonApi(async function GET() {
   if (!me) return NextResponse.json({ error: 'Не авторизован' }, { status: 401 })
 
   const creds = await readUserYandexCredentials(me.id)
-  const connected = !!creds
   let expired = false
-  if (connected) {
+  let uid: string | null = creds?.uid ?? null
+  if (creds) {
+    // Validates token and clears it from DB when expired
     const status = await getYandexMusicApiForUser(me.id)
-    expired = !!status.expired && status.source !== 'user'
+    expired = !!status.expired
+    if (expired || status.source !== 'user') {
+      uid = null
+    }
   }
 
+  const connected = !!uid
+
   return NextResponse.json({
-    connected: connected && !expired,
+    connected,
     expired,
     envConfigured: isEnvYandexAuthed(),
-    fullTracks: (connected && !expired) || isEnvYandexAuthed(),
-    uid: connected && !expired ? creds?.uid : null,
+    fullTracks: connected || isEnvYandexAuthed(),
+    uid,
   })
 })
 

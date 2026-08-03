@@ -466,6 +466,10 @@ io.on('connection', (socket) => {
     if (!(await isChatMember(userId, data.chatId))) return
 
     for (const pid of data.participantIds) {
+      if (!pid || pid === userId) continue
+      // Respect whoCanCall / blocklist the same as 1:1 invites
+      const gate = await canCallUser(userId, pid)
+      if (!gate.ok) continue
       const sockets = userSockets.get(pid)
       if (!sockets) continue
       for (const sid of sockets) {

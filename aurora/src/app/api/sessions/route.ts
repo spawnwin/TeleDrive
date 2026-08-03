@@ -5,17 +5,24 @@ import { db } from '@/lib/db'
 import { withJsonApi } from '@/lib/with-json-api'
 
 function deviceLabel(ua: string | null | undefined): string {
-  if (!ua) return 'Неизвестное устройство'
-  const s = ua.toLowerCase()
-  if (s.includes('iphone') || s.includes('ipad')) return 'iPhone / iPad'
+  const raw = (ua || '').trim()
+  if (!raw || raw === 'unknown' || raw === 'null' || raw === 'undefined') {
+    return 'Старая сессия'
+  }
+  const s = raw.toLowerCase()
+  if (s.includes('iphone') || s.includes('ipad') || s.includes('ios')) return 'iPhone / iPad'
   if (s.includes('android')) return 'Android'
   if (s.includes('mac os') || s.includes('macintosh')) return 'Mac'
   if (s.includes('windows')) return 'Windows'
+  if (s.includes('cros')) return 'Chrome OS'
   if (s.includes('linux')) return 'Linux'
+  if (s.includes('edg/') || s.includes('edgios') || s.includes('edge')) return 'Edge'
+  if (s.includes('opr/') || s.includes('opera')) return 'Opera'
+  if (s.includes('yaBrowser'.toLowerCase()) || s.includes('yabrowser')) return 'Яндекс.Браузер'
   if (s.includes('crios') || s.includes('chrome')) return 'Chrome'
+  if (s.includes('firefox') || s.includes('fxios')) return 'Firefox'
   if (s.includes('safari')) return 'Safari'
-  if (s.includes('firefox')) return 'Firefox'
-  return ua.slice(0, 48)
+  return raw.slice(0, 48)
 }
 
 export const GET = withJsonApi(async function GET() {

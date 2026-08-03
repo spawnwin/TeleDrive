@@ -21,6 +21,8 @@ npx prisma generate
 #   YANDEX_MUSIC_SHARE_ENV=1   # only if you intentionally share one YM account with all users
 npm run build
 pm2 restart aurora-web --update-env
+# Call privacy (1:1 + group:invite) lives in the signaling service — always restart both:
+pm2 restart aurora-call --update-env
 ```
 
 Smoke:

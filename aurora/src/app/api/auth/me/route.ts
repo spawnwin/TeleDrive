@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/auth'
-import { db } from '@/lib/db'
+import { readUserYandexCredentials } from '@/lib/yandex-music'
 import { withJsonApi } from '@/lib/with-json-api'
 
 export const GET = withJsonApi(async function GET() {
@@ -8,11 +8,10 @@ export const GET = withJsonApi(async function GET() {
     const user = await getCurrentUser()
     if (!user) return NextResponse.json({ user: null }, { status: 200 })
 
-    const ym = await db.user.findUnique({
-      where: { id: user.id },
-      select: { yandexMusicToken: true, yandexMusicUid: true },
-    })
-    const yandexMusicConnected = !!(ym?.yandexMusicToken && ym?.yandexMusicUid)
+    // Lightweight check (sealed token present). Expired tokens are cleared
+    // lazily by music endpoints / settings connect status.
+    const ym = await readUserYandexCredentials(user.id)
+    const yandexMusicConnected = !!ym
 
     return NextResponse.json({
       user: {

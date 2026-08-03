@@ -9,7 +9,7 @@ import {
   GIFT_COIN_REASONS,
   serializeGiftMetadata,
 } from '@/lib/gifts'
-import { areUsersBlocked } from '@/lib/user-blocks'
+import { assertCanMessage } from '@/lib/privacy-server'
 
 export const POST = withJsonApi(async function POST(req: NextRequest) {
   const me = await getCurrentUser()
@@ -39,8 +39,9 @@ export const POST = withJsonApi(async function POST(req: NextRequest) {
   if (!recipient || recipient.isBanned) {
     return NextResponse.json({ error: 'Получатель недоступен' }, { status: 404 })
   }
-  if (await areUsersBlocked(me.id, recipientId)) {
-    return NextResponse.json({ error: 'Пользователь заблокирован' }, { status: 403 })
+  const canMsg = await assertCanMessage(me.id, recipientId)
+  if (!canMsg.ok) {
+    return NextResponse.json({ error: canMsg.error }, { status: canMsg.status })
   }
 
   let targetChatId: string | null = chatId || null

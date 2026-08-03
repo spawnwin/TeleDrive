@@ -310,6 +310,16 @@ export function useWebRTC(opts: UseWebRTCOptions) {
         setError('Слишком много звонков. Подождите немного.')
       } else if (data.reason === 'calls_disabled') {
         setError('Звонки временно отключены')
+      } else if (data.reason === 'busy') {
+        setError('Абонент занят')
+      } else if (data.reason === 'declined' || data.reason === 'rejected') {
+        setError(data.message || 'Звонок отклонён')
+      } else if (data.reason === 'unauthorized') {
+        setError('Не удалось начать звонок')
+      } else if (data.message) {
+        setError(data.message)
+      } else if (data.reason) {
+        setError('Звонок недоступен')
       }
       callbacksRef.current.onCallEnded?.(data.callId, data.reason || 'rejected')
     })

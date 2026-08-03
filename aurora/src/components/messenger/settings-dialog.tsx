@@ -419,68 +419,84 @@ export function SettingsDialog({
   const messageSoundInputRef = useRef<HTMLInputElement>(null)
   const callSoundInputRef = useRef<HTMLInputElement>(null)
 
+  // Reset page/form only when the dialog opens (or initialPage changes).
+  // Do not depend on currentUser — Yandex connect updates the store and would
+  // otherwise kick the user off the Yandex settings page.
   useEffect(() => {
-    if (open) {
-      setPage(initialPage || 'main')
-      setName(currentUser?.name || '')
-      setBio(currentUser?.bio || '')
-      setAvatarColor(currentUser?.avatarColor || '#3390ec')
-      setAvatarUrl(currentUser?.avatarUrl || null)
-      setPremiumTheme(currentUser?.premiumTheme || 'classic')
-      setMessageSoundName(loadCustomSound('message')?.name || '')
-      setCallSoundName(loadCustomSound('call')?.name || '')
-      setMessagePresetId(loadSoundPresetId('message'))
-      setCallPresetId(loadSoundPresetId('call'))
-      setShowNotificationPreview(loadShowNotificationPreview())
-      setYandexToken('')
-      setYandexError(null)
-      setYandexConnected(!!currentUser?.yandexMusicConnected)
-      setYandexUid(null)
-      void syncShowPreviewToServiceWorker()
-      fetch('/api/yandex-music/connect')
-        .then((r) => r.json().catch(() => ({})))
-        .then((d) => {
-          const connected = !!d.connected
-          setYandexConnected(connected)
-          setYandexUid(typeof d.uid === 'string' ? d.uid : null)
-          if (d.expired) {
-            setYandexError(t('music.tokenExpired'))
-          }
-          if (currentUser && currentUser.yandexMusicConnected !== connected) {
-            setCurrentUser({ ...currentUser, yandexMusicConnected: connected })
-          }
-        })
-        .catch(() => {})
-      // Finish OAuth if token was saved while logged out
-      try {
-        const pending = sessionStorage.getItem('aurora:pendingYandexToken')
-        if (pending && pending.length >= 16) {
-          setYandexBusy(true)
-          fetch('/api/yandex-music/connect', {
-            method: 'POST',
-            credentials: 'include',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ token: pending }),
-          })
-            .then((r) => r.json().then((d) => ({ ok: r.ok, d })))
-            .then(({ ok, d }) => {
-              if (ok) {
-                setYandexConnected(true)
-                setYandexUid(typeof d.uid === 'string' ? d.uid : null)
-                sessionStorage.removeItem('aurora:pendingYandexToken')
-                toast.success(t('music.connectSuccess'))
-                if (currentUser) {
-                  setCurrentUser({ ...currentUser, yandexMusicConnected: true })
-                }
-              }
-            })
-            .finally(() => setYandexBusy(false))
+    if (!open) return
+    setPage(initialPage || 'main')
+    setName(currentUser?.name || '')
+    setBio(currentUser?.bio || '')
+    setAvatarColor(currentUser?.avatarColor || '#3390ec')
+    setAvatarUrl(currentUser?.avatarUrl || null)
+    setPremiumTheme(currentUser?.premiumTheme || 'classic')
+    setMessageSoundName(loadCustomSound('message')?.name || '')
+    setCallSoundName(loadCustomSound('call')?.name || '')
+    setMessagePresetId(loadSoundPresetId('message'))
+    setCallPresetId(loadSoundPresetId('call'))
+    setShowNotificationPreview(loadShowNotificationPreview())
+    setYandexToken('')
+    setYandexError(null)
+    setYandexConnected(!!currentUser?.yandexMusicConnected)
+    setYandexUid(null)
+    void syncShowPreviewToServiceWorker()
+  }, [open, initialPage]) // snapshot currentUser fields only when dialog opens
+
+  useEffect(() => {
+    if (!open) return
+    let cancelled = false
+    fetch('/api/yandex-music/connect')
+      .then((r) => r.json().catch(() => ({})))
+      .then((d) => {
+        if (cancelled) return
+        const connected = !!d.connected
+        setYandexConnected(connected)
+        setYandexUid(typeof d.uid === 'string' ? d.uid : null)
+        if (d.expired) {
+          setYandexError(t('music.tokenExpired'))
         }
-      } catch {
-        /* ignore */
+        const user = useAppStore.getState().currentUser
+        if (user && user.yandexMusicConnected !== connected) {
+          setCurrentUser({ ...user, yandexMusicConnected: connected })
+        }
+      })
+      .catch(() => {})
+    // Finish OAuth if token was saved while logged out
+    try {
+      const pending = sessionStorage.getItem('aurora:pendingYandexToken')
+      if (pending && pending.length >= 16) {
+        setYandexBusy(true)
+        fetch('/api/yandex-music/connect', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token: pending }),
+        })
+          .then((r) => r.json().then((d) => ({ ok: r.ok, d })))
+          .then(({ ok, d }) => {
+            if (cancelled) return
+            if (ok) {
+              setYandexConnected(true)
+              setYandexUid(typeof d.uid === 'string' ? d.uid : null)
+              sessionStorage.removeItem('aurora:pendingYandexToken')
+              toast.success(t('music.connectSuccess'))
+              const user = useAppStore.getState().currentUser
+              if (user) {
+                setCurrentUser({ ...user, yandexMusicConnected: true })
+              }
+            }
+          })
+          .finally(() => {
+            if (!cancelled) setYandexBusy(false)
+          })
       }
+    } catch {
+      /* ignore */
     }
-  }, [open, currentUser, initialPage, setCurrentUser, t])
+    return () => {
+      cancelled = true
+    }
+  }, [open, setCurrentUser, t])
 
   const handleAvatarPick = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
