@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Loader2, Music } from 'lucide-react'
+import { Heart, Loader2, Music } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -10,6 +10,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { useI18n } from '@/hooks/use-i18n'
+import { useAppStore } from '@/lib/store'
 import { cn } from '@/lib/utils'
 import type { YandexTrack } from '@/lib/yandex-music'
 
@@ -25,12 +26,11 @@ export type { YandexTrack }
 interface MusicPickerDialogProps {
   open: boolean
   onOpenChange: (v: boolean) => void
-  /** When set, shows a "file" tab that calls this callback. */
   onPickFile?: () => void
   onPickYandex: (track: YandexTrack) => void | Promise<void>
-  /** Chat mode: Yandex-only, no file upload. */
   yandexOnly?: boolean
   title?: string
+  onOpenYandexSettings?: () => void
 }
 
 export function MusicPickerDialog({
@@ -40,13 +40,20 @@ export function MusicPickerDialog({
   onPickYandex,
   yandexOnly = false,
   title,
+  onOpenYandexSettings,
 }: MusicPickerDialogProps) {
   const { t } = useI18n()
+  const currentUser = useAppStore((s) => s.currentUser)
   const [tab, setTab] = useState<'file' | 'yandex'>('yandex')
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<YandexTrack[]>([])
+  const [favorites, setFavorites] = useState<YandexTrack[]>([])
+  const [favoritesConnected, setFavoritesConnected] = useState(false)
+  const [favoritesLoaded, setFavoritesLoaded] = useState(false)
   const [searching, setSearching] = useState(false)
+  const [loadingFavorites, setLoadingFavorites] = useState(false)
   const [fetchingId, setFetchingId] = useState<string | null>(null)
+  const [fullTracks, setFullTracks] = useState(!!currentUser?.yandexMusicConnected)
 
   useEffect(() => {
     if (!open) {
@@ -54,6 +61,41 @@ export function MusicPickerDialog({
       setResults([])
       setTab('yandex')
       setFetchingId(null)
+      return
+    }
+    let cancelled = false
+    setLoadingFavorites(true)
+    setFavoritesLoaded(false)
+    fetch('/api/yandex-music/favorites')
+      .then((r) => r.json().catch(() => ({})))
+      .then((data) => {
+        if (cancelled) return
+        setFavorites(Array.isArray(data.tracks) ? data.tracks : [])
+        setFavoritesConnected(!!data.connected)
+        setFullTracks(!!data.connected || data.source === 'env')
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setFavorites([])
+          setFavoritesConnected(false)
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setLoadingFavorites(false)
+          setFavoritesLoaded(true)
+        }
+      })
+
+    fetch('/api/yandex-music/connect')
+      .then((r) => r.json().catch(() => ({})))
+      .then((data) => {
+        if (!cancelled) setFullTracks(!!data.fullTracks)
+      })
+      .catch(() => {})
+
+    return () => {
+      cancelled = true
     }
   }, [open])
 
@@ -84,6 +126,9 @@ export function MusicPickerDialog({
       clearTimeout(timer)
     }
   }, [query, open, tab])
+
+  const showFavorites = tab === 'yandex' && !query.trim()
+  const list = showFavorites ? favorites : results
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -130,6 +175,26 @@ export function MusicPickerDialog({
           </div>
         ) : (
           <div className="space-y-2">
+            {!fullTracks && (
+              <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs leading-snug text-amber-700 dark:text-amber-200/90">
+                {t('music.previewHint')}{' '}
+                {onOpenYandexSettings ? (
+                  <button
+                    type="button"
+                    className="font-semibold text-primary underline-offset-2 hover:underline"
+                    onClick={() => {
+                      onOpenChange(false)
+                      onOpenYandexSettings()
+                    }}
+                  >
+                    {t('music.connectLink')}
+                  </button>
+                ) : (
+                  t('music.connectInSettings')
+                )}
+              </div>
+            )}
+
             <input
               type="text"
               value={query}
@@ -138,60 +203,98 @@ export function MusicPickerDialog({
               className="w-full rounded-xl border border-border bg-muted/40 px-3 py-2.5 text-sm outline-none transition focus:border-primary focus:bg-background"
               autoFocus
             />
+
+            {showFavorites && (
+              <div className="flex items-center gap-1.5 px-0.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                <Heart className="h-3 w-3 text-rose-400" />
+                {t('music.favorites')}
+              </div>
+            )}
+
             <div className="max-h-[min(360px,50dvh)] space-y-1 overflow-y-auto overscroll-contain">
-              {searching && (
+              {(searching || (showFavorites && loadingFavorites)) && (
                 <div className="flex justify-center py-6">
                   <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
                 </div>
               )}
-              {!searching && query.trim() && results.length === 0 && (
+
+              {!searching && !showFavorites && query.trim() && results.length === 0 && (
                 <p className="py-6 text-center text-sm text-muted-foreground">
                   {t('wall.noResults')}
                 </p>
               )}
-              {!searching && !query.trim() && (
-                <p className="py-6 text-center text-sm text-muted-foreground">
-                  {t('wall.searchHint')}
-                </p>
-              )}
-              {results.map((tr) => (
-                <button
-                  key={tr.id}
-                  type="button"
-                  disabled={!!fetchingId}
-                  onClick={async () => {
-                    setFetchingId(tr.id)
-                    try {
-                      await onPickYandex(tr)
-                    } finally {
-                      setFetchingId(null)
-                    }
-                  }}
-                  className="flex w-full items-center gap-3 rounded-xl px-2 py-2 text-left transition hover:bg-muted disabled:opacity-50"
-                >
-                  {tr.coverUrl ? (
-                    <img
-                      src={tr.coverUrl}
-                      alt=""
-                      className="h-12 w-12 shrink-0 rounded-lg object-cover shadow-sm"
-                    />
-                  ) : (
-                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-primary/20 to-rose-500/20">
-                      <Music className="h-5 w-5 text-primary" />
-                    </div>
-                  )}
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-semibold">{tr.title}</p>
-                    <p className="truncate text-xs text-muted-foreground">{tr.artist}</p>
+
+              {showFavorites &&
+                favoritesLoaded &&
+                !loadingFavorites &&
+                !favoritesConnected && (
+                  <div className="space-y-2 py-6 text-center">
+                    <p className="text-sm text-muted-foreground">{t('music.favoritesNeedConnect')}</p>
+                    {onOpenYandexSettings && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          onOpenChange(false)
+                          onOpenYandexSettings()
+                        }}
+                      >
+                        {t('music.connectLink')}
+                      </Button>
+                    )}
                   </div>
-                  <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">
-                    {formatTime(tr.durationSec)}
-                  </span>
-                  {fetchingId === tr.id && (
-                    <Loader2 className="h-4 w-4 shrink-0 animate-spin text-primary" />
-                  )}
-                </button>
-              ))}
+                )}
+
+              {showFavorites &&
+                favoritesLoaded &&
+                !loadingFavorites &&
+                favoritesConnected &&
+                favorites.length === 0 && (
+                  <p className="py-6 text-center text-sm text-muted-foreground">
+                    {t('music.favoritesEmpty')}
+                  </p>
+                )}
+
+              {!searching &&
+                !loadingFavorites &&
+                list.map((tr) => (
+                  <button
+                    key={tr.id}
+                    type="button"
+                    disabled={!!fetchingId}
+                    onClick={async () => {
+                      setFetchingId(tr.id)
+                      try {
+                        await onPickYandex(tr)
+                      } finally {
+                        setFetchingId(null)
+                      }
+                    }}
+                    className="flex w-full items-center gap-3 rounded-xl px-2 py-2 text-left transition hover:bg-muted disabled:opacity-50"
+                  >
+                    {tr.coverUrl ? (
+                      <img
+                        src={tr.coverUrl}
+                        alt=""
+                        className="h-12 w-12 shrink-0 rounded-lg object-cover shadow-sm"
+                      />
+                    ) : (
+                      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-primary/20 to-rose-500/20">
+                        <Music className="h-5 w-5 text-primary" />
+                      </div>
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-semibold">{tr.title}</p>
+                      <p className="truncate text-xs text-muted-foreground">{tr.artist}</p>
+                    </div>
+                    <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">
+                      {formatTime(tr.durationSec)}
+                    </span>
+                    {fetchingId === tr.id && (
+                      <Loader2 className="h-4 w-4 shrink-0 animate-spin text-primary" />
+                    )}
+                  </button>
+                ))}
             </div>
           </div>
         )}

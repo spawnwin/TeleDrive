@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Loader2, Music, Pause, Play } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useI18n } from '@/hooks/use-i18n'
 import type { ChatMusicMetadata } from '@/lib/music-message'
 
 const MUSIC_PLAY_EVENT = 'aurora:music-play'
@@ -28,12 +29,14 @@ export function ChatMusicPlayer({
   messageId,
   className,
 }: ChatMusicPlayerProps) {
+  const { t } = useI18n()
   const audioRef = useRef<HTMLAudioElement>(null)
   const playerId = messageId || meta.trackId
   const streamSrc = `/api/yandex-music/stream/${encodeURIComponent(meta.trackId)}`
   const [playing, setPlaying] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(false)
+  const [preview, setPreview] = useState(false)
   const [current, setCurrent] = useState(0)
   const [duration, setDuration] = useState(meta.durationSec || 0)
 
@@ -41,6 +44,7 @@ export function ChatMusicPlayer({
     setPlaying(false)
     setLoading(false)
     setError(false)
+    setPreview(false)
     setCurrent(0)
     setDuration(meta.durationSec || 0)
     const a = audioRef.current
@@ -48,6 +52,12 @@ export function ChatMusicPlayer({
     a.pause()
     a.currentTime = 0
     a.load()
+
+    fetch(streamSrc, { headers: { Range: 'bytes=0-1' }, credentials: 'same-origin' })
+      .then((r) => {
+        setPreview(r.headers.get('X-Aurora-Preview') === '1')
+      })
+      .catch(() => {})
   }, [meta.trackId, meta.durationSec, streamSrc])
 
   useEffect(() => {
@@ -213,6 +223,16 @@ export function ChatMusicPlayer({
           >
             {meta.artist}
           </p>
+          {preview && (
+            <p
+              className={cn(
+                'mt-1 text-[10px] font-medium',
+                mine ? 'text-amber-200/90' : 'text-amber-600 dark:text-amber-400',
+              )}
+            >
+              {t('music.previewBadge')}
+            </p>
+          )}
           <div className="mt-2.5 flex items-center gap-2">
             <span
               className={cn(

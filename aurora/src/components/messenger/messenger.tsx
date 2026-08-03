@@ -65,6 +65,7 @@ export function Messenger() {
   const [bootError, setBootError] = useState(false)
   const [bootRetry, setBootRetry] = useState(0)
   const [showSettings, setShowSettings] = useState(false)
+  const [settingsInitialPage, setSettingsInitialPage] = useState<'main' | 'yandex'>('main')
   const [showInfo, setShowInfo] = useState(false)
   const [showCoins, setShowCoins] = useState(false)
   const [showPremium, setShowPremium] = useState(false)
@@ -78,6 +79,17 @@ export function Messenger() {
   const [sidebarQuery, setSidebarQuery] = useState('')
   const [sidebarSelectionMode, setSidebarSelectionMode] = useState(false)
   const historyStateRef = useRef<{ chatId: string | null; view: string; profileUserId: string | null }>({ chatId: null, view: 'chats', profileUserId: null })
+
+  useEffect(() => {
+    const openYandexSettings = (e: Event) => {
+      const detail = (e as CustomEvent<{ page?: string }>).detail
+      const page = detail?.page === 'yandex' ? 'yandex' : 'main'
+      setSettingsInitialPage(page)
+      setShowSettings(true)
+    }
+    window.addEventListener('aurora:open-settings', openYandexSettings as EventListener)
+    return () => window.removeEventListener('aurora:open-settings', openYandexSettings as EventListener)
+  }, [])
   const poppingStateRef = useRef(false)
 
   const closeMobileSearch = useCallback(() => {
@@ -715,7 +727,10 @@ export function Messenger() {
           } w-full shrink-0 flex-col border-r border-border xl:w-[360px] 2xl:w-[400px]`}
         >
           <ChatSidebar
-            onOpenSettings={() => setShowSettings(true)}
+            onOpenSettings={() => {
+              setSettingsInitialPage('main')
+              setShowSettings(true)
+            }}
             onOpenCoins={() => setShowCoins(true)}
             onOpenP2PMarketplace={() => setShowP2PMarketplace(true)}
             onOpenStreams={() => setShowStreams(true)}
@@ -801,6 +816,7 @@ export function Messenger() {
           onSettings={() => {
             closeMobileSearch()
             setShowFriends(false)
+            setSettingsInitialPage('main')
             setShowSettings(true)
           }}
           onProfile={() => {
@@ -822,7 +838,11 @@ export function Messenger() {
 
       <SettingsDialog
         open={showSettings}
-        onOpenChange={setShowSettings}
+        onOpenChange={(open) => {
+          setShowSettings(open)
+          if (!open) setSettingsInitialPage('main')
+        }}
+        initialPage={settingsInitialPage}
         onOpenPremium={() => setShowPremium(true)}
         onOpenCoins={() => setShowCoins(true)}
         onOpenMyProfile={() => {
@@ -841,7 +861,10 @@ export function Messenger() {
         onClose={() => setProfileUserId(null)}
         onMessage={handleProfileMessage}
         onCall={handleProfileCall}
-        onEditProfile={() => setShowSettings(true)}
+        onEditProfile={() => {
+          setSettingsInitialPage('main')
+          setShowSettings(true)
+        }}
         onOpenPremium={() => setShowPremium(true)}
       />
       {browserUrl && <InAppBrowser />}

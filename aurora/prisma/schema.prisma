@@ -58,6 +58,9 @@ model User {
   // Cloud storage
   storageUsed  Int      @default(0) // bytes
   storageQuota Int      @default(1073741824) // 1GB default, premium 10GB
+  // Linked Yandex Music account (token never sent to the client)
+  yandexMusicToken String?
+  yandexMusicUid   String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 

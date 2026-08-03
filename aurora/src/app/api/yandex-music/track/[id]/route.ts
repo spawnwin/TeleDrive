@@ -19,8 +19,8 @@ export const GET = withJsonApi(async function GET(
   const { id } = await params
 
   // Resolve a direct mp3 URL (full track when token is configured, else preview).
-  const directUrl = await getYandexTrackStreamUrl(id)
-  if (!directUrl) {
+  const stream = await getYandexTrackStreamUrl(id, me.id)
+  if (!stream?.url) {
     return NextResponse.json(
       { error: 'Не удалось получить ссылку на трек (возможно, нужен токен Яндекс Музыки)' },
       { status: 502 },
@@ -28,7 +28,7 @@ export const GET = withJsonApi(async function GET(
   }
 
   // Download the mp3.
-  const audioRes = await fetch(directUrl)
+  const audioRes = await fetch(stream.url)
   if (!audioRes.ok) {
     return NextResponse.json(
       { error: `Не удалось скачать трек (HTTP ${audioRes.status})` },

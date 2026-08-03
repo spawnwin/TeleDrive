@@ -34,6 +34,7 @@ import {
   LogOut,
   EllipsisVertical,
   X,
+  Music2,
 } from 'lucide-react'
 import { Avatar } from './avatar'
 import { Button } from '@/components/ui/button'
@@ -106,21 +107,6 @@ import { AvatarCropDialog } from './avatar-crop-dialog'
 import { ChatWallpaperDialog } from './chat-wallpaper-dialog'
 import { CreatorPremiumDialog } from '../shorts/creator-premium-dialog'
 
-interface SettingsDialogProps {
-  open: boolean
-  onOpenChange: (v: boolean) => void
-  onOpenPremium?: () => void
-  onOpenCoins?: () => void
-  /** Open the current user's public profile wall. */
-  onOpenMyProfile?: () => void
-}
-
-const COLOR_OPTIONS = [
-  '#3390ec', '#0ea5e9', '#10b981', '#eab308',
-  '#f97316', '#ef4444', '#ec4899', '#8b5cf6',
-  '#06b6d4', '#14b8a6', '#f43f5e', '#64748b',
-]
-
 type SettingsPage =
   | 'main'
   | 'account'
@@ -133,6 +119,28 @@ type SettingsPage =
   | 'premium'
   | 'data'
   | 'bots'
+  | 'yandex'
+
+interface SettingsDialogProps {
+  open: boolean
+  onOpenChange: (v: boolean) => void
+  onOpenPremium?: () => void
+  onOpenCoins?: () => void
+  /** Open the current user's public profile wall. */
+  onOpenMyProfile?: () => void
+  /** Open directly on a nested settings page (e.g. yandex). */
+  initialPage?: SettingsPage
+}
+
+const COLOR_OPTIONS = [
+  '#3390ec', '#0ea5e9', '#10b981', '#eab308',
+  '#f97316', '#ef4444', '#ec4899', '#8b5cf6',
+  '#06b6d4', '#14b8a6', '#f43f5e', '#64748b',
+]
+
+/** Same client_id as ym-api / unofficial Yandex Music clients. */
+const YANDEX_OAUTH_URL =
+  'https://oauth.yandex.ru/authorize?response_type=token&client_id=23cabbbdc6cd418abb4b39c32c41195d'
 
 /** Telegram-style menu row: colored icon square, label, hint, chevron. */
 function MenuRow({
@@ -343,7 +351,14 @@ function SoundPickerList({
   )
 }
 
-export function SettingsDialog({ open, onOpenChange, onOpenPremium, onOpenCoins, onOpenMyProfile }: SettingsDialogProps) {
+export function SettingsDialog({
+  open,
+  onOpenChange,
+  onOpenPremium,
+  onOpenCoins,
+  onOpenMyProfile,
+  initialPage = 'main',
+}: SettingsDialogProps) {
   const { t, lang, setLang } = useI18n()
   const router = useRouter()
   const {
@@ -377,13 +392,18 @@ export function SettingsDialog({ open, onOpenChange, onOpenPremium, onOpenCoins,
   const [messagePresetId, setMessagePresetId] = useState('note')
   const [callPresetId, setCallPresetId] = useState('ringtone-marimba')
   const [showNotificationPreview, setShowNotificationPreview] = useState(true)
+  const [yandexToken, setYandexToken] = useState('')
+  const [yandexConnected, setYandexConnected] = useState(!!currentUser?.yandexMusicConnected)
+  const [yandexUid, setYandexUid] = useState<string | null>(null)
+  const [yandexBusy, setYandexBusy] = useState(false)
+  const [yandexError, setYandexError] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const messageSoundInputRef = useRef<HTMLInputElement>(null)
   const callSoundInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     if (open) {
-      setPage('main')
+      setPage(initialPage || 'main')
       setName(currentUser?.name || '')
       setBio(currentUser?.bio || '')
       setAvatarColor(currentUser?.avatarColor || '#3390ec')
@@ -394,9 +414,20 @@ export function SettingsDialog({ open, onOpenChange, onOpenPremium, onOpenCoins,
       setMessagePresetId(loadSoundPresetId('message'))
       setCallPresetId(loadSoundPresetId('call'))
       setShowNotificationPreview(loadShowNotificationPreview())
+      setYandexToken('')
+      setYandexError(null)
+      setYandexConnected(!!currentUser?.yandexMusicConnected)
+      setYandexUid(null)
       void syncShowPreviewToServiceWorker()
+      fetch('/api/yandex-music/connect')
+        .then((r) => r.json().catch(() => ({})))
+        .then((d) => {
+          setYandexConnected(!!d.connected)
+          setYandexUid(typeof d.uid === 'string' ? d.uid : null)
+        })
+        .catch(() => {})
     }
-  }, [open, currentUser])
+  }, [open, currentUser, initialPage])
 
   const handleAvatarPick = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -662,6 +693,7 @@ export function SettingsDialog({ open, onOpenChange, onOpenPremium, onOpenCoins,
     premium: t('settings.premiumSection'),
     data: t('settings.data'),
     bots: t('settings.bots'),
+    yandex: t('music.settingsTitle'),
   }
 
   const currentLangLabel = languages.find((l) => l.code === lang)?.label
@@ -891,6 +923,14 @@ export function SettingsDialog({ open, onOpenChange, onOpenPremium, onOpenCoins,
                     label={t('settings.premiumSection')}
                     hint={t('settings.premiumSectionHint')}
                     onClick={() => setPage('premium')}
+                  />
+                  <MenuRow
+                    icon={<Music2 className="h-5 w-5" />}
+                    color="#fc3f1d"
+                    label={t('music.settingsTitle')}
+                    hint={t('music.settingsHint')}
+                    value={yandexConnected ? t('music.connected') : undefined}
+                    onClick={() => setPage('yandex')}
                   />
                   <MenuRow
                     icon={<Database className="h-5 w-5" />}
@@ -1306,6 +1346,130 @@ export function SettingsDialog({ open, onOpenChange, onOpenPremium, onOpenCoins,
             {page === 'data' && <StorageManager />}
 
             {page === 'bots' && <BotManager />}
+
+            {page === 'yandex' && (
+              <div className="space-y-5">
+                <div className="rounded-2xl bg-[var(--tg-secondary-bg)] p-4 space-y-3">
+                  <div className="flex items-start gap-3">
+                    <div className="w-11 h-11 rounded-xl bg-[#ffdb4d]/15 flex items-center justify-center shrink-0">
+                      <Music2 className="w-5 h-5 text-[#c9a227]" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-[15px] font-semibold text-[var(--tg-text)]">{t('music.settingsTitle')}</p>
+                      <p className="text-[13px] text-[var(--tg-hint)] mt-0.5 leading-snug">
+                        {t('music.settingsIntro')}
+                      </p>
+                    </div>
+                  </div>
+                  {yandexConnected ? (
+                    <div className="space-y-3 pt-1">
+                      <div className="flex items-center gap-2 text-[13px] text-emerald-500">
+                        <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                        {t('music.connected')}
+                        {yandexUid ? <span className="text-[var(--tg-hint)]">· uid {yandexUid}</span> : null}
+                      </div>
+                      <button
+                        type="button"
+                        disabled={yandexBusy}
+                        onClick={async () => {
+                          setYandexBusy(true)
+                          setYandexError(null)
+                          try {
+                            const res = await fetch('/api/yandex-music/connect', {
+                              method: 'DELETE',
+                              credentials: 'include',
+                            })
+                            if (!res.ok) throw new Error('fail')
+                            setYandexConnected(false)
+                            setYandexUid(null)
+                            setYandexToken('')
+                            if (currentUser) {
+                              setCurrentUser({ ...currentUser, yandexMusicConnected: false })
+                            }
+                            toast.success(t('music.disconnectSuccess'))
+                          } catch {
+                            setYandexError(t('music.connectError'))
+                          } finally {
+                            setYandexBusy(false)
+                          }
+                        }}
+                        className="w-full h-11 rounded-xl border border-red-500/30 text-red-500 text-[14px] font-medium hover:bg-red-500/10 transition-colors disabled:opacity-50"
+                      >
+                        {t('music.disconnectBtn')}
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="space-y-3 pt-1">
+                      <p className="text-[13px] text-[var(--tg-hint)] leading-snug">
+                        {t('music.tokenHowTo')}
+                      </p>
+                      <a
+                        href={YANDEX_OAUTH_URL}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex text-[13px] font-medium text-[var(--tg-button)] hover:underline"
+                      >
+                        {t('music.tokenOpen')}
+                      </a>
+                      <div className="space-y-1.5">
+                        <Label className="text-[13px] text-[var(--tg-hint)]">{t('music.tokenLabel')}</Label>
+                        <input
+                          type="password"
+                          value={yandexToken}
+                          onChange={(e) => setYandexToken(e.target.value)}
+                          placeholder={t('music.tokenPlaceholder')}
+                          autoComplete="off"
+                          className="w-full h-11 px-3 rounded-xl bg-[var(--tg-bg)] border border-[var(--tg-separator)] text-[14px] text-[var(--tg-text)] placeholder:text-[var(--tg-hint)] outline-none focus:border-[var(--tg-button)]"
+                        />
+                      </div>
+                      {yandexError && (
+                        <p className="text-[13px] text-red-500">{yandexError}</p>
+                      )}
+                      <button
+                        type="button"
+                        disabled={yandexBusy || !yandexToken.trim()}
+                        onClick={async () => {
+                          setYandexBusy(true)
+                          setYandexError(null)
+                          try {
+                            const res = await fetch('/api/yandex-music/connect', {
+                              method: 'POST',
+                              credentials: 'include',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ token: yandexToken.trim() }),
+                            })
+                            const data = await res.json().catch(() => ({}))
+                            if (!res.ok) {
+                              setYandexError(
+                                typeof data.error === 'string' ? data.error : t('music.connectError'),
+                              )
+                              return
+                            }
+                            setYandexConnected(true)
+                            setYandexUid(typeof data.uid === 'string' ? data.uid : null)
+                            setYandexToken('')
+                            if (currentUser) {
+                              setCurrentUser({ ...currentUser, yandexMusicConnected: true })
+                            }
+                            toast.success(t('music.connectSuccess'))
+                          } catch {
+                            setYandexError(t('music.connectError'))
+                          } finally {
+                            setYandexBusy(false)
+                          }
+                        }}
+                        className="w-full h-11 rounded-xl bg-[#ffdb4d] text-[#1a1a1a] text-[14px] font-semibold hover:brightness-95 transition-all disabled:opacity-50"
+                      >
+                        {yandexBusy ? '…' : t('music.connectBtn')}
+                      </button>
+                    </div>
+                  )}
+                </div>
+                <p className="text-[12px] text-[var(--tg-hint)] leading-relaxed px-1">
+                  {t('music.settingsHint')}
+                </p>
+              </div>
+            )}
           </motion.div>
         </div>
       </DialogContent>

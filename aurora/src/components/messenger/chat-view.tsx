@@ -3234,6 +3234,11 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
         yandexOnly
         title={t('composer.sendMusic')}
         onPickYandex={sendMusicTrack}
+        onOpenYandexSettings={() => {
+          window.dispatchEvent(
+            new CustomEvent('aurora:open-settings', { detail: { page: 'yandex' } }),
+          )
+        }}
       />
 
       <ChatWallpaperDialog

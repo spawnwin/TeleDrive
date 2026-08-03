@@ -5,6 +5,8 @@ import { getYandexTrackStreamUrl } from '@/lib/yandex-music'
 /**
  * Proxy a Yandex Music track as audio/mpeg without saving it to disk.
  * Supports Range so the in-chat player can seek.
+ * Uses the listener's linked Yandex token when available (full track);
+ * otherwise falls back to env token or anonymous preview (~30s).
  */
 export async function GET(
   req: NextRequest,
@@ -18,8 +20,8 @@ export async function GET(
     return NextResponse.json({ error: 'Invalid track id' }, { status: 400 })
   }
 
-  const directUrl = await getYandexTrackStreamUrl(id)
-  if (!directUrl) {
+  const stream = await getYandexTrackStreamUrl(id, me.id)
+  if (!stream?.url) {
     return NextResponse.json(
       { error: 'Не удалось получить ссылку на трек' },
       { status: 502 },
@@ -35,7 +37,7 @@ export async function GET(
 
   let upstream: Response
   try {
-    upstream = await fetch(directUrl, { headers: upstreamHeaders })
+    upstream = await fetch(stream.url, { headers: upstreamHeaders })
   } catch (e) {
     console.error('[yandex-music/stream] fetch failed', e)
     return NextResponse.json({ error: 'Stream fetch failed' }, { status: 502 })
@@ -53,6 +55,7 @@ export async function GET(
   headers.set('Accept-Ranges', 'bytes')
   headers.set('Cache-Control', 'private, max-age=300')
   headers.set('X-Content-Type-Options', 'nosniff')
+  if (stream.preview) headers.set('X-Aurora-Preview', '1')
   const len = upstream.headers.get('content-length')
   if (len) headers.set('Content-Length', len)
   const cr = upstream.headers.get('content-range')

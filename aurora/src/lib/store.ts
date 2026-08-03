@@ -65,6 +65,8 @@ export interface User {
   storageUsed?: number
   storageQuota?: number
   isBot?: boolean
+  /** Linked Yandex Music account (token never exposed to the client). */
+  yandexMusicConnected?: boolean
 }
 
 export interface ChatListItem {
