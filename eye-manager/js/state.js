@@ -340,7 +340,8 @@ window.EYE_STATE = (() => {
     ensureClubExtras(me);
     const f = me.facilities || {};
     const levels = (f.stadium || 1) + (f.training || 1) + (f.youth || 1) + (f.medical || 1) + (f.scout || 1);
-    return levels * 7500;
+    const rate = me.customClub ? 4200 : 6500;
+    return levels * rate;
   }
 
   function weeklyTvIncome(me = club()) {
@@ -352,7 +353,9 @@ window.EYE_STATE = (() => {
     const played = row?.played || 0;
     const pts = row?.pts || 0;
     const formBoost = played ? 0.85 + Math.min(0.45, (pts / Math.max(1, played * 3)) * 0.6) : 1;
-    return Math.round(base * 2.4 * formBoost * ((me.reputation || 70) / 78));
+    const customBoost = me.customClub ? 2.1 : 1;
+    const lowRepBoost = (me.reputation || 70) < 65 ? 1.35 : 1;
+    return Math.round(base * 4.2 * formBoost * ((me.reputation || 70) / 78) * customBoost * lowRepBoost);
   }
 
   function matchGateIncome(me, isHome) {
@@ -682,10 +685,10 @@ window.EYE_STATE = (() => {
     const clubObj = me || club();
     if (!clubObj) return null;
     const tiers = [
-      { id: 'local', name: 'Городской банк', base: 22000 },
-      { id: 'region', name: 'Регион Спорт', base: 52000 },
-      { id: 'nation', name: 'Национальный бренд', base: 110000 },
-      { id: 'global', name: 'EYE Global', base: 260000 }
+      { id: 'local', name: 'Городской банк', base: 38000 },
+      { id: 'region', name: 'Регион Спорт', base: 72000 },
+      { id: 'nation', name: 'Национальный бренд', base: 130000 },
+      { id: 'global', name: 'EYE Global', base: 280000 }
     ];
     const rep = clubObj.reputation || 70;
     const stadium = clubObj.facilities?.stadium || 1;
@@ -693,14 +696,16 @@ window.EYE_STATE = (() => {
     if (rep >= 78 || stadium >= 3) idx = 1;
     if (rep >= 84 || stadium >= 4) idx = 2;
     if (rep >= 90 || stadium >= 5) idx = 3;
+    if (clubObj.customClub && idx === 0) idx = 0; // keep local but higher base above
     const t = tiers[idx];
     // Debt-stressed clubs get worse sponsor terms
     const stress = Math.max(0, -(clubObj.budget || 0));
     const stressCut = stress > 0 ? Math.max(0.72, 1 - Math.min(0.28, stress / Math.max(1, creditLimit(clubObj)))) : 1;
+    const customBoost = clubObj.customClub ? 1.25 : 1;
     state.sponsor = {
       id: t.id,
       name: t.name,
-      weekly: Math.round(t.base * (0.85 + stadium * 0.1) * (rep / 82) * stressCut)
+      weekly: Math.round(t.base * (0.85 + stadium * 0.1) * (rep / 82) * stressCut * customBoost)
     };
     return state.sponsor;
   }
@@ -710,7 +715,13 @@ window.EYE_STATE = (() => {
     c.staff = c.staff || { coach: 1, physio: 1, scoutDir: 1 };
     c.youth = c.youth || [];
     c.facilities = c.facilities || { stadium: 1, training: 1, youth: 1, medical: 1, scout: 1 };
-    (c.squad || []).forEach(p => D().ensureTraits(p));
+    (c.squad || []).forEach(p => {
+      D().ensureTraits(p);
+      // Heal broken starter wage bills (value-based wages were ~100× too high)
+      if (c.customClub && !p.real && (p.ovr || 0) <= 70 && (p.wage || 0) > 14000) {
+        p.wage = Math.max(450, Math.round(700 + Math.max(0, p.ovr - 48) * 260 + (p.age < 21 ? -100 : 150)));
+      }
+    });
     (c.youth || []).forEach(p => D().ensureTraits(p));
   }
 

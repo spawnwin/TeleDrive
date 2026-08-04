@@ -248,7 +248,9 @@ window.EYE_DATA = (() => {
       const p = genPlayer(pos, bias, age, clubId);
       p.pot = Math.min(88, p.ovr + rnd(8, 22));
       p.contract = rnd(2, 4);
-      p.wage = Math.max(800, Math.round(p.value * 0.012));
+      // Скромный ФОТ для старта (value завышен для рынка — не тянуть зарплату от него)
+      p.wage = Math.max(450, Math.round(700 + Math.max(0, p.ovr - 48) * 240 + (p.age < 21 ? -100 : 150)));
+      p.value = Math.round(Math.min(p.value, valueOf(p.ovr, Math.min(p.pot, p.ovr + 8), p.age) * 0.55));
       return p;
     });
   }
@@ -277,7 +279,7 @@ window.EYE_DATA = (() => {
       style: style || 'balance',
       squad,
       lineup: null,
-      budget: budget ?? 1200000,
+      budget: budget ?? 2800000,
       reputation: reputation ?? 58,
       facilities: { stadium: 1, training: 1, youth: 1, medical: 1, scout: 1 },
       staff: { coach: 1, physio: 1, scoutDir: 1 },
