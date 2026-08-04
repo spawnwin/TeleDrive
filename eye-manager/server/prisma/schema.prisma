@@ -1,0 +1,63 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String   @id
+  login         String   @unique
+  name          String   @default("")
+  salt          String   @default("")
+  hash          String   @default("")
+  createdAt     BigInt
+  role          String   @default("user")
+  isBot         Boolean  @default(false)
+  level         Int      @default(1)
+  xp            Int      @default(0)
+  cupsPlayed    Int      @default(0)
+  cupsWon       Int      @default(0)
+  teamBound     Boolean  @default(false)
+  teamCreatedAt BigInt?
+  clubName      String?
+  regIp         String?
+  strength      Int?
+  cupEventsJson String   @default("[]")
+  sessions      Session[]
+  career        Career?
+}
+
+model Session {
+  token     String @id
+  userId    String
+  user      User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt BigInt
+  lastAt    BigInt
+
+  @@index([userId])
+}
+
+model Career {
+  userId    String @id
+  user      User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  manager   String?
+  updatedAt BigInt
+  stateJson String
+}
+
+model Cup {
+  id        String  @id
+  status    String  @default("open")
+  bracketId String?
+  archived  Boolean @default(false)
+  updatedAt BigInt
+  dataJson  String
+}
+
+model Meta {
+  key       String @id
+  valueJson String
+}

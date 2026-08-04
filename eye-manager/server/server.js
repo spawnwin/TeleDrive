@@ -7,31 +7,15 @@ const path = require('path');
 const crypto = require('crypto');
 const { URL } = require('url');
 const { createCupsModule } = require('./cups');
+const db = require('./db');
 
 const PORT = Number(process.env.EYE_PORT || 9140);
 const ROOT = path.resolve(__dirname, '..');
 const DATA_DIR = process.env.EYE_DATA || path.join(__dirname, 'data');
-const USERS_FILE = path.join(DATA_DIR, 'users.json');
-const SESSIONS_FILE = path.join(DATA_DIR, 'sessions.json');
-const SAVES = path.join(DATA_DIR, 'saves');
 const ADMIN_LOGIN = normalizeLogin(process.env.EYE_ADMIN_LOGIN || 'admin');
 const ADMIN_PASS = String(process.env.EYE_ADMIN_PASSWORD || 'eyeadmin');
 
-fs.mkdirSync(SAVES, { recursive: true });
 fs.mkdirSync(DATA_DIR, { recursive: true });
-
-function loadJson(file, fallback) {
-  try {
-    if (!fs.existsSync(file)) return fallback;
-    return JSON.parse(fs.readFileSync(file, 'utf8'));
-  } catch {
-    return fallback;
-  }
-}
-
-function saveJson(file, data) {
-  fs.writeFileSync(file, JSON.stringify(data, null, 2));
-}
 
 function hashPassword(password, salt) {
   const s = salt || crypto.randomBytes(16).toString('hex');
@@ -49,19 +33,15 @@ function verifyPassword(password, salt, hash) {
 }
 
 function usersDb() {
-  const db = loadJson(USERS_FILE, { users: {} });
-  if (!db.users) db.users = {};
-  return db;
+  return db.usersDb();
 }
 
-function saveUsers(db) {
-  saveJson(USERS_FILE, db);
+function saveUsers(users) {
+  db.saveUsers(users);
 }
 
 function sessionsDb() {
-  const db = loadJson(SESSIONS_FILE, { sessions: {} });
-  if (!db.sessions) db.sessions = {};
-  return db;
+  return db.sessionsDb();
 }
 
 function publicUser(u) {
@@ -78,8 +58,8 @@ function clientIp(req) {
   return String(req.socket?.remoteAddress || '').slice(0, 64);
 }
 
-function hasCareerFile(userId) {
-  return fs.existsSync(savePathFor(userId));
+function hasCareer(userId) {
+  return db.hasCareer(userId);
 }
 
 function markTeamBound(user, clubName) {
@@ -88,38 +68,32 @@ function markTeamBound(user, clubName) {
   if (clubName) user.clubName = String(clubName).slice(0, 40);
 }
 
-function registrationBlocked(db, ip) {
+function registrationBlocked(users, ip) {
   const local = !ip || ip === '127.0.0.1' || ip === '::1' || ip === ':ffff:127.0.0.1';
-  const humans = Object.values(db.users).filter((u) => !u.isBot && u.role !== 'bot');
+  const humans = Object.values(users.users).filter((u) => !u.isBot && u.role !== 'bot');
   const sameIp = humans.filter((u) => u.regIp && u.regIp === ip);
   if (!sameIp.length) return null;
-  const withTeam = sameIp.find((u) => u.teamBound || hasCareerFile(u.id));
+  const withTeam = sameIp.find((u) => u.teamBound || hasCareer(u.id));
   if (withTeam) {
     return 'Мультиаккаунты запрещены: с этой сети уже есть аккаунт с командой. Войдите в существующий.';
   }
-  // Outside localhost — one registration per IP even before team create
   if (!local && sameIp.length >= 1) {
     return 'С этой сети аккаунт уже создан. Перерегистрация запрещена правилами.';
   }
   return null;
 }
 
-const cups = createCupsModule({
-  dataDir: DATA_DIR,
-  usersDb,
-  saveUsers,
-  publicUser
-});
+let cups;
 
 function createSession(userId) {
-  const db = sessionsDb();
+  const sess = sessionsDb();
   const token = crypto.randomBytes(24).toString('hex');
-  db.sessions[token] = { userId, createdAt: Date.now(), lastAt: Date.now() };
+  sess.sessions[token] = { userId, createdAt: Date.now(), lastAt: Date.now() };
   const cut = Date.now() - 30 * 864e5;
-  Object.keys(db.sessions).forEach((t) => {
-    if ((db.sessions[t].lastAt || 0) < cut) delete db.sessions[t];
+  Object.keys(sess.sessions).forEach((t) => {
+    if ((sess.sessions[t].lastAt || 0) < cut) delete sess.sessions[t];
   });
-  saveJson(SESSIONS_FILE, db);
+  db.saveSessions(sess);
   return token;
 }
 
@@ -128,11 +102,11 @@ function authUser(req) {
   const m = h.match(/^Bearer\s+(.+)$/i);
   const token = m ? m[1].trim() : (req.headers['x-eye-token'] || '').trim();
   if (!token) return null;
-  const db = sessionsDb();
-  const s = db.sessions[token];
+  const sess = sessionsDb();
+  const s = sess.sessions[token];
   if (!s) return null;
   s.lastAt = Date.now();
-  saveJson(SESSIONS_FILE, db);
+  db.saveSessions(sess);
   const u = usersDb().users[s.userId];
   if (!u) return null;
   cups.ensureUserProgress(u);
@@ -158,13 +132,9 @@ function requireAdmin(req, res) {
   return auth;
 }
 
-function savePathFor(userId) {
-  return path.join(SAVES, `user_${userId}.json`);
-}
-
 function ensureAdminUser() {
-  const db = usersDb();
-  let admin = Object.values(db.users).find((u) => u.login === ADMIN_LOGIN);
+  const users = usersDb();
+  let admin = Object.values(users.users).find((u) => u.login === ADMIN_LOGIN);
   if (!admin) {
     const id = crypto.randomBytes(8).toString('hex');
     const { salt, hash } = hashPassword(ADMIN_PASS);
@@ -182,13 +152,13 @@ function ensureAdminUser() {
       cupsPlayed: 0,
       cupsWon: 0
     };
-    db.users[id] = admin;
-    saveUsers(db);
+    users.users[id] = admin;
+    saveUsers(users);
     console.log(`[EYE] admin created · login=${ADMIN_LOGIN}`);
   } else {
     admin.role = 'admin';
     cups.ensureUserProgress(admin);
-    saveUsers(db);
+    saveUsers(users);
   }
 }
 
@@ -246,13 +216,10 @@ function readBody(req) {
 }
 
 function persistUser(user) {
-  const db = usersDb();
-  db.users[user.id] = user;
-  saveUsers(db);
+  const users = usersDb();
+  users.users[user.id] = user;
+  saveUsers(users);
 }
-
-ensureAdminUser();
-cups.ensureBotPool();
 
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
@@ -267,6 +234,7 @@ const server = http.createServer(async (req, res) => {
       ok: true,
       service: 'eye-manager',
       ts: Date.now(),
+      db: 'sqlite',
       cups: cups.stats()
     });
   }
@@ -317,8 +285,8 @@ const server = http.createServer(async (req, res) => {
       cups.ensureUserProgress(user);
       persistUser(user);
       const token = createSession(user.id);
-      const hasCareer = hasCareerFile(user.id);
-      if (hasCareer && !user.teamBound) {
+      const careerOk = hasCareer(user.id);
+      if (careerOk && !user.teamBound) {
         markTeamBound(user);
         persistUser(user);
       }
@@ -326,8 +294,8 @@ const server = http.createServer(async (req, res) => {
         ok: true,
         token,
         user: cups.enrichPublic(user),
-        hasCareer,
-        teamBound: !!(user.teamBound || hasCareer)
+        hasCareer: careerOk,
+        teamBound: !!(user.teamBound || careerOk)
       });
     } catch (e) {
       return json(res, 500, { error: String(e.message || e) });
@@ -337,9 +305,9 @@ const server = http.createServer(async (req, res) => {
   if (pathname === '/api/logout' && req.method === 'POST') {
     const auth = authUser(req);
     if (auth) {
-      const db = sessionsDb();
-      delete db.sessions[auth.token];
-      saveJson(SESSIONS_FILE, db);
+      const sess = sessionsDb();
+      delete sess.sessions[auth.token];
+      db.saveSessions(sess);
     }
     return json(res, 200, { ok: true });
   }
@@ -347,8 +315,8 @@ const server = http.createServer(async (req, res) => {
   if (pathname === '/api/me' && req.method === 'GET') {
     const auth = requireAuth(req, res);
     if (!auth) return;
-    const hasCareer = hasCareerFile(auth.user.id);
-    if (hasCareer && !auth.user.teamBound) {
+    const careerOk = hasCareer(auth.user.id);
+    if (careerOk && !auth.user.teamBound) {
       markTeamBound(auth.user);
       persistUser(auth.user);
     } else {
@@ -357,8 +325,8 @@ const server = http.createServer(async (req, res) => {
     return json(res, 200, {
       ok: true,
       user: cups.enrichPublic(auth.user),
-      hasCareer,
-      teamBound: !!(auth.user.teamBound || hasCareer),
+      hasCareer: careerOk,
+      teamBound: !!(auth.user.teamBound || careerOk),
       bracket: cups.bracketForLevel(auth.user.level || 1),
       liveCup: cups.findMyLiveCup(auth.user.id),
       cupEvents: cups.listCupEvents(auth.user.id, { limit: 10 }),
@@ -369,9 +337,8 @@ const server = http.createServer(async (req, res) => {
   if (pathname === '/api/career' && req.method === 'GET') {
     const auth = requireAuth(req, res);
     if (!auth) return;
-    const file = savePathFor(auth.user.id);
-    if (!fs.existsSync(file)) return json(res, 404, { error: 'Нет сохранения' });
-    const payload = JSON.parse(fs.readFileSync(file, 'utf8'));
+    const payload = db.getCareer(auth.user.id);
+    if (!payload?.state) return json(res, 404, { error: 'Нет карьеры' });
     return json(res, 200, { ok: true, ...payload });
   }
 
@@ -382,7 +349,7 @@ const server = http.createServer(async (req, res) => {
       const body = JSON.parse((await readBody(req)).toString('utf8'));
       if (!body || !body.state) return json(res, 400, { error: 'state required' });
       const mode = body.mode === 'create' ? 'create' : 'save';
-      const exists = hasCareerFile(auth.user.id);
+      const exists = hasCareer(auth.user.id);
       const bound = !!(auth.user.teamBound || exists);
 
       if (mode === 'create' && bound) {
@@ -393,17 +360,15 @@ const server = http.createServer(async (req, res) => {
       }
 
       if (exists) {
-        try {
-          const prev = JSON.parse(fs.readFileSync(savePathFor(auth.user.id), 'utf8'));
-          const oldClub = prev.state?.clubId;
-          const newClub = body.state?.clubId;
-          if (oldClub && newClub && oldClub !== newClub) {
-            return json(res, 403, {
-              error: 'Нельзя заменить существующую команду. Пересоздание запрещено правилами.',
-              code: 'team_bound'
-            });
-          }
-        } catch { /* allow write if corrupt */ }
+        const prev = db.getCareer(auth.user.id);
+        const oldClub = prev?.state?.clubId;
+        const newClub = body.state?.clubId;
+        if (oldClub && newClub && oldClub !== newClub) {
+          return json(res, 403, {
+            error: 'Нельзя заменить существующую команду. Пересоздание запрещено правилами.',
+            code: 'team_bound'
+          });
+        }
       }
 
       if (mode === 'create' || (!exists && !auth.user.teamBound)) {
@@ -422,7 +387,7 @@ const server = http.createServer(async (req, res) => {
         updatedAt: Date.now(),
         state: body.state
       };
-      fs.writeFileSync(savePathFor(auth.user.id), JSON.stringify(payload));
+      db.setCareer(auth.user.id, payload);
       return json(res, 200, {
         ok: true,
         id: auth.user.id,
@@ -440,50 +405,34 @@ const server = http.createServer(async (req, res) => {
     try {
       const body = JSON.parse((await readBody(req)).toString('utf8') || '{}');
       const targetId = body.userId || auth.user.id;
-      const db = usersDb();
-      const u = db.users[targetId];
+      const users = usersDb();
+      const u = users.users[targetId];
       if (!u) return json(res, 404, { error: 'Нет пользователя' });
-      const file = savePathFor(targetId);
-      if (fs.existsSync(file)) fs.unlinkSync(file);
+      db.deleteCareer(targetId);
       u.teamBound = false;
       u.teamCreatedAt = null;
-      saveUsers(db);
+      saveUsers(users);
       return json(res, 200, { ok: true });
     } catch (e) {
       return json(res, 500, { error: String(e.message || e) });
     }
   }
 
-  // legacy anonymous save
+  // legacy endpoints — career only via auth + DB
   if (pathname === '/api/save' && req.method === 'POST') {
-    const auth = authUser(req);
+    const auth = requireAuth(req, res);
+    if (!auth) return;
     try {
-      const raw = await readBody(req);
-      const body = JSON.parse(raw.toString('utf8'));
+      const body = JSON.parse((await readBody(req)).toString('utf8'));
       if (!body || !body.state) return json(res, 400, { error: 'state required' });
-      if (auth) {
-        const payload = {
-          id: auth.user.id,
-          manager: body.manager || body.state.managerName || auth.user.name,
-          userId: auth.user.id,
-          updatedAt: Date.now(),
-          state: body.state
-        };
-        fs.writeFileSync(savePathFor(auth.user.id), JSON.stringify(payload));
-        return json(res, 200, { ok: true, id: auth.user.id });
-      }
-      const id = crypto.createHash('sha1')
-        .update(String(body.manager || body.state.managerName || 'coach') + '|' + (body.state.clubId || ''))
-        .digest('hex')
-        .slice(0, 16);
-      const payload = {
-        id,
-        manager: body.manager || body.state.managerName,
+      db.setCareer(auth.user.id, {
+        id: auth.user.id,
+        manager: body.manager || body.state.managerName || auth.user.name,
+        userId: auth.user.id,
         updatedAt: Date.now(),
         state: body.state
-      };
-      fs.writeFileSync(path.join(SAVES, id + '.json'), JSON.stringify(payload));
-      return json(res, 200, { ok: true, id });
+      });
+      return json(res, 200, { ok: true, id: auth.user.id });
     } catch (e) {
       return json(res, 500, { error: String(e.message || e) });
     }
@@ -701,9 +650,42 @@ const server = http.createServer(async (req, res) => {
   send(res, 200, fs.readFileSync(file), { 'Content-Type': type, 'Cache-Control': cache });
 });
 
-server.listen(PORT, '0.0.0.0', () => {
-  console.log(`[EYE] listening on http://0.0.0.0:${PORT}`);
-  console.log(`[EYE] root ${ROOT}`);
-  console.log(`[EYE] data ${DATA_DIR}`);
-  cups.startScheduler();
+async function main() {
+  await db.init();
+  cups = createCupsModule({
+    dataDir: DATA_DIR,
+    usersDb,
+    saveUsers,
+    publicUser,
+    store: {
+      loadCups: () => db.loadCups(),
+      saveCups: (x) => db.saveCups(x),
+      loadArchive: () => db.loadArchive(),
+      saveArchive: (x) => db.saveArchive(x),
+      readCareerClub: (userId) => db.readCareerClub(userId),
+      writeCareer: (userId, payload) => db.writeCareerPayload(userId, payload)
+    }
+  });
+  ensureAdminUser();
+  cups.ensureBotPool();
+
+  server.listen(PORT, '0.0.0.0', () => {
+    console.log(`[EYE] listening on http://0.0.0.0:${PORT}`);
+    console.log(`[EYE] root ${ROOT}`);
+    console.log(`[EYE] data ${DATA_DIR}`);
+    console.log(`[EYE] db ${db.DB_FILE}`);
+    cups.startScheduler();
+  });
+
+  const shutdown = async () => {
+    try { await db.disconnect(); } catch {}
+    process.exit(0);
+  };
+  process.on('SIGINT', shutdown);
+  process.on('SIGTERM', shutdown);
+}
+
+main().catch((err) => {
+  console.error('[EYE] fatal', err);
+  process.exit(1);
 });

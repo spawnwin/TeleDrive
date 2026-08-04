@@ -2,13 +2,20 @@
   "name": "eye-manager-server",
   "version": "1.0.0",
   "private": true,
-  "description": "EYE Football Manager — static + cloud saves",
+  "description": "EYE Football Manager — SQLite (Prisma) + online cups",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "test": "node --test test.js cups-test.js"
+    "test": "node --test test.js cups-test.js",
+    "db:generate": "prisma generate",
+    "db:push": "prisma db push"
   },
   "engines": {
     "node": ">=18"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.19.2",
+    "dotenv": "^16.6.1",
+    "prisma": "^6.19.2"
   }
 }

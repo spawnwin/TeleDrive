@@ -49,34 +49,13 @@ function bracketForLevel(level) {
   return LEVEL_BRACKETS.find((b) => level >= b.min && level <= b.max) || LEVEL_BRACKETS[0];
 }
 
-function createCupsModule({ dataDir, usersDb, saveUsers, publicUser }) {
+function createCupsModule({ dataDir, usersDb, saveUsers, publicUser, store }) {
   const CUPS_FILE = path.join(dataDir, 'cups.json');
   const ARCHIVE_FILE = path.join(dataDir, 'cups_archive.json');
   const TICK_MS = Number(process.env.EYE_CUP_TICK_MS || 5 * 60 * 1000);
   const OPEN_WINDOW_MS = Number(process.env.EYE_CUP_OPEN_MS || 5 * 60 * 1000);
   const LIVE_ROUND_MS = Number(process.env.EYE_CUP_LIVE_MS || 20 * 1000);
   const LIVE_POLL_MS = Math.min(5000, Math.max(1000, Math.floor(LIVE_ROUND_MS / 4)));
-
-  function loadCups() {
-    const db = load(CUPS_FILE, { cups: {}, meta: { lastTick: 0 } });
-    if (!db.cups) db.cups = {};
-    if (!db.meta) db.meta = { lastTick: 0 };
-    return db;
-  }
-
-  function saveCups(db) {
-    save(CUPS_FILE, db);
-  }
-
-  function loadArchive() {
-    const db = load(ARCHIVE_FILE, { entries: [] });
-    if (!Array.isArray(db.entries)) db.entries = [];
-    return db;
-  }
-
-  function saveArchive(db) {
-    save(ARCHIVE_FILE, db);
-  }
 
   function load(file, fallback) {
     try {
@@ -89,6 +68,40 @@ function createCupsModule({ dataDir, usersDb, saveUsers, publicUser }) {
 
   function save(file, data) {
     fs.writeFileSync(file, JSON.stringify(data, null, 2));
+  }
+
+  function loadCups() {
+    if (store?.loadCups) {
+      const db = store.loadCups();
+      if (!db.cups) db.cups = {};
+      if (!db.meta) db.meta = { lastTick: 0 };
+      return db;
+    }
+    const db = load(CUPS_FILE, { cups: {}, meta: { lastTick: 0 } });
+    if (!db.cups) db.cups = {};
+    if (!db.meta) db.meta = { lastTick: 0 };
+    return db;
+  }
+
+  function saveCups(db) {
+    if (store?.saveCups) return store.saveCups(db);
+    save(CUPS_FILE, db);
+  }
+
+  function loadArchive() {
+    if (store?.loadArchive) {
+      const db = store.loadArchive();
+      if (!Array.isArray(db.entries)) db.entries = [];
+      return db;
+    }
+    const db = load(ARCHIVE_FILE, { entries: [] });
+    if (!Array.isArray(db.entries)) db.entries = [];
+    return db;
+  }
+
+  function saveArchive(db) {
+    if (store?.saveArchive) return store.saveArchive(db);
+    save(ARCHIVE_FILE, db);
   }
 
   function ensureUserProgress(u) {
@@ -215,6 +228,7 @@ function createCupsModule({ dataDir, usersDb, saveUsers, publicUser }) {
 
   function readCareerClub(userId) {
     try {
+      if (store?.readCareerClub) return store.readCareerClub(userId);
       const saveFile = path.join(dataDir, 'saves', `user_${userId}.json`);
       if (!fs.existsSync(saveFile)) return null;
       const payload = JSON.parse(fs.readFileSync(saveFile, 'utf8'));
@@ -225,6 +239,13 @@ function createCupsModule({ dataDir, usersDb, saveUsers, publicUser }) {
     } catch {
       return null;
     }
+  }
+
+  function writeCareerClub(userId, payload) {
+    if (store?.writeCareer) return store.writeCareer(userId, payload);
+    const saveFile = path.join(dataDir, 'saves', `user_${userId}.json`);
+    fs.mkdirSync(path.dirname(saveFile), { recursive: true });
+    fs.writeFileSync(saveFile, JSON.stringify(payload, null, 2));
   }
 
   function xiStrengthFromClub(me) {
@@ -290,7 +311,7 @@ function createCupsModule({ dataDir, usersDb, saveUsers, publicUser }) {
   function applyCareerMoney(userId, amount, label, body) {
     const career = readCareerClub(userId);
     if (!career || !amount) return null;
-    const { payload, st, me, saveFile } = career;
+    const { payload, st, me } = career;
     me.budget = Math.round((me.budget || 0) + amount);
     st.ledger = Array.isArray(st.ledger) ? st.ledger : [];
     st.ledger.unshift({
@@ -313,7 +334,7 @@ function createCupsModule({ dataDir, usersDb, saveUsers, publicUser }) {
       week: st.week
     });
     if (st.inbox.length > 80) st.inbox.length = 80;
-    fs.writeFileSync(saveFile, JSON.stringify(payload, null, 2));
+    writeCareerClub(userId, payload);
     return amount;
   }
 

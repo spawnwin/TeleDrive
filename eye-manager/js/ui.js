@@ -536,7 +536,7 @@ window.EYE_UI = (() => {
     if (btnCont) {
       const canContinue = local || cloudHasCareer;
       btnCont.hidden = !canContinue;
-      btnCont.textContent = local ? 'В центр управления' : 'Загрузить карьеру';
+      btnCont.textContent = 'В центр управления';
     }
     const btnNew = $('#btn-new');
     const bound = teamAlreadyBound();
@@ -3180,8 +3180,6 @@ window.EYE_UI = (() => {
         toast(err.message || 'Не удалось сбросить');
       }
     });
-    $('#btn-save-cloud')?.addEventListener('click', () => cloudSave());
-
     $('#online-cups-tabs')?.addEventListener('click', (e) => {
       const tab = e.target.closest('[data-oc]');
       if (!tab) return;
@@ -3335,13 +3333,12 @@ window.EYE_UI = (() => {
 
   async function cloudSave(silent = false, opts = {}) {
     const st = S().get();
-    if (!st) return silent ? null : toast('Нет сохранения');
+    if (!st) return silent ? null : toast('Нет карьеры');
     if (!A().isLoggedIn()) return silent ? null : toast('Войдите в аккаунт');
     try {
       await A().saveCareer(st, opts);
       cloudHasCareer = true;
       if (A().getUser()) A().getUser().teamBound = true;
-      if (!silent) toast('Облако: сохранено');
       return true;
     } catch (err) {
       if (!silent) toast(err.message || 'Сервер недоступен');

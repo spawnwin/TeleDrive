@@ -20,17 +20,27 @@ if ! id "$SERVICE_USER" &>/dev/null; then
   useradd --system --home "$APP_DIR" --shell /usr/sbin/nologin "$SERVICE_USER" || true
 fi
 
-mkdir -p "$APP_DIR" "$APP_DIR/server/data/saves"
+mkdir -p "$APP_DIR" "$APP_DIR/server/data"
 # When already installing from inside APP_DIR, skip destructive rsync.
 if [[ "$SRC_DIR" != "$APP_DIR" ]]; then
   rsync -a --delete \
     --exclude 'server/data' \
     --exclude 'server/data-test' \
+    --exclude 'server/node_modules' \
     --exclude '.git' \
     "$SRC_DIR/" "$APP_DIR/"
 else
   echo "[EYE] source is APP_DIR — skip rsync"
 fi
+
+# Prisma SQLite
+cd "$APP_DIR/server"
+export DATABASE_URL="file:$APP_DIR/server/data/eye.db"
+echo "DATABASE_URL=\"file:$APP_DIR/server/data/eye.db\"" > .env
+npm install --omit=dev
+npx prisma generate
+npx prisma db push --skip-generate
+cd "$APP_DIR"
 
 chown -R "$SERVICE_USER":"$SERVICE_USER" "$APP_DIR"
 
@@ -45,6 +55,7 @@ User=$SERVICE_USER
 WorkingDirectory=$APP_DIR
 Environment=EYE_PORT=$PORT
 Environment=EYE_DATA=$APP_DIR/server/data
+Environment=DATABASE_URL=file:$APP_DIR/server/data/eye.db
 ExecStart=/usr/bin/node $APP_DIR/server/server.js
 Restart=on-failure
 RestartSec=3
