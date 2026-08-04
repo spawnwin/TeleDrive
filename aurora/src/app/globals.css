@@ -213,6 +213,10 @@ body[data-lightbox-open] [data-slot="sheet-content"] {
   padding-top: max(1.25rem, calc(env(safe-area-inset-top) + 0.5rem));
 }
 
+.aurora-feed-safe-top {
+  padding-top: max(0.85rem, calc(env(safe-area-inset-top) + 0.65rem));
+}
+
 .aurora-wrap-anywhere {
   overflow-wrap: anywhere;
   word-break: break-word;

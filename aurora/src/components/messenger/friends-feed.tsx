@@ -241,12 +241,12 @@ export function FriendsFeed({ onBack }: FriendsFeedProps) {
 
   return (
     <div className="aurora-feed flex h-full min-h-0 flex-col">
-      <header className="aurora-feed-header flex shrink-0 items-center gap-3 px-4 py-3.5 sm:px-5">
+      <header className="aurora-feed-header aurora-feed-safe-top relative z-20 flex shrink-0 items-center gap-3 px-4 pb-3.5 sm:px-5">
         {onBack && (
           <button
             type="button"
             onClick={onBack}
-            className="xl:hidden flex h-9 w-9 items-center justify-center rounded-xl text-[#8fa0b5] transition hover:bg-white/5 hover:text-white"
+            className="xl:hidden relative z-20 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-[#8fa0b5] transition hover:bg-white/5 hover:text-white"
             aria-label={t('misc.back')}
           >
             <ArrowLeft className="h-4 w-4" />
