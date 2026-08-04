@@ -849,7 +849,7 @@ const server = http.createServer(async (req, res) => {
 
   if (pathname.startsWith('/api/cups/') && req.method === 'GET') {
     const id = pathname.slice('/api/cups/'.length).split('/')[0];
-    if (!id || id === 'meta' || id === 'leaderboard') return json(res, 404, { error: 'Нет' });
+    if (!id || id === 'meta' || id === 'leaderboard' || id === 'events') return json(res, 404, { error: 'Нет' });
     const cup = (await cups.getCupAsync?.(id)) || cups.getCup(id);
     if (!cup) return json(res, 404, { error: 'Кубок не найден' });
     return json(res, 200, { ok: true, cup });
