@@ -18,12 +18,12 @@ window.EYE_WORLD = (() => {
   };
 
   const LEAGUES = [
-    { id:'epl', name:'Premier League', country:'Англия', tier:1, prize:45e6, currency:'€', short:'EPL' },
-    { id:'laliga', name:'La Liga', country:'Испания', tier:1, prize:38e6, currency:'€', short:'LAL' },
-    { id:'seriea', name:'Serie A', country:'Италия', tier:1, prize:32e6, currency:'€', short:'SEA' },
-    { id:'bundesliga', name:'Bundesliga', country:'Германия', tier:1, prize:30e6, currency:'€', short:'BUN' },
-    { id:'ligue1', name:'Ligue 1', country:'Франция', tier:1, prize:28e6, currency:'€', short:'LI1' },
-    { id:'rpl', name:'РПЛ', country:'Россия', tier:1, prize:12e6, currency:'₽', short:'RPL' }
+    { id:'epl', name:'Английская Премьер-лига', country:'Англия', tier:1, prize:45e6, short:'АПЛ' },
+    { id:'laliga', name:'Ла Лига', country:'Испания', tier:1, prize:38e6, short:'Ла Лига' },
+    { id:'seriea', name:'Серия А', country:'Италия', tier:1, prize:32e6, short:'Серия А' },
+    { id:'bundesliga', name:'Бундеслига', country:'Германия', tier:1, prize:30e6, short:'Бундес' },
+    { id:'ligue1', name:'Лига 1', country:'Франция', tier:1, prize:28e6, short:'Лига 1' },
+    { id:'rpl', name:'Российская Премьер-лига', country:'Россия', tier:1, prize:12e6, short:'РПЛ' }
   ];
 
   const CLUBS = [

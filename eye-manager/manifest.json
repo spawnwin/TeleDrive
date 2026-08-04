@@ -1,7 +1,7 @@
 {
-  "name": "EYE Football Manager",
+  "name": "EYE — Футбольный менеджер",
   "short_name": "EYE",
-  "description": "Футбольный менеджер в тёмном Liquid Glass стиле",
+  "description": "Футбольный менеджер: реальные лиги, трансферы, валюта ₽ $ €",
   "start_url": "./",
   "display": "standalone",
   "background_color": "#05070A",

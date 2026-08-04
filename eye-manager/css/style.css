@@ -236,7 +236,28 @@ input:focus, select:focus { border-color: rgba(94,234,212,.45); box-shadow: 0 0 
 }
 .club-chip strong { display: block; font-size: 15px; }
 .club-chip small, .top-stats { color: var(--muted); font-size: 12px; }
-.top-stats { display: flex; gap: 8px; align-items: center; }
+.top-stats { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
+.currency-switch {
+  display: inline-flex; gap: 2px; padding: 3px;
+  border-radius: 999px; background: rgba(255,255,255,.06);
+  border: 1px solid var(--line);
+}
+.currency-switch.large { width: 100%; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; padding: 0; border: 0; background: transparent; border-radius: 0; margin-top: 10px; }
+.cur-btn {
+  min-width: 34px; min-height: 28px; padding: 0 10px;
+  border-radius: 999px; font-size: 13px; font-weight: 700;
+  color: var(--dim);
+}
+.currency-switch.large .cur-btn {
+  min-height: 44px; border-radius: 14px;
+  background: var(--glass); border: 1px solid var(--line); color: var(--muted);
+}
+.cur-btn.active {
+  background: rgba(94,234,212,.18); color: var(--accent-2);
+  border: 1px solid rgba(94,234,212,.35);
+}
+.currency-panel { padding: 14px 16px; text-align: left; }
+.currency-panel strong { font-family: var(--display); display: block; margin-bottom: 4px; }
 .pill {
   padding: 4px 10px; border-radius: 999px;
   background: var(--accent-dim); color: var(--accent-2);

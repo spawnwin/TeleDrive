@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1" />
   <meta name="theme-color" content="#05070A" />
   <meta name="description" content="EYE — футбольный менеджер нового поколения. Тёмный Liquid Glass, карьера, тактика, трансферы." />
-  <title>EYE — Football Manager</title>
+  <title>EYE — Футбольный менеджер</title>
   <link rel="icon" href="assets/eye.svg" type="image/svg+xml" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -28,7 +28,7 @@
           <img src="assets/eye.svg" alt="" width="96" height="96" />
         </div>
         <h1 class="brand">EYE</h1>
-        <p class="brand-sub">Football Manager</p>
+        <p class="brand-sub">Футбольный менеджер</p>
         <div class="boot-track"><div class="boot-fill" id="boot-fill"></div></div>
       </div>
     </section>
@@ -46,7 +46,7 @@
         <button class="btn btn-primary btn-glow" id="btn-new">Новая карьера</button>
         <button class="btn btn-glass" id="btn-continue" hidden>Продолжить</button>
       </div>
-      <p class="home-foot">Liquid Glass · Сезон · Тактика · Трансферы</p>
+      <p class="home-foot">Сезон · Тактика · Трансферы · Валюта</p>
     </section>
 
     <!-- CREATE -->
@@ -98,6 +98,11 @@
         <div class="top-stats">
           <span id="hub-budget">—</span>
           <span id="hub-morale" class="pill">—</span>
+          <div class="currency-switch" id="currency-switch" title="Валюта">
+            <button type="button" data-cur="RUB" class="cur-btn">₽</button>
+            <button type="button" data-cur="USD" class="cur-btn">$</button>
+            <button type="button" data-cur="EUR" class="cur-btn">€</button>
+          </div>
         </div>
       </header>
 
@@ -183,7 +188,7 @@
         </div>
         <div class="filter-row">
           <select id="tf-ovr">
-            <option value="0">OVR любой</option>
+            <option value="0">Рейтинг любой</option>
             <option value="70">70+</option>
             <option value="75">75+</option>
             <option value="80">80+</option>
@@ -191,10 +196,10 @@
           </select>
           <select id="tf-price">
             <option value="0">Бюджет любой</option>
-            <option value="5000000">до 5 млн</option>
-            <option value="15000000">до 15 млн</option>
-            <option value="40000000">до 40 млн</option>
-            <option value="100000000">до 100 млн</option>
+            <option value="5000000">до 5 млн €</option>
+            <option value="15000000">до 15 млн €</option>
+            <option value="40000000">до 40 млн €</option>
+            <option value="100000000">до 100 млн €</option>
           </select>
         </div>
       </div>
@@ -269,6 +274,15 @@
         <h2>Ещё</h2>
       </header>
       <div class="more-stack">
+        <div class="glass-panel currency-panel">
+          <strong>Валюта отображения</strong>
+          <p class="hint" id="currency-rates">Курсы к евро: 1 € = 100 ₽ = 1,08 $</p>
+          <div class="currency-switch large" id="currency-switch-more">
+            <button type="button" data-cur="RUB" class="cur-btn">Рубли ₽</button>
+            <button type="button" data-cur="USD" class="cur-btn">Доллары $</button>
+            <button type="button" data-cur="EUR" class="cur-btn">Евро €</button>
+          </div>
+        </div>
         <button class="btn btn-glass" data-nav="table">Таблица лиги</button>
         <button class="btn btn-glass" data-nav="stats">Бомбардиры и ассисты</button>
         <button class="btn btn-glass" data-nav="history">История матчей</button>
@@ -332,6 +346,7 @@
     <div id="toast" class="toast" hidden></div>
   </div>
 
+  <script src="js/i18n.js"></script>
   <script src="js/world.js"></script>
   <script src="js/data.js"></script>
   <script src="js/engine.js"></script>

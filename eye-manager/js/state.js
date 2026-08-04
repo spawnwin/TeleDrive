@@ -6,14 +6,40 @@ window.EYE_STATE = (() => {
   const D = () => window.EYE_DATA;
   const E = () => window.EYE_ENGINE;
   const W = () => window.EYE_WORLD;
+  const I18N = () => window.EYE_I18N;
 
-  function money(n, currency) {
-    const cur = currency || state?.currency || '€';
-    const abs = Math.abs(n);
-    const sign = n < 0 ? '−' : '';
-    if (abs >= 1e6) return sign + (abs / 1e6).toFixed(2).replace(/\.00$/, '') + ' млн ' + cur;
-    if (abs >= 1e3) return sign + Math.round(abs / 1e3) + ' тыс ' + cur;
-    return sign + Math.round(abs) + ' ' + cur;
+  /** Все суммы внутри — в евро. Отображение: EUR / RUB / USD */
+  function currencyInfo(code) {
+    const id = code || getCurrency();
+    return I18N().CURRENCIES[id] || I18N().CURRENCIES.RUB;
+  }
+
+  function getCurrency() {
+    if (state?.displayCurrency) return state.displayCurrency;
+    try { return localStorage.getItem('eye_currency') || 'RUB'; } catch { return 'RUB'; }
+  }
+
+  function setCurrency(code) {
+    if (!I18N().CURRENCIES[code]) return false;
+    try { localStorage.setItem('eye_currency', code); } catch {}
+    if (state) { state.displayCurrency = code; save(); }
+    return true;
+  }
+
+  function money(n, forceCode) {
+    const cur = currencyInfo(forceCode);
+    const val = (Number(n) || 0) * cur.rate;
+    const abs = Math.abs(val);
+    const sign = val < 0 ? '−' : '';
+    const sym = cur.symbol;
+    if (abs >= 1e9) return sign + (abs / 1e9).toFixed(2).replace(/\.00$/, '') + ' млрд ' + sym;
+    if (abs >= 1e6) return sign + (abs / 1e6).toFixed(2).replace(/\.00$/, '') + ' млн ' + sym;
+    if (abs >= 1e3) return sign + Math.round(abs / 1e3).toLocaleString('ru-RU') + ' тыс ' + sym;
+    return sign + Math.round(abs).toLocaleString('ru-RU') + ' ' + sym;
+  }
+
+  function moneyHint(n) {
+    return `${money(n, 'RUB')} · ${money(n, 'USD')} · ${money(n, 'EUR')}`;
   }
 
   function emptySeasonTable(clubs) {
@@ -77,12 +103,12 @@ window.EYE_STATE = (() => {
       clubs: allClubs,
       leagueId: league.id,
       leagueName: league.name,
-      currency: league.currency || '€',
+      displayCurrency: getCurrency(),
       table: emptySeasonTable(leagueClubs),
       fixtures,
       inbox: [{
         id: D().uid('m'), type: 'welcome', title: 'Добро пожаловать в EYE',
-        body: `Вы возглавили «${me.name}» (${league.name}). В мире ${allClubs.length} клубов и тысячи игроков — трансферы открыты.`,
+        body: `Вы возглавили «${me.name}» (${league.name}). В мире ${allClubs.length} клубов — трансферы открыты. Валюту можно сменить в настройках.`,
         read: false, at: Date.now()
       }],
       history: [],
@@ -187,6 +213,7 @@ window.EYE_STATE = (() => {
         if (!raw) return null;
       }
       state = JSON.parse(raw);
+      if (!state.displayCurrency) state.displayCurrency = getCurrency();
       if (!state.transferList?.length) refreshTransferMarket();
       return state;
     } catch { return null; }
@@ -640,7 +667,8 @@ window.EYE_STATE = (() => {
   }
 
   return {
-    KEY, money, createCareer, get, club, clubById, leagueClubs, save, load, clear,
+    KEY, money, moneyHint, getCurrency, setCurrency, currencyInfo,
+    createCareer, get, club, clubById, leagueClubs, save, load, clear,
     currentFixture, playerMatch, recordPlayerMatch, sortedTable, topScorers,
     train, buyPlayer, makeOffer, sellPlayer, respondOffer, filterMarket, refreshTransferMarket,
     upgradeFacility, promoteYouth, setTactics, setLineup, autoLineup

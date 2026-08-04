@@ -145,17 +145,20 @@ window.EYE_DATA = (() => {
 
   function instantiateClub(tpl, overrides = {}) {
     const league = W().leagueById(tpl.leagueId);
+    const ru = window.EYE_I18N?.clubRu(tpl.id, tpl.name, tpl.stadium) || { name: tpl.name, stadium: tpl.stadium };
+    const leagueRu = window.EYE_I18N?.leagueRu(tpl.leagueId, league) || { name: league?.name };
     const squad = buildSquadFromTemplate(tpl);
     const avg = Math.round(squad.reduce((s, p) => s + p.ovr, 0) / squad.length);
     return {
       id: tpl.id,
       templateId: tpl.id,
-      name: tpl.name,
+      name: ru.name,
+      nameEn: tpl.name,
       short: tpl.short,
       color: tpl.color,
       leagueId: tpl.leagueId,
-      leagueName: league?.name || tpl.leagueId,
-      stadium: tpl.stadium,
+      leagueName: leagueRu.name || league?.name || tpl.leagueId,
+      stadium: ru.stadium,
       formation: overrides.formation || tpl.formation || '4-3-3',
       style: overrides.style || 'balance',
       squad,

@@ -35,6 +35,24 @@ window.EYE_UI = (() => {
     toast._t = setTimeout(() => { t.hidden = true; }, 2800);
   }
 
+  function syncCurrencyButtons() {
+    const cur = S().getCurrency();
+    $all('.cur-btn').forEach(b => b.classList.toggle('active', b.dataset.cur === cur));
+    const rates = $('#currency-rates');
+    if (rates) {
+      rates.textContent = `Сейчас: ${S().currencyInfo().name}. Курсы: 1 € = 100 ₽ = 1,08 $`;
+    }
+  }
+
+  function applyCurrency(code) {
+    S().setCurrency(code);
+    syncCurrencyButtons();
+    toast('Валюта: ' + S().currencyInfo(code).name);
+    const active = document.querySelector('.screen.active');
+    const id = active?.id?.replace('screen-', '');
+    if (id) refresh(id);
+  }
+
   function refresh(id) {
     const st = S().get();
     if (!st && !['boot','home','create'].includes(id)) return;
@@ -51,6 +69,7 @@ window.EYE_UI = (() => {
     if (id === 'history') renderHistory();
     if (id === 'player') renderPlayer();
     if (id === 'create') fillCreateForm();
+    if (id === 'more') syncCurrencyButtons();
     if (id === 'home') {
       const cont = $('#btn-continue');
       cont.hidden = !S().load();
@@ -74,7 +93,8 @@ window.EYE_UI = (() => {
       W().clubsByLeague(lid).slice().sort((a, b) => b.rep - a.rep).forEach(c => {
         const o = document.createElement('option');
         o.value = c.id;
-        o.textContent = `${c.name} · rep ${c.rep}`;
+        const ru = window.EYE_I18N.clubRu(c.id, c.name, c.stadium);
+        o.textContent = `${ru.name} · сила ${c.rep}`;
         selC.appendChild(o);
       });
       previewClub();
@@ -90,15 +110,17 @@ window.EYE_UI = (() => {
     const tpl = W().clubTemplate(id);
     if (!tpl || !box) return;
     box.hidden = false;
+    const ru = window.EYE_I18N.clubRu(tpl.id, tpl.name, tpl.stadium);
     const stars = (tpl.stars || []).slice(0, 6).map(s => `${s[0]} (${s[3]})`).join(' · ');
     box.innerHTML = `
       <div style="display:flex;gap:10px;align-items:center;margin-bottom:8px">
         <span class="club-dot" style="background:${tpl.color}"></span>
-        <strong>${tpl.name}</strong>
+        <strong>${ru.name}</strong>
       </div>
       <div class="meta" style="color:var(--muted);font-size:12px;line-height:1.45">
-        ${tpl.stadium} · бюджет ~${S().money(tpl.budget, W().leagueById(tpl.leagueId)?.currency)}
-        · фанаты ${tpl.fans.toLocaleString('ru')}<br/>
+        ${ru.stadium} · бюджет ~${S().money(tpl.budget)}
+        · болельщики ${tpl.fans.toLocaleString('ru')}<br/>
+        <span style="opacity:.75">${S().moneyHint(tpl.budget)}</span><br/>
         Звёзды: ${stars}
       </div>
     `;
@@ -109,9 +131,10 @@ window.EYE_UI = (() => {
     const me = S().club();
     $('#hub-club').textContent = me.name;
     $('#hub-color').style.background = me.color;
-    $('#hub-meta').textContent = `${st.leagueName} · С${st.season} · Тур ${st.week}`;
+    $('#hub-meta').textContent = `${st.leagueName} · Сезон ${st.season} · Тур ${st.week}`;
     $('#hub-budget').textContent = S().money(me.budget);
     $('#hub-morale').textContent = 'Мораль ' + me.morale;
+    syncCurrencyButtons();
     const unread = st.inbox.filter(m => !m.read).length;
     $('#inbox-badge').textContent = unread ? unread + ' новых' : 'Почта';
 
@@ -125,7 +148,7 @@ window.EYE_UI = (() => {
     } else {
       const home = S().clubById(pm.home);
       const away = S().clubById(pm.away);
-      box.textContent = `${home.name}  vs  ${away.name}`;
+      box.textContent = `${home.name} — ${away.name}`;
       btn.disabled = false;
       btn.textContent = 'К матчу';
     }
@@ -177,8 +200,9 @@ window.EYE_UI = (() => {
       </div>
       <div class="meta" style="margin-top:12px;color:var(--muted);font-size:13px;line-height:1.5">
         Потенциал ${p.pot} · стоимость ${S().money(p.value)} · зарплата ${S().money(p.wage)}/нед<br/>
+        <span style="opacity:.8">${S().moneyHint(p.value)}</span><br/>
         Сезон: ${p.seasonApps || 0} игр, ${p.seasonGoals || 0} голов, ${p.seasonAssists || 0} ассистов<br/>
-        Карьера: ${p.careerGoals || 0} голов, ${p.careerAssists || 0} ассистов · контракт ${p.contract}г
+        Карьера: ${p.careerGoals || 0} голов, ${p.careerAssists || 0} ассистов · контракт ${p.contract} г
         ${p.injured ? '<br/>Травма: ' + p.injured + ' тур(а)' : ''}
       </div>
     `;
@@ -193,7 +217,7 @@ window.EYE_UI = (() => {
     const me = S().club();
     const avg = Math.round(me.squad.reduce((s, p) => s + p.ovr, 0) / me.squad.length);
     const stars = me.squad.filter(p => p.real).length;
-    $('#squad-summary').textContent = `${me.squad.length} игроков · OVR ${avg} · ${stars} звёзд · ${me.formation} · ${me.stadium || ''}`;
+    $('#squad-summary').textContent = `${me.squad.length} игроков · рейтинг ${avg} · ${stars} звёзд · ${me.formation} · ${me.stadium || ''}`;
     const sorted = [...me.squad].sort((a, b) => b.ovr - a.ovr);
     $('#squad-list').innerHTML = sorted.map(p => `
       <button class="row row-btn" data-player="${p.id}">
@@ -262,7 +286,7 @@ window.EYE_UI = (() => {
       const offers = S().get().transferOffers || [];
       list.innerHTML = offers.map(o => `
         <div class="row">
-          <div class="ovr">€</div>
+          <div class="ovr">$</div>
           <div>
             <strong>${o.playerName}</strong>
             <div class="meta">${o.fromName} предлагает ${S().money(o.bid)}</div>
@@ -378,7 +402,7 @@ window.EYE_UI = (() => {
       return `
         <button class="fac-card" data-fac="${f.id}" ${lvl >= f.max ? 'disabled' : ''}>
           <div><strong>${f.name}</strong><span>Уровень ${lvl}/${f.max}</span></div>
-          <span class="btn-tiny">${lvl >= f.max ? 'MAX' : S().money(cost)}</span>
+          <span class="btn-tiny">${lvl >= f.max ? 'макс.' : S().money(cost)}</span>
         </button>
       `;
     }).join('');
@@ -619,6 +643,14 @@ window.EYE_UI = (() => {
       if (confirm('Сбросить карьеру EYE?')) { S().clear(); show('home'); }
     });
     $('#btn-save-cloud')?.addEventListener('click', () => cloudSave());
+
+    document.body.addEventListener('click', (e) => {
+      const curBtn = e.target.closest('[data-cur]');
+      if (curBtn && curBtn.classList.contains('cur-btn')) {
+        applyCurrency(curBtn.dataset.cur);
+        e.stopPropagation();
+      }
+    });
   }
 
   async function cloudSave() {
