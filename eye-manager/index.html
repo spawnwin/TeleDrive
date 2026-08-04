@@ -51,37 +51,52 @@
 
     <!-- CREATE -->
     <section id="screen-create" class="screen">
-      <button class="icon-back" data-nav="home" aria-label="Назад">‹</button>
-      <h2 class="screen-title">Новая карьера</h2>
+      <header class="subhead">
+        <button class="icon-back" data-nav="home" aria-label="Назад">‹</button>
+        <h2>Новая карьера</h2>
+      </header>
       <form id="form-create" class="glass-panel create-form">
-        <label>Менеджер<input name="manager" maxlength="24" required placeholder="Ваше имя" autocomplete="nickname" /></label>
-        <label>Лига
-          <select name="league" id="sel-league" required></select>
+        <label>Менеджер
+          <input name="manager" maxlength="24" required placeholder="Ваше имя" autocomplete="nickname" />
         </label>
-        <label>Клуб
-          <select name="clubId" id="sel-club" required></select>
-        </label>
+
+        <div class="field-block">
+          <span class="field-label">Лига</span>
+          <div class="league-pills" id="league-pills" role="listbox" aria-label="Лига"></div>
+          <input type="hidden" name="league" id="sel-league" required />
+        </div>
+
+        <div class="field-block">
+          <span class="field-label">Клуб</span>
+          <div class="club-picker" id="club-picker" role="listbox" aria-label="Клуб"></div>
+          <input type="hidden" name="clubId" id="sel-club" required />
+        </div>
+
         <div class="club-preview glass-panel" id="club-preview" hidden></div>
-        <label>Схема
-          <select name="formation">
-            <option>4-3-3</option>
-            <option>4-4-2</option>
-            <option>4-2-3-1</option>
-            <option>3-5-2</option>
-            <option>5-3-2</option>
-            <option>4-1-4-1</option>
-          </select>
-        </label>
-        <label>Стиль
-          <select name="style">
-            <option value="balance">Баланс</option>
-            <option value="attack">Атака</option>
-            <option value="defend">Оборона</option>
-            <option value="possession">Владение</option>
-            <option value="counter">Контратака</option>
-          </select>
-        </label>
-        <button class="btn btn-primary" type="submit">Возглавить клуб</button>
+
+        <div class="create-row">
+          <label>Схема
+            <select name="formation">
+              <option>4-3-3</option>
+              <option>4-4-2</option>
+              <option>4-2-3-1</option>
+              <option>3-5-2</option>
+              <option>5-3-2</option>
+              <option>4-1-4-1</option>
+            </select>
+          </label>
+          <label>Стиль
+            <select name="style">
+              <option value="balance">Баланс</option>
+              <option value="attack">Атака</option>
+              <option value="defend">Оборона</option>
+              <option value="possession">Владение</option>
+              <option value="counter">Контратака</option>
+            </select>
+          </label>
+        </div>
+
+        <button class="btn btn-primary create-submit" type="submit">Возглавить клуб</button>
       </form>
     </section>
 

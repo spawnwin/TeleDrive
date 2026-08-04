@@ -87,31 +87,64 @@ window.EYE_UI = (() => {
   }
 
   function fillCreateForm() {
-    const selL = $('#sel-league');
-    const selC = $('#sel-club');
-    if (!selL.options.length) {
-      W().LEAGUES.forEach(l => {
-        const o = document.createElement('option');
-        o.value = l.id;
-        o.textContent = `${l.name} (${l.country})`;
-        selL.appendChild(o);
-      });
+    const pills = $('#league-pills');
+    const picker = $('#club-picker');
+    const hidL = $('#sel-league');
+    const hidC = $('#sel-club');
+    if (!pills || !picker) return;
+
+    if (!pills.dataset.ready) {
+      pills.innerHTML = W().LEAGUES.map((l, i) => {
+        const name = (window.EYE_I18N?.leagueRu(l.id, l)?.name) || l.name;
+        return `<button type="button" class="league-pill${i === 0 ? ' active' : ''}" data-league="${l.id}" role="option">${name}</button>`;
+      }).join('');
+      pills.dataset.ready = '1';
+      hidL.value = W().LEAGUES[0]?.id || '';
     }
-    const fillClubs = () => {
-      const lid = selL.value;
-      selC.innerHTML = '';
-      W().clubsByLeague(lid).slice().sort((a, b) => b.rep - a.rep).forEach(c => {
-        const o = document.createElement('option');
-        o.value = c.id;
+
+    const fillClubs = (keepClub) => {
+      const lid = hidL.value || W().LEAGUES[0]?.id;
+      const clubs = W().clubsByLeague(lid).slice().sort((a, b) => b.rep - a.rep);
+      const preferred = keepClub && clubs.some(c => c.id === keepClub) ? keepClub : clubs[0]?.id;
+      hidC.value = preferred || '';
+      picker.innerHTML = clubs.map(c => {
         const ru = window.EYE_I18N.clubRu(c.id, c.name, c.stadium);
-        o.textContent = `${ru.name} · сила ${c.rep}`;
-        selC.appendChild(o);
-      });
+        const active = c.id === preferred ? ' active' : '';
+        return `
+          <button type="button" class="club-option${active}" data-club="${c.id}" role="option">
+            <span class="club-dot" style="background:${c.color}"></span>
+            <span><strong>${ru.name}</strong><small>${ru.stadium}</small></span>
+            <span class="rep">${c.rep}</span>
+          </button>
+        `;
+      }).join('');
       previewClub();
     };
-    selL.onchange = fillClubs;
-    selC.onchange = previewClub;
-    fillClubs();
+
+    pills.onchange = null;
+    if (!pills.dataset.bound) {
+      pills.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-league]');
+        if (!btn) return;
+        hidL.value = btn.dataset.league;
+        pills.querySelectorAll('.league-pill').forEach(p => p.classList.toggle('active', p === btn));
+        fillClubs(null);
+      });
+      picker.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-club]');
+        if (!btn) return;
+        hidC.value = btn.dataset.club;
+        picker.querySelectorAll('.club-option').forEach(p => p.classList.toggle('active', p === btn));
+        previewClub();
+      });
+      pills.dataset.bound = '1';
+    }
+
+    // sync active pill
+    pills.querySelectorAll('.league-pill').forEach(p => {
+      p.classList.toggle('active', p.dataset.league === hidL.value);
+    });
+    fillClubs(hidC.value);
   }
 
   function previewClub() {
@@ -123,15 +156,18 @@ window.EYE_UI = (() => {
     const ru = window.EYE_I18N.clubRu(tpl.id, tpl.name, tpl.stadium);
     const stars = (tpl.stars || []).slice(0, 6).map(s => `${s[0]} (${s[3]})`).join(' · ');
     box.innerHTML = `
-      <div style="display:flex;gap:10px;align-items:center;margin-bottom:8px">
-        <span class="club-dot" style="background:${tpl.color}"></span>
-        <strong>${ru.name}</strong>
-      </div>
-      <div class="meta" style="color:var(--muted);font-size:12px;line-height:1.45">
-        ${ru.stadium} · бюджет ~${S().money(tpl.budget)}
-        · болельщики ${tpl.fans.toLocaleString('ru')}<br/>
-        <span style="opacity:.75">${S().moneyHint(tpl.budget)}</span><br/>
-        Звёзды: ${stars}
+      <div class="club-preview-hero" style="--club:${tpl.color}"></div>
+      <div class="club-preview-body">
+        <div style="display:flex;gap:10px;align-items:center;margin-bottom:8px">
+          <span class="club-dot" style="background:${tpl.color}"></span>
+          <strong style="font-family:var(--display);font-size:17px">${ru.name}</strong>
+        </div>
+        <div class="meta">
+          ${ru.stadium} · бюджет ~${S().money(tpl.budget)}
+          · болельщики ${tpl.fans.toLocaleString('ru')}<br/>
+          <span style="opacity:.75">${S().moneyHint(tpl.budget)}</span><br/>
+          Звёзды: ${stars}
+        </div>
       </div>
     `;
   }
