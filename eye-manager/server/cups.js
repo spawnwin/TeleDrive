@@ -203,6 +203,7 @@ function createCupsModule({ dataDir, usersDb, saveUsers, publicUser, store }) {
       startedAt: c.startedAt || null,
       finishedAt: c.finishedAt || null,
       slotsFilled: (c.entrants || []).length,
+      entrantsCount: (c.entrants || []).length,
       humans: (c.entrants || []).filter((e) => !e.isBot).length,
       bots: (c.entrants || []).filter((e) => e.isBot).length,
       entrants: (c.entrants || []).map((e) => ({
@@ -248,18 +249,38 @@ function createCupsModule({ dataDir, usersDb, saveUsers, publicUser, store }) {
     fs.writeFileSync(saveFile, JSON.stringify(payload, null, 2));
   }
 
+  function playerPower(p) {
+    if (!p) return 0;
+    if (typeof p.effective === 'number') return p.effective;
+    if (typeof p.mastery === 'number') return p.mastery;
+    if (typeof p.ovr === 'number') return p.ovr;
+    const sk = p.skills || {};
+    const vals = Object.values(sk).filter((n) => typeof n === 'number');
+    if (vals.length) return Math.round(vals.reduce((a, b) => a + b, 0) / vals.length);
+    return 50;
+  }
+
   function xiStrengthFromClub(me) {
     if (!me?.squad?.length) return null;
-    const xi = (me.lineup || []).filter(Boolean);
-    const pool = xi.length >= 11
-      ? xi.slice(0, 11)
-      : [...me.squad].sort((a, b) => (b.ovr || 0) - (a.ovr || 0)).slice(0, 11);
+    const rawLineup = me.lineupIds || me.lineup || [];
+    let pool = rawLineup
+      .map((idOrP) => (typeof idOrP === 'string' ? me.squad.find((p) => p.id === idOrP) : idOrP))
+      .filter(Boolean);
+    if (pool.length < 11) {
+      pool = [...me.squad].sort((a, b) => playerPower(b) - playerPower(a)).slice(0, 11);
+    } else {
+      pool = pool.slice(0, 11);
+    }
     if (!pool.length) return null;
-    return Math.round(pool.reduce((s, p) => s + (p.ovr || 60), 0) / pool.length);
+    return Math.round(pool.reduce((s, p) => s + playerPower(p), 0) / pool.length);
   }
 
   function refreshEntrantStrength(entrant) {
     if (!entrant || entrant.isBot) return entrant;
+    if (store?.clubStrength) {
+      const str = store.clubStrength(entrant.userId);
+      if (str) entrant.strength = str;
+    }
     const career = readCareerClub(entrant.userId);
     if (!career) return entrant;
     const str = xiStrengthFromClub(career.me);
@@ -450,8 +471,34 @@ function createCupsModule({ dataDir, usersDb, saveUsers, publicUser, store }) {
     cup.round = label;
     const winners = [];
     ties.forEach((m) => {
-      const score = simScore(m.home.strength || 60, m.away.strength || 60);
+      let score;
+      let matchId = null;
+      if (store?.playCupTie) {
+        try {
+          const r = store.playCupTie(m.home, m.away, { cupId: cup.id, cupName: cup.name, round: label });
+          if (r?.score) {
+            score = r.score;
+            matchId = r.matchId || null;
+            if (r.homeStrength) m.home.strength = r.homeStrength;
+            if (r.awayStrength) m.away.strength = r.awayStrength;
+          }
+        } catch (e) {
+          console.warn('[cups] playCupTie failed', e.message || e);
+        }
+      }
+      if (!score) score = simScore(m.home.strength || 60, m.away.strength || 60);
+      // knockout cannot draw — extra-time / pens
+      if (score[0] === score[1]) {
+        const hs = m.home.strength || 60;
+        const as = m.away.strength || 60;
+        if (hs === as) {
+          if (Math.random() < 0.5) score[0] += 1;
+          else score[1] += 1;
+        } else if (hs > as) score[0] += 1;
+        else score[1] += 1;
+      }
       m.score = score;
+      m.matchId = matchId;
       m.played = true;
       m.winnerId = score[0] > score[1] ? m.home.userId : m.away.userId;
       winners.push(m.winnerId === m.home.userId ? m.home : m.away);
@@ -460,8 +507,9 @@ function createCupsModule({ dataDir, usersDb, saveUsers, publicUser, store }) {
       round: label,
       ties: ties.map((m) => ({
         id: m.id,
-        home: { userId: m.home.userId, name: m.home.name, clubName: m.home.clubName, isBot: m.home.isBot },
-        away: { userId: m.away.userId, name: m.away.name, clubName: m.away.clubName, isBot: m.away.isBot },
+        matchId: m.matchId || null,
+        home: { userId: m.home.userId, name: m.home.name, clubName: m.home.clubName, isBot: m.home.isBot, strength: m.home.strength },
+        away: { userId: m.away.userId, name: m.away.name, clubName: m.away.clubName, isBot: m.away.isBot, strength: m.away.strength },
         score: m.score,
         winnerId: m.winnerId
       }))
@@ -509,6 +557,8 @@ function createCupsModule({ dataDir, usersDb, saveUsers, publicUser, store }) {
       }
       u.xp = (u.xp || 0) + xpGain;
       u.level = levelFromXp(u.xp);
+      u.points = (u.points || 0) + (won ? 10 : 3);
+      u.fame = (u.fame || 0) + (won ? 5 : 1);
       cup.xpAwards[e.userId] = xpGain;
       dirty = true;
 
@@ -753,6 +803,9 @@ function createCupsModule({ dataDir, usersDb, saveUsers, publicUser, store }) {
 
     let strength = Number(opts.strength) || 0;
     let resolvedClub = clubName;
+    if (!strength && store?.clubStrength) {
+      strength = store.clubStrength(user.id) || 0;
+    }
     const career = readCareerClub(user.id);
     if (career) {
       resolvedClub = resolvedClub || career.me.name;

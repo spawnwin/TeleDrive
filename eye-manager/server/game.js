@@ -110,10 +110,17 @@ function clubStrength(club) {
 }
 
 function resolveXi(club) {
+  const byId = new Map((club.players || []).map((p) => [p.id, p]));
+  const fromLineup = (club.lineupIds || [])
+    .map((id) => byId.get(id))
+    .filter((p) => p && !(p.injuredHours > 0));
+  if (fromLineup.length >= 11) return fromLineup.slice(0, 11);
+
   const form = FORMATIONS[club.formation] || FORMATIONS['4-4-2'];
-  const used = new Set();
-  const xi = [];
+  const used = new Set(fromLineup.map((p) => p.id));
+  const xi = [...fromLineup];
   for (const slot of form) {
+    if (xi.length >= 11) break;
     let best = null;
     let bestScore = -1;
     for (const p of club.players) {
@@ -124,7 +131,15 @@ function resolveXi(club) {
     }
     if (best) { used.add(best.id); xi.push(best); }
   }
-  return xi;
+  if (xi.length < 11) {
+    for (const p of [...club.players].sort((a, b) => effectiveMastery(b) - effectiveMastery(a))) {
+      if (xi.length >= 11) break;
+      if (used.has(p.id) || p.injuredHours > 0) continue;
+      used.add(p.id);
+      xi.push(p);
+    }
+  }
+  return xi.slice(0, 11);
 }
 
 function defaultClub(user, opts = {}) {
@@ -147,11 +162,24 @@ function defaultClub(user, opts = {}) {
     players,
     staff: { coach: 1, gkCoach: 1, scout: 0, medic: 0 },
     history: [],
+    ledger: [],
     createdAt: Date.now()
   };
 }
 
-function ensureLineup(club) {
+function ensureLineup(club, force = false) {
+  const validIds = new Set((club.players || []).map((p) => p.id));
+  const kept = (club.lineupIds || []).filter((id) => validIds.has(id));
+  if (!force && kept.length === 11) {
+    club.lineupIds = kept;
+    const rest = club.players.filter((p) => !kept.includes(p.id)).slice(0, 7);
+    club.benchIds = (club.benchIds || []).filter((id) => validIds.has(id) && !kept.includes(id));
+    if (club.benchIds.length < rest.length) club.benchIds = rest.map((p) => p.id);
+    return club;
+  }
+  // temporary clear so resolveXi rebuilds from formation
+  if (force) club.lineupIds = [];
+  else club.lineupIds = kept;
   const xi = resolveXi(club);
   club.lineupIds = xi.map((p) => p.id);
   const rest = club.players.filter((p) => !club.lineupIds.includes(p.id)).slice(0, 7);
@@ -182,6 +210,9 @@ function publicClub(club, user) {
     staff: club.staff,
     strength: clubStrength(club),
     history: (club.history || []).slice(0, 20),
+    ledger: (club.ledger || []).slice(0, 40),
+    skillCap: skillCap(club, false),
+    gkSkillCap: skillCap(club, true),
     manager: user ? { id: user.id, login: user.login, name: user.name, level: user.level } : null
   };
 }
@@ -292,9 +323,9 @@ function trainPlayer(club, playerId, skillKey, amount = 1) {
   } else if (!['tackle', 'mark', 'dribble', 'control', 'stamina', 'pass', 'shotPower', 'shotAcc'].includes(skillKey)) {
     return { ok: false, error: 'Неверный навык' };
   }
-  const cap = 15 + (club.staff?.coach || 0) * 5;
+  const cap = skillCap(club, p.pos === 'Gk');
   const cur = p.skills[skillKey] || 10;
-  if (cur >= cap) return { ok: false, error: `Потолок умения ${cap} (наймите тренера)` };
+  if (cur >= cap) return { ok: false, error: `Потолок умения ${cap}. Улучшите персонал в Бонусе.` };
   p.skills[skillKey] = Math.min(cap, cur + amount);
   p.xpPool -= cost;
   return { ok: true, player: { ...p, mastery: masteryOf(p), effective: effectiveMastery(p) } };
@@ -306,6 +337,54 @@ function recoverSquad(club) {
     if (p.injuredHours > 0) p.injuredHours = Math.max(0, p.injuredHours - 12);
   });
   return club;
+}
+
+function pushLedger(club, delta, label) {
+  club.ledger = Array.isArray(club.ledger) ? club.ledger : [];
+  club.ledger.unshift({ id: uid('led'), at: Date.now(), delta, label });
+  if (club.ledger.length > 80) club.ledger.length = 80;
+}
+
+function hireStaff(club, role) {
+  const roles = {
+    coach: { key: 'coach', label: 'Тренер', max: 5, cost: 80000 },
+    gkCoach: { key: 'gkCoach', label: 'Тренер вратарей', max: 5, cost: 60000 },
+    scout: { key: 'scout', label: 'Скаут', max: 3, cost: 50000 },
+    medic: { key: 'medic', label: 'Врач', max: 3, cost: 45000 }
+  };
+  const conf = roles[role];
+  if (!conf) return { ok: false, error: 'Неизвестная роль' };
+  club.staff = club.staff || { coach: 1, gkCoach: 1, scout: 0, medic: 0 };
+  const cur = club.staff[conf.key] || 0;
+  if (cur >= conf.max) return { ok: false, error: `${conf.label}: максимум ур. ${conf.max}` };
+  const cost = conf.cost * (cur + 1);
+  club.staff[conf.key] = cur + 1;
+  return { ok: true, cost, label: `${conf.label} → ур. ${cur + 1}`, staff: club.staff };
+}
+
+function upgradeStadium(club) {
+  const level = club.stadiumLevel || 1;
+  if (level >= 8) return { ok: false, error: 'Стадион уже максимального уровня' };
+  const cost = 100000 * level;
+  club.stadiumLevel = level + 1;
+  club.capacity = Math.round((club.capacity || 8000) * 1.35);
+  return { ok: true, cost, label: `Стадион ур. ${club.stadiumLevel}`, stadiumLevel: club.stadiumLevel, capacity: club.capacity };
+}
+
+function setLineup(club, lineupIds, benchIds) {
+  const ids = new Set(club.players.map((p) => p.id));
+  const xi = (lineupIds || []).filter((id) => ids.has(id)).slice(0, 11);
+  if (xi.length !== 11) return { ok: false, error: 'Нужно ровно 11 игроков в основе' };
+  const bench = (benchIds || []).filter((id) => ids.has(id) && !xi.includes(id)).slice(0, 7);
+  club.lineupIds = xi;
+  club.benchIds = bench;
+  return { ok: true, club };
+}
+
+function skillCap(club, isGk = false) {
+  const staff = club.staff || {};
+  if (isGk) return 15 + (staff.gkCoach || 0) * 5;
+  return 15 + (staff.coach || 0) * 5;
 }
 
 module.exports = {
@@ -324,5 +403,10 @@ module.exports = {
   simulateMatch,
   trainPlayer,
   recoverSquad,
-  makePlayer
+  makePlayer,
+  pushLedger,
+  hireStaff,
+  upgradeStadium,
+  setLineup,
+  skillCap
 };

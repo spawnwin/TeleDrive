@@ -9,7 +9,16 @@
     tab: 'main',
     me: null,
     club: null,
-    cache: {}
+    cache: {},
+    cupPoll: null,
+    watchingCup: null
+  };
+
+  const EVENT_LABELS = {
+    cup_started: 'Кубок стартовал',
+    cup_out: 'Вылет из кубка',
+    cup_won: 'Победа в кубке',
+    cup_done: 'Кубок завершён'
   };
 
   const TABS = {
@@ -60,7 +69,6 @@
     $('#modal-card').innerHTML = html;
     $('#modal').hidden = false;
   }
-  function closeModal() { $('#modal').hidden = true; }
 
   function tickClock() {
     const d = new Date();
@@ -135,6 +143,7 @@
     const club = state.club;
     const u = state.me?.user;
     if (state.tab === 'finance') {
+      const ledger = club?.ledger || [];
       $('#view').innerHTML = `
         <div class="grid-3">
           <div class="stat-card"><span>Баланс</span><b>${money(u?.money)}</b></div>
@@ -142,8 +151,13 @@
           <div class="stat-card"><span>Зарплаты / нед</span><b>${money((club?.players || []).reduce((s, p) => s + (p.wage || 0), 0))}</b></div>
         </div>
         <section class="panel">
-          <h3>Финансы клуба</h3>
-          <p class="hint">Доход идёт с товарищеских и кубков. Победа — до 45 000 ¤, ничья — 18 000 ¤.</p>
+          <h3>Движение средств</h3>
+          <p class="hint">Товарищеские: победа 45 000 · ничья 18 000 · поражение 8 000. Кубки дают призовые и очки рейтинга.</p>
+          <div class="list">${ledger.length ? ledger.map((row) => `
+            <div class="list-row">
+              <div><strong>${row.label}</strong><small>${new Date(row.at).toLocaleString('ru-RU')}</small></div>
+              <b style="color:${row.delta >= 0 ? 'var(--grass-bright)' : 'var(--danger)'}">${row.delta >= 0 ? '+' : ''}${money(row.delta)}</b>
+            </div>`).join('') : '<p class="hint">Пока нет операций — сыграйте матч</p>'}</div>
         </section>`;
       return;
     }
@@ -153,7 +167,7 @@
         <section class="panel">
           <h3>События</h3>
           <div class="list">${events.length ? events.map((e) => `
-            <div class="list-row"><div><strong>${e.title || e.type}</strong><small>${e.body || ''}</small></div><small>${new Date(e.at || Date.now()).toLocaleString('ru-RU')}</small></div>
+            <div class="list-row"><div><strong>${e.title || EVENT_LABELS[e.type] || e.type}</strong><small>${e.cupName || e.body || ''}${e.xp ? ' · +' + e.xp + ' XP' : ''}${e.money ? ' · +' + money(e.money) : ''}</small></div><small>${new Date(e.at || Date.now()).toLocaleString('ru-RU')}</small></div>
           `).join('') : '<p class="hint">Пока тихо — сыграйте матч или вступите в кубок.</p>'}</div>
         </section>`;
       return;
@@ -188,15 +202,17 @@
   async function renderTeam() {
     const club = state.club;
     if (state.tab === 'stadium') {
+      const lvl = club.stadiumLevel || 1;
+      const cost = 100000 * lvl;
       $('#view').innerHTML = `
         <section class="panel">
-          <h3>${club.stadium}</h3>
+          <div class="panel-head"><h3>${club.stadium}</h3><button class="btn btn-primary btn-tiny" id="btn-stadium" ${lvl >= 8 ? 'disabled' : ''}>Улучшить · ${money(cost)}</button></div>
           <div class="grid-3">
-            <div class="stat-card"><span>Уровень</span><b>${club.stadiumLevel || 1}</b></div>
+            <div class="stat-card"><span>Уровень</span><b>${lvl} / 8</b></div>
             <div class="stat-card"><span>Вместимость</span><b>${money(club.capacity || 8000).replace(' ¤','')}</b></div>
             <div class="stat-card"><span>Фанаты</span><b>${money(state.me?.user?.fans).replace(' ¤','')}</b></div>
           </div>
-          <p class="hint" style="margin-top:12px">Стадион растёт вместе с фан-базой. Играйте матчи — болельщики приходят на хорошую игру.</p>
+          <p class="hint" style="margin-top:12px">Каждый уровень увеличивает вместимость и привлекает болельщиков.</p>
         </section>`;
       return;
     }
@@ -214,6 +230,8 @@
         </section>`;
       return;
     }
+    const sorted = [...(club.players || [])].sort((a, b) => (b.effective || 0) - (a.effective || 0));
+    const xi = new Set(club.lineupIds || []);
     $('#view').innerHTML = `
       <div class="grid-2">
         <section class="panel">
@@ -221,16 +239,22 @@
           ${pitchHtml(club)}
         </section>
         <section class="panel">
-          <h3>Схема</h3>
+          <h3>Схема и основа</h3>
           <form class="form-grid" id="form-formation">
             <label>Формация
               <select name="formation">
                 ${['4-4-2','4-3-3','3-5-2','4-2-3-1'].map((f) => `<option value="${f}" ${club.formation===f?'selected':''}>${f}</option>`).join('')}
               </select>
             </label>
-            <button class="btn btn-primary" type="submit">Применить</button>
+            <button class="btn btn-primary" type="submit">Автосостав по схеме</button>
           </form>
-          <p class="hint">Игроки подбираются автоматически под позиции схемы с учётом мастерства и готовности.</p>
+          <p class="hint">Отметьте ровно 11 игроков и сохраните основу вручную.</p>
+          <div class="list" id="lineup-picker">${sorted.map((p) => `
+            <label class="list-row" style="cursor:pointer">
+              <div><strong>${p.name} · ${p.pos}</strong><small>эфф. ${p.effective} · физа ${p.fitness}%</small></div>
+              <input type="checkbox" data-lineup-id="${p.id}" ${xi.has(p.id) ? 'checked' : ''} />
+            </label>`).join('')}</div>
+          <button class="btn btn-primary" id="btn-save-lineup" style="margin-top:12px">Сохранить основу</button>
         </section>
       </div>`;
   }
@@ -242,8 +266,11 @@
       $('#view').innerHTML = `
         <section class="panel">
           <h3>Восстановление</h3>
-          <p class="hint">Восстановить физическую готовность и ускорить лечение — 15 000 ¤</p>
-          <button class="btn btn-primary" id="btn-recover">Восстановить состав</button>
+          <p class="hint">15 000 ¤ или 1 бустер. Врач ускоряет восстановление в матчах.</p>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn btn-primary" id="btn-recover">За 15 000 ¤</button>
+            <button class="btn" id="btn-recover-boost">За бустер (${state.me?.user?.boosters || 0})</button>
+          </div>
         </section>
         <section class="panel">
           <div class="table-wrap"><table class="sheet"><thead><tr><th>Игрок</th><th>Физа</th><th>Травма</th></tr></thead>
@@ -255,7 +282,7 @@
       $('#view').innerHTML = `
         <section class="panel">
           <h3>Тренировки</h3>
-          <p class="hint">Опыт копится в матчах. Распределите его в умения. Потолок зависит от тренера.</p>
+          <p class="hint">Опыт копится в матчах. Потолок умений: полевые ${club.skillCap || 20}, вратари ${club.gkSkillCap || 20}. Поднимите персонал в Бонусе.</p>
           <div class="list">${players.map((p) => `
             <div class="list-row">
               <div>
@@ -306,26 +333,49 @@
       return;
     }
     if (state.tab === 'cups') {
-      const data = await A().request('api/cups?status=open');
-      const cups = data.cups || [];
+      const [openData, liveData, doneData] = await Promise.all([
+        A().request('api/cups?status=open'),
+        A().request('api/cups?status=live'),
+        A().request('api/cups?status=finished')
+      ]);
+      const lvl = state.me?.user?.level || 1;
+      const cups = (openData.cups || []).filter((c) => lvl >= (c.minLevel || 1) && lvl <= (c.maxLevel || 10));
+      const liveAll = liveData.cups || [];
+      const finished = (doneData.cups || []).slice(0, 8);
       const live = state.me?.liveCup;
       $('#view').innerHTML = `
-        ${live ? `<section class="panel"><div class="panel-head"><h3>Ваш кубок идёт</h3><button class="btn btn-primary btn-tiny" data-cup="${live.id}">Открыть</button></div>
-          <p>${live.name} · ${live.round || 'раунд'}</p></section>` : ''}
+        ${live ? `<section class="panel"><div class="panel-head"><h3>Ваш кубок идёт</h3><button class="btn btn-primary btn-tiny" data-cup="${live.id}">Смотреть</button></div>
+          <p>${live.name} · ${live.round || 'раунд'}${live.nextRoundAt ? ' · следующий раунд ' + new Date(live.nextRoundAt).toLocaleTimeString('ru-RU') : ''}</p></section>` : ''}
         <section class="panel">
-          <div class="panel-head"><h3>Открытые кубки</h3><span class="badge">автостарт</span></div>
-          <p class="hint">Кубки создаются по уровням. Если нет живых игроков к старту — кубок уходит в архив.</p>
+          <div class="panel-head"><h3>Кубки вашего уровня</h3><span class="badge">ур. ${lvl}</span></div>
+          <p class="hint">Запись открыта до старта. Без живых игроков кубок уходит в архив.</p>
           <div class="list">${cups.length ? cups.map((c) => `
             <div class="list-row">
               <div>
                 <strong>${c.name}</strong>
-                <small>${c.bracketLabel || c.bracketId || ''} · ${c.entrantsCount || c.humans || 0}/${c.size} · старт ${c.startAt ? new Date(c.startAt).toLocaleTimeString('ru-RU') : 'скоро'}</small>
+                <small>${c.bracketLabel || ''} · ${c.slotsFilled || c.entrantsCount || 0}/${c.size} · люди ${c.humans || 0} · старт ${c.startAt ? new Date(c.startAt).toLocaleTimeString('ru-RU') : 'скоро'}</small>
               </div>
               <div style="display:flex;gap:6px">
-                <button class="btn btn-tiny" data-cup="${c.id}">Карточка</button>
+                <button class="btn btn-tiny" data-cup="${c.id}">Открыть</button>
                 <button class="btn btn-primary btn-tiny" data-cup-join="${c.id}">Вступить</button>
               </div>
-            </div>`).join('') : '<p class="hint">Сейчас нет открытых кубков — загляните чуть позже</p>'}</div>
+            </div>`).join('') : '<p class="hint">Нет открытых кубков вашего уровня — подождите тик</p>'}</div>
+        </section>
+        <section class="panel">
+          <h3>Идут сейчас</h3>
+          <div class="list">${liveAll.length ? liveAll.map((c) => `
+            <div class="list-row">
+              <div><strong>${c.name}</strong><small>${c.round || 'раунд'} · в сетке ${c.aliveCount || '—'}</small></div>
+              <button class="btn btn-tiny" data-cup="${c.id}">Смотреть</button>
+            </div>`).join('') : '<p class="hint">Сейчас никто не играет</p>'}</div>
+        </section>
+        <section class="panel">
+          <h3>Недавние итоги</h3>
+          <div class="list">${finished.length ? finished.map((c) => `
+            <div class="list-row">
+              <div><strong>${c.name}</strong><small>чемпион: ${c.champion?.clubName || c.champion?.name || '—'}</small></div>
+              <button class="btn btn-tiny" data-cup="${c.id}">Отчёт</button>
+            </div>`).join('') : '<p class="hint">Пока пусто</p>'}</div>
         </section>`;
       return;
     }
@@ -388,15 +438,34 @@
   }
 
   async function renderBonus() {
+    const club = state.club;
+    const staff = club?.staff || {};
+    const boosters = state.me?.user?.boosters || 0;
+    const staffRows = [
+      ['coach', 'Тренер', staff.coach || 0, 5, 80000],
+      ['gkCoach', 'Тренер вратарей', staff.gkCoach || 0, 5, 60000],
+      ['scout', 'Скаут', staff.scout || 0, 3, 50000],
+      ['medic', 'Врач', staff.medic || 0, 3, 45000]
+    ];
     $('#view').innerHTML = `
       <section class="panel">
-        <h3>Бустеры</h3>
-        <p class="hint">У вас ${state.me?.user?.boosters || 0} бустеров. В EYE XI бустеры — косметика и удобство, без pay-to-win в кубках.</p>
-        <div class="grid-3">
-          <div class="stat-card"><span>VIP</span><b>скоро</b></div>
-          <div class="stat-card"><span>Смена эмблемы</span><b>скоро</b></div>
-          <div class="stat-card"><span>Ускорение лечения</span><b>скоро</b></div>
+        <div class="panel-head"><h3>Бустеры</h3><span class="badge">${boosters} шт.</span></div>
+        <p class="hint">Бустеры ускоряют развитие, но не покупают победы в кубках.</p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+          <button class="btn btn-primary" id="btn-recover-boost">Восстановить состав · 1 бустер</button>
+          <button class="btn" id="btn-xp-boost">+40 опыта лучшему игроку · 1 бустер</button>
         </div>
+      </section>
+      <section class="panel">
+        <h3>Персонал</h3>
+        <p class="hint">Тренер поднимает потолок умений полевых, тренер вратарей — голкиперов.</p>
+        <div class="list">${staffRows.map(([role, label, cur, max, base]) => {
+          const cost = base * (cur + 1);
+          return `<div class="list-row">
+            <div><strong>${label}</strong><small>ур. ${cur}/${max}${cur < max ? ' · следующий ' + money(cost) : ''}</small></div>
+            <button class="btn btn-tiny" data-hire="${role}" ${cur >= max ? 'disabled' : ''}>Нанять</button>
+          </div>`;
+        }).join('')}</div>
       </section>`;
   }
 
@@ -458,23 +527,79 @@
     `);
   }
 
-  async function showCup(id) {
-    const data = await A().request('api/cups/' + id);
-    const c = data.cup;
-    openModal(`
+  function stopCupPoll() {
+    if (state.cupPoll) {
+      clearInterval(state.cupPoll);
+      state.cupPoll = null;
+    }
+    state.watchingCup = null;
+  }
+
+  function renderCupCard(c) {
+    const statusLabel = c.status === 'open' ? 'набор' : c.status === 'live' ? 'идёт' : 'завершён';
+    const ties = (c.history || []).slice().reverse().flatMap((h) =>
+      (h.ties || []).map((t) => ({ ...t, round: h.round }))
+    );
+    const bracket = c.bracket || [];
+    return `
       <div class="panel-head">
         <h2 style="margin:0;font-family:Syne,sans-serif">${c.name}</h2>
         <button class="btn btn-tiny" id="modal-close">Закрыть</button>
       </div>
-      <p class="hint">${c.bracketLabel || ''} · ${c.status} · ${c.size} команд</p>
-      <div class="list">${(c.entrants || c.publicEntrants || []).map((e) => `
-        <div class="list-row"><div><strong>${e.clubName || e.name || e.login}</strong><small>${e.isBot ? 'бот' : 'игрок'} · сила ${e.strength || '—'}</small></div></div>
+      <p class="hint">${c.bracketLabel || ''} · <span class="badge">${statusLabel}</span> · ${c.slotsFilled || c.entrantsCount || 0}/${c.size}
+        ${c.round ? ' · ' + c.round : ''}
+        ${c.nextRoundAt && c.status === 'live' ? ' · след. раунд ' + new Date(c.nextRoundAt).toLocaleTimeString('ru-RU') : ''}
+      </p>
+      ${c.champion ? `<div class="stat-card" style="margin-bottom:12px"><span>Чемпион</span><b>${c.champion.clubName || c.champion.name}</b></div>` : ''}
+      ${bracket.length ? `<h3>Текущая сетка</h3><div class="list">${bracket.map((t) => `
+        <div class="list-row">
+          <div><strong>${t.home?.clubName || t.home?.name} ${t.score ? t.score[0] + ':' + t.score[1] : 'vs'} ${t.away?.clubName || t.away?.name}</strong>
+          <small>${t.score ? 'сыграно' : 'ожидание'}${t.matchId ? ' · есть отчёт' : ''}</small></div>
+          ${t.matchId ? `<button class="btn btn-tiny" data-match="${t.matchId}">Отчёт</button>` : ''}
+        </div>`).join('')}</div>` : ''}
+      ${ties.length ? `<h3 style="margin-top:14px">История</h3><div class="list">${ties.slice(0, 16).map((t) => `
+        <div class="list-row">
+          <div><strong>${t.round}: ${t.home?.clubName || t.home?.name} ${t.score?.[0]}:${t.score?.[1]} ${t.away?.clubName || t.away?.name}</strong></div>
+          ${t.matchId ? `<button class="btn btn-tiny" data-match="${t.matchId}">Отчёт</button>` : ''}
+        </div>`).join('')}</div>` : ''}
+      <h3 style="margin-top:14px">Участники</h3>
+      <div class="list">${(c.entrants || []).map((e) => `
+        <div class="list-row"><div><strong>${e.clubName || e.name}</strong><small>${e.isBot ? 'бот' : 'игрок'} · сила ${e.strength || '—'} · ур. ${e.level || '?'}${e.out ? ' · выбыл' : ''}</small></div>
+        ${e.out ? '<span class="badge danger">out</span>' : '<span class="badge">in</span>'}</div>
       `).join('') || '<p class="hint">Пока никого</p>'}</div>
-      <div style="margin-top:12px;display:flex;gap:8px">
-        <button class="btn btn-primary" data-cup-join="${c.id}">Вступить</button>
-        <button class="btn" data-cup-leave="${c.id}">Выйти</button>
-      </div>
-    `);
+      <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
+        ${c.status === 'open' ? `<button class="btn btn-primary" data-cup-join="${c.id}">Вступить</button>
+        <button class="btn" data-cup-leave="${c.id}">Выйти</button>` : ''}
+        ${c.status === 'live' ? '<span class="badge warn">автообновление</span>' : ''}
+      </div>`;
+  }
+
+  async function showCup(id) {
+    stopCupPoll();
+    state.watchingCup = id;
+    const data = await A().request('api/cups/' + id);
+    openModal(renderCupCard(data.cup));
+    if (data.cup.status === 'live') {
+      state.cupPoll = setInterval(async () => {
+        if (state.watchingCup !== id || $('#modal').hidden) {
+          stopCupPoll();
+          return;
+        }
+        try {
+          const fresh = await A().request('api/cups/' + id);
+          $('#modal-card').innerHTML = renderCupCard(fresh.cup);
+          if (fresh.cup.status !== 'live') {
+            stopCupPoll();
+            await refreshMe();
+          }
+        } catch {}
+      }, 3000);
+    }
+  }
+
+  function closeModal() {
+    stopCupPoll();
+    $('#modal').hidden = true;
   }
 
   function showTrain(playerId) {
@@ -626,6 +751,65 @@
           A().setUser(data.user);
           paintSidebar();
           toast('Состав восстановлен');
+          render();
+        } catch (err) { toast(err.message); }
+      }
+      if (e.target.id === 'btn-recover-boost') {
+        try {
+          const data = await A().request('api/players/recover', { method: 'POST', body: { booster: true } });
+          state.club = data.club;
+          state.me.user = data.user;
+          A().setUser(data.user);
+          paintSidebar();
+          toast('Восстановлено за бустер');
+          render();
+        } catch (err) { toast(err.message); }
+      }
+      if (e.target.id === 'btn-xp-boost') {
+        try {
+          const best = [...(state.club?.players || [])].sort((a, b) => (b.effective || 0) - (a.effective || 0))[0];
+          const data = await A().request('api/bonus/xp', { method: 'POST', body: { playerId: best?.id } });
+          state.club = data.club;
+          state.me.user = data.user;
+          A().setUser(data.user);
+          paintSidebar();
+          toast('+40 опыта');
+          render();
+        } catch (err) { toast(err.message); }
+      }
+      if (e.target.id === 'btn-stadium') {
+        try {
+          const data = await A().request('api/club/stadium', { method: 'POST' });
+          state.club = data.club;
+          state.me.user = data.user;
+          A().setUser(data.user);
+          paintSidebar();
+          toast('Стадион улучшен');
+          render();
+        } catch (err) { toast(err.message); }
+      }
+      if (e.target.id === 'btn-save-lineup') {
+        const ids = $$('#lineup-picker [data-lineup-id]:checked').map((el) => el.dataset.lineupId);
+        if (ids.length !== 11) {
+          toast('Отметьте ровно 11 игроков');
+          return;
+        }
+        try {
+          const data = await A().request('api/club/lineup', { method: 'POST', body: { lineupIds: ids } });
+          state.club = data.club;
+          toast('Основа сохранена');
+          render();
+        } catch (err) { toast(err.message); }
+      }
+      const hire = e.target.closest('[data-hire]');
+      if (hire && !hire.disabled) {
+        try {
+          const data = await A().request('api/club/staff', { method: 'POST', body: { role: hire.dataset.hire } });
+          state.club = data.club;
+          state.me.user = data.user;
+          A().setUser(data.user);
+          paintSidebar();
+          toast('Персонал нанят');
           render();
         } catch (err) { toast(err.message); }
       }
