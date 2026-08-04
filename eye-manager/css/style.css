@@ -112,6 +112,25 @@ input:focus, select:focus { border-color: rgba(94,234,212,.45); box-shadow: 0 0 
   line-height: 1.45;
 }
 .lede { max-width: 28ch; margin: 0 auto; }
+.home-pillars {
+  display: flex; flex-wrap: wrap; justify-content: center; gap: 8px;
+  margin-top: 4px;
+}
+.home-pillars span {
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: rgba(255,255,255,.04);
+  color: var(--dim);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  animation: rise .55s ease both;
+}
+.home-pillars span:nth-child(2) { animation-delay: .06s; }
+.home-pillars span:nth-child(3) { animation-delay: .12s; }
+.home-pillars span:nth-child(4) { animation-delay: .18s; }
 
 .eye-logo {
   width: 96px; height: 96px;
@@ -125,6 +144,11 @@ input:focus, select:focus { border-color: rgba(94,234,212,.45); box-shadow: 0 0 
     0 0 40px rgba(94,234,212,.15);
   backdrop-filter: blur(18px) saturate(140%);
   -webkit-backdrop-filter: blur(18px) saturate(140%);
+  animation: logoGlow 4.8s ease-in-out infinite alternate;
+}
+@keyframes logoGlow {
+  from { filter: brightness(1); }
+  to { filter: brightness(1.08); }
 }
 .eye-logo img { filter: drop-shadow(0 4px 12px rgba(94,234,212,.35)); }
 .boot-eye { animation: pulseEye 2.4s ease-in-out infinite; }
@@ -336,12 +360,45 @@ input:focus, select:focus { border-color: rgba(94,234,212,.45); box-shadow: 0 0 
 }
 
 .hub-next { padding: 18px; display: grid; gap: 12px; }
+.hub-next .btn { transition: transform .2s ease, box-shadow .2s ease; }
 .next-label { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--dim); }
 .next-fixture { font-family: var(--display); font-size: 22px; font-weight: 700; letter-spacing: -.02em; }
 
+.hub-sections { display: grid; gap: 16px; }
+.hub-section-title,
+.menu-section-title {
+  font-family: var(--display);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--dim);
+  margin: 0;
+}
 .hub-grid {
   display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
 }
+.menu-section { display: grid; gap: 10px; }
+.menu-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.menu-card {
+  text-align: left;
+  padding: 14px;
+  display: grid;
+  gap: 4px;
+  transition: transform .2s ease, border-color .2s ease, background .2s ease;
+}
+.menu-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(94,234,212,.28);
+  background: rgba(255,255,255,.08);
+}
+.menu-card strong { font-family: var(--display); font-size: 15px; }
+.menu-card span { color: var(--muted); font-size: 12px; }
+.menu-actions { display: grid; gap: 8px; }
 .filters { padding: 12px; display: grid; gap: 8px; }
 .filter-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .filters input, .filters select { margin-top: 0; min-height: 42px; padding: 10px 12px; font-size: 13px; }
@@ -395,6 +452,12 @@ input:focus, select:focus { border-color: rgba(94,234,212,.45); box-shadow: 0 0 
 .tile {
   text-align: left; padding: 16px;
   display: grid; gap: 4px;
+  transition: transform .2s ease, border-color .2s ease, background .2s ease;
+}
+.tile:hover {
+  transform: translateY(-2px);
+  border-color: rgba(94,234,212,.28);
+  background: rgba(255,255,255,.08);
 }
 .tile strong { font-family: var(--display); font-size: 17px; }
 .tile span { color: var(--muted); font-size: 12px; }
@@ -792,17 +855,29 @@ input:focus, select:focus { border-color: rgba(94,234,212,.45); box-shadow: 0 0 
     letter-spacing: -.04em;
   }
   .desktop-brand small { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .08em; }
-  .desktop-nav-list { display: grid; gap: 4px; flex: 1; }
+  .desktop-nav-list { display: flex; flex-direction: column; gap: 14px; flex: 1; }
+  .nav-group { display: grid; gap: 3px; }
+  .nav-group-label {
+    display: block;
+    padding: 0 12px 4px;
+    font-family: var(--display);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--dim);
+  }
   .desk-btn {
     display: flex; align-items: center; gap: 10px;
     width: 100%;
-    min-height: 42px;
+    min-height: 38px;
     padding: 0 12px;
     border-radius: 12px;
     color: var(--muted);
-    font-weight: 600; font-size: 14px;
+    font-weight: 600; font-size: 13px;
     text-align: left;
     border: 1px solid transparent;
+    transition: background .15s ease, color .15s ease, border-color .15s ease;
   }
   .desk-btn span { width: 18px; text-align: center; opacity: .85; }
   .desk-btn:hover { background: rgba(255,255,255,.05); color: var(--ink); }
@@ -840,18 +915,23 @@ input:focus, select:focus { border-color: rgba(94,234,212,.45); box-shadow: 0 0 
   /* Hub dashboard */
   #screen-hub.active {
     display: grid;
-    grid-template-columns: 1.15fr 1fr;
+    grid-template-columns: 1.05fr 1.1fr;
     grid-template-rows: auto auto 1fr;
     gap: 16px 20px;
     align-content: start;
   }
   #screen-hub .topbar { grid-column: 1 / -1; }
   #screen-hub .hub-next { grid-column: 1; align-self: start; }
-  #screen-hub .hub-grid {
+  #screen-hub .hub-sections {
     grid-column: 2;
     grid-row: 2 / 4;
-    grid-template-columns: 1fr 1fr;
     align-content: start;
+    overflow: auto;
+    max-height: calc(100vh - 120px);
+    padding-right: 4px;
+  }
+  #screen-hub .hub-grid {
+    grid-template-columns: 1fr 1fr;
   }
   #screen-hub .news-strip {
     grid-column: 1;
@@ -859,8 +939,15 @@ input:focus, select:focus { border-color: rgba(94,234,212,.45); box-shadow: 0 0 
     max-height: none;
     overflow: auto;
   }
-  .hub-grid { grid-template-columns: 1fr 1fr; gap: 12px; }
-  .tile { min-height: 84px; }
+  .hub-grid { gap: 12px; }
+  .tile { min-height: 78px; }
+
+  #screen-more .more-stack {
+    max-width: 560px;
+  }
+  #screen-more .menu-grid {
+    grid-template-columns: 1fr 1fr;
+  }
 
   /* Home / auth / create centered card */
   #screen-home.active,
@@ -966,7 +1053,7 @@ input:focus, select:focus { border-color: rgba(94,234,212,.45); box-shadow: 0 0 
 
   /* More = settings */
   #screen-more .more-stack {
-    max-width: 520px;
+    max-width: 560px;
   }
 
   /* Club / train denser */

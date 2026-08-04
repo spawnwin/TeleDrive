@@ -30,18 +30,35 @@
         </div>
       </div>
       <nav class="desktop-nav-list">
-        <button type="button" data-nav="hub" class="desk-btn active"><span>⌂</span>Центр</button>
-        <button type="button" data-nav="squad" class="desk-btn"><span>◈</span>Состав</button>
-        <button type="button" data-nav="tactics" class="desk-btn"><span>⬡</span>Тактика</button>
-        <button type="button" data-nav="transfers" class="desk-btn"><span>⇄</span>Рынок</button>
-        <button type="button" data-nav="table" class="desk-btn"><span>#</span>Таблица</button>
-        <button type="button" data-nav="calendar" class="desk-btn"><span>▦</span>Календарь</button>
-        <button type="button" data-nav="cup" class="desk-btn"><span>◆</span>Кубок</button>
-        <button type="button" data-nav="ucl" class="desk-btn"><span>★</span>ЛЧ</button>
-        <button type="button" data-nav="board" class="desk-btn"><span>○</span>Совет</button>
-        <button type="button" data-nav="youth" class="desk-btn"><span>◇</span>Академия</button>
-        <button type="button" data-nav="inbox" class="desk-btn"><span>✉</span>Почта</button>
-        <button type="button" data-nav="more" class="desk-btn"><span>···</span>Ещё</button>
+        <div class="nav-group">
+          <span class="nav-group-label">Команда</span>
+          <button type="button" data-nav="hub" class="desk-btn active"><span>⌂</span>Центр</button>
+          <button type="button" data-nav="squad" class="desk-btn"><span>◈</span>Состав</button>
+          <button type="button" data-nav="tactics" class="desk-btn"><span>⬡</span>Тактика</button>
+          <button type="button" data-nav="transfers" class="desk-btn"><span>⇄</span>Рынок</button>
+        </div>
+        <div class="nav-group">
+          <span class="nav-group-label">Сезон</span>
+          <button type="button" data-nav="table" class="desk-btn"><span>#</span>Таблица</button>
+          <button type="button" data-nav="calendar" class="desk-btn"><span>▦</span>Календарь</button>
+          <button type="button" data-nav="cup" class="desk-btn"><span>◆</span>Кубок</button>
+          <button type="button" data-nav="ucl" class="desk-btn"><span>★</span>ЛЧ</button>
+          <button type="button" data-nav="stats" class="desk-btn"><span>〡</span>Статистика</button>
+        </div>
+        <div class="nav-group">
+          <span class="nav-group-label">Клуб</span>
+          <button type="button" data-nav="board" class="desk-btn"><span>○</span>Совет</button>
+          <button type="button" data-nav="youth" class="desk-btn"><span>◇</span>Академия</button>
+          <button type="button" data-nav="club" class="desk-btn"><span>▣</span>Инфра</button>
+          <button type="button" data-nav="finance" class="desk-btn"><span>¤</span>Финансы</button>
+          <button type="button" data-nav="train" class="desk-btn"><span>▴</span>Тренировка</button>
+          <button type="button" data-nav="inbox" class="desk-btn"><span>✉</span>Почта</button>
+        </div>
+        <div class="nav-group">
+          <span class="nav-group-label">Система</span>
+          <button type="button" data-nav="history" class="desk-btn"><span>◷</span>История</button>
+          <button type="button" data-nav="more" class="desk-btn"><span>⚙</span>Настройки</button>
+        </div>
       </nav>
       <div class="desktop-nav-foot" id="desktop-user"><strong>Гость</strong><small>ПК-версия</small></div>
     </aside>
@@ -75,7 +92,12 @@
         <button class="btn btn-glass" id="btn-continue" hidden>Продолжить</button>
         <button class="btn btn-glass" id="btn-logout" hidden>Выйти</button>
       </div>
-      <p class="home-foot">Аккаунт · Сезон · Матч · Трансферы</p>
+      <div class="home-pillars" aria-hidden="true">
+        <span>Аккаунт</span>
+        <span>Сезон</span>
+        <span>Матч</span>
+        <span>Трансферы</span>
+      </div>
     </section>
 
     <!-- AUTH -->
@@ -188,21 +210,31 @@
         <button data-nav="squad" class="dock-btn"><span>◈</span>Состав</button>
         <button data-nav="tactics" class="dock-btn"><span>⬡</span>Тактика</button>
         <button data-nav="transfers" class="dock-btn"><span>⇄</span>Рынок</button>
-        <button data-nav="more" class="dock-btn"><span>···</span>Ещё</button>
+        <button data-nav="more" class="dock-btn"><span>☰</span>Меню</button>
       </nav>
 
-      <div class="hub-grid">
-        <button class="tile glass-panel" data-nav="table"><strong>Таблица</strong><span>Лига</span></button>
-        <button class="tile glass-panel" data-nav="calendar"><strong>Календарь</strong><span>Туры</span></button>
-        <button class="tile glass-panel" data-nav="cup"><strong>Кубок</strong><span>EYE Cup</span></button>
-        <button class="tile glass-panel" data-nav="ucl"><strong>ЛЧ</strong><span>Чемпионов</span></button>
-        <button class="tile glass-panel" data-nav="board"><strong>Совет</strong><span>Цели</span></button>
-        <button class="tile glass-panel" data-nav="stats"><strong>Бомбардиры</strong><span>Статистика</span></button>
-        <button class="tile glass-panel" data-nav="finance"><strong>Финансы</strong><span>Бюджет</span></button>
-        <button class="tile glass-panel" data-nav="train"><strong>Тренировка</strong><span>Развитие</span></button>
-        <button class="tile glass-panel" data-nav="club"><strong>Клуб</strong><span>Инфраструктура</span></button>
-        <button class="tile glass-panel" data-nav="youth"><strong>Академия</strong><span>Молодёжь</span></button>
-        <button class="tile glass-panel" data-nav="inbox"><strong>Почта</strong><span id="inbox-badge">0</span></button>
+      <div class="hub-sections">
+        <section class="hub-section">
+          <h3 class="hub-section-title">Соревнования</h3>
+          <div class="hub-grid">
+            <button class="tile glass-panel" data-nav="table"><strong>Таблица</strong><span>Лига и зоны</span></button>
+            <button class="tile glass-panel" data-nav="calendar"><strong>Календарь</strong><span>Туры и кубки</span></button>
+            <button class="tile glass-panel" data-nav="cup"><strong>Кубок</strong><span>EYE Cup</span></button>
+            <button class="tile glass-panel" data-nav="ucl"><strong>ЛЧ</strong><span>Чемпионов</span></button>
+            <button class="tile glass-panel" data-nav="stats"><strong>Статистика</strong><span>Голы · MOTM</span></button>
+          </div>
+        </section>
+        <section class="hub-section">
+          <h3 class="hub-section-title">Клуб</h3>
+          <div class="hub-grid">
+            <button class="tile glass-panel" data-nav="board"><strong>Совет</strong><span>Цели сезона</span></button>
+            <button class="tile glass-panel" data-nav="finance"><strong>Финансы</strong><span>Бюджет и журнал</span></button>
+            <button class="tile glass-panel" data-nav="train"><strong>Тренировка</strong><span>Развитие</span></button>
+            <button class="tile glass-panel" data-nav="club"><strong>Инфра</strong><span>Стадион и штаб</span></button>
+            <button class="tile glass-panel" data-nav="youth"><strong>Академия</strong><span>Молодёжь</span></button>
+            <button class="tile glass-panel" data-nav="inbox"><strong>Почта</strong><span id="inbox-badge">0</span></button>
+          </div>
+        </section>
       </div>
 
       <div class="news-strip" id="news-strip"></div>
@@ -419,34 +451,58 @@
       <div class="list" id="inbox-list"></div>
     </section>
 
-    <!-- MORE -->
+    <!-- MORE / SETTINGS -->
     <section id="screen-more" class="screen">
       <header class="subhead">
         <button class="icon-back" data-nav="hub">‹</button>
-        <h2>Ещё</h2>
+        <h2>Меню</h2>
       </header>
       <div class="more-stack">
-        <div class="glass-panel currency-panel">
-          <strong>Валюта отображения</strong>
-          <p class="hint" id="currency-rates">Курсы к евро: 1 € = 100 ₽ = 1,08 $</p>
-          <div class="currency-switch large" id="currency-switch-more">
-            <button type="button" data-cur="RUB" class="cur-btn">Рубли ₽</button>
-            <button type="button" data-cur="USD" class="cur-btn">Доллары $</button>
-            <button type="button" data-cur="EUR" class="cur-btn">Евро €</button>
+        <section class="menu-section phone-only-nav">
+          <h3 class="menu-section-title">Соревнования</h3>
+          <div class="menu-grid">
+            <button class="menu-card glass-panel" data-nav="table"><strong>Таблица</strong><span>Лига</span></button>
+            <button class="menu-card glass-panel" data-nav="calendar"><strong>Календарь</strong><span>Туры</span></button>
+            <button class="menu-card glass-panel" data-nav="cup"><strong>Кубок</strong><span>EYE Cup</span></button>
+            <button class="menu-card glass-panel" data-nav="ucl"><strong>ЛЧ</strong><span>Сетка</span></button>
+            <button class="menu-card glass-panel" data-nav="stats"><strong>Статистика</strong><span>Голы · MOTM</span></button>
           </div>
-        </div>
-        <button class="btn btn-glass phone-only-nav" data-nav="table">Таблица лиги</button>
-        <button class="btn btn-glass phone-only-nav" data-nav="ucl">Лига чемпионов</button>
-        <button class="btn btn-glass phone-only-nav" data-nav="board">Совет директоров</button>
-        <button class="btn btn-glass phone-only-nav" data-nav="youth">Академия</button>
-        <button class="btn btn-glass" data-nav="stats">Бомбардиры и ассисты</button>
-        <button class="btn btn-glass" data-nav="history">История матчей</button>
-        <button class="btn btn-glass" data-nav="train">Тренировки</button>
-        <button class="btn btn-glass" data-nav="club">Инфраструктура</button>
-        <button class="btn btn-glass phone-only-nav" data-nav="inbox">Почта</button>
-        <button class="btn btn-glass" id="btn-save-cloud">Сохранить в облако</button>
-        <button class="btn btn-glass" id="btn-logout-more">Выйти из аккаунта</button>
-        <button class="btn btn-danger" id="btn-reset">Сбросить карьеру</button>
+        </section>
+        <section class="menu-section phone-only-nav">
+          <h3 class="menu-section-title">Клуб</h3>
+          <div class="menu-grid">
+            <button class="menu-card glass-panel" data-nav="board"><strong>Совет</strong><span>Цели</span></button>
+            <button class="menu-card glass-panel" data-nav="youth"><strong>Академия</strong><span>Набор</span></button>
+            <button class="menu-card glass-panel" data-nav="club"><strong>Инфра</strong><span>Объекты</span></button>
+            <button class="menu-card glass-panel" data-nav="finance"><strong>Финансы</strong><span>Журнал</span></button>
+            <button class="menu-card glass-panel" data-nav="train"><strong>Тренировка</strong><span>Фокус</span></button>
+            <button class="menu-card glass-panel" data-nav="inbox"><strong>Почта</strong><span>Сообщения</span></button>
+          </div>
+        </section>
+        <section class="menu-section">
+          <h3 class="menu-section-title">Карьера</h3>
+          <div class="menu-grid">
+            <button class="menu-card glass-panel" data-nav="history"><strong>История</strong><span>Матчи и сезоны</span></button>
+            <button class="menu-card glass-panel phone-only-nav" data-nav="stats"><strong>Статистика</strong><span>Голы · MOTM</span></button>
+          </div>
+        </section>
+        <section class="menu-section">
+          <h3 class="menu-section-title">Настройки</h3>
+          <div class="glass-panel currency-panel">
+            <strong>Валюта отображения</strong>
+            <p class="hint" id="currency-rates">Курсы к евро: 1 € = 100 ₽ = 1,08 $</p>
+            <div class="currency-switch large" id="currency-switch-more">
+              <button type="button" data-cur="RUB" class="cur-btn">Рубли ₽</button>
+              <button type="button" data-cur="USD" class="cur-btn">Доллары $</button>
+              <button type="button" data-cur="EUR" class="cur-btn">Евро €</button>
+            </div>
+          </div>
+          <div class="menu-actions">
+            <button class="btn btn-glass" id="btn-save-cloud">Сохранить в облако</button>
+            <button class="btn btn-glass" id="btn-logout-more">Выйти из аккаунта</button>
+            <button class="btn btn-danger" id="btn-reset">Сбросить карьеру</button>
+          </div>
+        </section>
       </div>
     </section>
 

@@ -35,21 +35,15 @@ window.EYE_UI = (() => {
     const dockIds = ['hub', 'squad', 'tactics', 'transfers', 'more'];
     $all('.dock-btn').forEach(b => b.classList.toggle('active', b.dataset.nav === id));
     if (!dockIds.includes(id) && id !== 'match' && id !== 'prematch' && id !== 'result') {
-      // secondary screens keep "more" highlighted on phone dock
       if (['table','calendar','cup','ucl','board','youth','inbox','stats','finance','train','club','history','player'].includes(id)) {
         $all('.dock-btn').forEach(b => b.classList.toggle('active', b.dataset.nav === 'more'));
       }
     }
 
-    const deskIds = ['hub','squad','tactics','transfers','table','calendar','cup','ucl','board','youth','inbox','more'];
-    $all('.desk-btn').forEach(b => {
-      const nav = b.dataset.nav;
-      let on = nav === id;
-      if (!deskIds.includes(id) && ['stats','finance','train','club','history','player'].includes(id)) {
-        on = nav === 'more';
-      }
-      b.classList.toggle('active', on);
-    });
+    // Desktop: exact match; player card keeps squad highlighted
+    const deskAlias = { player: 'squad' };
+    const deskActive = deskAlias[id] || id;
+    $all('.desk-btn').forEach(b => b.classList.toggle('active', b.dataset.nav === deskActive));
 
     const app = document.getElementById('app');
     if (app) {
@@ -1456,6 +1450,14 @@ window.EYE_UI = (() => {
         toast(r.msg);
         $('#youth-msg').textContent = r.msg;
         renderYouth();
+        return;
+      }
+      const ydrop = e.target.closest('[data-youth-drop]');
+      if (ydrop) {
+        const r = S().releaseYouth(ydrop.dataset.youthDrop);
+        toast(r.msg);
+        $('#youth-msg').textContent = r.msg;
+        if (r.ok) renderYouth();
         return;
       }
       const press = e.target.closest('[data-press]');

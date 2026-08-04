@@ -63,7 +63,7 @@ window.EYE_ENGINE = (() => {
       else { def += d * 1.35; }
       cond += (p.condition || 80);
     });
-    const chemistry = Math.round((chemPts / 11) * 10); // ~20–100
+    const chemistry = Math.round(35 + (chemPts / 110) * 65); // ~35–100
     const chemMod = 0.90 + Math.min(0.14, (chemistry / 100) * 0.14);
     const leaderBoost = 1 + Math.min(0.04, leaders * 0.015);
     const style = club.style || 'balance';
