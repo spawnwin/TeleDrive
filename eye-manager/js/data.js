@@ -40,16 +40,16 @@ window.EYE_DATA = (() => {
     { id:'recovery', name:'Восстановление', focus:'condition', boost:8 }
   ];
   const FACILITIES = [
-    { id:'stadium', name:'Стадион', max:5, base:4e5, effect:'income' },
-    { id:'training', name:'База', max:5, base:2.5e5, effect:'training' },
-    { id:'youth', name:'Академия', max:5, base:3e5, effect:'youth' },
-    { id:'medical', name:'Медицина', max:5, base:2e5, effect:'injury' },
-    { id:'scout', name:'Скаутинг', max:5, base:1.8e5, effect:'scout' }
+    { id:'stadium', name:'Стадион', max:5, base:4e5, effect:'income', effectRu:'Больше кассы с матчей' },
+    { id:'training', name:'База', max:5, base:2.5e5, effect:'training', effectRu:'Сильнее эффект тренировок' },
+    { id:'youth', name:'Академия', max:5, base:3e5, effect:'youth', effectRu:'Лучше набор и потенциал' },
+    { id:'medical', name:'Медицина', max:5, base:2e5, effect:'injury', effectRu:'Быстрее заживление травм' },
+    { id:'scout', name:'Скаутинг', max:5, base:1.8e5, effect:'scout', effectRu:'Точнее скаут-отчёты' }
   ];
   const STAFF_ROLES = [
-    { id: 'coach', name: 'Ассистент', max: 5, base: 90000, effect: 'training' },
-    { id: 'physio', name: 'Врач', max: 5, base: 75000, effect: 'injury' },
-    { id: 'scoutDir', name: 'Главный скаут', max: 5, base: 80000, effect: 'scout' }
+    { id: 'coach', name: 'Ассистент', max: 5, base: 90000, effect: 'training', effectRu: 'Бонус к тренировкам' },
+    { id: 'physio', name: 'Врач', max: 5, base: 75000, effect: 'injury', effectRu: 'Восстановление и лазарет' },
+    { id: 'scoutDir', name: 'Главный скаут', max: 5, base: 80000, effect: 'scout', effectRu: 'Качество разведки' }
   ];
   const PRESS_OPTIONS = [
     { id: 'confident', label: 'Мы заслужили победу', morale: 3, board: 2, risk: 0 },

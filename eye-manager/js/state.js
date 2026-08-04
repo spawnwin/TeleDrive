@@ -1055,28 +1055,140 @@ window.EYE_STATE = (() => {
     if (me.budget < cost) return { ok: false, msg: 'Не хватает бюджета' };
     adjustBudget(-cost, `Тренировка «${t.name}»`);
     const boost = t.boost + me.facilities.training + Math.floor((me.staff.coach || 1) / 2);
+    const gains = [];
+    let recovered = 0;
+    let skipped = 0;
     me.squad.forEach(p => {
       D().ensureTraits(p);
-      if (p.injured || p.suspended) return;
+      if (p.injured || p.suspended) { skipped++; return; }
       if (t.focus === 'condition') {
+        const before = Math.round((p.condition || 70) + (p.energy || 70));
         p.condition = Math.min(100, p.condition + boost);
         p.energy = Math.min(100, p.energy + boost);
+        const after = Math.round((p.condition || 70) + (p.energy || 70));
+        if (after > before) {
+          recovered++;
+          if (gains.length < 8) gains.push({ id: p.id, name: p.name, text: `+конд/энергия` });
+        }
       } else {
         const focusHit = p.devFocus && D().DEV_FOCUS.find(f => f.id === p.devFocus)?.attr === t.focus;
-        p[t.focus] = Math.min(99, (p[t.focus] || 60) + (Math.random() < (focusHit ? 0.78 : 0.55) ? 1 : 0));
+        const beforeAttr = p[t.focus] || 60;
+        const beforeOvr = p.ovr;
+        p[t.focus] = Math.min(99, beforeAttr + (Math.random() < (focusHit ? 0.78 : 0.55) ? 1 : 0));
         if (focusHit && Math.random() < 0.35) {
           const alt = D().DEV_FOCUS.find(f => f.id === p.devFocus)?.attr;
-          if (alt) p[alt] = Math.min(99, (p[alt] || 60) + (alt === t.focus ? 0 : 1));
+          if (alt && alt !== t.focus) p[alt] = Math.min(99, (p[alt] || 60) + 1);
         }
         if (Math.random() < 0.12 + me.facilities.training * 0.02 + (me.staff.coach || 1) * 0.01 + (focusHit ? 0.06 : 0)) {
           p.ovr = Math.min(p.pot, p.ovr + 1);
         }
         p.condition = Math.max(45, p.condition - 3);
         p.form = Math.min(99, p.form + 1);
+        const bits = [];
+        if ((p[t.focus] || 0) > beforeAttr) bits.push(`+${t.focus}`);
+        if (p.ovr > beforeOvr) bits.push('+OVR');
+        if (focusHit) bits.push('фокус');
+        if (bits.length && gains.length < 10) gains.push({ id: p.id, name: p.name, text: bits.join(' · ') });
       }
     });
     save();
-    return { ok: true, msg: `Тренировка «${t.name}» (−${money(cost)})` };
+    const ready = squadReadiness();
+    return {
+      ok: true,
+      msg: `Тренировка «${t.name}» (−${money(cost)})`,
+      training: t,
+      cost,
+      gains,
+      recovered,
+      skipped,
+      readiness: ready
+    };
+  }
+
+  function squadReadiness() {
+    const me = club();
+    if (!me) return null;
+    const sq = me.squad || [];
+    const n = sq.length || 1;
+    const avgCond = Math.round(sq.reduce((s, p) => s + (p.condition || 70), 0) / n);
+    const avgEnergy = Math.round(sq.reduce((s, p) => s + (p.energy || 70), 0) / n);
+    const injured = sq.filter(p => p.injured > 0);
+    const suspended = sq.filter(p => p.suspended > 0);
+    const tired = sq.filter(p => !p.injured && !p.suspended && ((p.condition || 100) < 58 || (p.energy || 100) < 52));
+    const cards = sq.filter(p => (p.seasonYellows || 0) >= 4 && !p.suspended);
+    return { avgCond, avgEnergy, injured, suspended, tired, cards, size: sq.length };
+  }
+
+  function opponentBrief(oppId) {
+    const opp = clubById(oppId);
+    if (!opp) return null;
+    const style = D().STYLES.find(s => s.id === opp.style)?.name || opp.style || 'Баланс';
+    const threats = [...(opp.squad || [])]
+      .filter(p => !p.injured && !p.suspended)
+      .sort((a, b) => (b.seasonGoals || 0) * 3 + b.ovr - ((a.seasonGoals || 0) * 3 + a.ovr))
+      .slice(0, 3)
+      .map(p => ({
+        id: p.id,
+        name: p.name,
+        pos: D().POS_LABEL[p.pos] || p.pos,
+        ovr: p.ovr,
+        goals: p.seasonGoals || 0,
+        assists: p.seasonAssists || 0
+      }));
+    const out = [...(opp.squad || [])]
+      .filter(p => p.injured > 0 || p.suspended > 0)
+      .sort((a, b) => b.ovr - a.ovr)
+      .slice(0, 4)
+      .map(p => ({
+        name: p.name,
+        reason: p.injured > 0 ? `травма ${p.injured}` : `бан ${p.suspended}`,
+        ovr: p.ovr
+      }));
+    const recent = (state.history || [])
+      .filter(h => h.homeId === oppId || h.awayId === oppId || h.home === opp.name || h.away === opp.name)
+      .slice(0, 3)
+      .map(h => {
+        const hs = h.score?.[0] ?? '?';
+        const as = h.score?.[1] ?? '?';
+        return `${h.home} ${hs}:${as} ${h.away}`;
+      });
+    const strength = E().teamStrength(opp, { home: false });
+    return {
+      id: opp.id,
+      name: opp.name,
+      formation: opp.formation || '4-3-3',
+      style,
+      strength: Math.round((strength.attack + strength.defense + strength.mid) / 3),
+      chemistry: strength.chemistry,
+      threats,
+      out,
+      recent
+    };
+  }
+
+  function boardProgress() {
+    const me = club();
+    if (!state?.board || !me) return null;
+    const rows = sortedTable();
+    const idx = rows.findIndex(r => r.id === me.id);
+    const place = idx >= 0 ? idx + 1 : null;
+    const row = idx >= 0 ? rows[idx] : null;
+    const target = state.board.targetPlace;
+    const onTrack = place != null && place <= target;
+    const gap = place != null ? place - target : null;
+    return {
+      place,
+      target,
+      onTrack,
+      gap,
+      pts: row?.pts || 0,
+      played: row?.played || 0,
+      gd: row ? (row.gf || 0) - (row.ga || 0) : 0,
+      confidence: state.board.confidence,
+      targetLabel: state.board.targetLabel,
+      warnings: state.board.warnings || 0,
+      cupTarget: state.board.cupTarget
+    };
   }
 
   function setDevFocus(playerId, focusId) {
@@ -1796,6 +1908,7 @@ window.EYE_STATE = (() => {
     renewContract, negotiateContract, setDevFocus, financeSummary, resolveCupRoundAI, scoutPlayer, takeNewJob,
     hireStaff, answerPress, refillYouth, releaseYouth, runYouthIntake, pendingPress: () => state?.pendingPress || null,
     xiStatus, fixXi, matchRivalry, transferWindowOpen, listLeagueTables,
-    resolvePlayerRequest, seasonLog: () => state?.seasonLog || [], avgSeasonRating
+    resolvePlayerRequest, seasonLog: () => state?.seasonLog || [], avgSeasonRating,
+    squadReadiness, opponentBrief, boardProgress
   };
 })();

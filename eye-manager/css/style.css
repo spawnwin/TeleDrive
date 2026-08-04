@@ -953,8 +953,53 @@ input:focus, select:focus { border-color: rgba(94,234,212,.45); box-shadow: 0 0 
   animation: rise .3s ease;
 }
 
-.section-label { color: var(--muted); font-size: 14px; }
-#press-card .btn { width: 100%; margin-top: 6px; }
+.fit-row {
+  display: flex; flex-wrap: wrap; gap: 6px;
+  margin-top: 6px;
+}
+.fit-bar {
+  display: inline-grid;
+  grid-template-columns: 42px auto;
+  align-items: center; gap: 6px;
+  min-width: 96px;
+  font-size: 10px; color: var(--dim);
+}
+.fit-bar i {
+  display: block; height: 5px; border-radius: 99px;
+  background: rgba(255,255,255,.08); position: relative; overflow: hidden;
+}
+.fit-bar i::after {
+  content: ""; position: absolute; inset: 0 auto 0 0; width: var(--v, 50%);
+  border-radius: inherit;
+  background: linear-gradient(90deg, #2DD4BF, #99F6E4);
+}
+.fit-bar.mid i::after { background: linear-gradient(90deg, #FBBF24, #FDE68A); }
+.fit-bar.bad i::after { background: linear-gradient(90deg, #FB7185, #FECDD3); }
+.fit-bar em { font-style: normal; font-variant-numeric: tabular-nums; color: var(--muted); }
+.row-tired { border-color: rgba(251,191,36,.35) !important; }
+.row-injured { border-color: rgba(251,113,133,.35) !important; opacity: .88; }
+.badge-ok {
+  display: inline-block; margin-left: 6px;
+  padding: 1px 6px; border-radius: 6px;
+  font-size: 10px; font-weight: 700;
+  color: var(--ok); background: rgba(74,222,128,.12);
+  border: 1px solid rgba(74,222,128,.28); vertical-align: middle;
+}
+.board-conf {
+  height: 8px; border-radius: 99px; background: rgba(255,255,255,.08); overflow: hidden; margin-top: 10px;
+}
+.board-conf i { display: block; height: 100%; border-radius: inherit; }
+.dossier-grid {
+  display: grid; gap: 12px; margin-top: 12px;
+}
+.dossier-grid .field-label {
+  display: block; font-size: 11px; text-transform: uppercase; letter-spacing: .04em;
+  color: var(--dim); margin-bottom: 4px;
+}
+@media (min-width: 720px) {
+  .dossier-grid { grid-template-columns: 1fr 1fr; }
+  .dossier-grid .dossier-form { grid-column: 1 / -1; }
+}
 
 /* ——— Desktop shell (phone layout unchanged below 960px) ——— */
 .desktop-nav { display: none; }

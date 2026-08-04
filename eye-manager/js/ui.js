@@ -328,9 +328,15 @@ window.EYE_UI = (() => {
     }
     const goal = $('#hub-board-goal');
     if (goal) {
-      goal.textContent = st.sacked
-        ? 'Вас уволили — выберите новый клуб в разделе «Совет».'
-        : (board ? `Цель: ${board.targetLabel}${board.cupTarget ? ' · кубок' : ''}` : '');
+      if (st.sacked) {
+        goal.textContent = 'Вас уволили — выберите новый клуб в разделе «Совет».';
+      } else if (board) {
+        const prog = S().boardProgress();
+        const place = prog?.place != null ? `${prog.place}-е / цель ≤${prog.target}` : board.targetLabel;
+        goal.textContent = `Цель: ${board.targetLabel} · ${place}${board.cupTarget ? ' · кубок' : ''}`;
+      } else {
+        goal.textContent = '';
+      }
     }
     syncCurrencyButtons();
     const unread = st.inbox.filter(m => !m.read).length;
@@ -420,6 +426,7 @@ window.EYE_UI = (() => {
         ${bar('Атака', p.attack)}${bar('Защита', p.defense)}${bar('Техника', p.tech)}
         ${bar('Пас', p.pass || p.tech)}${bar('Темп', p.pace || 70)}${bar('Физика', p.physical || p.stamina)}
         ${bar('Вынос.', p.stamina)}${bar('IQ', p.iq)}${bar('Форма', p.form)}
+        ${bar('Конд.', p.condition || 70)}${bar('Энерг.', p.energy || 70)}${bar('Мораль', p.morale || 60)}
       </div>
       <div class="meta" style="margin-top:12px;color:var(--muted);font-size:13px;line-height:1.5">
         Потенциал ${p.pot} · стоимость ${S().money(p.value || 0)} · зарплата ${S().money(p.wage || 0)}/нед<br/>
@@ -473,22 +480,48 @@ window.EYE_UI = (() => {
     return `<div class="stat-bar"><span>${label}</span><i style="--v:${v}%"></i><b>${v}</b></div>`;
   }
 
+  function fitTone(v) {
+    const n = Number(v) || 0;
+    if (n >= 75) return 'ok';
+    if (n >= 55) return 'mid';
+    return 'bad';
+  }
+
+  function fitBar(label, v) {
+    const n = Math.max(0, Math.min(100, Math.round(Number(v) || 0)));
+    return `<span class="fit-bar ${fitTone(n)}" title="${label} ${n}"><i style="--v:${n}%"></i><em>${label[0]}${n}</em></span>`;
+  }
+
   function renderSquad() {
     const me = S().club();
+    const ready = S().squadReadiness();
     const avg = Math.round(me.squad.reduce((s, p) => s + p.ovr, 0) / me.squad.length);
     const stars = me.squad.filter(p => p.real).length;
-    $('#squad-summary').textContent = `${me.squad.length} игроков · рейтинг ${avg} · ${stars} звёзд · ${me.formation} · ${me.stadium || ''}`;
-    const sorted = [...me.squad].sort((a, b) => b.ovr - a.ovr);
+    const tiredN = ready?.tired?.length || 0;
+    const injN = ready?.injured?.length || 0;
+    $('#squad-summary').textContent =
+      `${me.squad.length} игроков · рейтинг ${avg} · конд. ${ready?.avgCond ?? '—'} · энерг. ${ready?.avgEnergy ?? '—'}` +
+      `${tiredN ? ` · устали ${tiredN}` : ''}${injN ? ` · лазарет ${injN}` : ''} · ${me.formation}`;
+    const sorted = [...me.squad].sort((a, b) => {
+      const ta = ((a.condition || 0) < 58 || (a.energy || 0) < 52) ? 1 : 0;
+      const tb = ((b.condition || 0) < 58 || (b.energy || 0) < 52) ? 1 : 0;
+      if (a.injured !== b.injured) return (b.injured ? 1 : 0) - (a.injured ? 1 : 0);
+      if (ta !== tb) return tb - ta;
+      return b.ovr - a.ovr;
+    });
     $('#squad-list').innerHTML = sorted.map(p => {
       D().ensureTraits(p);
       const trait = (p.traits || [])[0] ? D().traitInfo(p.traits[0]).name : '';
       const avgR = S().avgSeasonRating(p);
       const shortContract = (p.contract || 0) <= 1;
+      const yc = p.seasonYellows || 0;
+      const cardWarn = yc >= 4 && !p.suspended;
+      const tired = !p.injured && !p.suspended && ((p.condition || 100) < 58 || (p.energy || 100) < 52);
       return `
-      <button class="row row-btn" data-player="${p.id}">
+      <button class="row row-btn${tired ? ' row-tired' : ''}${p.injured ? ' row-injured' : ''}" data-player="${p.id}">
         <div class="ovr">${p.ovr}</div>
         <div>
-          <strong>${p.name}${p.real ? ' ★' : ''}${shortContract ? ' <span class="badge-warn">📄' + (p.contract || 0) + 'г</span>' : ''}</strong>
+          <strong>${p.name}${p.real ? ' ★' : ''}${shortContract ? ' <span class="badge-warn">📄' + (p.contract || 0) + 'г</span>' : ''}${cardWarn ? ' <span class="badge-warn">ЖК ' + yc + '/5</span>' : ''}</strong>
           <div class="meta">
             <span class="badge-pos">${D().POS_LABEL[p.pos] || p.pos}</span>
             · ${p.age}л · форма ${p.form}
@@ -498,8 +531,9 @@ window.EYE_UI = (() => {
             ${p.injured ? ' · травма ' + p.injured : ''}
             ${p.suspended ? ' · бан ' + p.suspended : ''}
             · ${p.seasonGoals || 0}Г/${p.seasonAssists || 0}А
-            ${(p.seasonYellows || 0) ? ' · ЖК ' + p.seasonYellows : ''}
+            ${yc && !cardWarn ? ' · ЖК ' + yc : ''}
           </div>
+          <div class="fit-row">${fitBar('Конд', p.condition)}${fitBar('Энерг', p.energy)}</div>
         </div>
         <div class="meta">${S().money(p.value)}</div>
       </button>`;
@@ -800,17 +834,29 @@ window.EYE_UI = (() => {
       jobs.hidden = true;
       return;
     }
-    const confColor = board.confidence >= 55 ? 'var(--good, #34d399)' : board.confidence >= 35 ? 'var(--warn, #fbbf24)' : 'var(--bad, #f87171)';
+    const prog = S().boardProgress();
+    const conf = board.confidence;
+    const confColor = conf >= 55 ? 'var(--ok)' : conf >= 35 ? 'var(--warn)' : 'var(--danger)';
+    const placeLine = prog?.place != null
+      ? `Сейчас <strong>${prog.place}-е</strong> из цели ≤${prog.target} · ${prog.pts} очк. · РМ ${(prog.gd > 0 ? '+' : '') + prog.gd}`
+      : `Цель: место не ниже ${board.targetPlace}`;
+    const track = prog?.place == null ? '' : (prog.onTrack
+      ? '<span class="badge-ok">в графике</span>'
+      : `<span class="badge-warn">отставание ${prog.gap}</span>`);
     card.innerHTML = `
       <div class="next-label">${st.sacked ? 'Вас уволили' : 'Цели сезона'}</div>
-      <h3 style="margin:6px 0;font-family:var(--display)">${board.targetLabel}</h3>
-      <div class="meta" style="color:var(--muted);line-height:1.5;font-size:13px">
-        Место не ниже ${board.targetPlace}${board.cupTarget ? ' · кубок: ' + (board.cupTarget === 'semi' ? 'полуфинал' : '1/4') : ''}<br/>
-        Уверенность: <strong style="color:${confColor}">${board.confidence}%</strong>
-        · предупреждений: ${board.warnings}<br/>
+      <h3 style="margin:6px 0;font-family:var(--display)">${board.targetLabel} ${track}</h3>
+      <div class="board-conf"><i style="width:${conf}%;background:${confColor}"></i></div>
+      <div class="meta" style="color:var(--muted);line-height:1.55;font-size:13px;margin-top:10px">
+        ${placeLine}<br/>
+        Уверенность: <strong style="color:${confColor}">${conf}%</strong>
+        · предупреждений: ${board.warnings}
+        ${board.cupTarget ? '<br/>Кубок: ' + (board.cupTarget === 'semi' ? 'полуфинал' : '1/4') : ''}<br/>
         Клуб: «${me.name}» · ${st.leagueName}
       </div>
-      ${st.sacked ? '<p class="hint" style="margin-top:10px">Выберите новый клуб ниже.</p>' : '<p class="hint" style="margin-top:10px">Поражения снижают доверие. Итог сезона решает судьбу контракта.</p>'}
+      ${st.sacked
+        ? '<p class="hint" style="margin-top:10px">Выберите новый клуб ниже.</p>'
+        : '<p class="hint" style="margin-top:10px">Победы поднимают доверие, поражения роняют. Итог сезона решает контракт.</p>'}
     `;
     if (!st.sacked) { jobs.hidden = true; jobs.innerHTML = ''; return; }
     jobs.hidden = false;
@@ -918,22 +964,68 @@ window.EYE_UI = (() => {
   }
 
   function renderTrain() {
+    const ready = S().squadReadiness();
+    const status = $('#train-status');
+    if (status && ready) {
+      const focusN = (S().club().squad || []).filter(p => p.devFocus).length;
+      status.innerHTML = `
+        <strong>Готовность состава</strong>
+        <div class="meta" style="color:var(--muted);margin-top:6px;font-size:13px;line-height:1.5">
+          Кондиция ${ready.avgCond} · энергия ${ready.avgEnergy}
+          · устали ${ready.tired.length} · лазарет ${ready.injured.length}
+          · фокус развития: ${focusN}
+          ${ready.cards.length ? ` · ЖК-риск: ${ready.cards.map(p => p.name).slice(0, 3).join(', ')}` : ''}
+        </div>
+        <div class="fit-row" style="margin-top:10px">${fitBar('Конд', ready.avgCond)}${fitBar('Энерг', ready.avgEnergy)}</div>
+      `;
+    }
     $('#train-grid').innerHTML = D().TRAINING.map(t => `
       <button class="train-card" data-train="${t.id}">
-        <div><strong>${t.name}</strong><span>${t.focus}</span></div>
+        <div><strong>${t.name}</strong><span>${t.focus === 'condition' ? 'восстановление' : 'рост · ' + t.focus}</span></div>
         <span class="btn-tiny">Старт</span>
       </button>
     `).join('');
   }
 
+  function showTrainReport(r) {
+    const box = $('#train-report');
+    if (!box) return;
+    if (!r?.ok) { box.hidden = true; box.innerHTML = ''; return; }
+    const lines = (r.gains || []).map(g =>
+      `<div class="rating-row"><span>${g.name}</span><strong>${g.text}</strong></div>`
+    ).join('') || `<div class="hint">Массовый эффект без ярких индивидуальных приростов</div>`;
+    const extra = r.training?.focus === 'condition'
+      ? `Восстановились: ${r.recovered || 0}`
+      : `Пропущено (травма/бан): ${r.skipped || 0}`;
+    box.hidden = false;
+    box.innerHTML = `
+      <strong>Отчёт: ${r.training?.name || 'Тренировка'}</strong>
+      <div class="hint" style="margin:6px 0 10px">${r.msg} · ${extra}</div>
+      ${lines}
+    `;
+  }
+
   function renderClub() {
     const me = S().club();
+    const ready = S().squadReadiness();
+    const bay = $('#medical-bay');
+    if (bay) {
+      const rows = [...(ready?.injured || []), ...(ready?.suspended || [])];
+      bay.innerHTML = `
+        <strong>Лазарет · медицина ур. ${me.facilities?.medical || 1}</strong>
+        <div class="meta" style="color:var(--muted);margin-top:6px;font-size:13px;line-height:1.5">
+          ${rows.length
+            ? rows.map(p => `${p.name} — ${p.injured ? 'травма ' + p.injured + ' тур.' : 'бан ' + p.suspended}`).join('<br/>')
+            : 'Все здоровы и доступны.'}
+        </div>
+      `;
+    }
     $('#facility-list').innerHTML = D().FACILITIES.map(f => {
       const lvl = me.facilities[f.id] || 1;
       const cost = Math.round(f.base * Math.pow(1.65, lvl - 1));
       return `
         <button class="fac-card" data-fac="${f.id}" ${lvl >= f.max ? 'disabled' : ''}>
-          <div><strong>${f.name}</strong><span>Уровень ${lvl}/${f.max}</span></div>
+          <div><strong>${f.name}</strong><span>Ур. ${lvl}/${f.max} · ${f.effectRu || ''}</span></div>
           <span class="btn-tiny">${lvl >= f.max ? 'макс.' : S().money(cost)}</span>
         </button>
       `;
@@ -944,7 +1036,7 @@ window.EYE_UI = (() => {
       const cost = Math.round(r.base * Math.pow(1.55, lvl - 1));
       return `
         <button class="fac-card" data-staff="${r.id}" ${lvl >= r.max ? 'disabled' : ''}>
-          <div><strong>${r.name}</strong><span>Уровень ${lvl}/${r.max}</span></div>
+          <div><strong>${r.name}</strong><span>Ур. ${lvl}/${r.max} · ${r.effectRu || ''}</span></div>
           <span class="btn-tiny">${lvl >= r.max ? 'макс.' : S().money(cost)}</span>
         </button>
       `;
@@ -1058,6 +1150,8 @@ window.EYE_UI = (() => {
     const rivalry = S().matchRivalry(home.id, away.id);
     const myS = E().teamStrength(me, { home: home.id === me.id, derby: !!rivalry });
     const opS = E().teamStrength(opp, { home: home.id === opp.id, derby: !!rivalry });
+    const ready = S().squadReadiness();
+    const cardRisk = (ready?.cards || []).filter(p => (me.lineup || []).some(x => x?.id === p.id));
     $('#prematch-card').innerHTML = `
       <div class="next-label">${matchTypeLabel(next.type)} · Тур ${st.week}${rivalry ? ' · ДЕРБИ' : ''}</div>
       ${rivalry ? `<div class="derby-badge">${rivalry.name}</div>` : ''}
@@ -1070,7 +1164,30 @@ window.EYE_UI = (() => {
         · химия ${myS.chemistry}
         · ${me.formation} · ${D().STYLES.find(s => s.id === me.style)?.name || me.style}
       </div>
+      ${cardRisk.length ? `<div class="hint" style="margin-top:8px">ЖК-риск в XI: ${cardRisk.map(p => p.name + ' (' + (p.seasonYellows || 0) + '/5)').join(', ')}</div>` : ''}
     `;
+    const brief = S().opponentBrief(opp.id);
+    const dossier = $('#opp-dossier');
+    if (dossier && brief) {
+      const threats = brief.threats.map(t =>
+        `${t.name} (${t.pos}, ${t.ovr})${t.goals || t.assists ? ` · ${t.goals}Г/${t.assists}А` : ''}`
+      ).join('<br/>') || '—';
+      const outs = brief.out.map(o => `${o.name} — ${o.reason}`).join('<br/>') || 'Все в строю';
+      const form = brief.recent.length ? brief.recent.join('<br/>') : 'Мало данных по форме';
+      dossier.innerHTML = `
+        <strong>Досье · ${brief.name}</strong>
+        <div class="meta" style="color:var(--muted);margin-top:6px;font-size:13px;line-height:1.55">
+          ${brief.formation} · ${brief.style} · сила ${brief.strength} · химия ${brief.chemistry}
+        </div>
+        <div class="dossier-grid">
+          <div><span class="field-label">Угрозы</span><div class="hint">${threats}</div></div>
+          <div><span class="field-label">Вне состава</span><div class="hint">${outs}</div></div>
+          <div class="dossier-form"><span class="field-label">Недавние</span><div class="hint">${form}</div></div>
+        </div>
+      `;
+    } else if (dossier) {
+      dossier.innerHTML = '';
+    }
     const status = S().xiStatus();
     const warn = $('#prematch-warnings');
     const fixBtn = $('#btn-fix-xi');
@@ -1085,7 +1202,7 @@ window.EYE_UI = (() => {
     } else if (status.loadWarn || (status.tired || []).length) {
       warn.hidden = false;
       const list = (status.tired || []).slice(0, 6).map(u => `${u.name} — ${u.reason}`).join('<br/>');
-      warn.innerHTML = `<strong>${status.loadWarn ? 'Высокая нагрузка XI' : 'Усталость в составе'}</strong><div class="hint" style="margin-top:6px">${list || 'Рекомендуется ротация'}</div>`;
+      warn.innerHTML = `<strong>${status.loadWarn ? 'Высокая нагрузка XI' : 'Усталость в составе'}</strong><div class="hint" style="margin-top:6px">${list || 'Рекомендуется ротация'}<br/><button type="button" class="btn btn-tiny" data-nav="train" style="margin-top:8px">К тренировкам</button></div>`;
       if (fixBtn) fixBtn.hidden = true;
       if (freshBtn) freshBtn.hidden = false;
       if (kick) { kick.disabled = false; kick.textContent = 'Начать матч'; }
@@ -1523,7 +1640,11 @@ window.EYE_UI = (() => {
       const train = e.target.closest('[data-train]');
       if (train) {
         const r = S().train(train.dataset.train);
-        $('#train-msg').textContent = r.msg; toast(r.msg); return;
+        $('#train-msg').textContent = r.msg;
+        toast(r.msg);
+        showTrainReport(r);
+        renderTrain();
+        return;
       }
       const fac = e.target.closest('[data-fac]');
       if (fac) {
