@@ -71,7 +71,7 @@ window.EYE_UI = (() => {
     const dockIds = ['hub', 'squad', 'tactics', 'transfers', 'more'];
     $all('.dock-btn').forEach(b => b.classList.toggle('active', b.dataset.nav === id));
     if (!dockIds.includes(id) && id !== 'match' && id !== 'prematch' && id !== 'result') {
-      if (['table','calendar','cup','ucl','board','youth','inbox','stats','finance','train','club','history','player'].includes(id)) {
+      if (['table','calendar','cup','ucl','cwc','board','youth','inbox','stats','finance','train','club','history','player'].includes(id)) {
         $all('.dock-btn').forEach(b => b.classList.toggle('active', b.dataset.nav === 'more'));
       }
     }
@@ -185,6 +185,7 @@ window.EYE_UI = (() => {
     if (id === 'calendar') renderCalendar();
     if (id === 'cup') renderCup();
     if (id === 'ucl') renderUcl();
+    if (id === 'cwc') renderCwc();
     if (id === 'board') renderBoard();
     if (id === 'finance') renderFinance();
     if (id === 'result') renderResult();
@@ -331,6 +332,7 @@ window.EYE_UI = (() => {
   function matchTypeLabel(type) {
     if (type === 'cup') return 'Кубок EYE';
     if (type === 'ucl') return 'Лига чемпионов EYE';
+    if (type === 'cwc') return 'Клубный чемпионат мира';
     return S().get()?.leagueName || 'Лига';
   }
 
@@ -378,7 +380,8 @@ window.EYE_UI = (() => {
       } else {
         const cup = S().playerCupMatch();
         const ucl = S().playerUclMatch();
-        // Only hint KO screens when the main CTA is a different match
+        const cwc = S().playerCwcMatch();
+        if (cwc && next?.type !== 'cwc') chips.push(`<button type="button" class="hub-chip" data-nav="cwc">Есть матч ЧМ</button>`);
         if (ucl && next?.type !== 'ucl') chips.push(`<button type="button" class="hub-chip" data-nav="ucl">Есть матч ЛЧ</button>`);
         if (cup && next?.type !== 'cup') chips.push(`<button type="button" class="hub-chip" data-nav="cup">Есть кубок</button>`);
       }
@@ -405,7 +408,10 @@ window.EYE_UI = (() => {
       const riv = S().matchRivalry(home.id, away.id);
       box.textContent = `${riv ? '⚡ ' : ''}${home.name} — ${away.name}${riv ? ' · ' + riv.name : ''}`;
       btn.disabled = false;
-      btn.textContent = next.type === 'ucl' ? 'Матч ЛЧ' : next.type === 'cup' ? 'Кубковый матч' : riv ? 'Дерби' : 'К матчу';
+      btn.textContent = next.type === 'ucl' ? 'Матч ЛЧ'
+        : next.type === 'cwc' ? 'Матч ЧМ'
+        : next.type === 'cup' ? 'Кубковый матч'
+        : riv ? 'Дерби' : 'К матчу';
     }
 
     const news = $('#news-strip');
@@ -788,6 +794,18 @@ window.EYE_UI = (() => {
         cupBits.push(`<div class="news-item me-round"><strong>ЛЧ · ${ucl.round}</strong><div>${h?.name} ${score} ${a?.name}</div></div>`);
       }
     }
+    const cwc = st.cwc;
+    if (cwc && !cwc.champion && S().isClubInCwc(me.id)) {
+      const pm = S().playerCwcMatch();
+      if (pm) {
+        const h = S().clubById(pm.home); const a = S().clubById(pm.away);
+        const score = pm.played ? `${pm.score[0]}:${pm.score[1]}` : '— : —';
+        const label = cwc.phase === 'groups' ? `Группы · тур ${(cwc.groupMatchday || 0) + 1}` : cwc.round;
+        cupBits.push(`<div class="news-item me-round"><strong>ЧМ · ${label}</strong><div>${h?.name} ${score} ${a?.name}</div></div>`);
+      } else {
+        cupBits.push(`<div class="news-item me-round"><strong>Клубный ЧМ</strong><div>${cwc.phase === 'groups' ? 'Групповой этап' : cwc.round}</div></div>`);
+      }
+    }
 
     let body = '';
     if (calendarTab === 'rounds') {
@@ -878,20 +896,84 @@ window.EYE_UI = (() => {
       setKoPlayButton(btn, null, 'Играть матч ЛЧ');
       return;
     }
+    const meId = S().club()?.id;
+    const seed = (ucl.seeds || []).find(s => s.id === meId);
+    const path = S().get().uclBest ? ` · путь: ${S().get().uclBest}` : '';
     if (ucl.champion) {
       const c = S().clubById(ucl.champion);
-      status.innerHTML = `<strong>${ucl.name}</strong><div>Победитель: ${c?.name || '—'}</div>`;
+      status.innerHTML = `<strong>${ucl.name}</strong><div>Победитель: ${c?.name || '—'}${path}</div>`;
       setKoPlayButton(btn, null, 'Играть матч ЛЧ');
     } else {
       const pm = S().playerUclMatch();
-      const meId = S().club()?.id;
       const inComp = (ucl.bracket || []).some(m => m.home === meId || m.away === meId);
       status.innerHTML = `<strong>${ucl.name}</strong><div>Стадия: ${ucl.round}${
         pm ? ' · ваш матч готов' : (inComp ? '' : ' · ваш клуб вне сетки')
-      }</div>`;
+      }${path}</div>${seed ? `<div class="hint" style="margin-top:8px">Путёвка: ${seed.reason}${ucl.wildcard && seed.reason.includes('wildcard') ? '' : ''}</div>` : ''}`;
       setKoPlayButton(btn, pm, 'Играть матч ЛЧ');
     }
-    $('#ucl-list').innerHTML = bracketHtml(ucl.bracket, ucl.round || 'Сетка') || `<div class="news-item">Сетка пуста</div>`;
+    const hist = (ucl.history || []).map(h => bracketHtml(h.ties, h.round)).join('');
+    const cur = bracketHtml(ucl.bracket, ucl.round || 'Сетка');
+    $('#ucl-list').innerHTML = (hist + cur) || `<div class="news-item">Сетка пуста</div>`;
+  }
+
+  function renderCwc() {
+    const cwc = S().get().cwc;
+    const status = $('#cwc-status');
+    const btn = $('#btn-cwc-play');
+    const list = $('#cwc-list');
+    if (!cwc) {
+      status.textContent = 'ЧМ ещё не сформирован';
+      setKoPlayButton(btn, null, 'Играть матч ЧМ');
+      if (list) list.innerHTML = '';
+      return;
+    }
+    const meId = S().club()?.id;
+    const path = S().get().cwcBest ? ` · путь: ${S().get().cwcBest}` : '';
+    const mySeed = (cwc.seeds || []).find(s => s.id === meId);
+    if (cwc.champion) {
+      const c = S().clubById(cwc.champion);
+      status.innerHTML = `<strong>${cwc.name}</strong><div>Чемпион мира среди клубов: ${c?.name || '—'}${path}</div>`;
+      setKoPlayButton(btn, null, 'Играть матч ЧМ');
+    } else {
+      const pm = S().playerCwcMatch();
+      const inComp = S().isClubInCwc(meId);
+      const phase = cwc.phase === 'groups'
+        ? `Группы · тур ${(cwc.groupMatchday || 0) + 1}/3`
+        : cwc.round;
+      status.innerHTML = `<strong>${cwc.name}</strong><div>${phase}${
+        pm ? ' · ваш матч готов' : (inComp ? '' : ' · вне турнира')
+      }${path}</div>${mySeed ? `<div class="hint" style="margin-top:8px">Сид: ${mySeed.reason}</div>` : ''}`;
+      setKoPlayButton(btn, pm, 'Играть матч ЧМ');
+    }
+
+    let html = '';
+    if (cwc.phase === 'groups' || (cwc.history || []).some(h => h.round === 'Группы')) {
+      const groups = cwc.phase === 'groups' ? cwc.groups : (cwc.history || []).find(h => h.round === 'Группы')?.groups;
+      if (groups) {
+        html += Object.values(groups).map(g => {
+          const rows = Object.values(g.table || {}).sort((a, b) =>
+            b.pts - a.pts || (b.gf - b.ga) - (a.gf - a.ga) || b.gf - a.gf
+          ).map((r, i) => {
+            const club = S().clubById(r.id);
+            const mine = r.id === meId ? ' me-round' : '';
+            return `<div class="news-item${mine}"><strong>${i + 1}. ${club?.name || r.id}</strong><div>${r.pts} очк. · ${r.gf}:${r.ga}</div></div>`;
+          }).join('');
+          const md = cwc.groupMatchday || 0;
+          const day = ((g.matchdays || [])[md] || []).map(m => {
+            const h = S().clubById(m.home); const a = S().clubById(m.away);
+            const score = m.played ? `${m.score[0]}:${m.score[1]}` : 'не сыгран';
+            const mine = m.home === meId || m.away === meId;
+            return `<div class="news-item${mine ? ' me-round' : ''}">${h?.name} — ${a?.name}<div>${score}</div></div>`;
+          }).join('');
+          return `<div class="bracket-round"><div class="bracket-label">${g.name}</div>${rows}${cwc.phase === 'groups' ? `<div class="hint" style="margin:8px 0">Тур ${md + 1}</div>${day}` : ''}</div>`;
+        }).join('');
+      }
+    }
+    if (cwc.phase === 'ko' || cwc.champion) {
+      html += (cwc.history || []).filter(h => h.round !== 'Группы').map(h => bracketHtml(h.ties, h.round)).join('');
+      if ((cwc.bracket || []).length) html += bracketHtml(cwc.bracket, cwc.round || 'Плей-офф');
+    }
+    if (list) list.innerHTML = html || `<div class="news-item">Сетка пуста</div>`;
   }
 
   function renderBoard() {
@@ -1189,7 +1271,7 @@ window.EYE_UI = (() => {
           <strong>Сезон ${s.season} · ${s.leagueName}</strong>
           <div>${s.clubName || ''} — ${s.place}-е · ${s.pts} очк. · РМ ${(s.gd > 0 ? '+' : '') + (s.gd || 0)}</div>
           <div class="meta" style="color:var(--muted);margin-top:4px;font-size:12px">
-            Кубок: ${s.cupBest || '—'} · ЛЧ: ${s.uclBest || '—'} · призовые ${S().money(s.prize || 0)}
+            Кубок: ${s.cupBest || '—'} · ЛЧ: ${s.uclBest || '—'} · ЧМ: ${s.cwcBest || '—'} · призовые ${S().money(s.prize || 0)}
             ${board ? ' · ' + board : ''}${s.sacked ? ' · уволен' : ''}
           </div>
           <div class="meta" style="color:var(--dim);margin-top:2px;font-size:12px">${[boot, ast].filter(Boolean).join(' · ')}</div>
@@ -1198,7 +1280,7 @@ window.EYE_UI = (() => {
       return;
     }
     $('#history-list').innerHTML = (st.history || []).slice(0, 40).map(h => `
-      <div class="news-item"><strong>С${h.season} · Т${h.week}${h.cup ? ' · Кубок' : ''}${h.ucl ? ' · ЛЧ' : ''}</strong><div>${h.home} ${h.score[0]}:${h.score[1]} ${h.away}</div></div>
+      <div class="news-item"><strong>С${h.season} · Т${h.week}${h.cup ? ' · Кубок' : ''}${h.ucl ? ' · ЛЧ' : ''}${h.cwc ? ' · ЧМ' : ''}</strong><div>${h.home} ${h.score[0]}:${h.score[1]} ${h.away}</div></div>
     `).join('') || `<div class="news-item">Матчей ещё не было</div>`;
   }
 
@@ -1206,7 +1288,7 @@ window.EYE_UI = (() => {
     const st = S().get();
     if (st?.sacked) { show('board'); return; }
     let next = S().nextMatch();
-    if (matchCtx?.match && (matchCtx.type === 'cup' || matchCtx.type === 'ucl')) {
+    if (matchCtx?.match && (matchCtx.type === 'cup' || matchCtx.type === 'ucl' || matchCtx.type === 'cwc')) {
       const still = !matchCtx.match.played &&
         (matchCtx.match.home === st.clubId || matchCtx.match.away === st.clubId);
       if (still) next = { type: matchCtx.type, match: matchCtx.match };
@@ -1593,6 +1675,7 @@ window.EYE_UI = (() => {
     try {
       if (next.type === 'ucl') S().recordUclMatch(next.match, result);
       else if (next.type === 'cup') S().recordCupMatch(next.match, result);
+      else if (next.type === 'cwc') S().recordCwcMatch(next.match, result);
       else S().recordPlayerMatch(next.match, result);
       matchPlaying = false;
       matchPaused = false;
@@ -2061,6 +2144,17 @@ window.EYE_UI = (() => {
         return;
       }
       matchCtx = { type: 'ucl', match: pm, subsUsed: 0 };
+      show('prematch');
+      renderPrematch();
+    });
+    $('#btn-cwc-play')?.addEventListener('click', () => {
+      const pm = S().playerCwcMatch();
+      if (!pm) {
+        toast('Сейчас нет вашего матча ЧМ');
+        renderCwc();
+        return;
+      }
+      matchCtx = { type: 'cwc', match: pm, subsUsed: 0 };
       show('prematch');
       renderPrematch();
     });

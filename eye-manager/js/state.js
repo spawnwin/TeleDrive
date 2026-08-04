@@ -139,7 +139,19 @@ window.EYE_STATE = (() => {
     };
     // KO comps after state.clubId exists so the player is always seeded
     state.cup = createCup(leagueClubs, me.id);
-    state.ucl = createUcl(allClubs, me.id);
+    state.ucl = createUcl(allClubs, me.id, { forcePlayer: true });
+    state.cwc = createCwc(allClubs, me.id);
+    state.nextUclSeeds = null;
+    state.lastUclChampion = null;
+    state.cwcBest = '';
+    if (isClubInCwc(me.id)) {
+      const seed = (state.cwc.seeds || []).find(s => s.id === me.id);
+      state.inbox.unshift({
+        id: D().uid('m'), type: 'cwc', title: 'Клубный чемпионат мира',
+        body: `Вы в сетке клубного ЧМ (${seed?.reason || 'приглашение'}). Группы — туры 7, 9 и 11; полуфинал — 13; финал — 15.`,
+        read: false, at: Date.now()
+      });
+    }
     ensureClubExtras(me);
     ensureMeta();
     pickSponsor(me);
@@ -268,30 +280,117 @@ window.EYE_STATE = (() => {
     return room;
   }
 
-  function createUcl(allClubs, ensureId) {
-    // 16 clubs: top reputation from each league + fillers — always include player club
+  const UCL_SLOTS = { epl: 3, laliga: 3, seriea: 3, bundesliga: 3, ligue1: 2, rpl: 2 };
+  const KO_ORDER = ['Группы', '1/8', '1/4', '1/2', 'Финал', 'Чемпион'];
+  const CWC_WEEKS_GROUPS = [7, 9, 11];
+  const CWC_WEEK_SEMI = 13;
+  const CWC_WEEK_FINAL = 15;
+
+  function nextKoStage(round) {
+    const map = { '1/8': '1/4', '1/4': '1/2', '1/2': 'Финал', 'Финал': 'Чемпион', 'Группы': '1/2' };
+    return map[round] || round;
+  }
+
+  function makeKoComp(name, round, ids, meta = {}) {
+    const bracket = ids.map((id, i) => (i % 2 === 0
+      ? { home: id, away: ids[i + 1], played: false, score: null }
+      : null)).filter(Boolean);
+    return {
+      name,
+      round,
+      bracket,
+      champion: null,
+      history: [],
+      seeds: meta.seeds || [],
+      qualified: meta.qualified || false,
+      ...meta
+    };
+  }
+
+  function snapshotUclQualifiers() {
+    const out = [];
+    const seen = new Set();
+    const push = (id, leagueId, place, reason) => {
+      if (!id || seen.has(id)) return;
+      seen.add(id);
+      out.push({ id, leagueId, place, reason });
+    };
+
+    (W().LEAGUES || []).forEach(l => {
+      const n = UCL_SLOTS[l.id] || 2;
+      const table = sortedTable(l.id) || [];
+      const short = l.short || l.name;
+      table.slice(0, n).forEach((row, i) => {
+        push(row.id, l.id, i + 1, `${short} · ${i + 1}-е место`);
+      });
+    });
+
+    // Действующий чемпион ЛЧ — отдельная путёвка, если не прошёл по таблице
+    const champId = state?.ucl?.champion || state?.lastUclChampion || null;
+    if (champId) {
+      const c = clubById(champId);
+      push(champId, c?.leagueId || '', 0, 'чемпион ЛЧ');
+    }
+
+    return out.slice(0, 16);
+  }
+
+  function reputationUclSeeds(allClubs) {
     const byLeague = {};
     allClubs.forEach(c => {
       byLeague[c.leagueId] = byLeague[c.leagueId] || [];
       byLeague[c.leagueId].push(c);
     });
     let seeds = [];
-    Object.values(byLeague).forEach(list => {
-      seeds.push(...[...list].sort((a, b) => b.reputation - a.reputation).slice(0, 3));
+    Object.entries(byLeague).forEach(([lid, list]) => {
+      const n = UCL_SLOTS[lid] || 2;
+      seeds.push(...[...list].sort((a, b) => b.reputation - a.reputation).slice(0, n).map((c, i) => ({
+        id: c.id, leagueId: lid, place: i + 1,
+        reason: `рейтинг · ${i + 1}-й в лиге`
+      })));
     });
-    seeds = seeds.sort((a, b) => b.reputation - a.reputation).slice(0, 16);
-    if (seeds.length < 16) {
-      const extra = allClubs.filter(c => !seeds.includes(c)).sort((a, b) => b.reputation - a.reputation);
-      seeds = seeds.concat(extra).slice(0, 16);
+    seeds = seeds.sort((a, b) => {
+      const ca = allClubs.find(c => c.id === a.id);
+      const cb = allClubs.find(c => c.id === b.id);
+      return (cb?.reputation || 0) - (ca?.reputation || 0);
+    }).slice(0, 16);
+    return seeds;
+  }
+
+  function createUcl(allClubs, ensureId, opts = {}) {
+    const forcePlayer = opts.forcePlayer !== false;
+    let seedMeta = (opts.seeds && opts.seeds.length)
+      ? opts.seeds
+      : (state?.nextUclSeeds?.length ? state.nextUclSeeds : reputationUclSeeds(allClubs));
+
+    let clubs = seedMeta.map(s => allClubs.find(c => c.id === s.id)).filter(Boolean);
+    if (clubs.length < 16) {
+      const have = new Set(clubs.map(c => c.id));
+      const extra = allClubs.filter(c => !have.has(c.id)).sort((a, b) => b.reputation - a.reputation);
+      for (const c of extra) {
+        if (clubs.length >= 16) break;
+        clubs.push(c);
+        seedMeta.push({ id: c.id, leagueId: c.leagueId, place: 0, reason: 'добор по рейтингу' });
+      }
     }
-    seeds = ensureSeeded(seeds, allClubs, ensureId, 16);
-    const ids = seeds.map(c => c.id).sort(() => Math.random() - 0.5);
-    return {
-      name: 'Лига чемпионов EYE',
-      round: '1/8',
-      bracket: ids.map((id, i) => i % 2 === 0 ? { home: id, away: ids[i + 1], played: false, score: null } : null).filter(Boolean),
-      champion: null
-    };
+    clubs = clubs.slice(0, 16);
+    seedMeta = seedMeta.filter(s => clubs.some(c => c.id === s.id)).slice(0, 16);
+
+    const mustId = ensureId || state?.clubId;
+    let wildcard = false;
+    if (forcePlayer && mustId && !clubs.some(c => c.id === mustId)) {
+      clubs = ensureSeeded(clubs, allClubs, mustId, 16);
+      seedMeta = seedMeta.filter(s => s.id !== mustId).slice(0, 15);
+      seedMeta.push({ id: mustId, leagueId: clubs.find(c => c.id === mustId)?.leagueId, place: 0, reason: 'wildcard менеджера' });
+      wildcard = true;
+    }
+
+    const ids = clubs.map(c => c.id).sort(() => Math.random() - 0.5);
+    return makeKoComp('Лига чемпионов EYE', '1/8', ids, {
+      seeds: seedMeta,
+      wildcard,
+      qualified: !wildcard && mustId ? seedMeta.some(s => s.id === mustId) : true
+    });
   }
 
   function createCup(clubs, ensureId) {
@@ -302,11 +401,130 @@ window.EYE_STATE = (() => {
       pool = pool.filter(c => c.id !== mustId);
       if (mine) pool.unshift(mine);
     }
-    const ids = pool.slice(0, 8).map(c => c.id).sort(() => Math.random() - 0.5);
+    const pick = pool.slice(0, 8);
+    const ids = pick.map(c => c.id).sort(() => Math.random() - 0.5);
+    return makeKoComp('Кубок EYE', '1/4', ids, {
+      seeds: pick.map(c => ({ id: c.id, reason: 'участник кубка' }))
+    });
+  }
+
+  function emptyGroupTable(clubIds) {
+    const t = {};
+    clubIds.forEach(id => {
+      t[id] = { id, played: 0, w: 0, d: 0, l: 0, gf: 0, ga: 0, pts: 0 };
+    });
+    return t;
+  }
+
+  function roundRobinMatchdays(ids) {
+    const [a, b, c, d] = ids;
+    const days = [
+      [{ home: a, away: b }, { home: c, away: d }],
+      [{ home: a, away: c }, { home: b, away: d }],
+      [{ home: a, away: d }, { home: b, away: c }]
+    ];
+    return days.map(day => day.map(m => ({ ...m, played: false, score: null })));
+  }
+
+  function pickCwcSeeds(allClubs) {
+    const seeds = [];
+    const used = new Set();
+    const push = (id, reason) => {
+      if (!id || used.has(id)) return;
+      const c = allClubs.find(x => x.id === id);
+      if (!c) return;
+      used.add(id);
+      seeds.push({ id, reason, leagueId: c.leagueId });
+    };
+
+    // League champions from last finish or current table / reputation
+    (W().LEAGUES || []).forEach(l => {
+      const table = sortedTable(l.id);
+      if (table?.length) push(table[0].id, `чемпион ${l.short || l.name}`);
+      else {
+        const top = allClubs.filter(c => c.leagueId === l.id).sort((a, b) => b.reputation - a.reputation)[0];
+        if (top) push(top.id, `лидер ${l.short || l.name}`);
+      }
+    });
+
+    // UCL holder
+    if (state?.lastUclChampion) push(state.lastUclChampion, 'победитель ЛЧ');
+    if (state?.ucl?.champion) push(state.ucl.champion, 'победитель ЛЧ');
+
+    // Fill to 8 by reputation
+    [...allClubs].sort((a, b) => b.reputation - a.reputation).forEach(c => {
+      if (seeds.length >= 8) return;
+      push(c.id, 'рейтинг мира');
+    });
+    return seeds.slice(0, 8);
+  }
+
+  function isClubInUclBracket(clubId) {
+    if (!clubId || !state?.ucl) return false;
+    if (state.ucl.champion === clubId) return true;
+    if ((state.ucl.seeds || []).some(s => s.id === clubId)) return true;
+    if ((state.ucl.bracket || []).some(m => m.home === clubId || m.away === clubId)) return true;
+    return (state.ucl.history || []).some(h =>
+      (h.ties || []).some(m => m.home === clubId || m.away === clubId)
+    );
+  }
+
+  function createCwc(allClubs, ensureId) {
+    let seeds = pickCwcSeeds(allClubs);
+    const mustId = ensureId || state?.clubId;
+    if (mustId && !seeds.some(s => s.id === mustId)) {
+      const log = (state?.seasonLog || [])[0];
+      const lastPlace = (log && log.clubId === mustId) ? (log.place || 0) : 0;
+      const table = sortedTable(state?.leagueId);
+      const livePlace = table.some(r => (r.played || 0) > 0)
+        ? table.findIndex(r => r.id === mustId) + 1
+        : 0;
+      const place = lastPlace || livePlace;
+      const leagueMates = allClubs.filter(c => c.leagueId === (state?.leagueId || allClubs.find(x => x.id === mustId)?.leagueId));
+      const repPlace = [...leagueMates].sort((a, b) => b.reputation - a.reputation).findIndex(c => c.id === mustId) + 1;
+      const inUcl = isClubInUclBracket(mustId);
+      if ((place > 0 && place <= 4) || (repPlace > 0 && repPlace <= 4) || inUcl) {
+        seeds = seeds.slice(0, 7);
+        seeds.push({
+          id: mustId,
+          reason: inUcl
+            ? 'участник ЛЧ'
+            : place
+              ? `топ лиги · ${place}-е`
+              : `рейтинг лиги · ${repPlace}-е`,
+          leagueId: state?.leagueId || allClubs.find(x => x.id === mustId)?.leagueId
+        });
+      }
+    }
+    const ids = seeds.map(s => s.id);
+    const shuffled = [...ids].sort(() => Math.random() - 0.5);
+    const gA = shuffled.slice(0, 4);
+    const gB = shuffled.slice(4, 8);
     return {
-      round: '1/4',
-      bracket: ids.map((id, i) => i % 2 === 0 ? { home: id, away: ids[i + 1], played: false, score: null } : null).filter(Boolean),
-      champion: null
+      name: 'Клубный чемпионат мира',
+      phase: 'groups',
+      groupMatchday: 0,
+      groups: {
+        A: {
+          name: 'Группа A',
+          clubs: gA,
+          table: emptyGroupTable(gA),
+          matchdays: roundRobinMatchdays(gA)
+        },
+        B: {
+          name: 'Группа B',
+          clubs: gB,
+          table: emptyGroupTable(gB),
+          matchdays: roundRobinMatchdays(gB)
+        }
+      },
+      bracket: [],
+      round: 'Группы',
+      history: [],
+      champion: null,
+      seeds,
+      clubs: ids,
+      best: ''
     };
   }
 
@@ -395,20 +613,25 @@ window.EYE_STATE = (() => {
       if (!state.scoutReports) state.scoutReports = {};
       if (!state.ucl) state.ucl = createUcl(state.clubs || [], state.clubId);
       if (!state.cup) state.cup = createCup(leagueClubs(), state.clubId);
+      if (!state.cwc) state.cwc = createCwc(state.clubs || [], state.clubId);
       if (state.sacked == null) state.sacked = false;
+      if (state.cwcBest == null) state.cwcBest = '';
       // Retrofit: if KO not started yet and player missing, reseat them
       if (state.ucl && !state.ucl.champion && state.clubId) {
         const inU = (state.ucl.bracket || []).some(m => m.home === state.clubId || m.away === state.clubId);
-        const started = (state.ucl.bracket || []).some(m => m.played);
-        if (!inU && !started) state.ucl = createUcl(state.clubs || [], state.clubId);
+        const started = (state.ucl.bracket || []).some(m => m.played) || (state.ucl.history || []).length;
+        if (!inU && !started) state.ucl = createUcl(state.clubs || [], state.clubId, { forcePlayer: true });
       }
       if (state.cup && !state.cup.champion && state.clubId) {
         const inC = (state.cup.bracket || []).some(m => m.home === state.clubId || m.away === state.clubId);
-        const started = (state.cup.bracket || []).some(m => m.played);
+        const started = (state.cup.bracket || []).some(m => m.played) || (state.cup.history || []).length;
         if (!inC && !started) state.cup = createCup(leagueClubs(), state.clubId);
       }
       if (state.cupBest == null) state.cupBest = '';
       if (state.uclBest == null) state.uclBest = '';
+      if (!state.ucl.history) state.ucl.history = [];
+      if (!state.cup.history) state.cup.history = [];
+      if (state.cwc && !state.cwc.history) state.cwc.history = [];
       if (!state.otherLeagues) state.otherLeagues = buildOtherLeagues(state.clubs || [], state.leagueId);
       state.clubs?.forEach(ensureClubExtras);
       ensureMeta();
@@ -699,6 +922,7 @@ window.EYE_STATE = (() => {
     pulseWorldNews();
     maybePlayCupAiWeek();
     maybePlayUclAiWeek();
+    maybePlayCwcAiWeek();
     const allPlayed = state.fixtures.every(r => r.matches.every(m => m.played));
     if (allPlayed) endSeason();
   }
@@ -950,6 +1174,7 @@ window.EYE_STATE = (() => {
       prize,
       cupBest: state.cup?.champion === me.id ? 'Чемпион' : (state.cupBest || '—'),
       uclBest: state.ucl?.champion === me.id ? 'Чемпион' : (state.uclBest || '—'),
+      cwcBest: state.cwc?.champion === me.id ? 'Чемпион' : (state.cwcBest || '—'),
       goldenBoot: scorers[0] ? { name: scorers[0].name, goals: scorers[0].goals } : null,
       topAssist: byAssists[0] ? { name: byAssists[0].name, assists: byAssists[0].assists } : null,
       boardTarget: state.board?.targetLabel || '',
@@ -1012,17 +1237,36 @@ window.EYE_STATE = (() => {
       boardMsg += ' Вас уволили.';
     }
 
-    // Promotion / relegation
+    const seasonLeagueName = state.leagueName;
+
+    // Snapshot UCL qualification from finished tables BEFORE promotion/relegation reshuffle
+    const nextSeeds = snapshotUclQualifiers();
+    const uclChamp = state.ucl?.champion || state.lastUclChampion || null;
+    const inNextUcl = nextSeeds.some(s => s.id === me.id);
+    const mySeed = nextSeeds.find(s => s.id === me.id);
+
+    // Promotion / relegation (after UCL snapshot)
     const ladderMsg = applyLadderMove(pos, table.length);
 
     state.inbox.unshift({
+      id: D().uid('m'), type: 'ucl',
+      title: inNextUcl ? 'ЛЧ: квалификация' : 'ЛЧ: вне зоны',
+      body: inNextUcl
+        ? `Вы в Лиге чемпионов следующего сезона (${mySeed?.reason || 'путёвка'}). Сетка обновится с нового тура.`
+        : `По итогам сезона вы не попали в топ зоны ЛЧ. Wildcard возможен только при старте новой карьеры.`,
+      read: false, at: Date.now()
+    });
+
+    state.inbox.unshift({
       id: D().uid('m'), type: 'season',
-      title: `Сезон ${state.season} завершён — ${state.leagueName}`,
+      title: `Сезон ${state.season} завершён — ${seasonLeagueName}`,
       body: `Место: ${pos}. Призовые: ${money(prize)}. ${boardMsg} ${ladderMsg}`,
       read: false, at: Date.now()
     });
 
     if (state.sacked) {
+      state.nextUclSeeds = nextSeeds;
+      state.lastUclChampion = uclChamp;
       save();
       return;
     }
@@ -1032,20 +1276,40 @@ window.EYE_STATE = (() => {
     state.board = B().createBoard(me);
     state.cupBest = '';
     state.uclBest = '';
+    state.cwcBest = '';
+    state.nextUclSeeds = nextSeeds;
+    state.lastUclChampion = uclChamp;
     const lc = leagueClubs();
     state.table = emptySeasonTable(lc);
     state.fixtures = buildFixtures(lc.map(c => c.id));
     state.stats = { scorers: {}, assisters: {}, motm: {} };
     state.cup = createCup(lc, me.id);
-    state.ucl = createUcl(state.clubs, me.id);
+    // Next UCL from table finishers — no free wildcard
+    state.ucl = createUcl(state.clubs, me.id, {
+      seeds: nextSeeds,
+      forcePlayer: false
+    });
+    state.cwc = createCwc(state.clubs, me.id);
     state.otherLeagues = buildOtherLeagues(state.clubs, state.leagueId);
     refillYouth(me, true);
     me.squad.forEach(p => { p.seasonYellows = 0; p.yellow = 0; p.suspended = 0; });
+    const uclIn = (state.ucl.bracket || []).some(m => m.home === me.id || m.away === me.id);
+    const cwcIn = isClubInCwc(me.id);
     state.inbox.unshift({
       id: D().uid('m'), type: 'board', title: 'Новые цели совета',
-      body: `${state.board.targetLabel}. Уверенность: ${state.board.confidence}%.`,
+      body: `${state.board.targetLabel}. Уверенность: ${state.board.confidence}%.${
+        uclIn ? ' Вы в сетке ЛЧ.' : ' Вне ЛЧ — проход только через зону квалификации.'
+      }${cwcIn ? ' Клубный ЧМ: группы на турах 7/9/11.' : ''}`,
       read: false, at: Date.now()
     });
+    if (cwcIn) {
+      const seed = (state.cwc.seeds || []).find(s => s.id === me.id);
+      state.inbox.unshift({
+        id: D().uid('m'), type: 'cwc', title: 'Клубный чемпионат мира',
+        body: `Сид: ${seed?.reason || 'приглашение'}. Расписание: группы 7·9·11, 1/2 — 13, финал — 15.`,
+        read: false, at: Date.now()
+      });
+    }
     refreshTransferMarket();
     save();
   }
@@ -1720,44 +1984,133 @@ window.EYE_STATE = (() => {
     ) || null;
   }
 
+  function isClubInCwc(clubId) {
+    const cwc = state?.cwc;
+    if (!cwc || cwc.champion) return false;
+    if (cwc.phase === 'groups') {
+      return Object.values(cwc.groups || {}).some(g => (g.clubs || []).includes(clubId));
+    }
+    return (cwc.bracket || []).some(m => m.home === clubId || m.away === clubId);
+  }
+
+  function playerCwcMatch() {
+    const cwc = state?.cwc;
+    if (!cwc || cwc.champion) return null;
+    if (cwc.phase === 'groups') {
+      const md = cwc.groupMatchday || 0;
+      for (const g of Object.values(cwc.groups || {})) {
+        const day = (g.matchdays || [])[md];
+        if (!day) continue;
+        const m = day.find(x => !x.played && (x.home === state.clubId || x.away === state.clubId));
+        if (m) return m;
+      }
+      return null;
+    }
+    return (cwc.bracket || []).find(m =>
+      !m.played && (m.home === state.clubId || m.away === state.clubId)
+    ) || null;
+  }
+
   function nextMatch() {
     const canKo = state.knockoutPlayedWeek !== state.week;
     const ucl = playerUclMatch();
     const cup = playerCupMatch();
-    if (canKo && ucl && state.week % 5 === 1) return { type: 'ucl', match: ucl };
-    if (canKo && cup && state.week % 3 === 0) return { type: 'cup', match: cup };
+    const cwc = playerCwcMatch();
+    const week = state.week;
+    if (canKo && cwc && (CWC_WEEKS_GROUPS.includes(week) || week === CWC_WEEK_SEMI || week === CWC_WEEK_FINAL)) {
+      return { type: 'cwc', match: cwc };
+    }
+    if (canKo && ucl && week % 5 === 1) return { type: 'ucl', match: ucl };
+    if (canKo && cup && week % 3 === 0) return { type: 'cup', match: cup };
     const lg = playerMatch();
     if (lg) return { type: 'league', match: lg };
+    if (canKo && cwc) return { type: 'cwc', match: cwc };
     if (canKo && ucl) return { type: 'ucl', match: ucl };
     if (canKo && cup) return { type: 'cup', match: cup };
     return null;
   }
 
+  function pushCompHistory(comp, roundLabel) {
+    if (!comp) return;
+    comp.history = comp.history || [];
+    comp.history.push({
+      round: roundLabel,
+      ties: (comp.bracket || []).map(m => ({
+        home: m.home, away: m.away, played: !!m.played, score: m.score ? [...m.score] : null
+      }))
+    });
+  }
+
   function advanceKnockout(comp, title, winPrize) {
     if (!comp || comp.champion) return;
     if (!comp.bracket.every(m => m.played)) return;
+    pushCompHistory(comp, comp.round);
     const winners = comp.bracket.map(m => m.score[0] > m.score[1] ? m.home : m.away);
+    const playerIn = winners.includes(state.clubId);
+    const playerWas = (comp.bracket || []).some(m => m.home === state.clubId || m.away === state.clubId);
+
     if (winners.length === 1) {
       comp.champion = winners[0];
+      comp.round = 'Чемпион';
       const champ = clubById(winners[0]);
       state.news.unshift({ id: D().uid('n'), title, body: `Победитель: ${champ?.name}`, at: Date.now() });
+      if (title.includes('ЛЧ')) state.lastUclChampion = winners[0];
       if (winners[0] === state.clubId) {
         adjustBudget(winPrize, title + ' — трофей');
-        state.inbox.unshift({ id: D().uid('m'), type: 'cup', title: title + ' — победа!', body: `Призовые ${money(winPrize)}`, read: false, at: Date.now() });
+        state.inbox.unshift({
+          id: D().uid('m'), type: 'cup', title: title + ' — чемпион!',
+          body: `Вы выиграли турнир. Призовые ${money(winPrize)}.`,
+          read: false, at: Date.now()
+        });
+      } else if (playerWas) {
+        state.inbox.unshift({
+          id: D().uid('m'), type: 'cup', title: title + ' — итог',
+          body: `Трофей у «${champ?.name || 'соперника'}». Ваш путь: ${comp.best || state.uclBest || state.cupBest || 'сетка'}.`,
+          read: false, at: Date.now()
+        });
       }
       return;
     }
+
     const next = [];
     for (let i = 0; i < winners.length; i += 2) {
       next.push({ home: winners[i], away: winners[i + 1], played: false, score: null });
     }
+    const prevRound = comp.round;
     comp.bracket = next;
     comp.round = next.length === 4 ? '1/4' : next.length === 2 ? '1/2' : next.length === 1 ? 'Финал' : '1/' + (next.length * 2);
+
+    if (playerWas && !playerIn) {
+      state.inbox.unshift({
+        id: D().uid('m'), type: 'cup',
+        title: `${title}: вылет`,
+        body: `Вы выбыли на стадии «${prevRound}». Турнир продолжается без вас (${comp.round}).`,
+        read: false, at: Date.now()
+      });
+      state.news.unshift({
+        id: D().uid('n'), title: `${title}: вылет`,
+        body: `Ваш клуб завершил путь на стадии ${prevRound}.`,
+        at: Date.now()
+      });
+    } else if (playerIn) {
+      state.inbox.unshift({
+        id: D().uid('m'), type: 'cup',
+        title: `${title}: проход`,
+        body: `Вы в следующей стадии — «${comp.round}».`,
+        read: false, at: Date.now()
+      });
+    } else {
+      state.news.unshift({
+        id: D().uid('n'), title: `${title}: ${comp.round}`,
+        body: `Сетка обновлена после стадии ${prevRound}.`,
+        at: Date.now()
+      });
+    }
   }
 
   function resolveCompAI(comp, exceptMatch) {
     if (!comp || comp.champion) return;
-    comp.bracket.forEach(m => {
+    (comp.bracket || []).forEach(m => {
       if (m.played) return;
       if (exceptMatch && m.home === exceptMatch.home && m.away === exceptMatch.away) return;
       if (m.home === state.clubId || m.away === state.clubId) return;
@@ -1772,6 +2125,106 @@ window.EYE_STATE = (() => {
     });
   }
 
+  function applyGroupResult(table, match) {
+    const [hg, ag] = match.score;
+    applyToAnyTable(table, match.home, match.away, [hg, ag]);
+  }
+
+  function sortedGroupTable(table) {
+    return Object.values(table || {}).sort((a, b) =>
+      b.pts - a.pts || (b.gf - b.ga) - (a.gf - a.ga) || b.gf - a.gf
+    );
+  }
+
+  function resolveCwcGroupMatchdayAI(exceptMatch) {
+    const cwc = state.cwc;
+    if (!cwc || cwc.phase !== 'groups') return;
+    const md = cwc.groupMatchday || 0;
+    Object.values(cwc.groups).forEach(g => {
+      const day = (g.matchdays || [])[md];
+      if (!day) return;
+      day.forEach(m => {
+        if (m.played) return;
+        if (exceptMatch && m.home === exceptMatch.home && m.away === exceptMatch.away) return;
+        if (m.home === state.clubId || m.away === state.clubId) return;
+        const home = clubById(m.home);
+        const away = clubById(m.away);
+        if (!home || !away) { m.played = true; m.score = [1, 0]; applyGroupResult(g.table, m); return; }
+        const res = simulateAIMatch(home, away);
+        m.played = true;
+        m.score = res.score;
+        applyGroupResult(g.table, m);
+      });
+    });
+  }
+
+  function advanceCwcFromGroups() {
+    const cwc = state.cwc;
+    if (!cwc || cwc.phase !== 'groups') return;
+    const md = cwc.groupMatchday || 0;
+    const daysDone = Object.values(cwc.groups).every(g =>
+      ((g.matchdays || [])[md] || []).every(m => m.played)
+    );
+    if (!daysDone) return;
+
+    if (md < 2) {
+      cwc.groupMatchday = md + 1;
+      state.news.unshift({
+        id: D().uid('n'), title: 'Клубный ЧМ',
+        body: `Завершён тур групп ${md + 1}. Следующий — ${md + 2}.`,
+        at: Date.now()
+      });
+      return;
+    }
+
+    // Build semis: A1 vs B2, B1 vs A2
+    const a = sortedGroupTable(cwc.groups.A.table);
+    const b = sortedGroupTable(cwc.groups.B.table);
+    const semis = [
+      { home: a[0]?.id, away: b[1]?.id, played: false, score: null },
+      { home: b[0]?.id, away: a[1]?.id, played: false, score: null }
+    ].filter(m => m.home && m.away);
+    cwc.phase = 'ko';
+    cwc.round = '1/2';
+    cwc.bracket = semis;
+    cwc.history = cwc.history || [];
+    cwc.history.push({ round: 'Группы', groups: JSON.parse(JSON.stringify(cwc.groups)) });
+    const meIn = semis.some(m => m.home === state.clubId || m.away === state.clubId);
+    const wasInGroups = Object.values(cwc.groups || {}).some(g => (g.clubs || []).includes(state.clubId));
+    if (wasInGroups) {
+      state.cwcBest = meIn ? '1/2' : 'Группы';
+      cwc.best = state.cwcBest;
+    }
+    state.inbox.unshift({
+      id: D().uid('m'), type: 'cwc',
+      title: meIn ? 'Клубный ЧМ: плей-офф' : 'Клубный ЧМ: вне сетки',
+      body: meIn
+        ? 'Вы вышли из группы. Впереди полуфинал (тур 13) и при победе — финал (тур 15).'
+        : 'Групповой этап завершён — ваш клуб не прошёл в полуфинал.',
+      read: false, at: Date.now()
+    });
+  }
+
+  function maybePlayCwcAiWeek() {
+    const cwc = state.cwc;
+    if (!cwc || cwc.champion) return;
+    if (playerCwcMatch()) return;
+    const week = state.week;
+    if (cwc.phase === 'groups') {
+      if (!CWC_WEEKS_GROUPS.includes(week)) return;
+      resolveCwcGroupMatchdayAI(null);
+      advanceCwcFromGroups();
+      return;
+    }
+    if (week !== CWC_WEEK_SEMI && week !== CWC_WEEK_FINAL) return;
+    resolveCompAI(cwc, null);
+    advanceKnockout(cwc, 'Клубный ЧМ', 1800000);
+    if (cwc.champion === state.clubId) state.cwcBest = 'Чемпион';
+    else if (cwc.champion) {
+      /* AI чемпион — путь игрока уже в cwcBest */
+    }
+  }
+
   function resolveCupRoundAI(exceptMatch) {
     resolveCompAI(state.cup, exceptMatch);
     maybeAdvanceCup();
@@ -1779,22 +2232,27 @@ window.EYE_STATE = (() => {
 
   function maybeAdvanceCup() {
     advanceKnockout(state.cup, 'Кубок EYE', 800000);
+    if (state.cup?.champion === state.clubId) state.cupBest = 'Чемпион';
   }
 
   function maybePlayCupAiWeek() {
     if (!state.cup || state.cup.champion) return;
+    if (state.week % 3 !== 0) return;
     const pending = playerCupMatch();
     if (pending) return;
     resolveCompAI(state.cup, null);
     advanceKnockout(state.cup, 'Кубок EYE', 800000);
+    if (state.cup?.champion === state.clubId) state.cupBest = 'Чемпион';
   }
 
   function maybePlayUclAiWeek() {
     if (!state.ucl || state.ucl.champion) return;
+    if (state.week % 5 !== 1) return;
     const pending = playerUclMatch();
     if (pending) return;
     resolveCompAI(state.ucl, null);
     advanceKnockout(state.ucl, 'ЛЧ EYE', 2500000);
+    if (state.ucl?.champion === state.clubId) state.uclBest = 'Чемпион';
   }
 
   function recordCupMatch(match, result) {
@@ -1805,21 +2263,28 @@ window.EYE_STATE = (() => {
     return recordKnockoutMatch(match, result, 'ucl', 'Лига чемпионов EYE', 350000);
   }
 
-  function noteKnockoutProgress(kind, won, roundLabel) {
-    const order = ['1/8', '1/4', '1/2', 'Финал', 'Чемпион'];
-    const key = kind === 'ucl' ? 'uclBest' : 'cupBest';
-    if (won) {
-      const next = roundLabel === 'Финал' ? 'Чемпион' : roundLabel;
-      const cur = state[key] || '';
-      if (order.indexOf(next) >= order.indexOf(cur)) state[key] = next || roundLabel;
-    } else {
-      const cur = state[key] || '';
-      if (!cur) state[key] = roundLabel || '1/8';
-    }
+  function recordCwcMatch(match, result) {
+    return recordKnockoutMatch(match, result, 'cwc', 'Клубный чемпионат мира', 400000);
   }
 
-  function recordKnockoutMatch(match, result, kind, label, prizeWin) {
-    match.played = true;
+  function noteKnockoutProgress(kind, won, roundLabel) {
+    const key = kind === 'ucl' ? 'uclBest' : kind === 'cwc' ? 'cwcBest' : 'cupBest';
+    // В группах ЧМ путь остаётся «Группы», пока не будет выхода в плей-офф
+    let reached;
+    if (kind === 'cwc' && state.cwc?.phase === 'groups') {
+      reached = 'Группы';
+    } else {
+      reached = won ? nextKoStage(roundLabel) : roundLabel;
+    }
+    const cur = state[key] || '';
+    if (KO_ORDER.indexOf(reached) >= KO_ORDER.indexOf(cur) || !cur) {
+      state[key] = reached || roundLabel;
+    }
+    const comp = kind === 'ucl' ? state.ucl : kind === 'cwc' ? state.cwc : state.cup;
+    if (comp) comp.best = state[key];
+  }
+
+  function finishForcedKoScore(result) {
     let score = result.score;
     if (score[0] === score[1]) {
       score = Math.random() < 0.5 ? [score[0] + 1, score[1]] : [score[0], score[1] + 1];
@@ -1831,41 +2296,79 @@ window.EYE_STATE = (() => {
         text: 'Победа в дополнительное время!', score
       });
     }
-    match.score = score;
-    trackStats(result);
-    const roundBefore = kind === 'cup' ? state.cup?.round : state.ucl?.round;
-    if (kind === 'cup') {
-      resolveCupRoundAI(match);
-      maybeAdvanceCup();
-    } else {
-      resolveCompAI(state.ucl, match);
-      advanceKnockout(state.ucl, 'ЛЧ EYE', 2500000);
-    }
+    return score;
+  }
 
+  function recordKnockoutMatch(match, result, kind, label, prizeWin) {
     const me = club();
     const isHome = match.home === me.id;
+    let score = result.score;
+    const allowDraw = kind === 'cwc' && state.cwc?.phase === 'groups';
+
+    if (!allowDraw) score = finishForcedKoScore(result);
+    match.played = true;
+    match.score = score;
+    trackStats(result);
+
+    let roundBefore = '1/8';
+    if (kind === 'cup') {
+      roundBefore = state.cup?.round;
+      resolveCupRoundAI(match);
+      maybeAdvanceCup();
+    } else if (kind === 'ucl') {
+      roundBefore = state.ucl?.round;
+      resolveCompAI(state.ucl, match);
+      advanceKnockout(state.ucl, 'ЛЧ EYE', 2500000);
+      if (state.ucl?.champion === me.id) state.uclBest = 'Чемпион';
+    } else if (kind === 'cwc') {
+      roundBefore = state.cwc?.round || 'Группы';
+      if (state.cwc.phase === 'groups') {
+        const g = Object.values(state.cwc.groups).find(gr => {
+          const md = state.cwc.groupMatchday || 0;
+          return ((gr.matchdays || [])[md] || []).some(x =>
+            x === match || (x.home === match.home && x.away === match.away)
+          );
+        });
+        if (g && !match._tableApplied) {
+          applyGroupResult(g.table, match);
+          match._tableApplied = true;
+        }
+        resolveCwcGroupMatchdayAI(match);
+        advanceCwcFromGroups();
+      } else {
+        resolveCompAI(state.cwc, match);
+        advanceKnockout(state.cwc, 'Клубный ЧМ', 1800000);
+        if (state.cwc?.champion === me.id) state.cwcBest = 'Чемпион';
+      }
+    }
+
     const myGoals = isHome ? score[0] : score[1];
     const oppGoals = isHome ? score[1] : score[0];
     const won = myGoals > oppGoals;
-    noteKnockoutProgress(kind, won, roundBefore);
-    const prize = won ? prizeWin : 50000;
-    adjustBudget(prize, won ? `${label}: победа` : `${label}: участие`);
-    me.morale = Math.min(100, me.morale + (won ? 5 : -2));
-    if (state.board) B().applyMatchConfidence(state.board, won, false, true);
-    state.lastResult = { ...result, prize, income: 0, competition: label, derby: result.derby || null, highlights: extractHighlights(result) };
+    const drew = myGoals === oppGoals;
+    noteKnockoutProgress(kind, won && !drew, roundBefore);
+    const prize = won ? prizeWin : (drew ? 80000 : 50000);
+    adjustBudget(prize, won ? `${label}: победа` : drew ? `${label}: ничья` : `${label}: участие`);
+    me.morale = Math.min(100, me.morale + (won ? 5 : drew ? 1 : -2));
+    if (state.board) B().applyMatchConfidence(state.board, won, drew, true);
+    state.lastResult = {
+      ...result, prize, income: 0, competition: label,
+      derby: result.derby || null, highlights: extractHighlights(result)
+    };
     applyMatchAwards(result);
     state.history.unshift({
-      at: Date.now(), season: state.season, week: state.week, cup: kind === 'cup', ucl: kind === 'ucl',
+      at: Date.now(), season: state.season, week: state.week,
+      cup: kind === 'cup', ucl: kind === 'ucl', cwc: kind === 'cwc',
       home: result.home, away: result.away, score,
       motm: result.motm ? { id: result.motm.id, name: result.motm.name, rating: result.motm.rating } : null
     });
     state.news.unshift({
-      id: D().uid('n'), title: won ? `${label}: победа` : `${label}: поражение`,
+      id: D().uid('n'),
+      title: won ? `${label}: победа` : drew ? `${label}: ничья` : `${label}: поражение`,
       body: `${result.home} ${score[0]}:${score[1]} ${result.away}`,
       at: Date.now()
     });
-    queuePressConference(won, false, true);
-    // Кубок/ЛЧ — midweek: не крутим лиговый advanceWeek (зарплаты уже списаны за тур)
+    queuePressConference(won, drew, true);
     state.knockoutPlayedWeek = state.week;
     save();
   }
@@ -1919,9 +2422,11 @@ window.EYE_STATE = (() => {
     state.day = 1;
     state.phase = 'season';
     state.cup = createCup(lc, next.id);
-    state.ucl = createUcl(state.clubs, next.id);
+    state.ucl = createUcl(state.clubs, next.id, { forcePlayer: true });
+    state.cwc = createCwc(state.clubs, next.id);
     state.cupBest = '';
     state.uclBest = '';
+    state.cwcBest = '';
     state.stats = { scorers: {}, assisters: {}, motm: {} };
     state.lastResult = null;
     state.pendingPress = null;
@@ -1952,8 +2457,8 @@ window.EYE_STATE = (() => {
   return {
     KEY, money, moneyHint, getCurrency, setCurrency, currencyInfo,
     createCareer, get, club, clubById, leagueClubs, save, load, clear,
-    currentFixture, playerMatch, nextMatch, playerCupMatch, playerUclMatch,
-    recordPlayerMatch, recordCupMatch, recordUclMatch, sortedTable, topScorers,
+    currentFixture, playerMatch, nextMatch, playerCupMatch, playerUclMatch, playerCwcMatch,
+    recordPlayerMatch, recordCupMatch, recordUclMatch, recordCwcMatch, sortedTable, topScorers,
     train, buyPlayer, makeOffer, sellPlayer, respondOffer, filterMarket, refreshTransferMarket,
     storeCounter, pendingCounters: () => state?.pendingCounters || {},
     pendingWage: () => state?.pendingWage || {},
@@ -1962,6 +2467,6 @@ window.EYE_STATE = (() => {
     hireStaff, answerPress, refillYouth, releaseYouth, runYouthIntake, pendingPress: () => state?.pendingPress || null,
     xiStatus, fixXi, matchRivalry, transferWindowOpen, listLeagueTables,
     resolvePlayerRequest, seasonLog: () => state?.seasonLog || [], avgSeasonRating,
-    squadReadiness, opponentBrief, boardProgress
+    squadReadiness, opponentBrief, boardProgress, isClubInCwc, isClubInUcl: isClubInUclBracket
   };
 })();

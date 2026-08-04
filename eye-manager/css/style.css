@@ -1399,6 +1399,7 @@ input:focus, select:focus { border-color: rgba(94,234,212,.45); box-shadow: 0 0 
   #screen-board.active,
   #screen-cup.active,
   #screen-ucl.active,
+  #screen-cwc.active,
   #screen-table.active,
   #screen-player.active {
     max-width: 1040px;
@@ -1449,7 +1450,8 @@ input:focus, select:focus { border-color: rgba(94,234,212,.45); box-shadow: 0 0 
 
   /* Cup / UCL */
   #screen-cup.active,
-  #screen-ucl.active {
+  #screen-ucl.active,
+  #screen-cwc.active {
     max-width: 1100px;
   }
   .bracket-grid {
