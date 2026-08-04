@@ -1,0 +1,14 @@
+{
+  "name": "eye-manager-server",
+  "version": "1.0.0",
+  "private": true,
+  "description": "EYE Football Manager — static + cloud saves",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test test.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "name": "EYE Football Manager",
+  "short_name": "EYE",
+  "description": "Футбольный менеджер в тёмном Liquid Glass стиле",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#05070A",
+  "theme_color": "#05070A",
+  "lang": "ru",
+  "icons": [
+    { "src": "assets/eye.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
