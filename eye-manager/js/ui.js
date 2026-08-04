@@ -27,6 +27,7 @@ window.EYE_UI = (() => {
   let historyTab = 'matches';
 
   let createStep = 1;
+  let createMode = 'custom'; // custom | takeover
 
   function $(sel, root = document) { return root.querySelector(sel); }
   function $all(sel, root = document) { return [...root.querySelectorAll(sel)]; }
@@ -110,8 +111,66 @@ window.EYE_UI = (() => {
       b.classList.toggle('done', n < createStep);
       b.setAttribute('aria-selected', n === createStep ? 'true' : 'false');
     });
+    if (createStep === 3) updateCreateSummary();
     const panel = $('#screen-create .entry-panel');
     if (panel) panel.scrollTop = 0;
+  }
+
+  function setCreateMode(mode) {
+    createMode = mode === 'takeover' ? 'takeover' : 'custom';
+    $all('#create-mode-switch .mode-chip').forEach(b => {
+      b.classList.toggle('active', b.dataset.createMode === createMode);
+    });
+    const custom = $('#create-custom-block');
+    const take = $('#create-takeover-block');
+    if (custom) custom.hidden = createMode !== 'custom';
+    if (take) take.hidden = createMode !== 'takeover';
+    const submit = $('#btn-create-submit');
+    if (submit) submit.textContent = createMode === 'custom' ? 'Создать команду' : 'Возглавить клуб';
+    if (createMode === 'takeover') previewClub();
+    else updateCustomPreview();
+  }
+
+  function updateCustomPreview() {
+    const box = $('#custom-preview');
+    if (!box) return;
+    const name = ($('#inp-club-name')?.value || 'Мой клуб').trim() || 'Мой клуб';
+    const color = $('#sel-color')?.value || '#C8102E';
+    const short = ($('#inp-club-short')?.value || name.slice(0, 3)).trim().toUpperCase() || 'EYE';
+    box.innerHTML = `
+      <div class="club-preview-hero" style="--club:${color}"></div>
+      <div class="club-preview-body">
+        <div style="display:flex;gap:10px;align-items:center;margin-bottom:8px">
+          <span class="club-dot" style="background:${color}"></span>
+          <strong style="font-family:var(--display);font-size:17px">${name}</strong>
+          <span class="pill">${short}</span>
+        </div>
+        <div class="meta">
+          Автосостав: 18 игроков · OVR ~52–63<br/>
+          Инфра ур. 1 · бюджет старта · цель: избежать вылета<br/>
+          Развивайте базу, академию, тренировки и фанатов.
+        </div>
+      </div>
+    `;
+  }
+
+  function updateCreateSummary() {
+    const box = $('#create-summary');
+    if (!box) return;
+    const leagueId = $('#sel-league')?.value;
+    const league = W().LEAGUES.find(l => l.id === leagueId);
+    const lname = (window.EYE_I18N?.leagueRu(leagueId, league)?.name) || league?.name || '—';
+    const formation = document.querySelector('#form-create select[name="formation"]')?.value || '4-3-3';
+    const style = document.querySelector('#form-create select[name="style"]')?.value || 'balance';
+    const styleName = D().STYLES.find(s => s.id === style)?.name || style;
+    if (createMode === 'custom') {
+      const name = ($('#inp-club-name')?.value || 'Мой клуб').trim() || 'Мой клуб';
+      box.innerHTML = `<strong>${name}</strong><div class="meta" style="margin-top:6px;color:var(--muted);font-size:13px;line-height:1.45">${lname} · схема ${formation} · ${styleName}<br/>Случайный состав из 18 игроков будет сгенерирован при старте.</div>`;
+    } else {
+      const tpl = W().clubTemplate($('#sel-club')?.value);
+      const ru = tpl ? (window.EYE_I18N.clubRu(tpl.id, tpl.name, tpl.stadium)) : null;
+      box.innerHTML = `<strong>${ru?.name || 'Клуб'}</strong><div class="meta" style="margin-top:6px;color:var(--muted);font-size:13px;line-height:1.45">${lname} · схема ${formation} · ${styleName}<br/>Вы возьмёте готовый состав клуба.</div>`;
+    }
   }
 
   function syncDesktopUser() {
@@ -235,8 +294,8 @@ window.EYE_UI = (() => {
     }
     if (hint) {
       hint.textContent = (local || cloudHasCareer)
-        ? 'Можно продолжить сохранение или начать заново.'
-        : 'Сохранений нет — начните новую карьеру.';
+        ? 'Можно продолжить сохранение или создать новую команду.'
+        : 'Сохранений нет — создайте свою команду со случайным составом.';
     }
     syncDesktopUser();
   }
@@ -246,7 +305,8 @@ window.EYE_UI = (() => {
     const picker = $('#club-picker');
     const hidL = $('#sel-league');
     const hidC = $('#sel-club');
-    if (!pills || !picker) return;
+    const colors = $('#color-pills');
+    if (!pills) return;
     const mgr = document.querySelector('#form-create input[name="manager"]');
     if (mgr && !mgr.value && A().getUser()?.name) mgr.value = A().getUser().name;
 
@@ -259,7 +319,24 @@ window.EYE_UI = (() => {
       hidL.value = W().LEAGUES[0]?.id || '';
     }
 
+    if (colors && !colors.dataset.ready) {
+      const list = D().CLUB_COLORS || ['#C8102E', '#034694', '#0BB363', '#FEBE10'];
+      colors.innerHTML = list.map((c, i) =>
+        `<button type="button" class="color-pill${i === 0 ? ' active' : ''}" data-color="${c}" style="--swatch:${c}" aria-label="${c}"></button>`
+      ).join('');
+      colors.dataset.ready = '1';
+      $('#sel-color').value = list[0];
+      colors.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-color]');
+        if (!btn) return;
+        $('#sel-color').value = btn.dataset.color;
+        colors.querySelectorAll('.color-pill').forEach(p => p.classList.toggle('active', p === btn));
+        updateCustomPreview();
+      });
+    }
+
     const fillClubs = (keepClub) => {
+      if (!picker || !hidC) return;
       const lid = hidL.value || W().LEAGUES[0]?.id;
       const clubs = W().clubsByLeague(lid).slice().sort((a, b) => b.rep - a.rep);
       const preferred = keepClub && clubs.some(c => c.id === keepClub) ? keepClub : clubs[0]?.id;
@@ -278,7 +355,6 @@ window.EYE_UI = (() => {
       previewClub();
     };
 
-    pills.onchange = null;
     if (!pills.dataset.bound) {
       pills.addEventListener('click', (e) => {
         const btn = e.target.closest('[data-league]');
@@ -287,21 +363,37 @@ window.EYE_UI = (() => {
         pills.querySelectorAll('.league-pill').forEach(p => p.classList.toggle('active', p === btn));
         fillClubs(null);
       });
-      picker.addEventListener('click', (e) => {
+      picker?.addEventListener('click', (e) => {
         const btn = e.target.closest('[data-club]');
         if (!btn) return;
         hidC.value = btn.dataset.club;
         picker.querySelectorAll('.club-option').forEach(p => p.classList.toggle('active', p === btn));
         previewClub();
       });
+      $('#create-mode-switch')?.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-create-mode]');
+        if (!btn) return;
+        setCreateMode(btn.dataset.createMode);
+      });
+      ['inp-club-name', 'inp-club-short', 'inp-stadium'].forEach(id => {
+        $(`#${id}`)?.addEventListener('input', () => {
+          if (id === 'inp-club-name' && !$('#inp-club-short')?.dataset.touched) {
+            const v = ($('#inp-club-name').value || '').replace(/[^a-zA-Zа-яА-ЯёЁ0-9]/g, '');
+            if ($('#inp-club-short')) $('#inp-club-short').value = v.slice(0, 3).toUpperCase();
+          }
+          if (id === 'inp-club-short') $('#inp-club-short').dataset.touched = '1';
+          updateCustomPreview();
+        });
+      });
       pills.dataset.bound = '1';
     }
 
-    // sync active pill
     pills.querySelectorAll('.league-pill').forEach(p => {
       p.classList.toggle('active', p.dataset.league === hidL.value);
     });
     fillClubs(hidC.value);
+    setCreateMode(createMode || 'custom');
+    updateCustomPreview();
   }
 
   function previewClub() {
@@ -386,6 +478,30 @@ window.EYE_UI = (() => {
         if (cup && next?.type !== 'cup') chips.push(`<button type="button" class="hub-chip" data-nav="cup">Есть кубок</button>`);
       }
       pulse.innerHTML = chips.join('');
+    }
+
+    const dev = $('#hub-dev');
+    if (dev) {
+      const summary = S().teamDevSummary?.();
+      if (summary && !st.sacked) {
+        dev.hidden = false;
+        dev.innerHTML = `
+          <div class="hub-dev-head">
+            <strong>Развитие клуба · ур. ${summary.level}</strong>
+            <span class="meta">OVR ${summary.avgOvr} · фанаты ${summary.fans.toLocaleString('ru')}</span>
+          </div>
+          <div class="hub-dev-actions">
+            <button type="button" class="hub-chip" data-nav="train">Тренировка</button>
+            <button type="button" class="hub-chip" data-nav="club">База · ${summary.training}</button>
+            <button type="button" class="hub-chip" data-nav="youth">Академия · ${summary.youth}</button>
+            <button type="button" class="hub-chip" data-nav="transfers">Трансферы</button>
+          </div>
+          ${summary.custom ? `<div class="hint" style="margin-top:8px">Своя команда: качайте базу, поднимайте молодёжь и копите на усиление состава.</div>` : ''}
+        `;
+      } else {
+        dev.hidden = true;
+        dev.innerHTML = '';
+      }
     }
 
     const box = $('#next-fixture');
@@ -548,7 +664,9 @@ window.EYE_UI = (() => {
     const tiredN = ready?.tired?.length || 0;
     const injN = ready?.injured?.length || 0;
     $('#squad-summary').textContent =
-      `${me.squad.length} игроков · рейтинг ${avg} · конд. ${ready?.avgCond ?? '—'} · энерг. ${ready?.avgEnergy ?? '—'}` +
+      `${me.squad.length} игроков · рейтинг ${avg}` +
+      `${me.customClub ? ' · свой клуб' : stars ? ` · звёзды ${stars}` : ''}` +
+      ` · конд. ${ready?.avgCond ?? '—'} · энерг. ${ready?.avgEnergy ?? '—'}` +
       `${tiredN ? ` · устали ${tiredN}` : ''}${injN ? ` · лазарет ${injN}` : ''} · ${me.formation}`;
     const sorted = [...me.squad].sort((a, b) => {
       const ta = ((a.condition || 0) < 58 || (a.energy || 0) < 52) ? 1 : 0;
@@ -1161,15 +1279,18 @@ window.EYE_UI = (() => {
   function renderClub() {
     const me = S().club();
     const ready = S().squadReadiness();
+    const summary = S().teamDevSummary?.();
     const bay = $('#medical-bay');
     if (bay) {
       const rows = [...(ready?.injured || []), ...(ready?.suspended || [])];
       bay.innerHTML = `
-        <strong>Лазарет · медицина ур. ${me.facilities?.medical || 1}</strong>
+        <strong>${me.customClub ? 'Ваш клуб' : 'Клуб'} · ур. ${summary?.level || me.clubLevel || 1}</strong>
         <div class="meta" style="color:var(--muted);margin-top:6px;font-size:13px;line-height:1.5">
+          OVR ${summary?.avgOvr || '—'} · фанаты ${(me.fans || 0).toLocaleString('ru')} · репутация ${Math.round(me.reputation || 0)}
+          · медицина ур. ${me.facilities?.medical || 1}<br/>
           ${rows.length
             ? rows.map(p => `${p.name} — ${p.injured ? 'травма ' + p.injured + ' тур.' : 'бан ' + p.suspended}`).join('<br/>')
-            : 'Все здоровы и доступны.'}
+            : 'Лазарет пуст — все доступны.'}
         </div>
       `;
     }
@@ -1934,7 +2055,18 @@ window.EYE_UI = (() => {
           }
           if (!$('#sel-league')?.value) { toast('Выберите лигу'); return; }
         }
-        if (step === 3 && !$('#sel-club')?.value) { toast('Выберите клуб'); return; }
+        if (step === 3) {
+          if (createMode === 'custom') {
+            if (!String($('#inp-club-name')?.value || '').trim()) {
+              toast('Укажите название клуба');
+              $('#inp-club-name')?.focus();
+              return;
+            }
+          } else if (!$('#sel-club')?.value) {
+            toast('Выберите клуб');
+            return;
+          }
+        }
         setCreateStep(step);
         e.preventDefault();
         return;
@@ -1949,7 +2081,11 @@ window.EYE_UI = (() => {
             if (mgr && !String(mgr.value || '').trim()) { toast('Сначала имя менеджера'); return; }
             if (!$('#sel-league')?.value) { toast('Сначала лигу'); return; }
           }
-          if (step >= 3 && !$('#sel-club')?.value) { toast('Сначала клуб'); return; }
+          if (step >= 3) {
+            if (createMode === 'custom') {
+              if (!String($('#inp-club-name')?.value || '').trim()) { toast('Сначала название клуба'); return; }
+            } else if (!$('#sel-club')?.value) { toast('Сначала клуб'); return; }
+          }
         }
         setCreateStep(step);
         e.preventDefault();
@@ -2014,7 +2150,12 @@ window.EYE_UI = (() => {
         cloudHasCareer = !!data.hasCareer;
         $('#login-msg').textContent = '';
         toast('Добро пожаловать, ' + (data.user.name || data.user.login));
-        show('lobby');
+        if (!cloudHasCareer) {
+          createMode = 'custom';
+          show('create');
+        } else {
+          show('lobby');
+        }
       } catch (err) {
         $('#login-msg').textContent = err.message;
       }
@@ -2031,8 +2172,9 @@ window.EYE_UI = (() => {
         });
         cloudHasCareer = false;
         $('#register-msg').textContent = '';
-        toast('Аккаунт создан');
-        show('lobby');
+        toast('Аккаунт создан — создайте команду');
+        createMode = 'custom';
+        show('create');
       } catch (err) {
         $('#register-msg').textContent = err.message;
       }
@@ -2051,15 +2193,34 @@ window.EYE_UI = (() => {
       if (!A().isLoggedIn()) { show('auth'); return; }
       const fd = new FormData(e.target);
       try {
-        S().createCareer({
-          managerName: String(fd.get('manager')).trim() || A().getUser()?.name || 'Менеджер',
-          clubId: String(fd.get('clubId')),
-          formation: String(fd.get('formation')),
-          style: String(fd.get('style'))
-        });
+        const managerName = String(fd.get('manager')).trim() || A().getUser()?.name || 'Менеджер';
+        const formation = String(fd.get('formation'));
+        const style = String(fd.get('style'));
+        if (createMode === 'custom') {
+          const name = String(fd.get('clubName') || '').trim();
+          if (!name) { toast('Укажите название клуба'); setCreateStep(2); return; }
+          const leagueId = String(fd.get('league') || $('#sel-league')?.value || '');
+          if (!leagueId) { toast('Выберите лигу'); setCreateStep(1); return; }
+          S().createCareer({
+            managerName,
+            formation,
+            style,
+            custom: {
+              leagueId,
+              name,
+              short: String(fd.get('clubShort') || name).trim(),
+              color: String(fd.get('clubColor') || '#C8102E'),
+              stadium: String(fd.get('stadium') || 'Стадион клуба').trim() || 'Стадион клуба'
+            }
+          });
+        } else {
+          const clubId = String(fd.get('clubId') || $('#sel-club')?.value || '');
+          if (!clubId) { toast('Выберите клуб'); setCreateStep(2); return; }
+          S().createCareer({ managerName, clubId, formation, style });
+        }
         S().autoLineup();
         await cloudSave(true);
-        toast('Карьера начата');
+        toast(createMode === 'custom' ? 'Команда создана · состав выдан' : 'Карьера начата');
         show('hub');
       } catch (err) {
         toast('Ошибка: ' + err.message);

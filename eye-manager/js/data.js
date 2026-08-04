@@ -133,6 +133,17 @@ window.EYE_DATA = (() => {
   }
 
   const FILL_SLOTS = ['GK','RB','CB','CB','LB','CDM','CM','CM','CAM','RW','ST','LW','GK','CB','CM','ST','RB','LB'];
+  /** Стартовый состав как в 11×11 — 18 позиций */
+  const STARTER_SLOTS = [
+    'GK', 'GK',
+    'CB', 'CB', 'CB', 'RB', 'LB',
+    'CDM', 'CM', 'CM', 'CAM', 'RW', 'LW',
+    'ST', 'ST', 'RW', 'LB', 'CDM'
+  ];
+  const CLUB_COLORS = [
+    '#C8102E', '#034694', '#0BB363', '#FEBE10', '#1B458F',
+    '#111827', '#E87722', '#6B2D5C', '#0E7C7B', '#7A263A'
+  ];
 
   function rnd(a, b) { return Math.floor(Math.random() * (b - a + 1)) + a; }
   function pick(arr) { return arr[rnd(0, arr.length - 1)]; }
@@ -229,6 +240,56 @@ window.EYE_DATA = (() => {
     return squad;
   }
 
+  /** Случайный стартовый состав (18 игроков, слабый класс — старт как в 11×11) */
+  function buildStarterSquad(clubId) {
+    return STARTER_SLOTS.map((pos, i) => {
+      const age = i < 2 ? rnd(22, 32) : rnd(17, 28);
+      const bias = pos === 'GK' ? rnd(54, 64) : rnd(50, 63);
+      const p = genPlayer(pos, bias, age, clubId);
+      p.pot = Math.min(88, p.ovr + rnd(8, 22));
+      p.contract = rnd(2, 4);
+      p.wage = Math.max(800, Math.round(p.value * 0.012));
+      return p;
+    });
+  }
+
+  function createStarterClub({
+    id, name, short, color, stadium, leagueId, formation, style, budget, fans, reputation
+  } = {}) {
+    const league = W().leagueById(leagueId);
+    const leagueRu = window.EYE_I18N?.leagueRu(leagueId, league) || { name: league?.name };
+    const clubId = id || ('u_' + uid('c').replace(/\W/g, '').slice(-10));
+    const squad = buildStarterSquad(clubId);
+    const avg = Math.round(squad.reduce((s, p) => s + p.ovr, 0) / Math.max(1, squad.length));
+    const shortName = String(short || name || 'EYE').trim().slice(0, 4).toUpperCase() || 'EYE';
+    return {
+      id: clubId,
+      templateId: null,
+      customClub: true,
+      name: String(name || 'Мой клуб').trim().slice(0, 28) || 'Мой клуб',
+      nameEn: String(name || 'My Club').trim().slice(0, 28),
+      short: shortName,
+      color: color || pick(CLUB_COLORS),
+      leagueId,
+      leagueName: leagueRu.name || league?.name || leagueId,
+      stadium: String(stadium || 'Стадион клуба').trim().slice(0, 40) || 'Стадион клуба',
+      formation: formation || '4-3-3',
+      style: style || 'balance',
+      squad,
+      lineup: null,
+      budget: budget ?? 1200000,
+      reputation: reputation ?? 58,
+      facilities: { stadium: 1, training: 1, youth: 1, medical: 1, scout: 1 },
+      staff: { coach: 1, physio: 1, scoutDir: 1 },
+      youth: [],
+      fans: fans ?? rnd(3500, 6500),
+      morale: 68,
+      isPlayer: false,
+      avgOvr: avg,
+      clubLevel: 1
+    };
+  }
+
   function instantiateClub(tpl, overrides = {}) {
     const league = W().leagueById(tpl.leagueId);
     const ru = window.EYE_I18N?.clubRu(tpl.id, tpl.name, tpl.stadium) || { name: tpl.name, stadium: tpl.stadium };
@@ -238,6 +299,7 @@ window.EYE_DATA = (() => {
     return {
       id: tpl.id,
       templateId: tpl.id,
+      customClub: false,
       name: ru.name,
       nameEn: tpl.name,
       short: tpl.short,
@@ -257,7 +319,8 @@ window.EYE_DATA = (() => {
       fans: tpl.fans,
       morale: 65,
       isPlayer: false,
-      avgOvr: avg
+      avgOvr: avg,
+      clubLevel: Math.max(1, Math.min(8, Math.round(tpl.rep / 12)))
     };
   }
 
@@ -296,8 +359,10 @@ window.EYE_DATA = (() => {
     FORMATIONS, POS_GROUP, POS_LABEL, STYLES, TRAINING, FACILITIES, STAFF_ROLES, PRESS_OPTIONS, RIVALRIES,
     TRAITS, DEV_FOCUS,
     get LEAGUES() { return W().LEAGUES; },
+    CLUB_COLORS, STARTER_SLOTS,
     rnd, pick, uid, genName, genPlayer, makePlayer, starToPlayer,
-    buildSquadFromTemplate, instantiateClub, buildWorldClubs, pitchCoords,
+    buildSquadFromTemplate, buildStarterSquad, createStarterClub,
+    instantiateClub, buildWorldClubs, pitchCoords,
     valueOf, attrsFromOvr, findRivalry, hasTrait, traitInfo, rollTraits, ensureTraits
   };
 })();

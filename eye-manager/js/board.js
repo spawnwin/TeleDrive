@@ -4,6 +4,7 @@ window.EYE_BOARD = (() => {
 
   function targetForClub(club) {
     const rep = club.reputation || 70;
+    if (club.customClub || rep < 62) return { place: 10, label: 'Избежать зоны вылета', cup: null };
     if (rep >= 88) return { place: 3, label: 'Топ-3', cup: 'semi' };
     if (rep >= 82) return { place: 4, label: 'Топ-4', cup: 'quarter' };
     if (rep >= 76) return { place: 6, label: 'Верхняя шестёрка', cup: 'quarter' };
@@ -13,7 +14,7 @@ window.EYE_BOARD = (() => {
   function createBoard(club) {
     const t = targetForClub(club);
     return {
-      confidence: 65,
+      confidence: club.customClub ? 72 : 65,
       targetPlace: t.place,
       targetLabel: t.label,
       cupTarget: t.cup,

@@ -77,24 +77,55 @@ window.EYE_STATE = (() => {
     }));
   }
 
-  function createCareer({ managerName, clubId, formation, style }) {
-    const tpl = W().clubTemplate(clubId);
-    if (!tpl) throw new Error('club not found');
-    const league = W().leagueById(tpl.leagueId);
+  function createCareer({ managerName, clubId, formation, style, custom }) {
     const allClubs = D().buildWorldClubs();
-    const me = allClubs.find(c => c.id === clubId);
+    let me;
+    let league;
+    let replacedName = '';
+
+    if (custom && custom.leagueId) {
+      league = W().leagueById(custom.leagueId);
+      if (!league) throw new Error('league not found');
+      const pool = allClubs.filter(c => c.leagueId === league.id);
+      const victim = [...pool].sort((a, b) => a.reputation - b.reputation || a.budget - b.budget)[0];
+      if (!victim) throw new Error('no club slot');
+      replacedName = victim.name;
+      me = D().createStarterClub({
+        name: custom.name,
+        short: custom.short,
+        color: custom.color,
+        stadium: custom.stadium,
+        leagueId: league.id,
+        formation: formation || '4-3-3',
+        style: style || 'balance'
+      });
+      const idx = allClubs.findIndex(c => c.id === victim.id);
+      allClubs[idx] = me;
+    } else {
+      const tpl = W().clubTemplate(clubId);
+      if (!tpl) throw new Error('club not found');
+      league = W().leagueById(tpl.leagueId);
+      me = allClubs.find(c => c.id === clubId);
+      if (!me) throw new Error('club not found');
+      me.formation = formation || me.formation;
+      me.style = style || 'balance';
+      me.budget = Math.round(me.budget * 1.05);
+    }
+
     me.isPlayer = true;
-    me.formation = formation || me.formation;
-    me.style = style || 'balance';
-    // starter budget boost for player
-    me.budget = Math.round(me.budget * 1.05);
+    refreshClubLevel(me);
 
     const leagueClubs = allClubs.filter(c => c.leagueId === league.id);
     const fixtures = buildFixtures(leagueClubs.map(c => c.id));
     const board = B().createBoard(me);
+    const avg = Math.round(me.squad.reduce((s, p) => s + p.ovr, 0) / Math.max(1, me.squad.length));
+
+    const welcomeBody = me.customClub
+      ? `Вы основали «${me.name}» в лиге «${league.name}». Состав из ${me.squad.length} игроков (ср. OVR ${avg}) выдан автоматически. Развивайте базу, академию и тренировки — как в классическом менеджере.`
+      : `Вы возглавили «${me.name}» (${league.name}). Задача совета: ${board.targetLabel}. Уверенность: ${board.confidence}%.`;
 
     state = {
-      version: 4,
+      version: 5,
       createdAt: Date.now(),
       managerName,
       season: 1,
@@ -113,8 +144,8 @@ window.EYE_STATE = (() => {
       scoutReports: {},
       ucl: null,
       inbox: [{
-        id: D().uid('m'), type: 'welcome', title: 'Добро пожаловать в EYE',
-        body: `Вы возглавили «${me.name}» (${league.name}). Задача совета: ${board.targetLabel}. Уверенность: ${board.confidence}%.`,
+        id: D().uid('m'), type: 'welcome', title: me.customClub ? 'Команда создана' : 'Добро пожаловать в EYE',
+        body: welcomeBody + (replacedName ? ` Слот в лиге освободил клуб «${replacedName}».` : ''),
         read: false, at: Date.now()
       }, {
         id: D().uid('m'), type: 'board', title: 'Цели сезона',
@@ -152,6 +183,13 @@ window.EYE_STATE = (() => {
         read: false, at: Date.now()
       });
     }
+    if (me.customClub) {
+      state.inbox.unshift({
+        id: D().uid('m'), type: 'dev', title: 'План развития клуба',
+        body: '1) Тренируйте состав каждую неделю. 2) Вкладывайте в базу и академию. 3) Поднимайте молодёжь. 4) Копите на трансферы. Победы растят болельщиков и уровень клуба.',
+        read: false, at: Date.now()
+      });
+    }
     ensureClubExtras(me);
     ensureMeta();
     pickSponsor(me);
@@ -159,6 +197,68 @@ window.EYE_STATE = (() => {
     refreshTransferMarket();
     save();
     return state;
+  }
+
+  function refreshClubLevel(clubObj) {
+    if (!clubObj) return 1;
+    const fac = clubObj.facilities || {};
+    const facSum = ['stadium', 'training', 'youth', 'medical', 'scout']
+      .reduce((s, k) => s + (fac[k] || 1), 0);
+    const staff = clubObj.staff || {};
+    const staffSum = (staff.coach || 1) + (staff.physio || 1) + (staff.scoutDir || 1);
+    const avg = clubObj.squad?.length
+      ? clubObj.squad.reduce((s, p) => s + p.ovr, 0) / clubObj.squad.length
+      : 55;
+    const fansScore = Math.min(5, Math.floor((clubObj.fans || 0) / 12000));
+    const raw = Math.round((facSum + staffSum) / 4 + (avg - 50) / 8 + fansScore);
+    clubObj.clubLevel = Math.max(1, Math.min(10, raw));
+    clubObj.avgOvr = Math.round(avg);
+    return clubObj.clubLevel;
+  }
+
+  function teamDevSummary() {
+    const me = club();
+    if (!me) return null;
+    refreshClubLevel(me);
+    const fac = me.facilities || {};
+    return {
+      level: me.clubLevel || 1,
+      avgOvr: me.avgOvr || 0,
+      fans: me.fans || 0,
+      training: fac.training || 1,
+      youth: fac.youth || 1,
+      stadium: fac.stadium || 1,
+      medical: fac.medical || 1,
+      scout: fac.scout || 1,
+      custom: !!me.customClub,
+      squadSize: me.squad?.length || 0
+    };
+  }
+
+  function applyMatchDevelopment(won, drew) {
+    const me = club();
+    if (!me) return;
+    if (won) {
+      me.fans = Math.min(95000, (me.fans || 4000) + D().rnd(me.customClub ? 60 : 25, me.customClub ? 140 : 70));
+      me.reputation = Math.min(92, (me.reputation || 60) + (me.customClub ? 0.15 : 0.05));
+    } else if (drew) {
+      me.fans = Math.min(95000, (me.fans || 4000) + D().rnd(8, 25));
+    } else {
+      me.fans = Math.max(2000, (me.fans || 4000) - D().rnd(5, 20));
+    }
+    const xi = (me.lineup || []).filter(Boolean);
+    xi.forEach(p => {
+      if (p.injured) return;
+      const chance = (me.customClub ? 0.1 : 0.05) + (won ? 0.04 : drew ? 0.02 : 0);
+      if (Math.random() < chance && p.ovr < (p.pot || 90)) {
+        p.ovr = Math.min(p.pot || 90, p.ovr + 1);
+        D().attrsFromOvr && Object.assign(p, {
+          // keep existing attrs; light bump via form
+        });
+        p.form = Math.min(95, (p.form || 60) + 2);
+      }
+    });
+    refreshClubLevel(me);
   }
 
   function ensureMeta() {
@@ -758,6 +858,7 @@ window.EYE_STATE = (() => {
       highlights: extractHighlights(result)
     };
     applyMatchAwards(result);
+    applyMatchDevelopment(won, drew);
     state.history.unshift({
       at: Date.now(), season: state.season, week: state.week,
       home: result.home, away: result.away, score: result.score,
@@ -1351,7 +1452,8 @@ window.EYE_STATE = (() => {
     const cost = 12000 + me.facilities.training * 3000;
     if (me.budget < cost) return { ok: false, msg: 'Не хватает бюджета' };
     adjustBudget(-cost, `Тренировка «${t.name}»`);
-    const boost = t.boost + me.facilities.training + Math.floor((me.staff.coach || 1) / 2);
+    const boost = t.boost + me.facilities.training + Math.floor((me.staff.coach || 1) / 2)
+      + (me.customClub ? 1 : 0);
     const gains = [];
     let recovered = 0;
     let skipped = 0;
@@ -1376,7 +1478,9 @@ window.EYE_STATE = (() => {
           const alt = D().DEV_FOCUS.find(f => f.id === p.devFocus)?.attr;
           if (alt && alt !== t.focus) p[alt] = Math.min(99, (p[alt] || 60) + 1);
         }
-        if (Math.random() < 0.12 + me.facilities.training * 0.02 + (me.staff.coach || 1) * 0.01 + (focusHit ? 0.06 : 0)) {
+        const growChance = 0.12 + me.facilities.training * 0.02 + (me.staff.coach || 1) * 0.01
+          + (focusHit ? 0.06 : 0) + (me.customClub ? 0.05 : 0);
+        if (Math.random() < growChance) {
           p.ovr = Math.min(p.pot, p.ovr + 1);
         }
         p.condition = Math.max(45, p.condition - 3);
@@ -1388,6 +1492,7 @@ window.EYE_STATE = (() => {
         if (bits.length && gains.length < 10) gains.push({ id: p.id, name: p.name, text: bits.join(' · ') });
       }
     });
+    refreshClubLevel(me);
     save();
     const ready = squadReadiness();
     return {
@@ -1710,6 +1815,7 @@ window.EYE_STATE = (() => {
       me.fans = Math.round(me.fans * 1.08);
       pickSponsor(me);
     }
+    refreshClubLevel(me);
     save();
     return { ok: true, msg: `${f.name} → ур. ${level + 1}` };
   }
@@ -2356,6 +2462,7 @@ window.EYE_STATE = (() => {
       derby: result.derby || null, highlights: extractHighlights(result)
     };
     applyMatchAwards(result);
+    applyMatchDevelopment(won, drew);
     state.history.unshift({
       at: Date.now(), season: state.season, week: state.week,
       cup: kind === 'cup', ucl: kind === 'ucl', cwc: kind === 'cwc',
@@ -2467,6 +2574,7 @@ window.EYE_STATE = (() => {
     hireStaff, answerPress, refillYouth, releaseYouth, runYouthIntake, pendingPress: () => state?.pendingPress || null,
     xiStatus, fixXi, matchRivalry, transferWindowOpen, listLeagueTables,
     resolvePlayerRequest, seasonLog: () => state?.seasonLog || [], avgSeasonRating,
-    squadReadiness, opponentBrief, boardProgress, isClubInCwc, isClubInUcl: isClubInUclBracket
+    squadReadiness, opponentBrief, boardProgress, isClubInCwc, isClubInUcl: isClubInUclBracket,
+    teamDevSummary, refreshClubLevel
   };
 })();

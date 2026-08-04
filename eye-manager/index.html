@@ -105,12 +105,12 @@
           <img src="assets/eye.svg" alt="" width="56" height="56" />
         </div>
         <h1 class="lobby-title">Карьера</h1>
-        <p class="hint" id="lobby-lede">Выберите сохранение или начните новый путь.</p>
+        <p class="hint" id="lobby-lede">Создайте свою команду со случайным составом и развивайте её.</p>
       </header>
       <div class="lobby-user glass-panel" id="lobby-user"></div>
       <div class="lobby-actions">
         <button class="btn btn-primary btn-glow" id="btn-continue" type="button" hidden>Продолжить</button>
-        <button class="btn btn-glass" id="btn-new" type="button">Новая карьера</button>
+        <button class="btn btn-glass" id="btn-new" type="button">Создать команду</button>
         <button class="btn btn-glass" id="btn-logout" type="button">Выйти из аккаунта</button>
       </div>
       <p class="hint" id="lobby-hint"></p>
@@ -158,12 +158,12 @@
       <button type="button" class="entry-scrim" data-nav="lobby" aria-label="Закрыть"></button>
       <div class="entry-panel entry-panel-wide glass-panel" role="dialog" aria-modal="true" aria-labelledby="create-title">
         <header class="entry-head">
-          <h2 id="create-title">Новая карьера</h2>
+          <h2 id="create-title">Создать команду</h2>
           <button type="button" class="entry-close" data-nav="lobby" aria-label="Закрыть">×</button>
         </header>
         <div class="create-stepper" id="create-stepper" role="tablist" aria-label="Шаги">
           <button type="button" class="create-step active" data-goto-step="1" role="tab" aria-selected="true">1 · Лига</button>
-          <button type="button" class="create-step" data-goto-step="2" role="tab" aria-selected="false">2 · Клуб</button>
+          <button type="button" class="create-step" data-goto-step="2" role="tab" aria-selected="false">2 · Команда</button>
           <button type="button" class="create-step" data-goto-step="3" role="tab" aria-selected="false">3 · Старт</button>
         </div>
         <form id="form-create" class="create-form entry-form">
@@ -176,16 +176,50 @@
               <div class="league-pills" id="league-pills" role="listbox" aria-label="Лига"></div>
               <input type="hidden" name="league" id="sel-league" required />
             </div>
-            <button type="button" class="btn btn-primary" data-create-next="2">Далее · клуб</button>
+            <p class="hint">После регистрации вы создаёте свой клуб и получаете случайный состав из 18 игроков.</p>
+            <button type="button" class="btn btn-primary" data-create-next="2">Далее · команда</button>
           </div>
 
           <div class="create-pane" data-create-pane="2" hidden>
-            <div class="field-block">
-              <span class="field-label">Клуб</span>
-              <div class="club-picker" id="club-picker" role="listbox" aria-label="Клуб"></div>
-              <input type="hidden" name="clubId" id="sel-club" required />
+            <div class="mode-switch" id="create-mode-switch" role="tablist">
+              <button type="button" class="mode-chip active" data-create-mode="custom">Создать клуб</button>
+              <button type="button" class="mode-chip" data-create-mode="takeover">Возглавить клуб</button>
             </div>
-            <div class="club-preview glass-panel" id="club-preview" hidden></div>
+
+            <div id="create-custom-block">
+              <label>Название клуба
+                <input name="clubName" id="inp-club-name" maxlength="28" placeholder="Например, Северный Шторм" />
+              </label>
+              <div class="create-row">
+                <label>Аббревиатура
+                  <input name="clubShort" id="inp-club-short" maxlength="4" placeholder="СШ" style="text-transform:uppercase" />
+                </label>
+                <label>Стадион
+                  <input name="stadium" id="inp-stadium" maxlength="40" placeholder="Арена клуба" />
+                </label>
+              </div>
+              <div class="field-block">
+                <span class="field-label">Цвет</span>
+                <div class="color-pills" id="color-pills" role="listbox" aria-label="Цвет"></div>
+                <input type="hidden" name="clubColor" id="sel-color" value="#C8102E" />
+              </div>
+              <div class="club-preview glass-panel" id="custom-preview">
+                <div class="club-preview-body">
+                  <strong>Случайный состав</strong>
+                  <div class="meta">18 игроков · OVR ~52–63 · база и академия ур. 1 · бюджет старта. Развивайте команду тренировками, инфраструктурой и молодёжью.</div>
+                </div>
+              </div>
+            </div>
+
+            <div id="create-takeover-block" hidden>
+              <div class="field-block">
+                <span class="field-label">Клуб</span>
+                <div class="club-picker" id="club-picker" role="listbox" aria-label="Клуб"></div>
+                <input type="hidden" name="clubId" id="sel-club" />
+              </div>
+              <div class="club-preview glass-panel" id="club-preview" hidden></div>
+            </div>
+
             <div class="create-nav-row">
               <button type="button" class="btn btn-glass" data-create-next="1">Назад</button>
               <button type="button" class="btn btn-primary" data-create-next="3">Далее · тактика</button>
@@ -214,9 +248,10 @@
                 </select>
               </label>
             </div>
+            <div class="glass-panel" id="create-summary" style="padding:12px"></div>
             <div class="create-nav-row">
               <button type="button" class="btn btn-glass" data-create-next="2">Назад</button>
-              <button class="btn btn-primary create-submit" type="submit">Возглавить клуб</button>
+              <button class="btn btn-primary create-submit" type="submit" id="btn-create-submit">Создать команду</button>
             </div>
           </div>
         </form>
@@ -248,6 +283,7 @@
       </div>
 
       <div class="hub-pulse" id="hub-pulse"></div>
+      <div class="hub-dev glass-panel" id="hub-dev" hidden></div>
       <div class="news-strip" id="news-strip"></div>
     </section>
 

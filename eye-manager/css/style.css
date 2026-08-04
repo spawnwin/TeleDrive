@@ -507,7 +507,66 @@ input:focus, select:focus { border-color: rgba(94,234,212,.45); box-shadow: 0 0 
 .create-form label { font-size: 13px; color: var(--muted); }
 .field-block { display: grid; gap: 8px; }
 .field-label { font-size: 13px; color: var(--muted); }
-.league-pills {
+.mode-switch {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.mode-chip {
+  flex: 1;
+  border: 1px solid var(--line);
+  background: rgba(255,255,255,.04);
+  color: var(--muted);
+  border-radius: 12px;
+  padding: 10px 12px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.mode-chip.active {
+  color: var(--text);
+  border-color: rgba(255,255,255,.22);
+  background: rgba(255,255,255,.1);
+}
+.color-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.color-pill {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  background: var(--swatch);
+  cursor: pointer;
+  padding: 0;
+}
+.color-pill.active {
+  border-color: #fff;
+  box-shadow: 0 0 0 2px rgba(255,255,255,.25);
+}
+.hub-dev {
+  padding: 14px;
+  margin: 10px 0 12px;
+}
+.hub-dev-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: baseline;
+  margin-bottom: 10px;
+}
+.hub-dev-head .meta {
+  color: var(--muted);
+  font-size: 12px;
+}
+.hub-dev-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
   display: flex; flex-wrap: nowrap; gap: 8px;
   overflow-x: auto; padding-bottom: 4px;
   -webkit-overflow-scrolling: touch;
