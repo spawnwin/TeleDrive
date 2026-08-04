@@ -1205,13 +1205,13 @@ export function ChatSidebar({
 
       {/* Telegram-style multi-select strip — replaces bottom nav while active */}
       {selectionMode && (
-        <div className="z-10 shrink-0 border-t border-sidebar-border bg-sidebar/95 px-2 pt-2 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur-md">
+        <div className="aurora-chats-composer z-10 shrink-0 px-2 pt-2 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
           <div className="mx-auto flex max-w-lg items-center justify-around gap-1">
             <button
               type="button"
               disabled={selectedIds.size === 0}
               onClick={() => void bulkArchive()}
-              className="flex min-w-0 flex-1 flex-col items-center gap-1 rounded-xl px-2 py-2 text-primary transition hover:bg-primary/10 disabled:opacity-40"
+              className="flex min-w-0 flex-1 flex-col items-center gap-1 rounded-xl px-2 py-2 text-[#5eb3f6] transition hover:bg-white/5 disabled:opacity-40"
             >
               <Archive className="h-5 w-5" />
               <span className="truncate text-[11px] font-medium">
@@ -1222,7 +1222,7 @@ export function ChatSidebar({
               type="button"
               disabled={selectedIds.size === 0}
               onClick={bulkMarkRead}
-              className="flex min-w-0 flex-1 flex-col items-center gap-1 rounded-xl px-2 py-2 text-primary transition hover:bg-primary/10 disabled:opacity-40"
+              className="flex min-w-0 flex-1 flex-col items-center gap-1 rounded-xl px-2 py-2 text-[#5eb3f6] transition hover:bg-white/5 disabled:opacity-40"
             >
               <CheckCheck className="h-5 w-5" />
               <span className="truncate text-[11px] font-medium">{t('chat.readShort')}</span>

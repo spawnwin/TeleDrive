@@ -71,8 +71,7 @@ export function MobileBottomNav({
   ]
 
   // High-contrast floating glass — must stay above list/stories and remain tappable
-  const glass =
-    'border border-white/12 bg-[#1c1c1e]/85 shadow-[0_8px_28px_rgba(0,0,0,0.4)] backdrop-blur-2xl dark:bg-[#17212b]/90'
+  const glass = 'aurora-chats-mobile-glass'
 
   useEffect(() => {
     if (!searchOpen) return
@@ -136,7 +135,7 @@ export function MobileBottomNav({
                 type="button"
                 onClick={onSearchClose}
                 className={cn(
-                  'h-[52px] shrink-0 touch-manipulation rounded-full px-4 text-[15px] font-medium text-primary active:opacity-70',
+                  'h-[52px] shrink-0 touch-manipulation rounded-full px-4 text-[15px] font-medium text-[#5eb3f6] active:opacity-70',
                   glass,
                 )}
               >
@@ -175,20 +174,20 @@ export function MobileBottomNav({
                           absoluteStrokeWidth
                           className={cn(
                             'h-[22px] w-[22px] transition-colors duration-150',
-                            active ? 'text-[#5eb3f6]' : 'text-white/55',
+                            active ? 'aurora-chats-mobile-active' : 'text-white/55',
                           )}
                         />
                         {id === 'chats' && unreadCount > 0 && (
                           <UnreadBadge
                             count={unreadCount}
-                            className="absolute -right-2.5 -top-1.5 h-[15px] min-w-[15px] border-[1.5px] border-[#1c1c1e] bg-primary px-0.5 text-[8px] leading-none shadow-none"
+                            className="absolute -right-2.5 -top-1.5 h-[15px] min-w-[15px] border-[1.5px] border-[#0e1621] bg-[linear-gradient(145deg,#3aa0ff,#2dd4bf)] px-0.5 text-[8px] leading-none text-[#041018] shadow-none"
                           />
                         )}
                       </span>
                       <span
                         className={cn(
                           'max-w-full truncate text-[9px] leading-none tracking-tight',
-                          active ? 'font-semibold text-[#5eb3f6]' : 'font-normal text-white/50',
+                          active ? 'aurora-chats-mobile-active font-semibold' : 'font-normal text-white/50',
                         )}
                       >
                         {label}
@@ -205,7 +204,7 @@ export function MobileBottomNav({
                     aria-current={undefined}
                     className="relative flex min-w-0 flex-1 touch-manipulation flex-col items-center justify-center gap-0.5 rounded-full px-0.5 py-0.5 transition-opacity active:opacity-60"
                   >
-                    <span className="flex h-[22px] w-[22px] items-center justify-center overflow-hidden rounded-full ring-2 ring-primary/40">
+                    <span className="flex h-[22px] w-[22px] items-center justify-center overflow-hidden rounded-full ring-2 ring-[#3aa0ff]/45">
                       <Avatar
                         name={userName || 'U'}
                         color={userAvatarColor || 'var(--primary)'}

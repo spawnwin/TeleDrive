@@ -58,7 +58,7 @@ export function CallMessageRow({ msg, viewerId, t }: CallMessageRowProps) {
           'inline-flex max-w-[90%] items-center gap-2 rounded-full px-3 py-1.5 text-xs font-medium shadow-sm',
           missed
             ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400'
-            : 'bg-muted/80 text-muted-foreground',
+            : 'aurora-chats-call-pill',
         )}
       >
         <CallIcon meta={meta} mine={mine} />

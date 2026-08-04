@@ -111,7 +111,7 @@ export function StoriesRow({ feed, currentUser, onAddStory, onOpenViewer }: Stor
           />
         </StoryRing>
         <span
-          className="absolute -bottom-0.5 -right-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-primary-foreground shadow ring-2 ring-sidebar"
+          className="absolute -bottom-0.5 -right-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-[linear-gradient(145deg,#3aa0ff,#2dd4bf)] text-white shadow ring-2 ring-[#0b131c]"
           onClick={(e) => {
             e.stopPropagation()
             onAddStory()
@@ -120,7 +120,7 @@ export function StoriesRow({ feed, currentUser, onAddStory, onOpenViewer }: Stor
           <Plus className="h-3 w-3" strokeWidth={2.5} />
         </span>
       </div>
-      <span className="max-w-[64px] truncate text-[10px] text-muted-foreground">
+      <span className="max-w-[64px] truncate text-[10px] text-[#8fa0b5]">
         {t('stories.myStory')}
       </span>
     </button>
@@ -170,7 +170,7 @@ export function StoriesRow({ feed, currentUser, onAddStory, onOpenViewer }: Stor
     <div
       ref={containerRef}
       className={cn(
-        'relative shrink-0 border-b border-sidebar-border/80 bg-sidebar/80 backdrop-blur-md',
+        'aurora-chats-stories relative shrink-0',
         !isDragging && 'transition-[height] duration-200 ease-out',
       )}
       style={{ height }}
@@ -185,7 +185,7 @@ export function StoriesRow({ feed, currentUser, onAddStory, onOpenViewer }: Stor
         data-stories-handle
         className="flex h-7 cursor-grab touch-none select-none items-center justify-center active:cursor-grabbing"
       >
-        <div className="h-1 w-9 rounded-full bg-muted-foreground/35" />
+        <div className="h-1 w-9 rounded-full bg-white/25" />
       </div>
 
       <div
@@ -204,7 +204,7 @@ export function StoriesRow({ feed, currentUser, onAddStory, onOpenViewer }: Stor
       <button
         type="button"
         onClick={() => setExpanded((v) => !v)}
-        className="absolute right-2 top-1.5 flex h-6 w-6 items-center justify-center rounded-full text-muted-foreground hover:bg-muted"
+        className="absolute right-2 top-1.5 flex h-6 w-6 items-center justify-center rounded-full text-[#8fa0b5] hover:bg-white/5 hover:text-[#e8eef6]"
         aria-label={expanded ? t('stories.collapse') : t('stories.expand')}
         title={expanded ? t('stories.collapse') : t('stories.expand')}
       >

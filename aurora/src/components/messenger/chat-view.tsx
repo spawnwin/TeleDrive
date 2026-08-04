@@ -2523,16 +2523,16 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            className="overflow-hidden border-b border-border bg-muted/30"
+            className="aurora-chats-strip overflow-hidden border-b"
           >
             <div className="px-3 py-2 sm:px-4">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <div className="aurora-chats-search relative rounded-xl">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#8fa0b5]" />
                 <Input
                   value={searchQuery}
                   onChange={(e) => runSearch(e.target.value)}
                   placeholder={t('search.messages')}
-                  className="h-9 rounded-lg border-none bg-background pl-10 pr-9 text-sm focus-visible:ring-1 focus-visible:ring-primary"
+                  className="h-9 rounded-xl border-none bg-transparent pl-10 pr-9 text-sm text-[#e8eef6] placeholder:text-[#6f8196] focus-visible:ring-0"
                   autoFocus
                 />
                 {searchQuery && (
@@ -2567,15 +2567,15 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            className="overflow-hidden border-b border-border bg-amber-500/5"
+            className="aurora-chats-strip overflow-hidden border-b"
           >
             <div className="flex items-center justify-between gap-3 px-4 py-2">
               <div className="flex items-center gap-2">
-                <Star className="h-4 w-4 text-amber-500" />
-                <span className="text-sm font-medium text-amber-600 dark:text-amber-400">
+                <Star className="h-4 w-4 text-amber-400" />
+                <span className="text-sm font-medium text-amber-300">
                   {t('info.favorites')}
                 </span>
-                <span className="text-xs text-muted-foreground">· {messages.length}</span>
+                <span className="text-xs text-[#8fa0b5]">· {messages.length}</span>
               </div>
               <Button
                 variant="ghost"
@@ -2597,12 +2597,12 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
         <button
           type="button"
           onClick={() => void jumpToMessage(pinnedMessage.id)}
-          className="flex w-full min-w-0 shrink-0 items-center gap-2 border-b border-border border-l-[3px] border-l-primary bg-muted/25 px-3 py-2 text-left transition hover:bg-muted/50 sm:px-4"
+          className="aurora-chats-strip aurora-chats-strip-pin flex w-full min-w-0 shrink-0 items-center gap-2 border-b border-l-[3px] px-3 py-2 text-left transition sm:px-4"
         >
-          <Pin className="h-4 w-4 shrink-0 text-primary" />
+          <Pin className="h-4 w-4 shrink-0 text-[#3aa0ff]" />
           <div className="min-w-0 flex-1 overflow-hidden">
-            <p className="truncate text-xs font-semibold text-primary">{pinnedMessage.senderName}</p>
-            <p className="truncate text-xs text-muted-foreground">
+            <p className="truncate text-xs font-semibold text-[#5eb3f6]">{pinnedMessage.senderName}</p>
+            <p className="truncate text-xs text-[#8fa0b5]">
               {pinnedMessage.content || (pinnedMessage.type === 'image' ? t('chat.image') : t('chat.file'))}
             </p>
           </div>
@@ -2664,7 +2664,7 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
             {grouped.map((group) => (
               <div key={group.day} className="flex flex-col gap-1.5">
                 <div className="my-2 flex justify-center px-2">
-                  <span className="max-w-full truncate rounded-full bg-muted/80 px-3 py-1 text-[12px] font-medium text-muted-foreground shadow-none backdrop-blur-sm dark:bg-black/40 dark:text-white/85">
+                  <span className="aurora-chats-day max-w-full truncate rounded-full px-3 py-1 text-[12px] font-medium">
                     {formatDayDivider(group.items[0].createdAt, lang)}
                   </span>
                 </div>
@@ -2844,15 +2844,15 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            className="shrink-0 overflow-hidden border-t border-border bg-muted/50"
+            className="aurora-chats-strip shrink-0 overflow-hidden border-t"
           >
             <div className="flex min-w-0 items-center gap-3 px-3 py-2.5 sm:px-4">
-              <Reply className="h-4 w-4 shrink-0 text-primary" />
-              <div className="min-w-0 flex-1 overflow-hidden border-l-2 border-primary pl-2">
-                <p className="truncate text-xs font-medium text-primary">
+              <Reply className="h-4 w-4 shrink-0 text-[#3aa0ff]" />
+              <div className="min-w-0 flex-1 overflow-hidden border-l-2 border-[#3aa0ff] pl-2">
+                <p className="truncate text-xs font-medium text-[#5eb3f6]">
                   {t('msg.replyTo')} {replyTo.sender.name}
                 </p>
-                <p className="truncate text-xs text-muted-foreground">
+                <p className="truncate text-xs text-[#8fa0b5]">
                   {replyTo.content || messagePreview(replyTo, t)}
                 </p>
               </div>
@@ -2876,12 +2876,12 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            className="shrink-0 overflow-hidden border-t border-border bg-amber-500/5"
+            className="aurora-chats-strip shrink-0 overflow-hidden border-t"
           >
             <div className="flex items-center gap-3 px-4 py-2.5">
-              <Edit3 className="h-4 w-4 shrink-0 text-amber-500" />
-              <div className="min-w-0 flex-1 border-l-2 border-amber-500 pl-2">
-                <p className="text-xs font-medium text-amber-500">{t('msg.editing')}</p>
+              <Edit3 className="h-4 w-4 shrink-0 text-amber-400" />
+              <div className="min-w-0 flex-1 border-l-2 border-amber-400 pl-2">
+                <p className="text-xs font-medium text-amber-400">{t('msg.editing')}</p>
                 <p className="truncate text-xs text-muted-foreground">
                   {editingMessage.content}
                 </p>
@@ -2995,8 +2995,8 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
         <div className="mx-auto flex w-full min-w-0 max-w-none flex-col gap-1.5">
           {/* Pending attachment — Telegram strip above the input row */}
           {pendingFile && pendingPreviewUrl && !isRecording && (
-            <div className="flex min-w-0 items-center gap-2 overflow-hidden rounded-2xl bg-muted/40 px-2 py-2">
-              <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-lg border border-border bg-muted">
+            <div className="aurora-chats-empty flex min-w-0 items-center gap-2 overflow-hidden rounded-2xl px-2 py-2">
+              <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-lg border border-white/[0.08] bg-white/[0.04]">
                 {isImageFile(pendingFile) ? (
                   <img src={pendingPreviewUrl} alt="" className="h-full w-full object-cover" />
                 ) : (
@@ -3871,10 +3871,10 @@ function MessageBubble({
             className={cn(
               'relative min-w-0 max-w-full overflow-hidden rounded-2xl px-3 py-1.5 text-[15px] leading-snug shadow-none transition-shadow',
               mine && msg.type !== 'gift' && msg.type !== 'sticker' && msg.type !== 'music'
-                ? 'bg-[var(--bubble-out)] text-white'
+                ? 'aurora-chats-bubble-out text-white'
                 : mine
                   ? ''
-                  : msg.type !== 'gift' && msg.type !== 'sticker' && msg.type !== 'music' && 'bg-[var(--bubble-in)] text-foreground shadow-none',
+                  : msg.type !== 'gift' && msg.type !== 'sticker' && msg.type !== 'music' && 'aurora-chats-bubble-in shadow-none',
               mine && msg.type !== 'gift' && msg.type !== 'sticker' && msg.type !== 'music' && (grouped ? 'rounded-tr-2xl' : 'rounded-tr-md'),
               !mine && msg.type !== 'gift' && msg.type !== 'sticker' && msg.type !== 'music' && (grouped ? 'rounded-tl-2xl' : 'rounded-tl-md'),
               mine && msg.type !== 'gift' && msg.type !== 'sticker' && msg.type !== 'music' && (nextGrouped ? 'rounded-br-2xl' : 'rounded-br-md'),
@@ -3888,7 +3888,7 @@ function MessageBubble({
               msg.type === 'share' && 'w-full min-w-0 sm:min-w-[180px]',
               msg.type === 'gift' && 'min-w-0 max-w-full bg-transparent shadow-none',
               msg.type === 'sticker' && 'min-w-0 bg-transparent shadow-none p-1',
-              highlighted && 'ring-2 ring-primary ring-offset-2 ring-offset-background',
+              highlighted && 'ring-2 ring-[#3aa0ff] ring-offset-2 ring-offset-[#0b131c]',
             )}
           >
             {msg.replyTo && (
@@ -4392,12 +4392,12 @@ function AlbumBubble({
           className={cn(
             'relative w-full min-w-0 overflow-hidden rounded-2xl p-1 shadow-sm',
             mine
-              ? 'bg-[var(--bubble-out)] text-white'
-              : 'bg-[var(--bubble-in)] text-foreground shadow-none',
+              ? 'aurora-chats-bubble-out text-white'
+              : 'aurora-chats-bubble-in shadow-none',
             // Telegram-style tails
             !grouped && (mine ? 'rounded-tr-md' : 'rounded-tl-md'),
             !nextGrouped && (mine ? 'rounded-br-md' : 'rounded-bl-md'),
-            highlighted && 'ring-2 ring-primary',
+            highlighted && 'ring-2 ring-[#3aa0ff]',
           )}
         >
           <div
