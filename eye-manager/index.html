@@ -399,7 +399,9 @@
       </header>
       <div class="glass-panel" id="cup-status" style="padding:14px"></div>
       <div class="list" id="cup-list"></div>
-      <button class="btn btn-primary" id="btn-cup-play" hidden>Играть кубковый матч</button>
+      <div class="ko-play-wrap">
+        <button class="btn btn-primary" id="btn-cup-play" hidden>Играть кубковый матч</button>
+      </div>
     </section>
 
     <section id="screen-ucl" class="screen">
@@ -409,7 +411,9 @@
       </header>
       <div class="glass-panel" id="ucl-status" style="padding:14px"></div>
       <div class="list" id="ucl-list"></div>
-      <button class="btn btn-primary" id="btn-ucl-play" hidden>Играть матч ЛЧ</button>
+      <div class="ko-play-wrap">
+        <button class="btn btn-primary" id="btn-ucl-play" hidden>Играть матч ЛЧ</button>
+      </div>
     </section>
 
     <section id="screen-board" class="screen">
@@ -630,11 +634,15 @@
           <strong>Перерыв</strong>
           <button type="button" class="entry-close" id="btn-ht-close" aria-label="Закрыть">×</button>
         </header>
-        <p class="hint" id="ht-hint">Стиль, схема и до 3 замен · затем второй тайм</p>
-        <div class="filter-row" id="ht-formations"></div>
-        <div class="filter-row" id="ht-styles"></div>
-        <div class="list" id="ht-bench"></div>
-        <button class="btn btn-primary" id="btn-second-half">Второй тайм</button>
+        <div class="ht-body">
+          <p class="hint" id="ht-hint">Стиль, схема и до 3 замен · затем второй тайм</p>
+          <div class="filter-row" id="ht-formations"></div>
+          <div class="filter-row" id="ht-styles"></div>
+          <div class="list" id="ht-bench"></div>
+        </div>
+        <div class="ht-foot">
+          <button class="btn btn-primary" id="btn-second-half">Второй тайм</button>
+        </div>
       </div>
     </section>
 

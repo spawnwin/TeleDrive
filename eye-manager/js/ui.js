@@ -886,19 +886,41 @@ window.EYE_UI = (() => {
     return `<div class="bracket-round"><div class="bracket-label">${stageLabel}</div><div class="bracket-grid">${grid}</div></div>`;
   }
 
+  function setKoPlayButton(btn, match, playLabel, idleLabel) {
+    if (!btn) return;
+    if (match) {
+      btn.hidden = false;
+      btn.disabled = false;
+      btn.classList.remove('is-disabled');
+      btn.textContent = playLabel;
+      btn.removeAttribute('aria-disabled');
+    } else {
+      btn.hidden = true;
+      btn.disabled = true;
+      btn.classList.add('is-disabled');
+      btn.setAttribute('aria-disabled', 'true');
+      if (idleLabel) btn.textContent = idleLabel;
+    }
+  }
+
   function renderCup() {
     const cup = S().get().cup;
     const status = $('#cup-status');
     const btn = $('#btn-cup-play');
-    if (!cup) { status.textContent = 'Кубка нет'; btn.hidden = true; return; }
+    if (!cup) {
+      status.textContent = 'Кубка нет';
+      setKoPlayButton(btn, null, 'Играть кубковый матч');
+      return;
+    }
     if (cup.champion) {
       const c = S().clubById(cup.champion);
       status.innerHTML = `<strong>Победитель:</strong> ${c?.name || '—'}`;
-      btn.hidden = true;
+      setKoPlayButton(btn, null, 'Играть кубковый матч');
     } else {
-      status.innerHTML = `<strong>Стадия:</strong> ${cup.round}`;
       const pm = S().playerCupMatch();
-      btn.hidden = !pm;
+      const inComp = (cup.bracket || []).some(m => m.home === S().club().id || m.away === S().club().id);
+      status.innerHTML = `<strong>Стадия:</strong> ${cup.round}${inComp ? (pm ? ' · ваш матч' : '') : ' · ваш клуб вне сетки'}`;
+      setKoPlayButton(btn, pm, 'Играть кубковый матч');
     }
     $('#cup-list').innerHTML = bracketHtml(cup.bracket, cup.round || 'Сетка') || `<div class="news-item">Сетка пуста</div>`;
   }
@@ -907,16 +929,23 @@ window.EYE_UI = (() => {
     const ucl = S().get().ucl;
     const status = $('#ucl-status');
     const btn = $('#btn-ucl-play');
-    if (!ucl) { status.textContent = 'ЛЧ ещё не сформирована'; btn.hidden = true; return; }
+    if (!ucl) {
+      status.textContent = 'ЛЧ ещё не сформирована';
+      setKoPlayButton(btn, null, 'Играть матч ЛЧ');
+      return;
+    }
     if (ucl.champion) {
       const c = S().clubById(ucl.champion);
       status.innerHTML = `<strong>${ucl.name}</strong><div>Победитель: ${c?.name || '—'}</div>`;
-      btn.hidden = true;
+      setKoPlayButton(btn, null, 'Играть матч ЛЧ');
     } else {
-      const inComp = (ucl.bracket || []).some(m => m.home === S().club().id || m.away === S().club().id)
-        || (ucl.bracket || []).some(m => m.played && (m.home === S().club().id || m.away === S().club().id));
-      status.innerHTML = `<strong>${ucl.name}</strong><div>Стадия: ${ucl.round}${inComp ? '' : ' · ваш клуб вне сетки'}</div>`;
-      btn.hidden = !S().playerUclMatch();
+      const pm = S().playerUclMatch();
+      const meId = S().club()?.id;
+      const inComp = (ucl.bracket || []).some(m => m.home === meId || m.away === meId);
+      status.innerHTML = `<strong>${ucl.name}</strong><div>Стадия: ${ucl.round}${
+        pm ? ' · ваш матч готов' : (inComp ? '' : ' · ваш клуб вне сетки')
+      }</div>`;
+      setKoPlayButton(btn, pm, 'Играть матч ЛЧ');
     }
     $('#ucl-list').innerHTML = bracketHtml(ucl.bracket, ucl.round || 'Сетка') || `<div class="news-item">Сетка пуста</div>`;
   }
@@ -1501,6 +1530,8 @@ window.EYE_UI = (() => {
     closeDrawer();
     matchPaused = false;
     syncPauseButton();
+    const flash = $('#goal-flash');
+    if (flash) flash.hidden = true;
     const used = matchCtx?.subsUsed || 0;
     const left = Math.max(0, 3 - used);
     $('#ht-hint').textContent = `Стиль, схема и замены (осталось ${left}/3) · затем второй тайм`;
@@ -2071,14 +2102,22 @@ window.EYE_UI = (() => {
     $('#ht-scrim')?.addEventListener('click', () => continueSecondHalf());
     $('#btn-cup-play')?.addEventListener('click', () => {
       const pm = S().playerCupMatch();
-      if (!pm) return;
+      if (!pm) {
+        toast('Сейчас нет вашего кубкового матча');
+        renderCup();
+        return;
+      }
       matchCtx = { type: 'cup', match: pm, subsUsed: 0 };
       show('prematch');
       renderPrematch();
     });
     $('#btn-ucl-play')?.addEventListener('click', () => {
       const pm = S().playerUclMatch();
-      if (!pm) return;
+      if (!pm) {
+        toast('Сейчас нет вашего матча ЛЧ');
+        renderUcl();
+        return;
+      }
       matchCtx = { type: 'ucl', match: pm, subsUsed: 0 };
       show('prematch');
       renderPrematch();

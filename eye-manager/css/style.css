@@ -92,6 +92,27 @@ input:focus, select:focus { border-color: rgba(94,234,212,.45); box-shadow: 0 0 
 }
 .screen.active { display: flex; flex-direction: column; gap: 16px; }
 #screen-hub.active { padding-bottom: calc(var(--dock-h) + 20px + var(--safe-b)); }
+#screen-cup.active,
+#screen-ucl.active,
+#screen-squad.active,
+#screen-transfers.active,
+#screen-more.active,
+#screen-youth.active,
+#screen-club.active,
+#screen-board.active,
+#screen-finance.active,
+#screen-train.active,
+#screen-inbox.active,
+#screen-history.active,
+#screen-stats.active,
+#screen-calendar.active,
+#screen-table.active,
+#screen-tactics.active,
+#screen-prematch.active,
+#screen-result.active,
+#screen-player.active {
+  padding-bottom: calc(28px + var(--safe-b));
+}
 @keyframes rise {
   from { opacity: 0; transform: translateY(10px); }
   to { opacity: 1; transform: none; }
@@ -682,14 +703,37 @@ input:focus, select:focus { border-color: rgba(94,234,212,.45); box-shadow: 0 0 
   position: fixed; left: 50%; bottom: calc(20px + var(--safe-b));
   transform: translateX(-50%);
   width: min(440px, calc(100% - 24px));
-  z-index: 101; padding: 14px; display: grid; gap: 10px;
-  max-height: 55vh; overflow: auto;
+  z-index: 101; padding: 14px; display: flex; flex-direction: column; gap: 10px;
+  max-height: min(70vh, 560px);
 }
 body.ht-open .edge-hit { pointer-events: none; }
+.ht-body {
+  overflow: auto;
+  display: grid;
+  gap: 10px;
+  min-height: 0;
+  flex: 1;
+  padding-right: 2px;
+}
+.ht-foot {
+  flex-shrink: 0;
+  padding-top: 4px;
+  border-top: 1px solid var(--line);
+}
+.ht-foot .btn { width: 100%; }
 .ht-head {
   display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  flex-shrink: 0;
 }
 .ht-head strong { font-family: var(--display); font-size: 18px; }
+.ko-play-wrap {
+  margin-top: auto;
+  position: sticky;
+  bottom: 8px;
+  padding-top: 8px;
+  z-index: 2;
+}
+.ko-play-wrap .btn { width: 100%; }
 .modal {
   position: fixed; inset: 0; z-index: 60;
   display: grid; place-items: center; padding: 18px;

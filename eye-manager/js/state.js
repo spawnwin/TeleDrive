@@ -111,7 +111,7 @@ window.EYE_STATE = (() => {
       otherLeagues: buildOtherLeagues(allClubs, league.id),
       board,
       scoutReports: {},
-      ucl: createUcl(allClubs),
+      ucl: null,
       inbox: [{
         id: D().uid('m'), type: 'welcome', title: 'Добро пожаловать в EYE',
         body: `Вы возглавили «${me.name}» (${league.name}). Задача совета: ${board.targetLabel}. Уверенность: ${board.confidence}%.`,
@@ -130,13 +130,16 @@ window.EYE_STATE = (() => {
       news: [],
       settings: { sfx: true, speed: 1 },
       lastResult: null,
-      cup: createCup(leagueClubs),
+      cup: null,
       cupBest: '',
       uclBest: '',
       stats: { scorers: {}, assisters: {}, motm: {} },
       sacked: false,
       pendingPress: null
     };
+    // KO comps after state.clubId exists so the player is always seeded
+    state.cup = createCup(leagueClubs, me.id);
+    state.ucl = createUcl(allClubs, me.id);
     ensureClubExtras(me);
     ensureMeta();
     pickSponsor(me);
@@ -254,8 +257,19 @@ window.EYE_STATE = (() => {
     else { ht.d++; at.d++; ht.pts++; at.pts++; }
   }
 
-  function createUcl(allClubs) {
-    // 16 clubs: top reputation from each league + fillers
+  function ensureSeeded(seeds, allClubs, ensureId, size) {
+    const mustId = ensureId || state?.clubId;
+    if (!mustId) return seeds.slice(0, size);
+    if (seeds.some(c => c.id === mustId)) return seeds.slice(0, size);
+    const mine = allClubs.find(c => c.id === mustId);
+    if (!mine) return seeds.slice(0, size);
+    const room = seeds.filter(c => c.id !== mustId).sort((a, b) => b.reputation - a.reputation).slice(0, size - 1);
+    room.push(mine);
+    return room;
+  }
+
+  function createUcl(allClubs, ensureId) {
+    // 16 clubs: top reputation from each league + fillers — always include player club
     const byLeague = {};
     allClubs.forEach(c => {
       byLeague[c.leagueId] = byLeague[c.leagueId] || [];
@@ -263,13 +277,14 @@ window.EYE_STATE = (() => {
     });
     let seeds = [];
     Object.values(byLeague).forEach(list => {
-      seeds.push(...list.sort((a, b) => b.reputation - a.reputation).slice(0, 3));
+      seeds.push(...[...list].sort((a, b) => b.reputation - a.reputation).slice(0, 3));
     });
     seeds = seeds.sort((a, b) => b.reputation - a.reputation).slice(0, 16);
     if (seeds.length < 16) {
       const extra = allClubs.filter(c => !seeds.includes(c)).sort((a, b) => b.reputation - a.reputation);
       seeds = seeds.concat(extra).slice(0, 16);
     }
+    seeds = ensureSeeded(seeds, allClubs, ensureId, 16);
     const ids = seeds.map(c => c.id).sort(() => Math.random() - 0.5);
     return {
       name: 'Лига чемпионов EYE',
@@ -279,8 +294,15 @@ window.EYE_STATE = (() => {
     };
   }
 
-  function createCup(clubs) {
-    const ids = clubs.map(c => c.id).sort(() => Math.random() - 0.5).slice(0, 8);
+  function createCup(clubs, ensureId) {
+    const mustId = ensureId || state?.clubId;
+    let pool = [...clubs].sort(() => Math.random() - 0.5);
+    if (mustId) {
+      const mine = pool.find(c => c.id === mustId);
+      pool = pool.filter(c => c.id !== mustId);
+      if (mine) pool.unshift(mine);
+    }
+    const ids = pool.slice(0, 8).map(c => c.id).sort(() => Math.random() - 0.5);
     return {
       round: '1/4',
       bracket: ids.map((id, i) => i % 2 === 0 ? { home: id, away: ids[i + 1], played: false, score: null } : null).filter(Boolean),
@@ -371,7 +393,8 @@ window.EYE_STATE = (() => {
       if (!state.displayCurrency) state.displayCurrency = getCurrency();
       if (!state.board && club()) state.board = B().createBoard(club());
       if (!state.scoutReports) state.scoutReports = {};
-      if (!state.ucl) state.ucl = createUcl(state.clubs || []);
+      if (!state.ucl) state.ucl = createUcl(state.clubs || [], state.clubId);
+      if (!state.cup) state.cup = createCup(leagueClubs(), state.clubId);
       if (state.sacked == null) state.sacked = false;
       if (!state.cup && leagueClubs().length) state.cup = createCup(leagueClubs());
       if (state.cupBest == null) state.cupBest = '';
@@ -1003,8 +1026,8 @@ window.EYE_STATE = (() => {
     state.table = emptySeasonTable(lc);
     state.fixtures = buildFixtures(lc.map(c => c.id));
     state.stats = { scorers: {}, assisters: {}, motm: {} };
-    state.cup = createCup(lc);
-    state.ucl = createUcl(state.clubs);
+    state.cup = createCup(lc, me.id);
+    state.ucl = createUcl(state.clubs, me.id);
     state.otherLeagues = buildOtherLeagues(state.clubs, state.leagueId);
     refillYouth(me, true);
     me.squad.forEach(p => { p.seasonYellows = 0; p.yellow = 0; p.suspended = 0; });
@@ -1885,8 +1908,8 @@ window.EYE_STATE = (() => {
     state.week = 1;
     state.day = 1;
     state.phase = 'season';
-    state.cup = createCup(lc);
-    state.ucl = createUcl(state.clubs);
+    state.cup = createCup(lc, next.id);
+    state.ucl = createUcl(state.clubs, next.id);
     state.cupBest = '';
     state.uclBest = '';
     state.stats = { scorers: {}, assisters: {}, motm: {} };
