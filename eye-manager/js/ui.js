@@ -22,6 +22,7 @@ window.EYE_UI = (() => {
   let cloudHasCareer = false;
   let saveTimer = null;
   let calendarTab = 'mine';
+  let historyTab = 'matches';
 
   function $(sel, root = document) { return root.querySelector(sel); }
   function $all(sel, root = document) { return [...root.querySelectorAll(sel)]; }
@@ -718,14 +719,23 @@ window.EYE_UI = (() => {
 
   function renderFinance() {
     const f = S().financeSummary();
+    const sp = f.sponsor;
+    const led = (f.ledger || []).map(e => {
+      const sign = e.amount >= 0 ? '+' : '';
+      const cls = e.amount >= 0 ? 'ok' : 'bad';
+      return `<div class="ledger-row ${cls}"><span>С${e.season}·Т${e.week} · ${e.label}</span><strong>${sign}${S().money(e.amount)}</strong></div>`;
+    }).join('') || `<div class="hint">Движений пока нет</div>`;
     $('#finance-card').innerHTML = `
       <div class="stat-grid finance-grid">
         <div class="news-item"><strong>Бюджет</strong><div class="kpi">${S().money(f.budget)}</div><small>${S().moneyHint(f.budget)}</small></div>
         <div class="news-item"><strong>Зарплаты / нед</strong><div class="kpi">${S().money(f.weeklyWages)}</div></div>
+        <div class="news-item"><strong>Спонсор</strong><div class="kpi">${sp ? S().money(sp.weekly) : '—'}</div><small>${sp ? sp.name + ' / нед' : 'нет'}</small></div>
         <div class="news-item"><strong>Стоимость состава</strong><div class="kpi">${S().money(f.squadValue)}</div></div>
         <div class="news-item"><strong>Болельщики</strong><div class="kpi">${f.fans.toLocaleString('ru')}</div></div>
-        <div class="news-item"><strong>Касса с матча</strong><div class="kpi">${S().money(f.incomePerMatch)}</div><small>оценка</small></div>
+        <div class="news-item"><strong>Баланс недели</strong><div class="kpi">${S().money(f.weeklyNet)}</div><small>спонсор − зарплаты</small></div>
       </div>
+      <h3 class="section-label" style="margin:16px 0 8px;font-family:var(--display)">Журнал</h3>
+      <div class="ledger-list">${led}</div>
     `;
   }
 
@@ -840,17 +850,43 @@ window.EYE_UI = (() => {
 
   function renderInbox() {
     const st = S().get();
-    st.inbox.forEach(m => m.read = true);
+    st.inbox.forEach(m => { if (m.type !== 'request' || m.resolved) m.read = true; });
     S().save();
-    $('#inbox-list').innerHTML = st.inbox.map(m => `
-      <div class="news-item"><strong>${m.title}</strong><div>${m.body}</div></div>
-    `).join('') || `<div class="news-item">Писем нет</div>`;
+    $('#inbox-list').innerHTML = st.inbox.map(m => {
+      const actions = (m.type === 'request' && m.playerId && !m.resolved)
+        ? `<div class="row-actions" style="margin-top:8px">
+            <button class="btn btn-tiny" data-req="${m.playerId}" data-req-act="promise">Обещать XI</button>
+            <button class="btn btn-tiny" data-req="${m.playerId}" data-req-act="list">На трансфер</button>
+            <button class="btn btn-tiny" data-req="${m.playerId}" data-req-act="dismiss">Отказать</button>
+          </div>`
+        : '';
+      return `<div class="news-item"><strong>${m.title}</strong><div>${m.body}</div>${actions}</div>`;
+    }).join('') || `<div class="news-item">Писем нет</div>`;
   }
 
   function renderHistory() {
     const st = S().get();
+    $all('#history-tabs .tab').forEach(t => t.classList.toggle('active', t.dataset.hist === historyTab));
+    if (historyTab === 'seasons') {
+      const log = st.seasonLog || [];
+      $('#history-list').innerHTML = log.map(s => {
+        const boot = s.goldenBoot ? `Бомбардир: ${s.goldenBoot.name} (${s.goldenBoot.goals})` : '';
+        const ast = s.topAssist ? `Ассисты: ${s.topAssist.name} (${s.topAssist.assists})` : '';
+        const board = s.boardOk == null ? '' : (s.boardOk ? 'Цели совета ✔' : 'Цели совета ✖');
+        return `<div class="news-item">
+          <strong>Сезон ${s.season} · ${s.leagueName}</strong>
+          <div>${s.clubName || ''} — ${s.place}-е · ${s.pts} очк. · РМ ${(s.gd > 0 ? '+' : '') + (s.gd || 0)}</div>
+          <div class="meta" style="color:var(--muted);margin-top:4px;font-size:12px">
+            Кубок: ${s.cupBest || '—'} · ЛЧ: ${s.uclBest || '—'} · призовые ${S().money(s.prize || 0)}
+            ${board ? ' · ' + board : ''}${s.sacked ? ' · уволен' : ''}
+          </div>
+          <div class="meta" style="color:var(--dim);margin-top:2px;font-size:12px">${[boot, ast].filter(Boolean).join(' · ')}</div>
+        </div>`;
+      }).join('') || `<div class="news-item">Завершите сезон — появится архив с наградами</div>`;
+      return;
+    }
     $('#history-list').innerHTML = (st.history || []).slice(0, 40).map(h => `
-      <div class="news-item"><strong>С${h.season} · Т${h.week}</strong><div>${h.home} ${h.score[0]}:${h.score[1]} ${h.away}</div></div>
+      <div class="news-item"><strong>С${h.season} · Т${h.week}${h.cup ? ' · Кубок' : ''}${h.ucl ? ' · ЛЧ' : ''}</strong><div>${h.home} ${h.score[0]}:${h.score[1]} ${h.away}</div></div>
     `).join('') || `<div class="news-item">Матчей ещё не было</div>`;
   }
 
@@ -888,16 +924,26 @@ window.EYE_UI = (() => {
     const status = S().xiStatus();
     const warn = $('#prematch-warnings');
     const fixBtn = $('#btn-fix-xi');
+    const freshBtn = $('#btn-fresh-xi');
     const kick = $('#btn-kickoff');
     if (!status.ok) {
       warn.hidden = false;
       warn.innerHTML = `<strong>Состав не готов</strong><div class="hint" style="margin-top:6px">${status.unavailable.map(u => `${u.name} — ${u.reason}`).join('<br/>') || 'Нужно 11 игроков'}</div>`;
       if (fixBtn) fixBtn.hidden = false;
+      if (freshBtn) freshBtn.hidden = true;
       if (kick) { kick.disabled = true; kick.textContent = 'Исправьте состав'; }
+    } else if (status.loadWarn || (status.tired || []).length) {
+      warn.hidden = false;
+      const list = (status.tired || []).slice(0, 6).map(u => `${u.name} — ${u.reason}`).join('<br/>');
+      warn.innerHTML = `<strong>${status.loadWarn ? 'Высокая нагрузка XI' : 'Усталость в составе'}</strong><div class="hint" style="margin-top:6px">${list || 'Рекомендуется ротация'}</div>`;
+      if (fixBtn) fixBtn.hidden = true;
+      if (freshBtn) freshBtn.hidden = false;
+      if (kick) { kick.disabled = false; kick.textContent = 'Начать матч'; }
     } else {
       warn.hidden = true;
       warn.innerHTML = '';
       if (fixBtn) fixBtn.hidden = true;
+      if (freshBtn) freshBtn.hidden = true;
       if (kick) { kick.disabled = false; kick.textContent = 'Начать матч'; }
     }
     matchCtx = { type: next.type, match: pm, subsUsed: matchCtx?.subsUsed || 0, derby: rivalry?.name || null };
@@ -1433,6 +1479,11 @@ window.EYE_UI = (() => {
       toast(r.msg);
       renderPrematch();
     });
+    $('#btn-fresh-xi')?.addEventListener('click', () => {
+      S().autoLineup(true);
+      toast('Собран свежий состав');
+      renderPrematch();
+    });
     $('#btn-skip-match')?.addEventListener('click', () => {
       matchPaused = false;
       matchAbort = true;
@@ -1511,6 +1562,10 @@ window.EYE_UI = (() => {
       const tab = e.target.closest('[data-cal]');
       if (tab) { calendarTab = tab.dataset.cal; renderCalendar(); }
     });
+    $('#history-tabs')?.addEventListener('click', (e) => {
+      const tab = e.target.closest('[data-hist]');
+      if (tab) { historyTab = tab.dataset.hist; renderHistory(); }
+    });
     ['tf-q','tf-pos','tf-league','tf-ovr','tf-price','tf-age'].forEach(id => {
       $(`#${id}`)?.addEventListener('input', () => renderTransfers('market'));
       $(`#${id}`)?.addEventListener('change', () => renderTransfers('market'));
@@ -1529,6 +1584,13 @@ window.EYE_UI = (() => {
       const curBtn = e.target.closest('[data-cur]');
       if (curBtn && curBtn.classList.contains('cur-btn')) {
         applyCurrency(curBtn.dataset.cur);
+        e.stopPropagation();
+      }
+      const req = e.target.closest('[data-req]');
+      if (req) {
+        const r = S().resolvePlayerRequest(req.dataset.req, req.dataset.reqAct || 'dismiss');
+        toast(r.msg);
+        renderInbox();
         e.stopPropagation();
       }
     });
