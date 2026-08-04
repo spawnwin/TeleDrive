@@ -974,9 +974,11 @@ window.EYE_UI = (() => {
     return `<div class="bracket-round"><div class="bracket-label">${stageLabel}</div><div class="bracket-grid">${grid}</div></div>`;
   }
 
-  function setKoPlayButton(btn, match, playLabel, idleLabel) {
+  function setKoPlayButton(btn, match, playLabel, idleLabel, type) {
     if (!btn) return;
-    if (match) {
+    const next = S().nextMatch();
+    const playable = !!(match && (!type || next?.type === type));
+    if (playable) {
       btn.hidden = false;
       btn.disabled = false;
       btn.classList.remove('is-disabled');
@@ -1007,8 +1009,13 @@ window.EYE_UI = (() => {
     } else {
       const pm = S().playerCupMatch();
       const inComp = (cup.bracket || []).some(m => m.home === S().club().id || m.away === S().club().id);
-      status.innerHTML = `<strong>Стадия:</strong> ${cup.round}${inComp ? (pm ? ' · ваш матч' : '') : ' · ваш клуб вне сетки'}`;
-      setKoPlayButton(btn, pm, 'Играть кубковый матч');
+      const next = S().nextMatch();
+      status.innerHTML = `<strong>Стадия:</strong> ${cup.round}${
+        inComp
+          ? (next?.type === 'cup' ? ' · ваш матч в очереди' : (pm ? ' · матч ждёт своего тура' : ''))
+          : ' · ваш клуб вне сетки'
+      }`;
+      setKoPlayButton(btn, pm, 'Играть кубковый матч', null, 'cup');
     }
     $('#cup-list').innerHTML = bracketHtml(cup.bracket, cup.round || 'Сетка') || `<div class="news-item">Сетка пуста</div>`;
   }
@@ -1032,10 +1039,14 @@ window.EYE_UI = (() => {
     } else {
       const pm = S().playerUclMatch();
       const inComp = (ucl.bracket || []).some(m => m.home === meId || m.away === meId);
+      const next = S().nextMatch();
       status.innerHTML = `<strong>${ucl.name}</strong><div>Стадия: ${ucl.round}${
-        pm ? ' · ваш матч готов' : (inComp ? '' : ' · ваш клуб вне сетки')
-      }${path}</div>${seed ? `<div class="hint" style="margin-top:8px">Путёвка: ${seed.reason}${ucl.wildcard && seed.reason.includes('wildcard') ? '' : ''}</div>` : ''}`;
-      setKoPlayButton(btn, pm, 'Играть матч ЛЧ');
+        next?.type === 'ucl' ? ' · ваш матч в очереди'
+          : (pm ? ' · матч ждёт своего тура' : (inComp ? '' : ' · ваш клуб вне сетки'))
+      }${path}</div>${seed ? `<div class="hint" style="margin-top:8px">Путёвка: ${seed.reason}</div>` : (
+        !inComp ? `<div class="hint" style="margin-top:8px">Путёвка — через зону лиги по итогам сезона.</div>` : ''
+      )}`;
+      setKoPlayButton(btn, pm, 'Играть матч ЛЧ', null, 'ucl');
     }
     const hist = (ucl.history || []).map(h => bracketHtml(h.ties, h.round)).join('');
     const cur = bracketHtml(ucl.bracket, ucl.round || 'Сетка');
@@ -1069,7 +1080,7 @@ window.EYE_UI = (() => {
       status.innerHTML = `<strong>${cwc.name}</strong><div>${phase}${
         pm ? ' · ваш матч готов' : (inComp ? '' : ' · вне турнира')
       }${path}</div>${mySeed ? `<div class="hint" style="margin-top:8px">Сид: ${mySeed.reason}</div>` : ''}`;
-      setKoPlayButton(btn, pm, 'Играть матч ЧМ');
+      setKoPlayButton(btn, pm, 'Играть матч ЧМ', null, 'cwc');
     }
 
     let html = '';
@@ -1192,18 +1203,23 @@ window.EYE_UI = (() => {
     $('#table-title').textContent = current?.name || st.leagueName || 'Таблица';
     const rows = S().sortedTable(tableLeagueId);
     const n = rows.length;
+    const uclSlots = ({ epl: 3, laliga: 3, seriea: 3, bundesliga: 3, ligue1: 2, rpl: 2 })[tableLeagueId] || 2;
+    const relegN = Math.min(2, Math.max(1, Math.floor(n / 6)));
     $('#league-table').innerHTML = `
+      <div class="hint" style="margin:0 0 10px">Зелёная зона — квалификация в ЛЧ (топ-${uclSlots}). Красная — риск вылета.</div>
       <table class="league">
         <thead><tr><th>#</th><th>Клуб</th><th>И</th><th>В</th><th>Н</th><th>П</th><th>Мячи</th><th>РМ</th><th>О</th></tr></thead>
         <tbody>
           ${rows.map((r, i) => {
+            const club = S().clubById(r.id);
+            const name = club?.name || r.name || r.id;
             const gd = (r.gf || 0) - (r.ga || 0);
             const gdStr = (gd > 0 ? '+' : '') + gd;
-            const zone = i < Math.min(4, Math.ceil(n / 4)) ? 'zone-top' : (i >= n - Math.min(3, Math.ceil(n / 5)) ? 'zone-bot' : '');
+            const zone = i < uclSlots ? 'zone-ucl' : (i >= n - relegN ? 'zone-bot' : '');
             return `
             <tr class="${r.id === me.id ? 'me' : ''} ${zone}">
               <td class="pos">${i + 1}</td>
-              <td>${r.name}</td>
+              <td>${name}${i < uclSlots ? ' <span class="zone-tag">ЛЧ</span>' : ''}</td>
               <td>${r.played}</td><td>${r.w}</td><td>${r.d}</td><td>${r.l}</td>
               <td>${r.gf}:${r.ga}</td><td class="gd">${gdStr}</td><td><strong>${r.pts}</strong></td>
             </tr>`;

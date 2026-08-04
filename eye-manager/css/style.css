@@ -993,7 +993,21 @@ input:focus, select:focus { border-color: rgba(94,234,212,.45); box-shadow: 0 0 
 .league tr.me { background: rgba(94,234,212,.08); }
 .league .pos { color: var(--muted); width: 28px; }
 .league tr.zone-top .pos { color: var(--accent-2); }
+.league tr.zone-ucl .pos { color: var(--accent-2); }
+.league tr.zone-ucl td:nth-child(2) { color: var(--accent-2); }
 .league tr.zone-bot .pos { color: var(--danger); }
+.zone-tag {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 6px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  color: #06241f;
+  background: var(--accent-2);
+  vertical-align: middle;
+}
 .league .gd { font-variant-numeric: tabular-nums; color: var(--muted); }
 
 .cal-round {
