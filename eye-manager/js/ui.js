@@ -830,12 +830,12 @@ window.EYE_UI = (() => {
         <div class="row">
           <div class="ovr">${p.ovr}</div>
           <div>
-            <strong>${p.name}</strong>
-            <div class="meta">${D().POS_LABEL[p.pos]} · ${p.age}л · ${S().money(p.value)}</div>
+            <strong>${p.name}${p.listed ? ' · в продаже' : ''}</strong>
+            <div class="meta">${D().POS_LABEL[p.pos]} · ${p.age}л · ${S().money(p.value)}${p.listed && p.ask ? ' · лот ' + S().money(p.ask) : ''}</div>
           </div>
-          <button class="btn btn-tiny" data-sell="${p.id}">Продать</button>
+          <button class="btn btn-tiny" data-sell="${p.id}" type="button">${p.listed ? 'Ещё раз' : 'Продать'}</button>
         </div>
-      `).join('');
+      `).join('') || `<div class="news-item">Состав пуст</div>`;
       return;
     }
 
@@ -1493,6 +1493,7 @@ window.EYE_UI = (() => {
     const home = S().clubById(pm.home);
     const away = S().clubById(pm.away);
     const me = S().club();
+    if (!home || !away || !me) { show('hub'); return; }
     const opp = home.id === me.id ? away : home;
     S().ensureLineup();
     const rivalry = S().matchRivalry(home.id, away.id);
@@ -1572,8 +1573,13 @@ window.EYE_UI = (() => {
     if (!board) { box.innerHTML = ''; return; }
     const xiS = board.xiStrength;
     const bS = board.benchStrength;
-    const edge = (xiS.power || 0) - (bS.power || 0);
-    const edgeLabel = edge >= 8 ? 'основа заметно сильнее' : edge >= 3 ? 'основа чуть сильнее' : edge <= -3 ? 'запас конкурентоспособен' : 'силы близки';
+    const edge = (xiS.avgOvr || 0) - (bS.avgOvr || 0);
+    const fitEdge = (xiS.power || 0) - (bS.power || 0);
+    const edgeLabel = fitEdge <= -6
+      ? 'запас свежее основы — подумайте о ротации'
+      : edge >= 5 ? 'основа заметно сильнее по рейтингу'
+      : edge <= -3 ? 'запас близок по рейтингу'
+      : 'силы близки';
 
     const rowHtml = (p, i) => {
       if (!p) return '';
@@ -1596,17 +1602,17 @@ window.EYE_UI = (() => {
       <div class="pm-strength">
         <div class="pm-str-card">
           <span class="field-label">Основа</span>
-          <div class="pm-str-kpi">${xiS.power}</div>
-          <small>OVR ${xiS.avgOvr} · конд. ${xiS.avgCond} · энерг. ${xiS.avgEnergy}</small>
+          <div class="pm-str-kpi">${xiS.avgOvr}</div>
+          <small>сила ${xiS.power} · конд. ${xiS.avgCond} · энерг. ${xiS.avgEnergy}</small>
         </div>
         <div class="pm-str-vs" title="${edgeLabel}">${edge > 0 ? '+' : ''}${edge}</div>
         <div class="pm-str-card">
           <span class="field-label">Запас (7)</span>
-          <div class="pm-str-kpi">${bS.power || '—'}</div>
-          <small>OVR ${bS.avgOvr || '—'} · конд. ${bS.avgCond || '—'} · энерг. ${bS.avgEnergy || '—'}</small>
+          <div class="pm-str-kpi">${bS.avgOvr || '—'}</div>
+          <small>сила ${bS.power || '—'} · конд. ${bS.avgCond || '—'} · энерг. ${bS.avgEnergy || '—'}</small>
         </div>
       </div>
-      <div class="hint" style="margin:8px 0 4px">${edgeLabel}. Сила учитывает рейтинг, форму и свежесть.</div>
+      <div class="hint" style="margin:8px 0 4px">${edgeLabel}. Δ — разница среднего OVR; «сила» учитывает свежесть.</div>
       <div class="pm-cols">
         <div class="pm-col">
           <div class="pm-col-title">Основной состав · ${board.xi.filter(Boolean).length}</div>
@@ -1839,19 +1845,25 @@ window.EYE_UI = (() => {
       : (bench.map(p => {
           let slot = slots.findIndex((pos, i) => pos === p.pos && me.lineup[i]);
           if (slot < 0) {
+            slot = slots.findIndex((pos) => D().POS_GROUP[pos] === D().POS_GROUP[p.pos]);
+          }
+          // Never park a non-GK into GK or GK into outfield via fallback
+          if (slot < 0) {
             slot = slots.findIndex((pos, i) => {
-              const group = (a) => a === 'GK' ? 'GK' : ['CB','RB','LB'].includes(a) ? 'DF' : ['ST','RW','LW'].includes(a) ? 'FW' : 'MF';
-              return group(pos) === group(p.pos);
+              const sg = D().POS_GROUP[pos];
+              const pg = D().POS_GROUP[p.pos];
+              if (sg === 'GK' || pg === 'GK') return false;
+              return true;
             });
           }
-          if (slot < 0) slot = 10;
+          if (slot < 0) return '';
           return `
-            <button class="row row-btn" data-ht-sub="${p.id}" data-ht-slot="${slot}">
+            <button class="row row-btn" data-ht-sub="${p.id}" data-ht-slot="${slot}" type="button">
               <div class="ovr">${p.ovr}</div>
-              <div><strong>${p.name}</strong><div class="meta">замена · ${D().POS_LABEL[p.pos]}</div></div>
+              <div><strong>${p.name}</strong><div class="meta">замена · ${D().POS_LABEL[p.pos]} → ${D().POS_LABEL[slots[slot]] || slots[slot]}</div></div>
             </button>
           `;
-        }).join('') || `<div class="news-item">Нет запасных</div>`);
+        }).filter(Boolean).join('') || `<div class="news-item">Нет запасных</div>`);
   }
 
   function closeHtPanel() {
@@ -1955,8 +1967,8 @@ window.EYE_UI = (() => {
     const last = S().get()?.lastResult;
     if (!last) return;
     const [hg, ag] = last.score;
-    const scorersH = (last.scorersH || []).map(s => `${s.minute}′ ${s.player.name}`).join(', ');
-    const scorersA = (last.scorersA || []).map(s => `${s.minute}′ ${s.player.name}`).join(', ');
+    const scorersH = (last.scorersH || []).map(s => `${s.minute}′ ${s.player?.name || '—'}`).join(', ');
+    const scorersA = (last.scorersA || []).map(s => `${s.minute}′ ${s.player?.name || '—'}`).join(', ');
     const highs = (last.highlights || []).slice(0, 8).map(h =>
       `<div class="feed-item ${h.type === 'goal' ? 'goal' : h.type === 'red' ? 'red' : h.type === 'injury' ? 'injury' : ''}">${h.minute || '?'}′ ${h.text}</div>`
     ).join('');
@@ -1964,10 +1976,11 @@ window.EYE_UI = (() => {
     const mySide = last.homeId === me?.id ? 'home' : last.awayId === me?.id ? 'away' : null;
     const ratingsHtml = (mySide ? (last.ratings?.[mySide] || []) : (last.ratings?.list || []).slice(0, 11))
       .slice()
-      .sort((a, b) => b.rating - a.rating)
+      .filter(r => r && r.name)
+      .sort((a, b) => (b.rating || 0) - (a.rating || 0))
       .map(r => {
         const motm = last.motm?.id === r.id;
-        return `<div class="rating-row${motm ? ' motm' : ''}"><span>${r.name}</span><strong>${r.rating.toFixed(1)}</strong></div>`;
+        return `<div class="rating-row${motm ? ' motm' : ''}"><span>${r.name}</span><strong>${Number(r.rating || 0).toFixed(1)}</strong></div>`;
       }).join('');
     const motmLine = last.motm
       ? `<div class="motm-banner">Игрок матча: <strong>${last.motm.name}</strong> · ${Number(last.motm.rating).toFixed(1)}</div>`
@@ -2042,6 +2055,9 @@ window.EYE_UI = (() => {
       const tl = e.target.closest('[data-table-league]');
       if (tl) { tableLeagueId = tl.dataset.tableLeague; renderTable(); return; }
 
+      const ttab = e.target.closest('#transfer-tabs [data-tab]');
+      if (ttab) { renderTransfers(ttab.dataset.tab); return; }
+
       const pl = e.target.closest('[data-player]');
       if (pl) { openPlayer(pl.dataset.player, 'squad'); return; }
 
@@ -2083,8 +2099,8 @@ window.EYE_UI = (() => {
       }
       const htForm = e.target.closest('[data-ht-form]');
       if (htForm) {
-        S().setTactics(htForm.dataset.htForm, null);
-        toast('Схема: ' + htForm.dataset.htForm + ' · XI переложен');
+        S().setTactics(htForm.dataset.htForm, null, { stickToXi: true });
+        toast('Схема: ' + htForm.dataset.htForm + ' · тот же XI');
         showHtPanel();
         return;
       }
@@ -2433,8 +2449,7 @@ window.EYE_UI = (() => {
     });
     $('#btn-skip-half')?.addEventListener('click', () => {
       if (isHtOpen()) {
-        // Already at HT — same as continue
-        continueSecondHalf();
+        toast('Уже перерыв — нажмите «Второй тайм» или «Пропустить»');
         return;
       }
       if (!matchPlaying) return;
@@ -2459,8 +2474,12 @@ window.EYE_UI = (() => {
     $('#sel-formation')?.addEventListener('change', (e) => { S().setTactics(e.target.value, null); S().autoLineup(); drawPitch(); renderBench(); });
     $('#sel-style')?.addEventListener('change', (e) => { S().setTactics(null, e.target.value); });
     $('#btn-second-half')?.addEventListener('click', () => continueSecondHalf());
-    $('#btn-ht-close')?.addEventListener('click', () => continueSecondHalf());
-    $('#ht-scrim')?.addEventListener('click', () => continueSecondHalf());
+    $('#btn-ht-close')?.addEventListener('click', () => {
+      toast('Нажмите «Второй тайм», чтобы продолжить');
+    });
+    $('#ht-scrim')?.addEventListener('click', () => {
+      toast('Нажмите «Второй тайм», чтобы продолжить');
+    });
     $('#btn-cup-play')?.addEventListener('click', () => {
       const next = S().nextMatch();
       if (next?.type !== 'cup') {

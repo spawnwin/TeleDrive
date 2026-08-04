@@ -497,7 +497,8 @@ window.EYE_STATE = (() => {
     const st = financeStatus(me);
     f.embargo = st.id === 'critical' || st.id === 'insolvent';
     if (me.budget >= 0) {
-      f.debtWeeks = 0;
+      if (f.holdDebtWeeks) f.holdDebtWeeks = false;
+      else f.debtWeeks = 0;
     }
     // status transition mail
     if (f.lastStatus !== st.id) {
@@ -626,7 +627,10 @@ window.EYE_STATE = (() => {
       && f.emergencyLoanSeason !== state.season) {
       const loan = Math.round(Math.min(st.credit * 0.35, Math.max(250000, st.debt * 0.55)));
       f.emergencyLoanSeason = state.season;
+      const weeksBefore = f.debtWeeks || 0;
       adjustBudget(loan, 'Экстренный кредит совета');
+      f.debtWeeks = Math.max(weeksBefore, 1);
+      f.holdDebtWeeks = true;
       if (state.board) state.board.confidence = Math.max(0, state.board.confidence - 10);
       state.inbox.unshift({
         id: D().uid('m'), type: 'finance',
@@ -981,18 +985,15 @@ window.EYE_STATE = (() => {
         ? table.findIndex(r => r.id === mustId) + 1
         : 0;
       const place = lastPlace || livePlace;
-      const leagueMates = allClubs.filter(c => c.leagueId === (state?.leagueId || allClubs.find(x => x.id === mustId)?.leagueId));
-      const repPlace = [...leagueMates].sort((a, b) => b.reputation - a.reputation).findIndex(c => c.id === mustId) + 1;
       const inUcl = isClubInUclBracket(mustId);
-      if ((place > 0 && place <= 4) || (repPlace > 0 && repPlace <= 4) || inUcl) {
+      // Only sporting path: last season top-4 or active UCL — not raw reputation
+      if ((place > 0 && place <= 4) || inUcl) {
         seeds = seeds.slice(0, 7);
         seeds.push({
           id: mustId,
           reason: inUcl
             ? 'участник ЛЧ'
-            : place
-              ? `топ лиги · ${place}-е`
-              : `рейтинг лиги · ${repPlace}-е`,
+            : `топ лиги · ${place}-е`,
           leagueId: state?.leagueId || allClubs.find(x => x.id === mustId)?.leagueId
         });
       }
@@ -1076,7 +1077,8 @@ window.EYE_STATE = (() => {
   }
 
   function filterMarket({ pos, maxPrice, minOvr, maxAge, leagueId, q } = {}) {
-    let list = [...(state?.transferList || [])];
+    const meId = state?.clubId;
+    let list = [...(state?.transferList || [])].filter(e => e.clubId !== meId);
     if (pos && pos !== 'ALL') list = list.filter(e => e.player.pos === pos || D().POS_GROUP[e.player.pos] === pos);
     if (maxPrice) list = list.filter(e => e.ask <= maxPrice);
     if (minOvr) list = list.filter(e => e.player.ovr >= minOvr);
@@ -2209,6 +2211,9 @@ window.EYE_STATE = (() => {
     const me = club();
     const item = state.transferList.find(e => e.id === entryId || e.player.id === entryId);
     if (!item) return { ok: false, msg: 'Игрок снят с рынка' };
+    if (item.clubId === me.id) {
+      return { ok: false, msg: 'Это ваш игрок — продажа только во вкладке «Продать»' };
+    }
     const ask = item.ask;
     const offer = bid || ask;
     const wageAsk = item.wageAsk || item.player.wage || 10000;
@@ -2255,6 +2260,9 @@ window.EYE_STATE = (() => {
 
   function finalizeBuy(item, price, loan, wage) {
     const me = club();
+    if (item.clubId && item.clubId === me.id) {
+      return { ok: false, msg: 'Нельзя купить своего игрока — снимите с продажи или ждите покупателя' };
+    }
     const p = { ...item.player, listed: false, ask: 0, clubId: me.id };
     if (wage) p.wage = wage;
     if (loan) {
@@ -2488,17 +2496,17 @@ window.EYE_STATE = (() => {
     return { ok: true, msg: `Ответ: ${opt.label}` };
   }
 
-  function setTactics(formation, style) {
+  function setTactics(formation, style, opts = {}) {
     const me = club();
     const formationChanged = formation && D().FORMATIONS[formation] && formation !== me.formation;
     if (formation && D().FORMATIONS[formation]) me.formation = formation;
     if (style) me.style = style;
-    if (formationChanged) remapLineupToFormation();
+    if (formationChanged) remapLineupToFormation({ stickToXi: !!opts.stickToXi });
     save();
   }
 
   /** Перекладывает текущий XI под новую схему, не вызывая полный автоподбор */
-  function remapLineupToFormation() {
+  function remapLineupToFormation(opts = {}) {
     const me = club();
     const slots = D().FORMATIONS[me.formation]?.slots || D().FORMATIONS['4-3-3'].slots;
     const current = (me.lineup || []).filter(Boolean);
@@ -2511,16 +2519,19 @@ window.EYE_STATE = (() => {
       const g = D().POS_GROUP[slot];
       let pick = current.find(p => !used.has(p.id) && p.pos === slot);
       if (!pick) pick = current.find(p => !used.has(p.id) && D().POS_GROUP[p.pos] === g);
-      if (!pick) pick = current.find(p => !used.has(p.id));
-      if (!pick) {
+      if (!pick) pick = current.find(p => !used.has(p.id) && !(g === 'GK' && D().POS_GROUP[p.pos] !== 'GK'));
+      if (!pick && !opts.stickToXi) {
         pick = me.squad
           .filter(p => !used.has(p.id) && !(p.injured > 0) && !(p.suspended > 0))
+          .filter(p => !(g === 'GK' && D().POS_GROUP[p.pos] !== 'GK'))
+          .filter(p => !(D().POS_GROUP[p.pos] === 'GK' && g !== 'GK'))
           .sort((a, b) => {
             const sa = (D().POS_GROUP[a.pos] === g ? 20 : 0) + a.ovr;
             const sb = (D().POS_GROUP[b.pos] === g ? 20 : 0) + b.ovr;
             return sb - sa;
           })[0];
       }
+      if (!pick) pick = current.find(p => !used.has(p.id));
       if (pick) used.add(pick.id);
       return pick;
     }).filter(Boolean);
@@ -2546,6 +2557,12 @@ window.EYE_STATE = (() => {
       const g = D().POS_GROUP[slot];
       const pool = me.squad
         .filter(p => !used.has(p.id) && !(p.injured > 0) && !(p.suspended > 0) && !p.red)
+        .filter(p => {
+          const pg = D().POS_GROUP[p.pos];
+          if (g === 'GK') return pg === 'GK';
+          if (pg === 'GK') return false;
+          return true;
+        })
         .map(p => {
           const pg = D().POS_GROUP[p.pos];
           let score = p.ovr + (p.form || 0) / 10 + (p.condition || 0) / 20;
@@ -2555,7 +2572,11 @@ window.EYE_STATE = (() => {
           return { p, score };
         })
         .sort((a, b) => b.score - a.score);
-      const pick = pool[0]?.p || me.squad.find(p => !used.has(p.id));
+      let pick = pool[0]?.p;
+      if (!pick && g === 'GK') {
+        pick = me.squad.find(p => !used.has(p.id) && D().POS_GROUP[p.pos] === 'GK');
+      }
+      if (!pick) pick = me.squad.find(p => !used.has(p.id) && D().POS_GROUP[p.pos] !== 'GK');
       if (pick) used.add(pick.id);
       return pick;
     }).filter(Boolean);
@@ -2585,30 +2606,51 @@ window.EYE_STATE = (() => {
 
   function ensureLineup() {
     const me = club();
-    if (!me.lineup || me.lineup.length < 11) autoLineup();
+    if (!me) return [];
+    const slots = D().FORMATIONS[me.formation]?.slots || D().FORMATIONS['4-3-3'].slots;
+    const xi = me.lineup || [];
+    const ghosts = xi.some(p => p && !me.squad.some(s => s.id === p.id));
+    const gkSlot = slots.findIndex(s => D().POS_GROUP[s] === 'GK');
+    const gkBad = gkSlot >= 0 && xi[gkSlot] && D().POS_GROUP[xi[gkSlot].pos] !== 'GK';
+    if (xi.length < 11 || ghosts || gkBad) autoLineup();
     return me.lineup;
   }
 
   function xiStatus() {
     const me = club();
     ensureLineup();
+    const slots = D().FORMATIONS[me.formation]?.slots || D().FORMATIONS['4-3-3'].slots;
     const unavailable = (me.lineup || []).filter(p => (p.injured > 0) || (p.suspended > 0));
     const tired = (me.lineup || []).filter(p =>
       !(p.injured > 0) && !(p.suspended > 0) && ((p.condition || 100) < 58 || (p.energy || 100) < 52)
     );
+    const posIssues = [];
+    (me.lineup || []).forEach((p, i) => {
+      if (!p) return;
+      const slot = slots[i];
+      const sg = D().POS_GROUP[slot];
+      const pg = D().POS_GROUP[p.pos];
+      if (sg === 'GK' && pg !== 'GK') {
+        posIssues.push({ id: p.id, name: p.name, reason: 'не вратарь на ВР' });
+      } else if (pg === 'GK' && sg !== 'GK') {
+        posIssues.push({ id: p.id, name: p.name, reason: 'вратарь не на ВР' });
+      }
+    });
+    const allBad = [...unavailable.map(p => ({
+      id: p.id,
+      name: p.name,
+      reason: p.injured > 0 ? `травма ${p.injured}` : `бан ${p.suspended}`
+    })), ...posIssues];
     return {
-      ok: unavailable.length === 0 && (me.lineup || []).length >= 11,
-      unavailable: unavailable.map(p => ({
-        id: p.id,
-        name: p.name,
-        reason: p.injured > 0 ? `травма ${p.injured}` : `бан ${p.suspended}`
-      })),
+      ok: allBad.length === 0 && (me.lineup || []).length >= 11 && posIssues.length === 0,
+      unavailable: allBad,
       tired: tired.map(p => ({
         id: p.id,
         name: p.name,
         reason: `форма ${Math.round(p.condition || 0)} · энергия ${Math.round(p.energy || 0)}`
       })),
-      loadWarn: tired.length >= 3
+      loadWarn: tired.length >= 3,
+      posIssues
     };
   }
 
@@ -2636,16 +2678,31 @@ window.EYE_STATE = (() => {
     const bench = me.squad.find(p => p.id === benchPlayerId);
     if (!bench || bench.injured || bench.suspended) return { ok: false, msg: 'Игрок недоступен' };
     if (slotIndex < 0 || slotIndex > 10) return { ok: false, msg: 'Слот' };
+    const slots = D().FORMATIONS[me.formation]?.slots || D().FORMATIONS['4-3-3'].slots;
+    const slotPos = slots[slotIndex];
+    const slotGroup = D().POS_GROUP[slotPos];
+    const playerGroup = D().POS_GROUP[bench.pos];
+    if (slotGroup === 'GK' && playerGroup !== 'GK') {
+      return { ok: false, msg: 'В ворота можно поставить только вратаря' };
+    }
+    if (playerGroup === 'GK' && slotGroup !== 'GK') {
+      return { ok: false, msg: 'Вратарь играет только на позиции ВР' };
+    }
     const out = xi[slotIndex];
     xi[slotIndex] = bench;
     const ids = xi.map(p => p.id);
-    // keep rest of squad after XI
     const rest = me.squad.filter(p => !ids.includes(p.id));
     if (out && !ids.includes(out.id)) rest.unshift(out);
     me.squad = [...xi, ...rest.filter((p, i, a) => a.findIndex(x => x.id === p.id) === i)];
     me.lineup = xi;
     save();
-    return { ok: true, msg: `${bench.name} в основе` };
+    const mismatch = slotGroup !== playerGroup;
+    return {
+      ok: true,
+      msg: mismatch
+        ? `${bench.name} в основе (неродная позиция ${D().POS_LABEL[slotPos] || slotPos})`
+        : `${bench.name} в основе`
+    };
   }
 
   function financeSummary() {
@@ -2724,6 +2781,7 @@ window.EYE_STATE = (() => {
   function tickContracts() {
     const me = club();
     const left = [];
+    const leavers = [];
     me.squad = me.squad.filter(p => {
       p.contract = Math.max(0, (p.contract || 1) - 1);
       if (p.contract > 0) return true;
@@ -2732,14 +2790,18 @@ window.EYE_STATE = (() => {
         return true;
       }
       left.push(p.name);
-      p.listed = true;
-      p.ask = Math.round(p.value * 0.35);
-      state.transferList = state.transferList || [];
-      state.transferList.unshift({
-        id: D().uid('t'), type: 'free', player: p, clubId: null, ask: p.ask, wageAsk: p.wage
-      });
+      leavers.push(p);
       return false;
     });
+    leavers.forEach(p => {
+      const free = { ...p, listed: true, ask: Math.round((p.value || 0) * 0.35), clubId: null };
+      state.transferList = state.transferList || [];
+      state.transferList.unshift({
+        id: D().uid('t'), type: 'free', player: free, clubId: null, ask: free.ask, wageAsk: free.wage
+      });
+      purgeFromLineup(p.id);
+    });
+    if (leavers.length && (me.lineup || []).length < 11) autoLineup();
     if (left.length) {
       state.inbox.unshift({
         id: D().uid('m'), type: 'contract',
@@ -3044,20 +3106,23 @@ window.EYE_STATE = (() => {
     if (!state.cup || state.cup.champion) return;
     if (state.week % 3 !== 0) return;
     const pending = playerCupMatch();
-    if (pending) return;
-    resolveCompAI(state.cup, null);
-    advanceKnockout(state.cup, 'Кубок EYE', 800000);
-    if (state.cup?.champion === state.clubId) state.cupBest = 'Чемпион';
+    // Even if player has a pending tie, resolve the rest of the round for AI clubs
+    resolveCompAI(state.cup, pending || null);
+    if (!pending) {
+      advanceKnockout(state.cup, 'Кубок EYE', 800000);
+      if (state.cup?.champion === state.clubId) state.cupBest = 'Чемпион';
+    }
   }
 
   function maybePlayUclAiWeek() {
     if (!state.ucl || state.ucl.champion) return;
     if (state.week % 5 !== 1) return;
     const pending = playerUclMatch();
-    if (pending) return;
-    resolveCompAI(state.ucl, null);
-    advanceKnockout(state.ucl, 'ЛЧ EYE', 2500000);
-    if (state.ucl?.champion === state.clubId) state.uclBest = 'Чемпион';
+    resolveCompAI(state.ucl, pending || null);
+    if (!pending) {
+      advanceKnockout(state.ucl, 'ЛЧ EYE', 2500000);
+      if (state.ucl?.champion === state.clubId) state.uclBest = 'Чемпион';
+    }
   }
 
   function recordCupMatch(match, result) {
