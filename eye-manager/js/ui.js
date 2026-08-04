@@ -28,6 +28,7 @@ window.EYE_UI = (() => {
 
   let createStep = 1;
   let createMode = 'custom'; // custom | takeover
+  let createDirty = false;
 
   function $(sel, root = document) { return root.querySelector(sel); }
   function $all(sel, root = document) { return [...root.querySelectorAll(sel)]; }
@@ -90,7 +91,7 @@ window.EYE_UI = (() => {
     }
 
     window.scrollTo(0, 0);
-    if (id === 'create') createStep = 1;
+    if (id === 'create' && !createDirty) createStep = 1;
     if (isWindow) {
       if (id === 'create') renderLobby();
       else renderHome();
@@ -100,6 +101,7 @@ window.EYE_UI = (() => {
 
   function setCreateStep(step) {
     createStep = Math.max(1, Math.min(3, Number(step) || 1));
+    if (createStep > 1) createDirty = true;
     $all('[data-create-pane]').forEach(p => {
       const on = Number(p.dataset.createPane) === createStep;
       p.hidden = !on;
@@ -377,6 +379,7 @@ window.EYE_UI = (() => {
       });
       ['inp-club-name', 'inp-club-short', 'inp-stadium'].forEach(id => {
         $(`#${id}`)?.addEventListener('input', () => {
+          createDirty = true;
           if (id === 'inp-club-name' && !$('#inp-club-short')?.dataset.touched) {
             const v = ($('#inp-club-name').value || '').replace(/[^a-zA-Zа-яА-ЯёЁ0-9]/g, '');
             if ($('#inp-club-short')) $('#inp-club-short').value = v.slice(0, 3).toUpperCase();
@@ -431,11 +434,17 @@ window.EYE_UI = (() => {
   function renderHub() {
     const st = S().get();
     const me = S().club();
-    $('#hub-club').textContent = me.name;
-    $('#hub-color').style.background = me.color;
-    $('#hub-meta').textContent = `${st.leagueName} · Сезон ${st.season} · Тур ${st.week}`;
-    $('#hub-budget').textContent = S().money(me.budget);
-    $('#hub-morale').textContent = 'Мораль ' + me.morale;
+    if (!st || !me) return;
+    const hubClub = $('#hub-club');
+    const hubColor = $('#hub-color');
+    const hubMeta = $('#hub-meta');
+    const hubBudget = $('#hub-budget');
+    const hubMorale = $('#hub-morale');
+    if (hubClub) hubClub.textContent = me.name;
+    if (hubColor) hubColor.style.background = me.color;
+    if (hubMeta) hubMeta.textContent = `${st.leagueName} · Сезон ${st.season} · Тур ${st.week}`;
+    if (hubBudget) hubBudget.textContent = S().money(me.budget);
+    if (hubMorale) hubMorale.textContent = 'Мораль ' + me.morale;
     const board = st.board;
     const boardEl = $('#hub-board');
     if (boardEl) {
@@ -469,13 +478,9 @@ window.EYE_UI = (() => {
       }
       if (st.sacked) {
         chips.push(`<button type="button" class="hub-chip warn" data-nav="board">Новый клуб</button>`);
-      } else {
-        const cup = S().playerCupMatch();
-        const ucl = S().playerUclMatch();
-        const cwc = S().playerCwcMatch();
-        if (cwc && next?.type !== 'cwc') chips.push(`<button type="button" class="hub-chip" data-nav="cwc">Есть матч ЧМ</button>`);
-        if (ucl && next?.type !== 'ucl') chips.push(`<button type="button" class="hub-chip" data-nav="ucl">Есть матч ЛЧ</button>`);
-        if (cup && next?.type !== 'cup') chips.push(`<button type="button" class="hub-chip" data-nav="cup">Есть кубок</button>`);
+      } else if (next && next.type !== 'league') {
+        const label = next.type === 'cwc' ? 'Матч ЧМ' : next.type === 'ucl' ? 'Матч ЛЧ' : 'Кубок';
+        chips.push(`<button type="button" class="hub-chip" data-nav="hub">${label} в очереди</button>`);
       }
       pulse.innerHTML = chips.join('');
     }
@@ -484,6 +489,7 @@ window.EYE_UI = (() => {
     if (dev) {
       const summary = S().teamDevSummary?.();
       if (summary && !st.sacked) {
+        const trainLeft = Math.max(0, 2 - (st.trainCountWeek || 0));
         dev.hidden = false;
         dev.innerHTML = `
           <div class="hub-dev-head">
@@ -491,7 +497,7 @@ window.EYE_UI = (() => {
             <span class="meta">OVR ${summary.avgOvr} · фанаты ${summary.fans.toLocaleString('ru')}</span>
           </div>
           <div class="hub-dev-actions">
-            <button type="button" class="hub-chip" data-nav="train">Тренировка</button>
+            <button type="button" class="hub-chip" data-nav="train">Тренировка · ${trainLeft}/2</button>
             <button type="button" class="hub-chip" data-nav="club">База · ${summary.training}</button>
             <button type="button" class="hub-chip" data-nav="youth">Академия · ${summary.youth}</button>
             <button type="button" class="hub-chip" data-nav="transfers">Трансферы</button>
@@ -509,31 +515,33 @@ window.EYE_UI = (() => {
     const label = $('#next-label');
     if (st.sacked) {
       if (label) label.textContent = 'Карьера';
-      box.textContent = 'Нужен новый клуб';
-      btn.disabled = false;
-      btn.textContent = 'К совету';
+      if (box) box.textContent = 'Нужен новый клуб';
+      if (btn) { btn.disabled = false; btn.textContent = 'К совету'; }
     } else if (!next) {
       if (label) label.textContent = 'Сезон';
-      box.textContent = 'Сезон завершён — новый стартует';
-      btn.disabled = true;
-      btn.textContent = 'Ожидание';
+      if (box) box.textContent = 'Сезон завершён — новый стартует';
+      if (btn) { btn.disabled = true; btn.textContent = 'Ожидание'; }
     } else {
       const home = S().clubById(next.match.home);
       const away = S().clubById(next.match.away);
       if (label) label.textContent = 'Следующий матч · ' + matchTypeLabel(next.type);
       const riv = S().matchRivalry(home.id, away.id);
-      box.textContent = `${riv ? '⚡ ' : ''}${home.name} — ${away.name}${riv ? ' · ' + riv.name : ''}`;
-      btn.disabled = false;
-      btn.textContent = next.type === 'ucl' ? 'Матч ЛЧ'
-        : next.type === 'cwc' ? 'Матч ЧМ'
-        : next.type === 'cup' ? 'Кубковый матч'
-        : riv ? 'Дерби' : 'К матчу';
+      if (box) box.textContent = `${riv ? '⚡ ' : ''}${home.name} — ${away.name}${riv ? ' · ' + riv.name : ''}`;
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = next.type === 'ucl' ? 'Матч ЛЧ'
+          : next.type === 'cwc' ? 'Матч ЧМ'
+          : next.type === 'cup' ? 'Кубковый матч'
+          : riv ? 'Дерби' : 'К матчу';
+      }
     }
 
     const news = $('#news-strip');
-    news.innerHTML = (st.news || []).slice(0, 5).map(n =>
-      `<div class="news-item"><strong>${n.title}</strong><div>${n.body}</div></div>`
-    ).join('') || `<div class="news-item">Пока тихо. Готовьте состав к туру.</div>`;
+    if (news) {
+      news.innerHTML = (st.news || []).slice(0, 5).map(n =>
+        `<div class="news-item"><strong>${n.title}</strong><div>${n.body}</div></div>`
+      ).join('') || `<div class="news-item">Пока тихо. Готовьте состав к туру.</div>`;
+    }
     syncDesktopUser();
   }
 
@@ -1236,7 +1244,10 @@ window.EYE_UI = (() => {
 
   function renderTrain() {
     const ready = S().squadReadiness();
+    const st = S().get();
     const status = $('#train-status');
+    const used = st?.trainCountWeek || 0;
+    const recoverUsed = st?.recoverCountWeek || 0;
     if (status && ready) {
       const focusN = (S().club().squad || []).filter(p => p.devFocus).length;
       status.innerHTML = `
@@ -1245,17 +1256,21 @@ window.EYE_UI = (() => {
           Кондиция ${ready.avgCond} · энергия ${ready.avgEnergy}
           · устали ${ready.tired.length} · лазарет ${ready.injured.length}
           · фокус развития: ${focusN}
+          · тренировки тура: <strong>${used}/2</strong>${recoverUsed ? ' · восстановление сделано' : ''}
           ${ready.cards.length ? ` · ЖК-риск: ${ready.cards.map(p => p.name).slice(0, 3).join(', ')}` : ''}
         </div>
         <div class="fit-row" style="margin-top:10px">${fitBar('Конд', ready.avgCond)}${fitBar('Энерг', ready.avgEnergy)}</div>
       `;
     }
-    $('#train-grid').innerHTML = D().TRAINING.map(t => `
-      <button class="train-card" data-train="${t.id}">
-        <div><strong>${t.name}</strong><span>${t.focus === 'condition' ? 'восстановление' : 'рост · ' + t.focus}</span></div>
-        <span class="btn-tiny">Старт</span>
-      </button>
-    `).join('');
+    $('#train-grid').innerHTML = D().TRAINING.map(t => {
+      const isRec = t.focus === 'condition';
+      const locked = isRec ? recoverUsed >= 1 : used >= 2;
+      return `
+      <button class="train-card" data-train="${t.id}" ${locked ? 'disabled' : ''}>
+        <div><strong>${t.name}</strong><span>${isRec ? 'восстановление · 1/тур' : 'рост · ' + t.focus}</span></div>
+        <span class="btn-tiny">${locked ? 'лимит' : 'Старт'}</span>
+      </button>`;
+    }).join('');
   }
 
   function showTrainReport(r) {
@@ -1671,6 +1686,7 @@ window.EYE_UI = (() => {
   function showHtPanel() {
     const panel = $('#ht-panel');
     const scrim = $('#ht-scrim');
+    if (!panel) return;
     if (scrim) scrim.hidden = false;
     panel.hidden = false;
     document.body.classList.add('ht-open');
@@ -1680,13 +1696,20 @@ window.EYE_UI = (() => {
     if (flash) flash.hidden = true;
     const used = matchCtx?.subsUsed || 0;
     const left = Math.max(0, 3 - used);
-    $('#ht-hint').textContent = `Стиль, схема и замены (осталось ${left}/3) · затем второй тайм`;
-    $('#ht-formations').innerHTML = Object.keys(D().FORMATIONS).map(f =>
-      `<button class="btn btn-tiny" data-ht-form="${f}">${f}</button>`
-    ).join('');
-    $('#ht-styles').innerHTML = D().STYLES.map(s =>
-      `<button class="btn btn-tiny" data-ht-style="${s.id}">${s.name}</button>`
-    ).join('');
+    const hint = $('#ht-hint');
+    if (hint) hint.textContent = `Стиль, схема и замены (осталось ${left}/3) · затем второй тайм`;
+    const forms = $('#ht-formations');
+    if (forms) {
+      forms.innerHTML = Object.keys(D().FORMATIONS).map(f =>
+        `<button class="btn btn-tiny" data-ht-form="${f}">${f}</button>`
+      ).join('');
+    }
+    const styles = $('#ht-styles');
+    if (styles) {
+      styles.innerHTML = D().STYLES.map(s =>
+        `<button class="btn btn-tiny" data-ht-style="${s.id}">${s.name}</button>`
+      ).join('');
+    }
     const me = S().club();
     S().ensureLineup();
     const xiIds = new Set(me.lineup.map(p => p.id));
@@ -1920,16 +1943,17 @@ window.EYE_UI = (() => {
       }
       const htForm = e.target.closest('[data-ht-form]');
       if (htForm) {
-        // Keep current XI during HT — autoLineup would wipe half-time subs
         S().setTactics(htForm.dataset.htForm, null);
-        toast('Схема: ' + htForm.dataset.htForm + ' · состав сохранён');
+        toast('Схема: ' + htForm.dataset.htForm + ' · XI переложен');
         showHtPanel();
         return;
       }
       const htStyle = e.target.closest('[data-ht-style]');
       if (htStyle) {
         S().setTactics(null, htStyle.dataset.htStyle);
-        toast('Стиль: ' + htStyle.dataset.htStyle); return;
+        toast('Стиль: ' + (D().STYLES.find(s => s.id === htStyle.dataset.htStyle)?.name || htStyle.dataset.htStyle));
+        showHtPanel();
+        return;
       }
       const htSub = e.target.closest('[data-ht-sub]');
       if (htSub) {
@@ -2040,6 +2064,9 @@ window.EYE_UI = (() => {
       if ((hasLocal || cloudHasCareer) && !confirm('Начать новую карьеру? Текущее сохранение будет перезаписано.')) {
         return;
       }
+      createDirty = false;
+      createMode = 'custom';
+      createStep = 1;
       show('create');
     });
     document.body.addEventListener('click', (e) => {
@@ -2152,6 +2179,8 @@ window.EYE_UI = (() => {
         toast('Добро пожаловать, ' + (data.user.name || data.user.login));
         if (!cloudHasCareer) {
           createMode = 'custom';
+          createDirty = false;
+          createStep = 1;
           show('create');
         } else {
           show('lobby');
@@ -2174,6 +2203,8 @@ window.EYE_UI = (() => {
         $('#register-msg').textContent = '';
         toast('Аккаунт создан — создайте команду');
         createMode = 'custom';
+        createDirty = false;
+        createStep = 1;
         show('create');
       } catch (err) {
         $('#register-msg').textContent = err.message;
@@ -2182,7 +2213,10 @@ window.EYE_UI = (() => {
     document.addEventListener('keydown', (e) => {
       if (e.key !== 'Escape') return;
       if ($('#bid-modal') && !$('#bid-modal').hidden) { closeBidModal(); return; }
-      if (isHtOpen()) { continueSecondHalf(); return; }
+      if (isHtOpen()) {
+        toast('Нажмите «Второй тайм», чтобы продолжить');
+        return;
+      }
       if (document.getElementById('app')?.classList.contains('entry-open')) {
         const createOpen = $('#screen-create')?.classList.contains('entry-open');
         show(createOpen && A().isLoggedIn() ? 'lobby' : 'home');
@@ -2220,6 +2254,7 @@ window.EYE_UI = (() => {
         }
         S().autoLineup();
         await cloudSave(true);
+        createDirty = false;
         toast(createMode === 'custom' ? 'Команда создана · состав выдан' : 'Карьера начата');
         show('hub');
       } catch (err) {
@@ -2287,35 +2322,38 @@ window.EYE_UI = (() => {
     $('#btn-ht-close')?.addEventListener('click', () => continueSecondHalf());
     $('#ht-scrim')?.addEventListener('click', () => continueSecondHalf());
     $('#btn-cup-play')?.addEventListener('click', () => {
-      const pm = S().playerCupMatch();
-      if (!pm) {
-        toast('Сейчас нет вашего кубкового матча');
-        renderCup();
+      const next = S().nextMatch();
+      if (next?.type !== 'cup') {
+        toast(next ? 'Сейчас другой матч — откройте Центр' : 'Сейчас нет вашего кубкового матча');
+        if (next) show('hub');
+        else renderCup();
         return;
       }
-      matchCtx = { type: 'cup', match: pm, subsUsed: 0 };
+      matchCtx = { type: 'cup', match: next.match, subsUsed: 0 };
       show('prematch');
       renderPrematch();
     });
     $('#btn-ucl-play')?.addEventListener('click', () => {
-      const pm = S().playerUclMatch();
-      if (!pm) {
-        toast('Сейчас нет вашего матча ЛЧ');
-        renderUcl();
+      const next = S().nextMatch();
+      if (next?.type !== 'ucl') {
+        toast(next ? 'Сейчас другой матч — откройте Центр' : 'Сейчас нет вашего матча ЛЧ');
+        if (next) show('hub');
+        else renderUcl();
         return;
       }
-      matchCtx = { type: 'ucl', match: pm, subsUsed: 0 };
+      matchCtx = { type: 'ucl', match: next.match, subsUsed: 0 };
       show('prematch');
       renderPrematch();
     });
     $('#btn-cwc-play')?.addEventListener('click', () => {
-      const pm = S().playerCwcMatch();
-      if (!pm) {
-        toast('Сейчас нет вашего матча ЧМ');
-        renderCwc();
+      const next = S().nextMatch();
+      if (next?.type !== 'cwc') {
+        toast(next ? 'Сейчас другой матч — откройте Центр' : 'Сейчас нет вашего матча ЧМ');
+        if (next) show('hub');
+        else renderCwc();
         return;
       }
-      matchCtx = { type: 'cwc', match: pm, subsUsed: 0 };
+      matchCtx = { type: 'cwc', match: next.match, subsUsed: 0 };
       show('prematch');
       renderPrematch();
     });

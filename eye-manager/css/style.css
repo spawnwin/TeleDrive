@@ -567,6 +567,7 @@ input:focus, select:focus { border-color: rgba(94,234,212,.45); box-shadow: 0 0 
   flex-wrap: wrap;
   gap: 8px;
 }
+.league-pills {
   display: flex; flex-wrap: nowrap; gap: 8px;
   overflow-x: auto; padding-bottom: 4px;
   -webkit-overflow-scrolling: touch;

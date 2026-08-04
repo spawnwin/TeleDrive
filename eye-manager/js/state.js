@@ -269,9 +269,9 @@ window.EYE_STATE = (() => {
       const chance = (me.customClub ? 0.1 : 0.05) + (won ? 0.04 : drew ? 0.02 : 0);
       if (Math.random() < chance && p.ovr < (p.pot || 90)) {
         p.ovr = Math.min(p.pot || 90, p.ovr + 1);
-        D().attrsFromOvr && Object.assign(p, {
-          // keep existing attrs; light bump via form
-        });
+        const attrs = D().attrsFromOvr(p.pos, p.ovr, p.age);
+        Object.assign(p, attrs);
+        p.value = D().valueOf(p.ovr, p.pot || p.ovr, p.age);
         p.form = Math.min(95, (p.form || 60) + 2);
       }
     });
@@ -1060,8 +1060,65 @@ window.EYE_STATE = (() => {
     maybePlayCupAiWeek();
     maybePlayUclAiWeek();
     maybePlayCwcAiWeek();
+    state.trainCountWeek = 0;
+    state.recoverCountWeek = 0;
     const allPlayed = state.fixtures.every(r => r.matches.every(m => m.played));
-    if (allPlayed) endSeason();
+    if (allPlayed) {
+      finishOutstandingKnockouts();
+      endSeason();
+    }
+  }
+
+  /** Доигрывает кубки/ЛЧ/ЧМ перед сменой сезона, чтобы матчи не сгорали */
+  function finishOutstandingKnockouts() {
+    let guard = 0;
+    while (guard++ < 24) {
+      const cwc = playerCwcMatch();
+      const ucl = playerUclMatch();
+      const cup = playerCupMatch();
+      const pending = cwc || ucl || cup;
+      if (!pending) break;
+      const home = clubById(pending.home);
+      const away = clubById(pending.away);
+      if (!home || !away) {
+        pending.played = true;
+        pending.score = [1, 0];
+        continue;
+      }
+      const res = simulateAIMatch(home, away);
+      if (cwc) recordCwcMatch(pending, res);
+      else if (ucl) recordUclMatch(pending, res);
+      else recordCupMatch(pending, res);
+    }
+    for (let i = 0; i < 16; i++) {
+      let progressed = false;
+      if (state.cwc && !state.cwc.champion) {
+        if (state.cwc.phase === 'groups') {
+          const before = state.cwc.groupMatchday;
+          resolveCwcGroupMatchdayAI(null);
+          advanceCwcFromGroups();
+          if (state.cwc.groupMatchday !== before || state.cwc.phase === 'ko') progressed = true;
+        } else {
+          const round = state.cwc.round;
+          resolveCompAI(state.cwc, null);
+          advanceKnockout(state.cwc, 'Клубный ЧМ', 1800000);
+          if (state.cwc.round !== round || state.cwc.champion) progressed = true;
+        }
+      }
+      if (state.ucl && !state.ucl.champion) {
+        const round = state.ucl.round;
+        resolveCompAI(state.ucl, null);
+        advanceKnockout(state.ucl, 'ЛЧ EYE', 2500000);
+        if (state.ucl.round !== round || state.ucl.champion) progressed = true;
+      }
+      if (state.cup && !state.cup.champion) {
+        const round = state.cup.round;
+        resolveCompAI(state.cup, null);
+        advanceKnockout(state.cup, 'Кубок EYE', 800000);
+        if (state.cup.round !== round || state.cup.champion) progressed = true;
+      }
+      if (!progressed) break;
+    }
   }
 
   function maybeYouthIntake() {
@@ -1390,7 +1447,7 @@ window.EYE_STATE = (() => {
       title: inNextUcl ? 'ЛЧ: квалификация' : 'ЛЧ: вне зоны',
       body: inNextUcl
         ? `Вы в Лиге чемпионов следующего сезона (${mySeed?.reason || 'путёвка'}). Сетка обновится с нового тура.`
-        : `По итогам сезона вы не попали в топ зоны ЛЧ. Wildcard возможен только при старте новой карьеры.`,
+        : `По итогам сезона вы не попали в зону ЛЧ. Путёвку даёт только место в таблице (или титул чемпиона ЛЧ).`,
       read: false, at: Date.now()
     });
 
@@ -1485,9 +1542,20 @@ window.EYE_STATE = (() => {
     ensureClubExtras(me);
     const t = D().TRAINING.find(x => x.id === typeId);
     if (!t) return { ok: false, msg: 'Нет такой тренировки' };
+    const used = state.trainCountWeek || 0;
+    const limit = 2;
+    const isRecovery = t.focus === 'condition';
+    if (!isRecovery && used >= limit) {
+      return { ok: false, msg: `Лимит развития на тур: ${limit}. Можно только «Восстановление».` };
+    }
+    if (isRecovery && (state.recoverCountWeek || 0) >= 1) {
+      return { ok: false, msg: 'Восстановление уже проводили на этом туре' };
+    }
     const cost = 12000 + me.facilities.training * 3000;
     if (me.budget < cost) return { ok: false, msg: 'Не хватает бюджета' };
     adjustBudget(-cost, `Тренировка «${t.name}»`);
+    if (isRecovery) state.recoverCountWeek = (state.recoverCountWeek || 0) + 1;
+    else state.trainCountWeek = used + 1;
     const boost = t.boost + me.facilities.training + Math.floor((me.staff.coach || 1) / 2)
       + (me.customClub ? 1 : 0);
     const gains = [];
@@ -1933,9 +2001,42 @@ window.EYE_STATE = (() => {
 
   function setTactics(formation, style) {
     const me = club();
+    const formationChanged = formation && D().FORMATIONS[formation] && formation !== me.formation;
     if (formation && D().FORMATIONS[formation]) me.formation = formation;
     if (style) me.style = style;
+    if (formationChanged) remapLineupToFormation();
     save();
+  }
+
+  /** Перекладывает текущий XI под новую схему, не вызывая полный автоподбор */
+  function remapLineupToFormation() {
+    const me = club();
+    const slots = D().FORMATIONS[me.formation]?.slots || D().FORMATIONS['4-3-3'].slots;
+    const current = (me.lineup || []).filter(Boolean);
+    if (current.length < 8) {
+      autoLineup();
+      return;
+    }
+    const used = new Set();
+    const xi = slots.map(slot => {
+      const g = D().POS_GROUP[slot];
+      let pick = current.find(p => !used.has(p.id) && p.pos === slot);
+      if (!pick) pick = current.find(p => !used.has(p.id) && D().POS_GROUP[p.pos] === g);
+      if (!pick) pick = current.find(p => !used.has(p.id));
+      if (!pick) {
+        pick = me.squad
+          .filter(p => !used.has(p.id) && !(p.injured > 0) && !(p.suspended > 0))
+          .sort((a, b) => {
+            const sa = (D().POS_GROUP[a.pos] === g ? 20 : 0) + a.ovr;
+            const sb = (D().POS_GROUP[b.pos] === g ? 20 : 0) + b.ovr;
+            return sb - sa;
+          })[0];
+      }
+      if (pick) used.add(pick.id);
+      return pick;
+    }).filter(Boolean);
+    if (xi.length >= 11) setLineup(xi.map(p => p.id));
+    else autoLineup();
   }
 
   function setLineup(ids) {
@@ -2159,17 +2260,37 @@ window.EYE_STATE = (() => {
     const cup = playerCupMatch();
     const cwc = playerCwcMatch();
     const week = state.week;
-    if (canKo && cwc && (CWC_WEEKS_GROUPS.includes(week) || week === CWC_WEEK_SEMI || week === CWC_WEEK_FINAL)) {
-      return { type: 'cwc', match: cwc };
-    }
-    if (canKo && ucl && week % 5 === 1) return { type: 'ucl', match: ucl };
-    if (canKo && cup && week % 3 === 0) return { type: 'cup', match: cup };
+    const cwcDue = !!cwc && (CWC_WEEKS_GROUPS.includes(week) || week === CWC_WEEK_SEMI || week === CWC_WEEK_FINAL);
+    const uclDue = !!ucl && week % 5 === 1;
+    const cupDue = !!cup && week % 3 === 0;
+    if (canKo && cwcDue) return { type: 'cwc', match: cwc };
+    if (canKo && uclDue) return { type: 'ucl', match: ucl };
+    if (canKo && cupDue) return { type: 'cup', match: cup };
+
+    // Просроченные еврокубки — до лиги, иначе сгорят в конце сезона
+    if (canKo && cwc && isCwcOverdue()) return { type: 'cwc', match: cwc };
+    if (canKo && ucl && week > 1 && week % 5 !== 1) return { type: 'ucl', match: ucl };
+    if (canKo && cup && week > 3 && week % 3 !== 0) return { type: 'cup', match: cup };
+
     const lg = playerMatch();
     if (lg) return { type: 'league', match: lg };
     if (canKo && cwc) return { type: 'cwc', match: cwc };
     if (canKo && ucl) return { type: 'ucl', match: ucl };
     if (canKo && cup) return { type: 'cup', match: cup };
     return null;
+  }
+
+  function isCwcOverdue() {
+    const cwc = state.cwc;
+    if (!cwc || cwc.champion || !playerCwcMatch()) return false;
+    const week = state.week;
+    if (cwc.phase === 'groups') {
+      const expected = CWC_WEEKS_GROUPS[cwc.groupMatchday || 0];
+      return expected != null && week > expected;
+    }
+    if (cwc.round === '1/2') return week > CWC_WEEK_SEMI;
+    if (cwc.round === 'Финал') return week > CWC_WEEK_FINAL;
+    return week > CWC_WEEK_FINAL;
   }
 
   function pushCompHistory(comp, roundLabel) {
