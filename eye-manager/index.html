@@ -264,14 +264,19 @@
           <select id="tf-league">
             <option value="ALL">Все лиги</option>
           </select>
-        </div>
-        <div class="filter-row">
           <select id="tf-ovr">
             <option value="0">Рейтинг любой</option>
             <option value="70">70+</option>
             <option value="75">75+</option>
             <option value="80">80+</option>
             <option value="85">85+</option>
+          </select>
+          <select id="tf-age">
+            <option value="0">Возраст любой</option>
+            <option value="21">до 21</option>
+            <option value="23">до 23</option>
+            <option value="25">до 25</option>
+            <option value="28">до 28</option>
           </select>
           <select id="tf-price">
             <option value="0">Бюджет любой</option>
@@ -301,6 +306,10 @@
         <button class="icon-back" data-nav="hub">‹</button>
         <h2>Календарь</h2>
       </header>
+      <div class="tabs" id="calendar-tabs">
+        <button type="button" class="tab active" data-cal="mine">Мои матчи</button>
+        <button type="button" class="tab" data-cal="rounds">Туры лиги</button>
+      </div>
       <div class="list" id="calendar-list"></div>
     </section>
 
@@ -425,15 +434,15 @@
             <button type="button" data-cur="EUR" class="cur-btn">Евро €</button>
           </div>
         </div>
-        <button class="btn btn-glass" data-nav="table">Таблица лиги</button>
-        <button class="btn btn-glass" data-nav="ucl">Лига чемпионов</button>
-        <button class="btn btn-glass" data-nav="board">Совет директоров</button>
-        <button class="btn btn-glass" data-nav="youth">Академия</button>
+        <button class="btn btn-glass phone-only-nav" data-nav="table">Таблица лиги</button>
+        <button class="btn btn-glass phone-only-nav" data-nav="ucl">Лига чемпионов</button>
+        <button class="btn btn-glass phone-only-nav" data-nav="board">Совет директоров</button>
+        <button class="btn btn-glass phone-only-nav" data-nav="youth">Академия</button>
         <button class="btn btn-glass" data-nav="stats">Бомбардиры и ассисты</button>
         <button class="btn btn-glass" data-nav="history">История матчей</button>
         <button class="btn btn-glass" data-nav="train">Тренировки</button>
         <button class="btn btn-glass" data-nav="club">Инфраструктура</button>
-        <button class="btn btn-glass" data-nav="inbox">Почта</button>
+        <button class="btn btn-glass phone-only-nav" data-nav="inbox">Почта</button>
         <button class="btn btn-glass" id="btn-save-cloud">Сохранить в облако</button>
         <button class="btn btn-glass" id="btn-logout-more">Выйти из аккаунта</button>
         <button class="btn btn-danger" id="btn-reset">Сбросить карьеру</button>

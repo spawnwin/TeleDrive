@@ -488,15 +488,48 @@ input:focus, select:focus { border-color: rgba(94,234,212,.45); box-shadow: 0 0 
 }
 .tab.active { color: var(--accent-2); background: var(--accent-dim); border-color: rgba(94,234,212,.3); }
 
-.table-wrap { overflow: hidden; padding: 0; }
+.table-wrap { overflow: auto; padding: 0; max-height: none; }
 .league {
   width: 100%; border-collapse: collapse; font-size: 13px;
 }
 .league th, .league td { padding: 10px 8px; text-align: center; border-bottom: 1px solid var(--line); }
-.league th { color: var(--dim); font-weight: 600; font-size: 11px; text-transform: uppercase; }
+.league th {
+  color: var(--dim); font-weight: 600; font-size: 11px; text-transform: uppercase;
+  position: sticky; top: 0; background: rgba(12, 16, 22, .94); backdrop-filter: blur(8px); z-index: 1;
+}
 .league td:nth-child(2), .league th:nth-child(2) { text-align: left; }
 .league tr.me { background: rgba(94,234,212,.08); }
 .league .pos { color: var(--muted); width: 28px; }
+.league tr.zone-top .pos { color: var(--accent-2); }
+.league tr.zone-bot .pos { color: var(--danger); }
+.league .gd { font-variant-numeric: tabular-nums; color: var(--muted); }
+
+.cal-round {
+  padding: 12px 14px; border-radius: 14px;
+  background: rgba(255,255,255,.04); border: 1px solid var(--line);
+  display: grid; gap: 10px;
+}
+.cal-round.current { border-color: rgba(94,234,212,.35); background: rgba(94,234,212,.08); }
+.cal-grid { display: grid; gap: 6px; }
+.cal-fixture {
+  display: grid; grid-template-columns: 1fr auto 1fr; gap: 8px; align-items: center;
+  font-size: 12px; color: var(--muted); padding: 6px 8px; border-radius: 10px;
+  background: rgba(0,0,0,.2);
+}
+.cal-fixture span:last-child { text-align: right; }
+.cal-fixture b { color: var(--ink); font-variant-numeric: tabular-nums; }
+.cal-fixture.mine { color: var(--accent-2); border: 1px solid rgba(94,234,212,.25); }
+
+.bracket-round { display: grid; gap: 10px; }
+.bracket-label {
+  font-family: var(--display); font-size: 14px; color: var(--muted);
+  letter-spacing: -.01em;
+}
+.bracket-grid { display: grid; gap: 8px; }
+.finance-grid .kpi {
+  font-family: var(--display); font-size: 22px; font-weight: 700;
+  letter-spacing: -.03em; margin-top: 4px;
+}
 
 .train-grid, .facility-list, .more-stack { display: grid; gap: 10px; }
 .train-card, .fac-card {
@@ -793,15 +826,20 @@ input:focus, select:focus { border-color: rgba(94,234,212,.45); box-shadow: 0 0 
     width: 100%;
   }
   #screen-create.active {
-    max-width: 720px;
+    max-width: 900px;
     margin: 0 auto;
     width: 100%;
   }
   #screen-create .club-picker {
-    max-height: 280px;
+    max-height: 320px;
     grid-template-columns: 1fr 1fr;
   }
   #screen-create .create-form { max-width: none; }
+
+  /* Hide phone back when sidebar is the nav */
+  #app:not(.menu-mode):not(.match-mode) .icon-back { display: none; }
+  #app:not(.menu-mode) .subhead { gap: 12px; }
+  .phone-only-nav { display: none; }
 
   /* Squad / lists wider */
   #screen-squad.active,
@@ -820,16 +858,77 @@ input:focus, select:focus { border-color: rgba(94,234,212,.45); box-shadow: 0 0 
   #screen-ucl.active,
   #screen-table.active,
   #screen-player.active {
-    max-width: 980px;
+    max-width: 1040px;
     width: 100%;
     margin: 0 auto;
   }
+
+  #screen-table.active { max-width: 1120px; }
+  #screen-table .table-wrap { max-height: calc(100vh - 160px); }
 
   #screen-transfers .list .row,
   #screen-squad .list .row {
     padding-right: 8px;
   }
   .row-actions { grid-auto-flow: column; grid-template-columns: none; }
+
+  /* Transfer filters as toolbar */
+  #transfer-filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: stretch;
+  }
+  #transfer-filters .filter-row {
+    display: contents;
+  }
+  #tf-q { flex: 1 1 220px; min-width: 180px; }
+  #transfer-filters select { flex: 1 1 120px; min-width: 110px; }
+
+  /* Finance KPI grid */
+  #finance-card .finance-grid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+  }
+
+  /* Board: card + jobs */
+  #screen-board.active {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    align-content: start;
+  }
+  #screen-board .subhead { grid-column: 1 / -1; }
+  #board-card { grid-column: 1; align-self: start; }
+  #job-list:not([hidden]) { grid-column: 2; }
+  #job-list[hidden] ~ * { }
+  #screen-board:has(#job-list[hidden]) #board-card { grid-column: 1 / -1; max-width: 560px; }
+
+  /* Cup / UCL */
+  #screen-cup.active,
+  #screen-ucl.active {
+    max-width: 1100px;
+  }
+  .bracket-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  /* Calendar rounds */
+  #screen-calendar.active { max-width: 1100px; }
+  .cal-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  /* More = settings */
+  #screen-more .more-stack {
+    max-width: 520px;
+  }
+
+  /* Club / train denser */
+  #screen-club .facility-list,
+  #screen-train .train-grid {
+    grid-template-columns: 1fr 1fr;
+  }
 
   /* Tactics: pitch + bench */
   #screen-tactics.active {

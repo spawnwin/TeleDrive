@@ -21,6 +21,7 @@ window.EYE_UI = (() => {
   let tableLeagueId = null;
   let cloudHasCareer = false;
   let saveTimer = null;
+  let calendarTab = 'mine';
 
   function $(sel, root = document) { return root.querySelector(sel); }
   function $all(sel, root = document) { return [...root.querySelectorAll(sel)]; }
@@ -56,6 +57,7 @@ window.EYE_UI = (() => {
     }
 
     window.scrollTo(0, 0);
+    if (el) el.scrollTop = 0;
     refresh(id);
   }
 
@@ -88,6 +90,18 @@ window.EYE_UI = (() => {
     if (rates) {
       rates.textContent = `Сейчас: ${S().currencyInfo().name}. Курсы: 1 € = 100 ₽ = 1,08 $`;
     }
+    syncTransferPriceLabels();
+  }
+
+  function syncTransferPriceLabels() {
+    const sel = $('#tf-price');
+    if (!sel) return;
+    const caps = [0, 5e6, 15e6, 40e6, 100e6];
+    [...sel.options].forEach((opt, i) => {
+      const cap = caps[i];
+      if (cap == null) return;
+      opt.textContent = cap === 0 ? 'Бюджет любой' : 'до ' + S().money(cap);
+    });
   }
 
   function applyCurrency(code) {
@@ -495,11 +509,14 @@ window.EYE_UI = (() => {
     }
 
     ensureTransferLeagueFilter();
+    syncTransferPriceLabels();
+    const maxAge = Number($('#tf-age')?.value || 0) || undefined;
     const market = S().filterMarket({
       q: $('#tf-q')?.value || '',
       pos: $('#tf-pos')?.value || 'ALL',
       leagueId: $('#tf-league')?.value || 'ALL',
       minOvr: Number($('#tf-ovr')?.value || 0),
+      maxAge,
       maxPrice: Number($('#tf-price')?.value || 0) || undefined
     });
     const banner = open
@@ -561,15 +578,67 @@ window.EYE_UI = (() => {
   function renderCalendar() {
     const st = S().get();
     const me = S().club();
-    $('#calendar-list').innerHTML = st.fixtures.map(r => {
-      const mine = r.matches.find(m => m.home === me.id || m.away === me.id);
-      if (!mine) return '';
-      const home = S().clubById(mine.home);
-      const away = S().clubById(mine.away);
-      const score = mine.played ? `${mine.score[0]}:${mine.score[1]}` : '— : —';
-      const mineCls = !mine.played && r.round >= st.week ? ' me-round' : '';
-      return `<div class="news-item${mineCls}"><strong>Тур ${r.round}</strong><div>${home.name} ${score} ${away.name}</div>${mine.played ? '' : '<small>ожидается</small>'}</div>`;
-    }).join('') || `<div class="news-item">Календарь пуст</div>`;
+    $all('#calendar-tabs .tab').forEach(t => t.classList.toggle('active', t.dataset.cal === calendarTab));
+
+    const cupBits = [];
+    const cup = st.cup;
+    if (cup && !cup.champion) {
+      const pm = (cup.bracket || []).find(m => m.home === me.id || m.away === me.id);
+      if (pm) {
+        const h = S().clubById(pm.home); const a = S().clubById(pm.away);
+        const score = pm.played ? `${pm.score[0]}:${pm.score[1]}` : '— : —';
+        cupBits.push(`<div class="news-item me-round"><strong>Кубок · ${cup.round}</strong><div>${h?.name} ${score} ${a?.name}</div></div>`);
+      }
+    }
+    const ucl = st.ucl;
+    if (ucl && !ucl.champion) {
+      const pm = (ucl.bracket || []).find(m => m.home === me.id || m.away === me.id);
+      if (pm) {
+        const h = S().clubById(pm.home); const a = S().clubById(pm.away);
+        const score = pm.played ? `${pm.score[0]}:${pm.score[1]}` : '— : —';
+        cupBits.push(`<div class="news-item me-round"><strong>ЛЧ · ${ucl.round}</strong><div>${h?.name} ${score} ${a?.name}</div></div>`);
+      }
+    }
+
+    let body = '';
+    if (calendarTab === 'rounds') {
+      body = st.fixtures.map(r => {
+        const isNow = r.round === st.week;
+        const rows = r.matches.map(m => {
+          const home = S().clubById(m.home);
+          const away = S().clubById(m.away);
+          const score = m.played ? `${m.score[0]}:${m.score[1]}` : 'vs';
+          const mine = m.home === me.id || m.away === me.id;
+          return `<div class="cal-fixture${mine ? ' mine' : ''}"><span>${home?.short || home?.name}</span><b>${score}</b><span>${away?.short || away?.name}</span></div>`;
+        }).join('');
+        return `<div class="cal-round${isNow ? ' current' : ''}" data-round="${r.round}"><strong>Тур ${r.round}${isNow ? ' · сейчас' : ''}</strong><div class="cal-grid">${rows}</div></div>`;
+      }).join('');
+    } else {
+      body = st.fixtures.map(r => {
+        const mine = r.matches.find(m => m.home === me.id || m.away === me.id);
+        if (!mine) return '';
+        const home = S().clubById(mine.home);
+        const away = S().clubById(mine.away);
+        const score = mine.played ? `${mine.score[0]}:${mine.score[1]}` : '— : —';
+        const mineCls = !mine.played && r.round >= st.week ? ' me-round' : '';
+        const cur = r.round === st.week ? ' current-week' : '';
+        return `<div class="news-item${mineCls}${cur}" data-round="${r.round}"><strong>Тур ${r.round}${r.round === st.week ? ' · сейчас' : ''}</strong><div>${home.name} ${score} ${away.name}</div>${mine.played ? '' : '<small>ожидается</small>'}</div>`;
+      }).join('') || `<div class="news-item">Календарь пуст</div>`;
+    }
+
+    $('#calendar-list').innerHTML = (cupBits.join('') + body) || `<div class="news-item">Календарь пуст</div>`;
+    const focus = $('#calendar-list .current, #calendar-list .current-week, #calendar-list .me-round');
+    if (focus) setTimeout(() => focus.scrollIntoView({ block: 'nearest', behavior: 'smooth' }), 40);
+  }
+
+  function bracketHtml(matches, stageLabel) {
+    const grid = (matches || []).map(m => {
+      const h = S().clubById(m.home); const a = S().clubById(m.away);
+      const score = m.played ? `${m.score[0]}:${m.score[1]}` : 'ещё не сыгран';
+      const mine = m.home === S().club().id || m.away === S().club().id;
+      return `<div class="bracket-tie news-item${mine ? ' me-round' : ''}"><strong>${h?.name || '—'} — ${a?.name || '—'}</strong><div>${score}</div></div>`;
+    }).join('');
+    return `<div class="bracket-round"><div class="bracket-label">${stageLabel}</div><div class="bracket-grid">${grid}</div></div>`;
   }
 
   function renderCup() {
@@ -586,12 +655,7 @@ window.EYE_UI = (() => {
       const pm = S().playerCupMatch();
       btn.hidden = !pm;
     }
-    $('#cup-list').innerHTML = (cup.bracket || []).map(m => {
-      const h = S().clubById(m.home); const a = S().clubById(m.away);
-      const score = m.played ? `${m.score[0]}:${m.score[1]}` : 'ещё не сыгран';
-      const mine = m.home === S().club().id || m.away === S().club().id;
-      return `<div class="news-item${mine ? ' me-round' : ''}"><strong>${h?.name} — ${a?.name}</strong><div>${score}</div></div>`;
-    }).join('');
+    $('#cup-list').innerHTML = bracketHtml(cup.bracket, cup.round || 'Сетка') || `<div class="news-item">Сетка пуста</div>`;
   }
 
   function renderUcl() {
@@ -609,12 +673,7 @@ window.EYE_UI = (() => {
       status.innerHTML = `<strong>${ucl.name}</strong><div>Стадия: ${ucl.round}${inComp ? '' : ' · ваш клуб вне сетки'}</div>`;
       btn.hidden = !S().playerUclMatch();
     }
-    $('#ucl-list').innerHTML = (ucl.bracket || []).map(m => {
-      const h = S().clubById(m.home); const a = S().clubById(m.away);
-      const score = m.played ? `${m.score[0]}:${m.score[1]}` : 'ожидается';
-      const mine = m.home === S().club().id || m.away === S().club().id;
-      return `<div class="news-item${mine ? ' me-round' : ''}"><strong>${h?.name} — ${a?.name}</strong><div>${score}</div></div>`;
-    }).join('') || `<div class="news-item">Сетка пуста</div>`;
+    $('#ucl-list').innerHTML = bracketHtml(ucl.bracket, ucl.round || 'Сетка') || `<div class="news-item">Сетка пуста</div>`;
   }
 
   function renderBoard() {
@@ -660,12 +719,12 @@ window.EYE_UI = (() => {
   function renderFinance() {
     const f = S().financeSummary();
     $('#finance-card').innerHTML = `
-      <div class="stat-grid">
-        <div class="news-item"><strong>Бюджет</strong><div>${S().money(f.budget)}</div><small>${S().moneyHint(f.budget)}</small></div>
-        <div class="news-item"><strong>Зарплаты / нед</strong><div>${S().money(f.weeklyWages)}</div></div>
-        <div class="news-item"><strong>Стоимость состава</strong><div>${S().money(f.squadValue)}</div></div>
-        <div class="news-item"><strong>Болельщики</strong><div>${f.fans.toLocaleString('ru')}</div></div>
-        <div class="news-item"><strong>Касса с матча (оценка)</strong><div>${S().money(f.incomePerMatch)}</div></div>
+      <div class="stat-grid finance-grid">
+        <div class="news-item"><strong>Бюджет</strong><div class="kpi">${S().money(f.budget)}</div><small>${S().moneyHint(f.budget)}</small></div>
+        <div class="news-item"><strong>Зарплаты / нед</strong><div class="kpi">${S().money(f.weeklyWages)}</div></div>
+        <div class="news-item"><strong>Стоимость состава</strong><div class="kpi">${S().money(f.squadValue)}</div></div>
+        <div class="news-item"><strong>Болельщики</strong><div class="kpi">${f.fans.toLocaleString('ru')}</div></div>
+        <div class="news-item"><strong>Касса с матча</strong><div class="kpi">${S().money(f.incomePerMatch)}</div><small>оценка</small></div>
       </div>
     `;
   }
@@ -684,18 +743,23 @@ window.EYE_UI = (() => {
     const current = leagues.find(l => l.id === tableLeagueId);
     $('#table-title').textContent = current?.name || st.leagueName || 'Таблица';
     const rows = S().sortedTable(tableLeagueId);
+    const n = rows.length;
     $('#league-table').innerHTML = `
       <table class="league">
-        <thead><tr><th>#</th><th>Клуб</th><th>И</th><th>В</th><th>Н</th><th>П</th><th>Мячи</th><th>О</th></tr></thead>
+        <thead><tr><th>#</th><th>Клуб</th><th>И</th><th>В</th><th>Н</th><th>П</th><th>Мячи</th><th>РМ</th><th>О</th></tr></thead>
         <tbody>
-          ${rows.map((r, i) => `
-            <tr class="${r.id === me.id ? 'me' : ''}">
+          ${rows.map((r, i) => {
+            const gd = (r.gf || 0) - (r.ga || 0);
+            const gdStr = (gd > 0 ? '+' : '') + gd;
+            const zone = i < Math.min(4, Math.ceil(n / 4)) ? 'zone-top' : (i >= n - Math.min(3, Math.ceil(n / 5)) ? 'zone-bot' : '');
+            return `
+            <tr class="${r.id === me.id ? 'me' : ''} ${zone}">
               <td class="pos">${i + 1}</td>
               <td>${r.name}</td>
               <td>${r.played}</td><td>${r.w}</td><td>${r.d}</td><td>${r.l}</td>
-              <td>${r.gf}:${r.ga}</td><td><strong>${r.pts}</strong></td>
-            </tr>
-          `).join('')}
+              <td>${r.gf}:${r.ga}</td><td class="gd">${gdStr}</td><td><strong>${r.pts}</strong></td>
+            </tr>`;
+          }).join('')}
         </tbody>
       </table>
     `;
@@ -1443,7 +1507,11 @@ window.EYE_UI = (() => {
       const tab = e.target.closest('.tab');
       if (tab) { statsTab = tab.dataset.stab; renderStats(); }
     });
-    ['tf-q','tf-pos','tf-league','tf-ovr','tf-price'].forEach(id => {
+    $('#calendar-tabs')?.addEventListener('click', (e) => {
+      const tab = e.target.closest('[data-cal]');
+      if (tab) { calendarTab = tab.dataset.cal; renderCalendar(); }
+    });
+    ['tf-q','tf-pos','tf-league','tf-ovr','tf-price','tf-age'].forEach(id => {
       $(`#${id}`)?.addEventListener('input', () => renderTransfers('market'));
       $(`#${id}`)?.addEventListener('change', () => renderTransfers('market'));
     });
