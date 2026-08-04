@@ -534,8 +534,10 @@ window.EYE_UI = (() => {
       const home = S().clubById(next.match.home);
       const away = S().clubById(next.match.away);
       if (label) label.textContent = 'Следующий матч · ' + matchTypeLabel(next.type);
-      const riv = S().matchRivalry(home.id, away.id);
-      if (box) box.textContent = `${riv ? '⚡ ' : ''}${home.name} — ${away.name}${riv ? ' · ' + riv.name : ''}`;
+      const riv = home && away ? S().matchRivalry(home.id, away.id) : null;
+      if (box) box.textContent = home && away
+        ? `${riv ? '⚡ ' : ''}${home.name} — ${away.name}${riv ? ' · ' + riv.name : ''}`
+        : 'Матч';
       if (btn) {
         btn.disabled = false;
         btn.textContent = next.type === 'ucl' ? 'Матч ЛЧ'
@@ -1237,7 +1239,8 @@ window.EYE_UI = (() => {
     const rows = S().sortedTable(tableLeagueId);
     const n = rows.length;
     const uclSlots = ({ epl: 3, laliga: 3, seriea: 3, bundesliga: 3, ligue1: 2, rpl: 2 })[tableLeagueId] || 2;
-    const relegN = Math.min(2, Math.max(1, Math.floor(n / 6)));
+    // Match ladder: last 2 places risk relegation when league has 10+ clubs
+    const relegN = n >= 10 ? 2 : 1;
     $('#league-table').innerHTML = `
       <div class="hint" style="margin:0 0 10px">Зелёная зона — квалификация в ЛЧ (топ-${uclSlots}). Красная — риск вылета.</div>
       <table class="league">
@@ -1426,7 +1429,7 @@ window.EYE_UI = (() => {
   function renderInbox() {
     const st = S().get();
     st.inbox.forEach(m => {
-      if ((m.type === 'request' && !m.resolved) || (m.type === 'contract_ask' && !m.resolved) || m.type === 'youth_intake') return;
+      if ((m.type === 'request' && !m.resolved) || (m.type === 'contract_ask' && !m.resolved)) return;
       m.read = true;
     });
     S().save();
@@ -1448,6 +1451,7 @@ window.EYE_UI = (() => {
             <button class="btn btn-tiny" data-nav="youth">Открыть академию</button>
           </div>`;
         m.resolved = true;
+        m.read = true;
       }
       return `<div class="news-item${m.resolved ? ' resolved' : ''}"><strong>${m.title}</strong><div>${m.body}</div>${actions}</div>`;
     }).join('') || `<div class="news-item">Писем нет</div>`;
@@ -2044,7 +2048,8 @@ window.EYE_UI = (() => {
       const nav = e.target.closest('[data-nav]');
       if (nav) {
         const dest = nav.dataset.nav;
-        if (dest === 'hub' && document.getElementById('screen-result')?.classList.contains('active') && S().pendingPress()?.options?.length) {
+        const onResult = document.getElementById('screen-result')?.classList.contains('active');
+        if (onResult && S().pendingPress()?.options?.length && dest !== 'result') {
           toast('Сначала ответьте на вопросы прессы');
           return;
         }
@@ -2288,7 +2293,12 @@ window.EYE_UI = (() => {
               const local = JSON.parse(raw);
               const lS = local.season || 0, lW = local.week || 0;
               const rS = remote.season || 0, rW = remote.week || 0;
-              preferRemote = rS > lS || (rS === lS && rW >= lW);
+              const lAt = local.savedAt || 0;
+              const rAt = remote.savedAt || 0;
+              // Strictly newer remote week wins; same week → prefer newer timestamp / local
+              if (rS > lS || (rS === lS && rW > lW)) preferRemote = true;
+              else if (rS === lS && rW === lW && rAt > lAt && rAt > 0) preferRemote = true;
+              else preferRemote = false;
               localNewer = !preferRemote;
             }
           } catch { preferRemote = true; }

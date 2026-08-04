@@ -1098,6 +1098,7 @@ window.EYE_STATE = (() => {
 
   function save() {
     if (!state) return;
+    state.savedAt = Date.now();
     try {
       if (typeof localStorage !== 'undefined') localStorage.setItem(KEY, JSON.stringify(state));
     } catch (e) { console.warn('save', e); }
@@ -1894,7 +1895,7 @@ window.EYE_STATE = (() => {
     const me = club();
     let dir = 0;
     if (pos <= 2) dir = -1; // up ladder (better league)
-    else if (pos >= tableSize - 1) dir = 1; // down
+    else if (pos >= tableSize - 1) dir = 1; // down — last two places (n-1 and n)
     if (!dir) return '';
     const targetId = B().neighborLeague(state.leagueId, dir);
     if (!targetId) return dir < 0 ? 'Вы на вершине лестницы лиг.' : 'Ниже лиг нет.';
@@ -2859,7 +2860,14 @@ window.EYE_STATE = (() => {
   }
 
   function nextMatch() {
-    const canKo = state.knockoutPlayedWeek !== state.week;
+    // Per-competition KO lock for the week (can play cup + UCL same week)
+    const ko = state.koPlayed && state.koPlayed.week === state.week
+      ? new Set(state.koPlayed.types || [])
+      : new Set();
+    // Migrate legacy single-flag saves
+    if (!state.koPlayed && state.knockoutPlayedWeek === state.week) {
+      ['cwc', 'ucl', 'cup'].forEach(t => ko.add(t));
+    }
     const ucl = playerUclMatch();
     const cup = playerCupMatch();
     const cwc = playerCwcMatch();
@@ -2867,21 +2875,29 @@ window.EYE_STATE = (() => {
     const cwcDue = !!cwc && (CWC_WEEKS_GROUPS.includes(week) || week === CWC_WEEK_SEMI || week === CWC_WEEK_FINAL);
     const uclDue = !!ucl && week % 5 === 1;
     const cupDue = !!cup && week % 3 === 0;
-    if (canKo && cwcDue) return { type: 'cwc', match: cwc };
-    if (canKo && uclDue) return { type: 'ucl', match: ucl };
-    if (canKo && cupDue) return { type: 'cup', match: cup };
+    if (cwcDue && !ko.has('cwc')) return { type: 'cwc', match: cwc };
+    if (uclDue && !ko.has('ucl')) return { type: 'ucl', match: ucl };
+    if (cupDue && !ko.has('cup')) return { type: 'cup', match: cup };
 
-    // Просроченные еврокубки — до лиги, иначе сгорят в конце сезона
-    if (canKo && cwc && isCwcOverdue()) return { type: 'cwc', match: cwc };
-    if (canKo && ucl && week > 1 && week % 5 !== 1) return { type: 'ucl', match: ucl };
-    if (canKo && cup && week > 3 && week % 3 !== 0) return { type: 'cup', match: cup };
+    // Просроченные еврокубки — до лиги
+    if (cwc && !ko.has('cwc') && isCwcOverdue()) return { type: 'cwc', match: cwc };
+    if (ucl && !ko.has('ucl') && week > 1 && week % 5 !== 1) return { type: 'ucl', match: ucl };
+    if (cup && !ko.has('cup') && week > 3 && week % 3 !== 0) return { type: 'cup', match: cup };
 
     const lg = playerMatch();
     if (lg) return { type: 'league', match: lg };
-    if (canKo && cwc) return { type: 'cwc', match: cwc };
-    if (canKo && ucl) return { type: 'ucl', match: ucl };
-    if (canKo && cup) return { type: 'cup', match: cup };
+    if (cwc && !ko.has('cwc')) return { type: 'cwc', match: cwc };
+    if (ucl && !ko.has('ucl')) return { type: 'ucl', match: ucl };
+    if (cup && !ko.has('cup')) return { type: 'cup', match: cup };
     return null;
+  }
+
+  function markKnockoutPlayed(kind) {
+    if (!state.koPlayed || state.koPlayed.week !== state.week) {
+      state.koPlayed = { week: state.week, types: [] };
+    }
+    if (!state.koPlayed.types.includes(kind)) state.koPlayed.types.push(kind);
+    state.knockoutPlayedWeek = state.week; // legacy mirror
   }
 
   function isCwcOverdue() {
@@ -3075,20 +3091,19 @@ window.EYE_STATE = (() => {
   function maybePlayCwcAiWeek() {
     const cwc = state.cwc;
     if (!cwc || cwc.champion) return;
-    if (playerCwcMatch()) return;
+    const pending = playerCwcMatch();
     const week = state.week;
     if (cwc.phase === 'groups') {
       if (!CWC_WEEKS_GROUPS.includes(week)) return;
-      resolveCwcGroupMatchdayAI(null);
-      advanceCwcFromGroups();
+      resolveCwcGroupMatchdayAI(pending || null);
+      if (!pending) advanceCwcFromGroups();
       return;
     }
     if (week !== CWC_WEEK_SEMI && week !== CWC_WEEK_FINAL) return;
-    resolveCompAI(cwc, null);
-    advanceKnockout(cwc, 'Клубный ЧМ', 1800000);
-    if (cwc.champion === state.clubId) state.cwcBest = 'Чемпион';
-    else if (cwc.champion) {
-      /* AI чемпион — путь игрока уже в cwcBest */
+    resolveCompAI(cwc, pending || null);
+    if (!pending) {
+      advanceKnockout(cwc, 'Клубный ЧМ', 1800000);
+      if (cwc.champion === state.clubId) state.cwcBest = 'Чемпион';
     }
   }
 
@@ -3240,7 +3255,7 @@ window.EYE_STATE = (() => {
       at: Date.now()
     });
     queuePressConference(won, drew, label);
-    state.knockoutPlayedWeek = state.week;
+    markKnockoutPlayed(kind);
     save();
   }
 
@@ -3307,6 +3322,7 @@ window.EYE_STATE = (() => {
     state.pendingWage = {};
     state.transferOffers = [];
     state.knockoutPlayedWeek = null;
+    state.koPlayed = null;
     state.sponsor = null;
     state.finance = {
       debtWeeks: 0,
