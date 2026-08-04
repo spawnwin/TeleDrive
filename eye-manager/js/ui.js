@@ -1484,6 +1484,7 @@ window.EYE_UI = (() => {
       </div>
       ${cardRisk.length ? `<div class="hint" style="margin-top:8px">ЖК-риск в XI: ${cardRisk.map(p => p.name + ' (' + (p.seasonYellows || 0) + '/5)').join(', ')}</div>` : ''}
     `;
+    renderPrematchLineup();
     const brief = S().opponentBrief(opp.id);
     const dossier = $('#opp-dossier');
     if (dossier && brief) {
@@ -1532,6 +1533,65 @@ window.EYE_UI = (() => {
       if (kick) { kick.disabled = false; kick.textContent = 'Начать матч'; }
     }
     matchCtx = { type: next.type, match: pm, subsUsed: matchCtx?.subsUsed || 0, derby: rivalry?.name || null };
+  }
+
+  function renderPrematchLineup() {
+    const box = $('#prematch-lineup');
+    if (!box) return;
+    const board = S().prematchSquadBoard?.();
+    if (!board) { box.innerHTML = ''; return; }
+    const xiS = board.xiStrength;
+    const bS = board.benchStrength;
+    const edge = (xiS.power || 0) - (bS.power || 0);
+    const edgeLabel = edge >= 8 ? 'основа заметно сильнее' : edge >= 3 ? 'основа чуть сильнее' : edge <= -3 ? 'запас конкурентоспособен' : 'силы близки';
+
+    const rowHtml = (p, i) => {
+      if (!p) return '';
+      const cls = p.unfit ? 'pm-player unfit' : p.tired ? 'pm-player tired' : 'pm-player';
+      return `
+        <div class="${cls}" data-player="${p.id}">
+          <span class="pm-slot">${i + 1}</span>
+          <span class="pm-pos">${p.pos}</span>
+          <span class="pm-name">${p.name}${p.status ? ` <em>${p.status}</em>` : ''}</span>
+          <span class="pm-ovr">${p.ovr}</span>
+          <span class="pm-fit">${fitBar('К', p.condition)}${fitBar('Э', p.energy)}</span>
+        </div>`;
+    };
+
+    box.innerHTML = `
+      <div class="pm-head">
+        <strong>Состав на матч</strong>
+        <div class="hint">${board.formation} · ${board.style}</div>
+      </div>
+      <div class="pm-strength">
+        <div class="pm-str-card">
+          <span class="field-label">Основа</span>
+          <div class="pm-str-kpi">${xiS.power}</div>
+          <small>OVR ${xiS.avgOvr} · конд. ${xiS.avgCond} · энерг. ${xiS.avgEnergy}</small>
+        </div>
+        <div class="pm-str-vs" title="${edgeLabel}">${edge > 0 ? '+' : ''}${edge}</div>
+        <div class="pm-str-card">
+          <span class="field-label">Запас (7)</span>
+          <div class="pm-str-kpi">${bS.power || '—'}</div>
+          <small>OVR ${bS.avgOvr || '—'} · конд. ${bS.avgCond || '—'} · энерг. ${bS.avgEnergy || '—'}</small>
+        </div>
+      </div>
+      <div class="hint" style="margin:8px 0 4px">${edgeLabel}. Сила учитывает рейтинг, форму и свежесть.</div>
+      <div class="pm-cols">
+        <div class="pm-col">
+          <div class="pm-col-title">Основной состав · ${board.xi.filter(Boolean).length}</div>
+          <div class="pm-list">${board.xi.map((p, i) => rowHtml(p, i)).join('')}</div>
+        </div>
+        <div class="pm-col">
+          <div class="pm-col-title">Запас · ${board.bench.length}${board.reserveTotal > board.bench.length ? ` / ${board.reserveTotal}` : ''}</div>
+          <div class="pm-list">${board.bench.map((p, i) => rowHtml(p, i)).join('') || '<div class="hint">Запас пуст</div>'}</div>
+        </div>
+      </div>
+      <div class="pm-actions">
+        <button type="button" class="btn btn-tiny" data-nav="tactics">Изменить XI</button>
+        <button type="button" class="btn btn-tiny" data-nav="squad">Состав</button>
+      </div>
+    `;
   }
 
   function drawMatchFrame(ctx, w, h, minute, colors, ball) {
