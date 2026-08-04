@@ -232,6 +232,14 @@ input:focus, select:focus { border-color: rgba(94,234,212,.45); box-shadow: 0 0 
   z-index: 3;
   pointer-events: auto;
 }
+#screen-home .home-mode-hint {
+  position: relative;
+  z-index: 3;
+  margin: 12px auto 0;
+  max-width: 34ch;
+  text-align: center;
+  color: rgba(255,255,255,.72);
+}
 #screen-home .home-actions .btn {
   position: relative;
   z-index: 3;
