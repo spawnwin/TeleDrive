@@ -83,6 +83,7 @@ export function MobileBottomNav({
 
   return (
     <nav
+      data-aurora-fixed
       aria-label="Мобильная навигация"
       className="pointer-events-none fixed inset-x-0 bottom-0 z-[300] xl:hidden"
     >

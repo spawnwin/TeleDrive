@@ -746,7 +746,7 @@ body[data-lightbox-open] [data-slot="sheet-content"] {
   mask-image: linear-gradient(180deg, rgb(0 0 0 / 55%), transparent 72%);
 }
 
-.aurora-chats > * {
+.aurora-chats > *:not([data-aurora-fixed]) {
   position: relative;
   z-index: 1;
 }
