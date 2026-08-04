@@ -1627,6 +1627,79 @@ window.EYE_STATE = (() => {
     return { avgCond, avgEnergy, injured, suspended, tired, cards, size: sq.length };
   }
 
+  function playerBoardRow(p, slotPos) {
+    if (!p) return null;
+    const cond = Math.round(p.condition || 70);
+    const energy = Math.round(p.energy || 70);
+    const form = Math.round(p.form || 60);
+    const unfit = (p.injured > 0) || (p.suspended > 0);
+    const tired = !unfit && (cond < 58 || energy < 52);
+    return {
+      id: p.id,
+      name: p.name,
+      pos: D().POS_LABEL[slotPos || p.pos] || slotPos || p.pos,
+      rawPos: p.pos,
+      ovr: p.ovr,
+      form,
+      condition: cond,
+      energy,
+      unfit,
+      tired,
+      status: p.injured > 0 ? `травма ${p.injured}` : p.suspended > 0 ? `бан ${p.suspended}` : tired ? 'усталость' : ''
+    };
+  }
+
+  function groupStrength(players) {
+    const list = (players || []).filter(Boolean);
+    if (!list.length) return { avgOvr: 0, avgCond: 0, avgEnergy: 0, avgForm: 0, power: 0, n: 0 };
+    const n = list.length;
+    const avgOvr = Math.round(list.reduce((s, p) => s + (p.ovr || 0), 0) / n);
+    const avgCond = Math.round(list.reduce((s, p) => s + (p.condition || 70), 0) / n);
+    const avgEnergy = Math.round(list.reduce((s, p) => s + (p.energy || 70), 0) / n);
+    const avgForm = Math.round(list.reduce((s, p) => s + (p.form || 60), 0) / n);
+    // Effective power blends rating with fitness
+    const power = Math.round(list.reduce((s, p) => {
+      const fit = ((p.condition || 70) + (p.energy || 70)) / 200;
+      const formMod = 0.85 + ((p.form || 60) / 100) * 0.3;
+      const out = (p.injured > 0 || p.suspended > 0) ? 0.55 : 1;
+      return s + (p.ovr || 0) * fit * formMod * out;
+    }, 0) / n);
+    return { avgOvr, avgCond, avgEnergy, avgForm, power, n };
+  }
+
+  /** Prematch board: starting XI + reserves with strength summary */
+  function prematchSquadBoard() {
+    const me = club();
+    if (!me) return null;
+    ensureLineup();
+    const slots = D().FORMATIONS[me.formation]?.slots || D().FORMATIONS['4-3-3'].slots;
+    const xiPlayers = (me.lineup || []).slice(0, 11);
+    const xiIds = new Set(xiPlayers.map(p => p?.id).filter(Boolean));
+    const reserves = (me.squad || [])
+      .filter(p => p && !xiIds.has(p.id))
+      .sort((a, b) => {
+        const ua = (a.injured > 0 || a.suspended > 0) ? 1 : 0;
+        const ub = (b.injured > 0 || b.suspended > 0) ? 1 : 0;
+        if (ua !== ub) return ua - ub;
+        return (b.ovr + (b.form || 0) / 10) - (a.ovr + (a.form || 0) / 10);
+      });
+    const bench = reserves.slice(0, 7);
+    const xi = xiPlayers.map((p, i) => playerBoardRow(p, slots[i]));
+    const reserveRows = reserves.map(p => playerBoardRow(p));
+    const benchRows = bench.map(p => playerBoardRow(p));
+    return {
+      formation: me.formation,
+      style: D().STYLES.find(s => s.id === me.style)?.name || me.style,
+      xi,
+      bench: benchRows,
+      reserves: reserveRows,
+      xiStrength: groupStrength(xiPlayers),
+      benchStrength: groupStrength(bench),
+      reserveStrength: groupStrength(reserves),
+      reserveTotal: reserves.length
+    };
+  }
+
   function opponentBrief(oppId) {
     const opp = clubById(oppId);
     if (!opp) return null;
@@ -2781,7 +2854,7 @@ window.EYE_STATE = (() => {
     hireStaff, answerPress, refillYouth, releaseYouth, runYouthIntake, pendingPress: () => state?.pendingPress || null,
     xiStatus, fixXi, matchRivalry, transferWindowOpen, transferWindowInfo, listLeagueTables,
     resolvePlayerRequest, seasonLog: () => state?.seasonLog || [], avgSeasonRating,
-    squadReadiness, opponentBrief, boardProgress, isClubInCwc, isClubInUcl: isClubInUclBracket,
+    squadReadiness, prematchSquadBoard, opponentBrief, boardProgress, isClubInCwc, isClubInUcl: isClubInUclBracket,
     teamDevSummary, refreshClubLevel, youthPromoteCost
   };
 })();
