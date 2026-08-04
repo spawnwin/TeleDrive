@@ -5,7 +5,9 @@ window.EYE_ENGINE = (() => {
   function teamStrength(club, opts = {}) {
     const form = club.formation || '4-3-3';
     const slots = D().FORMATIONS[form].slots;
-    const XI = (club.lineup || club.squad.slice(0, 11)).slice(0, 11);
+    const XI = (club.lineup && club.lineup.length >= 11
+      ? club.lineup
+      : club.squad.slice(0, 11)).slice(0, 11);
     while (XI.length < 11) XI.push(D().genPlayer(slots[XI.length] || 'CM', 55));
     let atk = 0, def = 0, mid = 0, cond = 0;
     XI.forEach((p, i) => {
@@ -14,7 +16,7 @@ window.EYE_ENGINE = (() => {
       const formMod = (p.form || 60) / 70;
       const condMod = (p.condition || 80) / 90;
       const moraleMod = (p.morale || 60) / 70;
-      const m = formMod * condMod * moraleMod * (p.injured > 0 ? 0.4 : 1);
+      const m = formMod * condMod * moraleMod * (p.injured > 0 ? 0.4 : 1) * (p.red ? 0 : 1);
       const a = p.attack * m;
       const d = p.defense * m;
       const t = ((p.tech + p.iq) / 2) * m;
@@ -32,9 +34,9 @@ window.EYE_ENGINE = (() => {
       possession: { a: 0.96, d: 1.02, m: 1.12 },
       counter: { a: 1.08, d: 1.06, m: 0.92 }
     }[style] || { a: 1, d: 1, m: 1 };
-    const home = opts.home ? 1.04 : 1;
+    const homeBoost = opts.home ? 1.04 : 1;
     return {
-      attack: (atk / 11) * styleMod.a * home,
+      attack: (atk / 11) * styleMod.a * homeBoost,
       defense: (def / 11) * styleMod.d,
       mid: (mid / 11) * styleMod.m,
       condition: cond / 11,
@@ -46,7 +48,6 @@ window.EYE_ENGINE = (() => {
   function chance(homeS, awayS, minute) {
     const hChance = homeS.attack / (homeS.attack + awayS.defense + 1) * (0.55 + homeS.mid / (homeS.mid + awayS.mid + 1) * 0.45);
     const aChance = awayS.attack / (awayS.attack + homeS.defense + 1) * (0.55 + awayS.mid / (awayS.mid + homeS.mid + 1) * 0.45);
-    // fatigue late game
     const fatigue = minute > 75 ? 1.15 : minute > 60 ? 1.05 : 1;
     return { home: hChance * fatigue, away: aChance * fatigue };
   }
@@ -74,39 +75,37 @@ window.EYE_ENGINE = (() => {
   }
 
   const COMMENT = {
-    chance: [
-      'Острый момент!', 'Выход один на один!', 'Опасная подача!',
-      'Стандарты — и снова угроза!', 'Быстрая комбинация!', 'Прострел в штрафную!'
-    ],
-    shot: [
-      'Удар!', 'Бьёт из-за штрафной!', 'Удар головой!', 'Прострел — удар!', 'Бьёт низом в угол!'
-    ],
-    save: [
-      'Вратарь спасает!', 'Потрясающий сейв!', 'Выносит кулаками!', 'Парирует на угол!'
-    ],
-    miss: [
-      'Мимо!', 'Штанга!', 'Перекладина!', 'Чуть выше!', 'Блок защитника!'
-    ],
-    goal: [
-      'ГОЛ!', 'В сетке!', 'Невероятный гол!', 'Разрезает оборону — и гол!', 'Холодный удар — гол!'
-    ],
+    chance: ['Острый момент!', 'Выход один на один!', 'Опасная подача!', 'Стандарты — и снова угроза!', 'Быстрая комбинация!', 'Прострел в штрафную!'],
+    shot: ['Удар!', 'Бьёт из-за штрафной!', 'Удар головой!', 'Прострел — удар!', 'Бьёт низом в угол!'],
+    save: ['Вратарь спасает!', 'Потрясающий сейв!', 'Выносит кулаками!', 'Парирует на угол!'],
+    miss: ['Мимо!', 'Штанга!', 'Перекладина!', 'Чуть выше!', 'Блок защитника!'],
+    goal: ['ГОЛ!', 'В сетке!', 'Невероятный гол!', 'Разрезает оборону — и гол!', 'Холодный удар — гол!'],
     card: ['Жёлтая карточка.', 'Жёсткий фол — жёлтая.', 'Судья достаёт желтую.'],
     red: ['КРАСНАЯ КАРТОЧКА!', 'Удаление!', 'Вторая жёлтая — удаление!'],
-    injury: ['Травма...', 'Игрок остаётся лежать.', 'Медики на поле.']
+    injury: ['Травма...', 'Игрок остаётся лежать.', 'Медики на поле.'],
+    sub: ['Замена.', 'Тренер меняет игрока.', 'Свежие ноги на поле.']
   };
 
+  /**
+   * options: startMinute, endMinute, score, stats, applyFatigue, scorersH/A
+   */
   function simulateMatch(home, away, options = {}) {
-    const speed = options.speed || 1;
+    const startMinute = options.startMinute || 1;
+    const endMinute = options.endMinute || 90;
     const homeS = teamStrength(home, { home: true });
     const awayS = teamStrength(away, { home: false });
     const events = [];
-    let hg = 0, ag = 0;
-    let possessionH = 50;
-    let shotsH = 0, shotsA = 0, onH = 0, onA = 0;
-    const scorersH = [], scorersA = [];
+    let hg = options.score ? options.score[0] : 0;
+    let ag = options.score ? options.score[1] : 0;
+    let possessionH = options.stats?.possession?.[0] ?? 50;
+    let shotsH = options.stats?.shots?.[0] ?? 0;
+    let shotsA = options.stats?.shots?.[1] ?? 0;
+    let onH = options.stats?.onTarget?.[0] ?? 0;
+    let onA = options.stats?.onTarget?.[1] ?? 0;
+    const scorersH = options.scorersH ? [...options.scorersH] : [];
+    const scorersA = options.scorersA ? [...options.scorersA] : [];
 
-    for (let minute = 1; minute <= 90; minute++) {
-      // possession drift
+    for (let minute = startMinute; minute <= endMinute; minute++) {
       const midDiff = homeS.mid - awayS.mid;
       possessionH = Math.max(32, Math.min(68, possessionH + midDiff * 0.02 + (Math.random() - 0.5) * 1.2));
 
@@ -124,7 +123,6 @@ window.EYE_ENGINE = (() => {
         if (Math.random() < 0.72) {
           if (isHome) shotsH++; else shotsA++;
           events.push({ minute, type: 'shot', side: attackSide, text: D().pick(COMMENT.shot) });
-
           const onTarget = Math.random() < 0.45 + quality * 0.18;
           if (onTarget) {
             if (isHome) onH++; else onA++;
@@ -135,8 +133,7 @@ window.EYE_ENGINE = (() => {
               if (isHome) { hg++; scorersH.push({ player: scorer, minute, assist }); }
               else { ag++; scorersA.push({ player: scorer, minute, assist }); }
               events.push({
-                minute, type: 'goal', side: attackSide,
-                scorer, assist,
+                minute, type: 'goal', side: attackSide, scorer, assist,
                 text: `${D().pick(COMMENT.goal)} ${scorer.name}${assist ? ` (п. ${assist.name})` : ''}`,
                 score: [hg, ag]
               });
@@ -149,7 +146,6 @@ window.EYE_ENGINE = (() => {
         }
       }
 
-      // cards / injuries rare
       if (Math.random() < 0.012) {
         const side = Math.random() < 0.5 ? 'home' : 'away';
         const xi = side === 'home' ? homeS.xi : awayS.xi;
@@ -173,11 +169,62 @@ window.EYE_ENGINE = (() => {
       }
     }
 
-    // apply match stats to players lightly
-    homeS.xi.forEach(p => { p.seasonApps = (p.seasonApps || 0) + 1; p.apps = (p.apps || 0) + 1; p.condition = Math.max(40, (p.condition || 80) - D().rnd(4, 12)); p.energy = Math.max(30, (p.energy || 80) - D().rnd(8, 18)); });
-    awayS.xi.forEach(p => { p.seasonApps = (p.seasonApps || 0) + 1; p.apps = (p.apps || 0) + 1; p.condition = Math.max(40, (p.condition || 80) - D().rnd(4, 12)); p.energy = Math.max(30, (p.energy || 80) - D().rnd(8, 18)); });
-    scorersH.forEach(s => { s.player.seasonGoals = (s.player.seasonGoals || 0) + 1; s.player.goals = (s.player.goals || 0) + 1; s.player.form = Math.min(99, (s.player.form || 60) + 3); if (s.assist) { s.assist.assists = (s.assist.assists || 0) + 1; } });
-    scorersA.forEach(s => { s.player.seasonGoals = (s.player.seasonGoals || 0) + 1; s.player.goals = (s.player.goals || 0) + 1; s.player.form = Math.min(99, (s.player.form || 60) + 3); if (s.assist) { s.assist.assists = (s.assist.assists || 0) + 1; } });
+    if (options.applyFatigue !== false && endMinute >= 90 && startMinute <= 1) {
+      homeS.xi.forEach(p => {
+        p.seasonApps = (p.seasonApps || 0) + 1; p.apps = (p.apps || 0) + 1;
+        p.condition = Math.max(40, (p.condition || 80) - D().rnd(4, 12));
+        p.energy = Math.max(30, (p.energy || 80) - D().rnd(8, 18));
+      });
+      awayS.xi.forEach(p => {
+        p.seasonApps = (p.seasonApps || 0) + 1; p.apps = (p.apps || 0) + 1;
+        p.condition = Math.max(40, (p.condition || 80) - D().rnd(4, 12));
+        p.energy = Math.max(30, (p.energy || 80) - D().rnd(8, 18));
+      });
+    } else if (options.applyFatigue && endMinute === 90) {
+      // second half fatigue only
+      homeS.xi.forEach(p => {
+        p.seasonApps = (p.seasonApps || 0) + 1; p.apps = (p.apps || 0) + 1;
+        p.condition = Math.max(40, (p.condition || 80) - D().rnd(4, 12));
+        p.energy = Math.max(30, (p.energy || 80) - D().rnd(8, 18));
+      });
+      awayS.xi.forEach(p => {
+        p.seasonApps = (p.seasonApps || 0) + 1; p.apps = (p.apps || 0) + 1;
+        p.condition = Math.max(40, (p.condition || 80) - D().rnd(4, 12));
+        p.energy = Math.max(30, (p.energy || 80) - D().rnd(8, 18));
+      });
+    }
+
+    // only count new scorers from this segment for season stats when finishing
+    if (options.finalizeStats) {
+      const baseH = (options.scorersH || []).length;
+      const baseA = (options.scorersA || []).length;
+      scorersH.slice(baseH).forEach(s => {
+        s.player.seasonGoals = (s.player.seasonGoals || 0) + 1;
+        s.player.goals = (s.player.goals || 0) + 1;
+        s.player.form = Math.min(99, (s.player.form || 60) + 3);
+        if (s.assist) { s.assist.assists = (s.assist.assists || 0) + 1; s.assist.seasonAssists = (s.assist.seasonAssists || 0) + 1; }
+      });
+      scorersA.slice(baseA).forEach(s => {
+        s.player.seasonGoals = (s.player.seasonGoals || 0) + 1;
+        s.player.goals = (s.player.goals || 0) + 1;
+        s.player.form = Math.min(99, (s.player.form || 60) + 3);
+        if (s.assist) { s.assist.assists = (s.assist.assists || 0) + 1; s.assist.seasonAssists = (s.assist.seasonAssists || 0) + 1; }
+      });
+    } else if (!options.startMinute || options.startMinute === 1) {
+      // legacy full-match path
+      if (endMinute >= 90 && startMinute === 1) {
+        scorersH.forEach(s => {
+          s.player.seasonGoals = (s.player.seasonGoals || 0) + 1; s.player.goals = (s.player.goals || 0) + 1;
+          s.player.form = Math.min(99, (s.player.form || 60) + 3);
+          if (s.assist) { s.assist.assists = (s.assist.assists || 0) + 1; s.assist.seasonAssists = (s.assist.seasonAssists || 0) + 1; }
+        });
+        scorersA.forEach(s => {
+          s.player.seasonGoals = (s.player.seasonGoals || 0) + 1; s.player.goals = (s.player.goals || 0) + 1;
+          s.player.form = Math.min(99, (s.player.form || 60) + 3);
+          if (s.assist) { s.assist.assists = (s.assist.assists || 0) + 1; s.assist.seasonAssists = (s.assist.seasonAssists || 0) + 1; }
+        });
+      }
+    }
 
     return {
       home: home.name, away: away.name,
@@ -191,31 +238,48 @@ window.EYE_ENGINE = (() => {
       },
       scorersH, scorersA,
       homeColor: home.color, awayColor: away.color,
-      speed
+      startMinute, endMinute
     };
   }
 
-  /** Live playback helper — yields events over time */
+  function mergeResults(a, b) {
+    return {
+      ...b,
+      events: [...(a.events || []), ...(b.events || [])],
+      scorersH: b.scorersH,
+      scorersA: b.scorersA,
+      score: b.score,
+      stats: b.stats,
+      startMinute: a.startMinute || 1,
+      endMinute: b.endMinute || 90
+    };
+  }
+
   async function playLive(result, onEvent, onTick, opts = {}) {
     const baseMs = opts.msPerMinute || 280;
+    const from = opts.fromMinute || result.startMinute || 1;
+    const to = opts.toMinute || result.endMinute || 90;
     let idx = 0;
-    for (let minute = 1; minute <= 90; minute++) {
+    while (idx < result.events.length && result.events[idx].minute < from) idx++;
+    for (let minute = from; minute <= to; minute++) {
       if (opts.aborted?.()) break;
       const msPerMinute = opts.aborted?.() ? 0 : baseMs;
       onTick?.(minute, result);
       while (idx < result.events.length && result.events[idx].minute === minute) {
         onEvent?.(result.events[idx], result);
         idx++;
-        if (!opts.aborted?.()) await sleep(Math.min(180, msPerMinute * 0.4));
+        if (!opts.aborted?.()) await sleep(Math.min(160, msPerMinute * 0.35));
       }
       if (!opts.aborted?.()) await sleep(msPerMinute);
     }
-    while (idx < result.events.length) {
-      onEvent?.(result.events[idx++], result);
+    if (opts.aborted?.()) {
+      while (idx < result.events.length && result.events[idx].minute <= to) {
+        onEvent?.(result.events[idx++], result);
+      }
     }
   }
 
   function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
-  return { teamStrength, simulateMatch, playLive, sleep };
+  return { teamStrength, simulateMatch, mergeResults, playLive, sleep, COMMENT };
 })();

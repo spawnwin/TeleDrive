@@ -285,7 +285,28 @@ input:focus, select:focus { border-color: rgba(94,234,212,.45); box-shadow: 0 0 
   font-family: var(--display); font-size: 22px; font-weight: 800;
   background: rgba(94,234,212,.14); color: var(--accent-2);
   border: 1px solid rgba(94,234,212,.3);
+  flex-shrink: 0;
 }
+.player-dot.selected {
+  box-shadow: 0 0 0 3px rgba(94,234,212,.55), 0 4px 14px rgba(0,0,0,.4);
+  transform: translate(-50%, -50%) scale(1.12);
+}
+.me-round { border-color: rgba(94,234,212,.35) !important; background: rgba(94,234,212,.08) !important; }
+.ht-panel {
+  position: fixed; left: 50%; bottom: calc(20px + var(--safe-b));
+  transform: translateX(-50%);
+  width: min(440px, calc(100% - 24px));
+  z-index: 40; padding: 14px; display: grid; gap: 10px;
+  max-height: 55vh; overflow: auto;
+}
+.modal {
+  position: fixed; inset: 0; z-index: 60;
+  background: rgba(0,0,0,.55);
+  display: grid; place-items: center; padding: 18px;
+}
+.modal[hidden] { display: none !important; }
+.modal-card { width: min(400px, 100%); padding: 18px; display: grid; gap: 12px; }
+.modal-card h3 { font-family: var(--display); }
 .stat-grid { display: grid; gap: 8px; }
 .stat-bar {
   display: grid; grid-template-columns: 64px 1fr 28px; gap: 8px; align-items: center;
@@ -382,6 +403,8 @@ input:focus, select:focus { border-color: rgba(94,234,212,.45); box-shadow: 0 0 
   box-shadow: 0 4px 14px rgba(0,0,0,.4);
   backdrop-filter: blur(8px);
   transform: translate(-50%, -50%);
+  padding: 0;
+  cursor: pointer;
 }
 .tactics-controls { padding: 14px; display: grid; gap: 12px; }
 .tactics-controls label { font-size: 13px; color: var(--muted); }

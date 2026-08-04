@@ -122,11 +122,13 @@
 
       <div class="hub-grid">
         <button class="tile glass-panel" data-nav="table"><strong>Таблица</strong><span>Лига</span></button>
+        <button class="tile glass-panel" data-nav="calendar"><strong>Календарь</strong><span>Туры</span></button>
+        <button class="tile glass-panel" data-nav="cup"><strong>Кубок</strong><span>EYE Cup</span></button>
         <button class="tile glass-panel" data-nav="stats"><strong>Бомбардиры</strong><span>Статистика</span></button>
+        <button class="tile glass-panel" data-nav="finance"><strong>Финансы</strong><span>Бюджет</span></button>
         <button class="tile glass-panel" data-nav="train"><strong>Тренировка</strong><span>Развитие</span></button>
         <button class="tile glass-panel" data-nav="club"><strong>Клуб</strong><span>Инфраструктура</span></button>
         <button class="tile glass-panel" data-nav="inbox"><strong>Почта</strong><span id="inbox-badge">0</span></button>
-        <button class="tile glass-panel" data-nav="transfers"><strong>Трансферы</strong><span>Рынок</span></button>
       </div>
 
       <div class="news-strip" id="news-strip"></div>
@@ -152,9 +154,12 @@
       <div class="pitch-wrap glass-panel">
         <div class="pitch" id="pitch"></div>
       </div>
+      <p class="hint" id="tactics-hint">Нажмите игрока на поле, затем замену со скамейки</p>
+      <div class="list" id="bench-list"></div>
       <div class="tactics-controls glass-panel">
         <label>Схема<select id="sel-formation"></select></label>
         <label>Стиль<select id="sel-style"></select></label>
+        <button class="btn btn-glass" id="btn-auto-xi-tac" type="button">Авто состав</button>
       </div>
     </section>
 
@@ -213,6 +218,35 @@
         <h2 id="table-title">Таблица</h2>
       </header>
       <div class="table-wrap glass-panel" id="league-table"></div>
+    </section>
+
+    <!-- CALENDAR -->
+    <section id="screen-calendar" class="screen">
+      <header class="subhead">
+        <button class="icon-back" data-nav="hub">‹</button>
+        <h2>Календарь</h2>
+      </header>
+      <div class="list" id="calendar-list"></div>
+    </section>
+
+    <!-- CUP -->
+    <section id="screen-cup" class="screen">
+      <header class="subhead">
+        <button class="icon-back" data-nav="hub">‹</button>
+        <h2>Кубок EYE</h2>
+      </header>
+      <div class="glass-panel" id="cup-status" style="padding:14px"></div>
+      <div class="list" id="cup-list"></div>
+      <button class="btn btn-primary" id="btn-cup-play" hidden>Играть кубковый матч</button>
+    </section>
+
+    <!-- FINANCE -->
+    <section id="screen-finance" class="screen">
+      <header class="subhead">
+        <button class="icon-back" data-nav="hub">‹</button>
+        <h2>Финансы</h2>
+      </header>
+      <div class="glass-panel" id="finance-card" style="padding:16px"></div>
     </section>
 
     <!-- STATS -->
@@ -334,7 +368,28 @@
       <div class="match-controls">
         <button class="btn btn-glass" id="btn-skip-match">Пропустить</button>
       </div>
+      <div id="ht-panel" class="ht-panel glass-panel" hidden>
+        <strong>Перерыв</strong>
+        <p class="hint">Смените стиль или сделайте замену, затем второй тайм</p>
+        <div class="filter-row" id="ht-styles"></div>
+        <div class="list" id="ht-bench"></div>
+        <button class="btn btn-primary" id="btn-second-half">Второй тайм</button>
+      </div>
     </section>
+
+    <!-- BID MODAL -->
+    <div id="bid-modal" class="modal" hidden>
+      <div class="modal-card glass-panel">
+        <h3 id="bid-title">Предложение</h3>
+        <p class="hint" id="bid-meta"></p>
+        <label>Сумма (в евро)<input type="number" id="bid-amount" min="0" step="100000" /></label>
+        <div class="filter-row">
+          <button class="btn btn-glass" id="bid-cancel">Отмена</button>
+          <button class="btn btn-primary" id="bid-submit">Отправить</button>
+        </div>
+        <button class="btn btn-tiny" id="bid-counter" hidden>Принять контрпредложение</button>
+      </div>
+    </div>
 
     <!-- RESULT -->
     <section id="screen-result" class="screen">
