@@ -40,8 +40,8 @@ window.EYE_UI = (() => {
       }
     }
 
-    // Desktop: exact match; player card keeps squad highlighted
-    const deskAlias = { player: 'squad' };
+    // Desktop: exact match; player card keeps origin tab highlighted
+    const deskAlias = { player: playerBack === 'youth' ? 'youth' : playerBack === 'inbox' ? 'inbox' : 'squad' };
     const deskActive = deskAlias[id] || id;
     $all('.desk-btn').forEach(b => b.classList.toggle('active', b.dataset.nav === deskActive));
 
@@ -330,6 +330,8 @@ window.EYE_UI = (() => {
     for (const c of st.clubs) {
       const p = c.squad.find(x => x.id === id);
       if (p) return { player: p, club: c };
+      const y = (c.youth || []).find(x => x.id === id);
+      if (y) return { player: y, club: c, youth: true };
     }
     const market = (st.transferList || []).find(e => e.player.id === id);
     if (market) return { player: market.player, club: market.clubId ? S().clubById(market.clubId) : null, market };
@@ -342,6 +344,7 @@ window.EYE_UI = (() => {
     if (!found) { box.innerHTML = '<p>Игрок не найден</p>'; return; }
     const p = found.player;
     const c = found.club;
+    const isYouth = !!found.youth;
     D().ensureTraits(p);
     const traits = (p.traits || []).map(id => {
       const t = D().traitInfo(id);
@@ -352,11 +355,12 @@ window.EYE_UI = (() => {
       .join('');
     const mine = !!found.club?.isPlayer;
     const report = (S().get().scoutReports || {})[p.id];
+    const avgR = S().avgSeasonRating(p);
     box.innerHTML = `
       <div class="player-hero">
         <div class="ovr big">${p.ovr}</div>
         <div>
-          <h3>${p.name}</h3>
+          <h3>${p.name}${isYouth ? ' · академия' : ''}</h3>
           <div class="meta">${D().POS_LABEL[p.pos] || p.pos} · ${p.age} лет · ${p.nation}
             ${p.real ? ' · ★' : ''}
             ${c ? ' · ' + c.name : ' · свободный'}</div>
@@ -369,10 +373,10 @@ window.EYE_UI = (() => {
         ${bar('Вынос.', p.stamina)}${bar('IQ', p.iq)}${bar('Форма', p.form)}
       </div>
       <div class="meta" style="margin-top:12px;color:var(--muted);font-size:13px;line-height:1.5">
-        Потенциал ${p.pot} · стоимость ${S().money(p.value)} · зарплата ${S().money(p.wage)}/нед<br/>
-        <span style="opacity:.8">${S().moneyHint(p.value)}</span><br/>
-        Сезон: ${p.seasonApps || 0} игр, ${p.seasonGoals || 0} голов, ${p.seasonAssists || 0} ассистов<br/>
-        Карьера: ${p.careerGoals || 0} голов, ${p.careerAssists || 0} ассистов · контракт ${p.contract} г
+        Потенциал ${p.pot} · стоимость ${S().money(p.value || 0)} · зарплата ${S().money(p.wage || 0)}/нед<br/>
+        <span style="opacity:.8">${S().moneyHint(p.value || 0)}</span><br/>
+        Сезон: ${p.seasonApps || 0} игр, ${p.seasonGoals || 0} голов, ${p.seasonAssists || 0} ассистов${avgR != null ? ` · ср. оценка ★${avgR}` : ''}<br/>
+        Карьера: ${p.careerGoals || 0} голов, ${p.careerAssists || 0} ассистов${isYouth ? '' : ' · контракт ' + (p.contract || 0) + ' г'}
         ${p.injured ? '<br/>Травма: ' + p.injured + ' тур(а)' : ''}
         ${p.suspended ? '<br/>Дисквалификация: ' + p.suspended + ' матч(а)' : ''}
         ${(p.seasonYellows || p.yellow) ? '<br/>Жёлтые в сезоне: ' + (p.seasonYellows || p.yellow) : ''}
@@ -381,18 +385,27 @@ window.EYE_UI = (() => {
       ${mine ? `
         <div class="glass-panel contract-box" style="margin-top:12px;padding:12px;display:grid;gap:10px">
           <label>Фокус развития<select id="sel-dev-focus">${focusOpts}</select></label>
-          <div class="create-row">
-            <label>Срок (лет)<select id="renew-years"><option value="1">1</option><option value="2" selected>2</option><option value="3">3</option><option value="4">4</option></select></label>
-            <label>Зарплата / нед (€)<input type="number" id="renew-wage" min="0" step="1000" value="${Math.round(p.wage * 1.12)}" /></label>
-          </div>
-          <button class="btn btn-primary" id="btn-renew" type="button">Предложить контракт</button>
-          <p class="hint" id="renew-msg">Бонус зависит от зарплаты и срока</p>
+          ${isYouth ? `
+            <button class="btn btn-primary" id="btn-promote-card" type="button">Выпустить в основу</button>
+          ` : `
+            <div class="create-row">
+              <label>Срок (лет)<select id="renew-years"><option value="1">1</option><option value="2" selected>2</option><option value="3">3</option><option value="4">4</option></select></label>
+              <label>Зарплата / нед (€)<input type="number" id="renew-wage" min="0" step="1000" value="${Math.round(p.wage * 1.12)}" /></label>
+            </div>
+            <button class="btn btn-primary" id="btn-renew" type="button">Предложить контракт</button>
+            <p class="hint" id="renew-msg">Бонус зависит от зарплаты и срока</p>
+          `}
         </div>
       ` : ''}
     `;
     $('#sel-dev-focus')?.addEventListener('change', (e) => {
       const r = S().setDevFocus(p.id, e.target.value || null);
       toast(r.msg);
+    });
+    $('#btn-promote-card')?.addEventListener('click', () => {
+      const r = S().promoteYouth(p.id);
+      toast(r.msg);
+      if (r.ok) { playerBack = 'squad'; openPlayer(p.id, 'squad'); }
     });
     $('#btn-renew')?.addEventListener('click', () => {
       const years = Number($('#renew-years')?.value || 2);
@@ -420,14 +433,17 @@ window.EYE_UI = (() => {
     $('#squad-list').innerHTML = sorted.map(p => {
       D().ensureTraits(p);
       const trait = (p.traits || [])[0] ? D().traitInfo(p.traits[0]).name : '';
+      const avgR = S().avgSeasonRating(p);
+      const shortContract = (p.contract || 0) <= 1;
       return `
       <button class="row row-btn" data-player="${p.id}">
         <div class="ovr">${p.ovr}</div>
         <div>
-          <strong>${p.name}${p.real ? ' ★' : ''}</strong>
+          <strong>${p.name}${p.real ? ' ★' : ''}${shortContract ? ' <span class="badge-warn">📄' + (p.contract || 0) + 'г</span>' : ''}</strong>
           <div class="meta">
             <span class="badge-pos">${D().POS_LABEL[p.pos] || p.pos}</span>
             · ${p.age}л · форма ${p.form}
+            ${avgR != null ? ' · ★' + avgR : ''}
             ${trait ? ' · ' + trait : ''}
             ${p.devFocus ? ' · фокус' : ''}
             ${p.injured ? ' · травма ' + p.injured : ''}
@@ -457,12 +473,12 @@ window.EYE_UI = (() => {
     selS.value = me.style;
     S().ensureLineup();
     selectedSlot = null;
-    drawPitch();
+    const fit = drawPitch();
     renderBench();
     const chem = E().teamStrength(me).chemistry;
     const hint = $('#tactics-hint');
     if (hint) {
-      hint.textContent = `Химия схемы: ${chem}/100 · нажмите игрока на поле, затем замену со скамейки`;
+      hint.textContent = `Химия ${chem}/100 · ${fit.exact} на месте · ${fit.group} рядом · ${fit.oop} не своей · слот → запас`;
     }
   }
 
@@ -472,11 +488,23 @@ window.EYE_UI = (() => {
     const coords = D().pitchCoords(me.formation);
     const slots = D().FORMATIONS[me.formation].slots;
     const xi = me.lineup;
+    let exact = 0, group = 0, oop = 0;
     $('#pitch').innerHTML = coords.map((c, i) => {
       const p = xi[i];
+      const slot = slots[i];
+      let fitClass = '';
+      if (p) {
+        if (p.pos === slot) { fitClass = ' fit-exact'; exact++; }
+        else if (D().POS_GROUP[p.pos] === D().POS_GROUP[slot]) { fitClass = ' fit-group'; group++; }
+        else { fitClass = ' fit-oop'; oop++; }
+      }
       const active = selectedSlot === i ? ' selected' : '';
-      return `<button type="button" class="player-dot${active}" data-slot="${i}" style="left:${c.x}%;top:${c.y}%;border-color:${me.color}" title="${p?.name || ''}">${p ? (D().POS_LABEL[slots[i]] || slots[i]) : '?'}</button>`;
+      const title = p
+        ? `${p.name} · ${D().POS_LABEL[p.pos] || p.pos}→${D().POS_LABEL[slot] || slot} · ${p.ovr}`
+        : (D().POS_LABEL[slot] || slot);
+      return `<button type="button" class="player-dot${fitClass}${active}" data-slot="${i}" style="left:${c.x}%;top:${c.y}%" title="${title}">${p ? (D().POS_LABEL[slot] || slot) : '?'}</button>`;
     }).join('');
+    return { exact, group, oop };
   }
 
   function renderBench() {
@@ -758,7 +786,8 @@ window.EYE_UI = (() => {
     const led = (f.ledger || []).map(e => {
       const sign = e.amount >= 0 ? '+' : '';
       const cls = e.amount >= 0 ? 'ok' : 'bad';
-      return `<div class="ledger-row ${cls}"><span>С${e.season}·Т${e.week} · ${e.label}</span><strong>${sign}${S().money(e.amount)}</strong></div>`;
+      const bal = e.balance != null ? `<em>${S().money(e.balance)}</em>` : '';
+      return `<div class="ledger-row ${cls}"><span>С${e.season}·Т${e.week} · ${e.label}</span><strong>${sign}${S().money(e.amount)}</strong>${bal}</div>`;
     }).join('') || `<div class="hint">Движений пока нет</div>`;
     $('#finance-card').innerHTML = `
       <div class="stat-grid finance-grid">
@@ -881,19 +910,22 @@ window.EYE_UI = (() => {
       <strong>Академия ур. ${me.facilities?.youth || 1}</strong>
       <div class="meta" style="color:var(--muted);margin-top:4px;font-size:13px">
         Воспитанников: ${list.length}${intake ? ` · новый набор: ${intake}` : ''}.
-        Рост каждую неделю. Выпуск — в основу, крестик — отчисление.
+        Карточка — фокус развития. Выпуск — в основу.
       </div>
     `;
     $('#youth-list').innerHTML = list.slice().sort((a, b) => b.pot - a.pot).map(p => {
       D().ensureTraits(p);
       const trait = (p.traits || [])[0] ? D().traitInfo(p.traits[0]).name : '';
+      const focus = p.devFocus ? (D().DEV_FOCUS.find(f => f.id === p.devFocus)?.name || p.devFocus) : '';
       return `
-      <div class="row">
-        <div class="ovr">${p.ovr}</div>
-        <div>
-          <strong>${p.name}${p.intake ? ' · новый' : ''}</strong>
-          <div class="meta">${D().POS_LABEL[p.pos]} · ${p.age}л · пот. ${p.pot}${trait ? ' · ' + trait : ''}</div>
-        </div>
+      <div class="row youth-row">
+        <button class="row-btn youth-card" data-youth-open="${p.id}" type="button">
+          <div class="ovr">${p.ovr}</div>
+          <div>
+            <strong>${p.name}${p.intake ? ' · новый' : ''}</strong>
+            <div class="meta">${D().POS_LABEL[p.pos]} · ${p.age}л · пот. ${p.pot}${trait ? ' · ' + trait : ''}${focus ? ' · 🎯' + focus : ''}</div>
+          </div>
+        </button>
         <div class="row-actions">
           <button class="btn btn-tiny" data-promote="${p.id}">В основу</button>
           <button class="btn btn-tiny" data-youth-drop="${p.id}">Отчислить</button>
@@ -905,7 +937,7 @@ window.EYE_UI = (() => {
   function renderInbox() {
     const st = S().get();
     st.inbox.forEach(m => {
-      if ((m.type === 'request' && !m.resolved) || m.type === 'youth_intake') return;
+      if ((m.type === 'request' && !m.resolved) || (m.type === 'contract_ask' && !m.resolved) || m.type === 'youth_intake') return;
       m.read = true;
     });
     S().save();
@@ -917,13 +949,18 @@ window.EYE_UI = (() => {
             <button class="btn btn-tiny" data-req="${m.playerId}" data-req-act="list">На трансфер</button>
             <button class="btn btn-tiny" data-req="${m.playerId}" data-req-act="dismiss">Отказать</button>
           </div>`;
+      } else if (m.type === 'contract_ask' && m.playerId && !m.resolved) {
+        actions = `<div class="row-actions" style="margin-top:8px">
+            <button class="btn btn-tiny" data-contract-open="${m.playerId}">Карточка</button>
+            <button class="btn btn-tiny btn-accent" data-contract-quick="${m.playerId}" data-want-wage="${m.wantWage || 0}">Принять ~${S().money(m.wantWage || 0)}</button>
+          </div>`;
       } else if (m.type === 'youth_intake' && !m.resolved) {
         actions = `<div class="row-actions" style="margin-top:8px">
             <button class="btn btn-tiny" data-nav="youth">Открыть академию</button>
           </div>`;
         m.resolved = true;
       }
-      return `<div class="news-item"><strong>${m.title}</strong><div>${m.body}</div>${actions}</div>`;
+      return `<div class="news-item${m.resolved ? ' resolved' : ''}"><strong>${m.title}</strong><div>${m.body}</div>${actions}</div>`;
     }).join('') || `<div class="news-item">Писем нет</div>`;
   }
 
@@ -1301,7 +1338,6 @@ window.EYE_UI = (() => {
     ).join('');
     const me = S().club();
     const mySide = last.homeId === me?.id ? 'home' : last.awayId === me?.id ? 'away' : null;
-    const myRatings = mySide && last.ratings ? last.ratings[mySide] : (last.ratings?.list || []).filter(r => true);
     const ratingsHtml = (mySide ? (last.ratings?.[mySide] || []) : (last.ratings?.list || []).slice(0, 11))
       .slice()
       .sort((a, b) => b.rating - a.rating)
@@ -1316,21 +1352,27 @@ window.EYE_UI = (() => {
       ? `<div class="hint">Химия XI: ${mySide === 'home' ? last.chemistryHome : last.chemistryAway}</div>`
       : '';
     $('#result-card').innerHTML = `
-      <div class="next-label">${last.derby ? 'Дерби · ' + last.derby : 'Итог матча'}</div>
-      <div>${last.home}</div>
-      <div class="score">${hg}:${ag}</div>
-      <div>${last.away}</div>
-      ${motmLine}
-      ${chemLine}
-      <div style="color:var(--muted);font-size:13px;margin-top:8px;line-height:1.5">
-        ${scorersH ? `<div><strong>Голы ${last.home}:</strong> ${scorersH}</div>` : ''}
-        ${scorersA ? `<div><strong>Голы ${last.away}:</strong> ${scorersA}</div>` : ''}
-        Владение ${last.stats.possession.join('% — ')}%<br/>
-        Удары ${last.stats.shots.join(' — ')} · в створ ${last.stats.onTarget.join(' — ')}<br/>
-        ${last.prize != null ? `Призовые ${S().money(last.prize)}${last.income ? ' · касса ' + S().money(last.income) : ''}${last.competition ? ' · ' + last.competition : ''}` : ''}
+      <div class="result-layout">
+        <div class="result-scoreboard">
+          <div class="next-label">${last.derby ? 'Дерби · ' + last.derby : 'Итог матча'}</div>
+          <div>${last.home}</div>
+          <div class="score">${hg}:${ag}</div>
+          <div>${last.away}</div>
+          ${motmLine}
+          ${chemLine}
+        </div>
+        <div class="result-details">
+          <div class="result-meta">
+            ${scorersH ? `<div><strong>Голы ${last.home}:</strong> ${scorersH}</div>` : ''}
+            ${scorersA ? `<div><strong>Голы ${last.away}:</strong> ${scorersA}</div>` : ''}
+            <div>Владение ${last.stats.possession.join('% — ')}%</div>
+            <div>Удары ${last.stats.shots.join(' — ')} · в створ ${last.stats.onTarget.join(' — ')}</div>
+            ${last.prize != null ? `<div>Призовые ${S().money(last.prize)}${last.income ? ' · касса ' + S().money(last.income) : ''}${last.competition ? ' · ' + last.competition : ''}</div>` : ''}
+          </div>
+          ${highs ? `<div class="result-highs">${highs}</div>` : ''}
+        </div>
+        ${ratingsHtml ? `<div class="ratings-block"><strong>Оценки</strong>${ratingsHtml}</div>` : ''}
       </div>
-      ${ratingsHtml ? `<div class="ratings-block"><strong>Оценки</strong>${ratingsHtml}</div>` : ''}
-      ${highs ? `<div style="margin-top:12px;text-align:left">${highs}</div>` : ''}
     `;
     const press = S().pendingPress();
     const card = $('#press-card');
@@ -1450,6 +1492,24 @@ window.EYE_UI = (() => {
         toast(r.msg);
         $('#youth-msg').textContent = r.msg;
         renderYouth();
+        return;
+      }
+      const yopen = e.target.closest('[data-youth-open]');
+      if (yopen) {
+        openPlayer(yopen.dataset.youthOpen, 'youth');
+        return;
+      }
+      const copen = e.target.closest('[data-contract-open]');
+      if (copen) {
+        openPlayer(copen.dataset.contractOpen, 'inbox');
+        return;
+      }
+      const cquick = e.target.closest('[data-contract-quick]');
+      if (cquick) {
+        const wage = Number(cquick.dataset.wantWage || 0);
+        const r = S().negotiateContract(cquick.dataset.contractQuick, 2, wage || null);
+        toast(r.msg);
+        renderInbox();
         return;
       }
       const ydrop = e.target.closest('[data-youth-drop]');

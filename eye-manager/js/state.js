@@ -542,6 +542,24 @@ window.EYE_STATE = (() => {
     if (!result.ratings && result.xiHome) {
       Object.assign(result, E().rateMatch(result));
     }
+    const list = result.ratings?.list || [];
+    const byId = {};
+    for (const c of state.clubs || []) {
+      (c.squad || []).forEach(p => { byId[p.id] = p; });
+    }
+    list.forEach(r => {
+      const p = byId[r.id];
+      if (!p) return;
+      const rating = Number(r.rating) || 6;
+      p.seasonRatingSum = (p.seasonRatingSum || 0) + rating;
+      p.seasonRatingApps = (p.seasonRatingApps || 0) + 1;
+      // form/morale from performance
+      const delta = (rating - 6.5) * 2.2;
+      p.form = Math.max(30, Math.min(99, (p.form || 60) + delta));
+      if (rating >= 7.5) p.morale = Math.min(100, (p.morale || 60) + 2);
+      else if (rating <= 5.5) p.morale = Math.max(20, (p.morale || 60) - 2);
+    });
+
     const motm = result.motm;
     if (!motm) return;
     state.stats = state.stats || { scorers: {}, assisters: {}, motm: {} };
@@ -549,15 +567,16 @@ window.EYE_STATE = (() => {
     state.stats.motm[motm.id] = state.stats.motm[motm.id] || { id: motm.id, name: motm.name, count: 0 };
     state.stats.motm[motm.id].count++;
     state.stats.motm[motm.id].name = motm.name;
-    // boost player if in any club
-    for (const c of state.clubs || []) {
-      const p = c.squad.find(x => x.id === motm.id);
-      if (p) {
-        p.form = Math.min(99, (p.form || 60) + 3);
-        p.morale = Math.min(100, (p.morale || 60) + 3);
-        break;
-      }
+    const p = byId[motm.id];
+    if (p) {
+      p.form = Math.min(99, (p.form || 60) + 2);
+      p.morale = Math.min(100, (p.morale || 60) + 2);
     }
+  }
+
+  function avgSeasonRating(p) {
+    if (!p?.seasonRatingApps) return null;
+    return Math.round((p.seasonRatingSum / p.seasonRatingApps) * 10) / 10;
   }
 
   function simOtherLeaguesWeek() {
@@ -912,6 +931,7 @@ window.EYE_STATE = (() => {
         if (p.age > 32 && Math.random() < 0.35) p.ovr = Math.max(45, p.ovr - 1);
         if (p.age < 24 && p.ovr < p.pot && Math.random() < 0.55) p.ovr = Math.min(p.pot, p.ovr + 1);
         p.seasonGoals = 0; p.seasonAssists = 0; p.seasonApps = 0;
+        p.seasonRatingSum = 0; p.seasonRatingApps = 0;
         // return loans
         if (p.loan && p.loanFrom) {
           const origin = clubById(p.loanFrom);
@@ -1061,7 +1081,8 @@ window.EYE_STATE = (() => {
 
   function setDevFocus(playerId, focusId) {
     const me = club();
-    const p = me?.squad.find(x => x.id === playerId);
+    let p = me?.squad.find(x => x.id === playerId);
+    if (!p) p = me?.youth?.find(x => x.id === playerId);
     if (!p) return { ok: false, msg: 'Нет игрока' };
     if (focusId && !D().DEV_FOCUS.some(f => f.id === focusId)) return { ok: false, msg: 'Нет фокуса' };
     p.devFocus = focusId || null;
@@ -1075,7 +1096,11 @@ window.EYE_STATE = (() => {
     const p = me?.squad.find(x => x.id === playerId);
     if (!p) return { ok: false, msg: 'Нет игрока' };
     years = Math.max(1, Math.min(4, Number(years) || 2));
-    const wantWage = Math.round(p.wage * (1.08 + years * 0.02 + Math.random() * 0.08));
+    const ask = (state.inbox || []).find(m =>
+      m.type === 'contract_ask' && m.playerId === playerId && !m.resolved
+    );
+    const wantWage = ask?.wantWage
+      || Math.round(p.wage * (1.08 + years * 0.02 + Math.random() * 0.08));
     const wage = Math.round(Number(wageOffer) || wantWage);
     const bonus = Math.round(wage * 6 * years);
     if (me.budget < bonus) return { ok: false, msg: 'Нужен бонус ' + money(bonus) };
@@ -1093,6 +1118,12 @@ window.EYE_STATE = (() => {
     p.wage = wage;
     p.morale = Math.min(100, (p.morale || 60) + 10);
     p.value = D().valueOf(p.ovr, p.pot, p.age);
+    if (ask) { ask.resolved = true; ask.read = true; }
+    (state.inbox || []).forEach(m => {
+      if (m.type === 'contract_ask' && m.playerId === playerId) {
+        m.resolved = true; m.read = true;
+      }
+    });
     save();
     return { ok: true, msg: `${p.name}: +${years} г, ${money(wage)}/нед (−${money(bonus)})` };
   }
@@ -1765,6 +1796,6 @@ window.EYE_STATE = (() => {
     renewContract, negotiateContract, setDevFocus, financeSummary, resolveCupRoundAI, scoutPlayer, takeNewJob,
     hireStaff, answerPress, refillYouth, releaseYouth, runYouthIntake, pendingPress: () => state?.pendingPress || null,
     xiStatus, fixXi, matchRivalry, transferWindowOpen, listLeagueTables,
-    resolvePlayerRequest, seasonLog: () => state?.seasonLog || []
+    resolvePlayerRequest, seasonLog: () => state?.seasonLog || [], avgSeasonRating
   };
 })();
