@@ -94,7 +94,6 @@ window.EYE_UI = (() => {
       if (id === 'create') renderLobby();
       else renderHome();
     }
-    closeDrawer();
     refresh(id);
   }
 
@@ -364,9 +363,28 @@ window.EYE_UI = (() => {
     }
     syncCurrencyButtons();
     const unread = st.inbox.filter(m => !m.read).length;
-    $('#inbox-badge').textContent = unread ? unread + ' новых' : 'Почта';
+    const badge = $('#inbox-badge');
+    if (badge) badge.textContent = unread ? unread + ' новых' : 'Сообщения';
 
     const next = S().nextMatch();
+    const pulse = $('#hub-pulse');
+    if (pulse) {
+      const chips = [];
+      if (unread) {
+        chips.push(`<button type="button" class="hub-chip warn" data-nav="inbox"><span class="hub-chip-n">${unread}</span>Почта</button>`);
+      }
+      if (st.sacked) {
+        chips.push(`<button type="button" class="hub-chip warn" data-nav="board">Новый клуб</button>`);
+      } else {
+        const cup = S().playerCupMatch();
+        const ucl = S().playerUclMatch();
+        // Only hint KO screens when the main CTA is a different match
+        if (ucl && next?.type !== 'ucl') chips.push(`<button type="button" class="hub-chip" data-nav="ucl">Есть матч ЛЧ</button>`);
+        if (cup && next?.type !== 'cup') chips.push(`<button type="button" class="hub-chip" data-nav="cup">Есть кубок</button>`);
+      }
+      pulse.innerHTML = chips.join('');
+    }
+
     const box = $('#next-fixture');
     const btn = $('#btn-play-match');
     const label = $('#next-label');
@@ -744,80 +762,6 @@ window.EYE_UI = (() => {
   function closeBidModal() {
     $('#bid-modal').hidden = true;
     bidEntryId = null;
-  }
-
-  function openDrawer() {
-    const app = document.getElementById('app');
-    if (!app || app.classList.contains('menu-mode')) return;
-    if (matchPlaying && isHtOpen()) return;
-    if (matchPlaying) return; // don't open drawer mid-match
-    const d = $('#drawer');
-    const s = $('#drawer-scrim');
-    if (!d) return;
-    d.classList.add('open');
-    d.setAttribute('aria-hidden', 'false');
-    if (s) s.hidden = false;
-    const active = document.querySelector('#stage > .screen.active');
-    const id = active?.id?.replace('screen-', '') || '';
-    $all('.drawer-link').forEach(b => {
-      const nav = b.dataset.nav;
-      b.classList.toggle('active', nav === id || (id === 'player' && nav === 'squad'));
-    });
-  }
-
-  function closeDrawer() {
-    const d = $('#drawer');
-    const s = $('#drawer-scrim');
-    if (d) {
-      d.classList.remove('open');
-      d.setAttribute('aria-hidden', 'true');
-    }
-    if (s) s.hidden = true;
-  }
-
-  function bindEdgeSwipe() {
-    let startX = 0, startY = 0, tracking = false, edge = false;
-    const onStart = (x, y, fromEdge) => {
-      startX = x; startY = y; tracking = true; edge = fromEdge;
-    };
-    const onMove = (x, y) => {
-      if (!tracking) return;
-      const dx = x - startX;
-      const dy = y - startY;
-      if (Math.abs(dy) > Math.abs(dx) && Math.abs(dy) > 12) { tracking = false; return; }
-      if (edge && dx > 56 && Math.abs(dy) < 40) {
-        tracking = false;
-        openDrawer();
-      } else if ($('#drawer')?.classList.contains('open') && dx < -56 && Math.abs(dy) < 40) {
-        tracking = false;
-        closeDrawer();
-      }
-    };
-    const onEnd = () => { tracking = false; edge = false; };
-
-    document.addEventListener('touchstart', (e) => {
-      const t = e.changedTouches[0];
-      if (!t) return;
-      const fromEdge = t.clientX <= 24;
-      if (fromEdge || $('#drawer')?.classList.contains('open')) onStart(t.clientX, t.clientY, fromEdge);
-    }, { passive: true });
-    document.addEventListener('touchmove', (e) => {
-      const t = e.changedTouches[0];
-      if (t) onMove(t.clientX, t.clientY);
-    }, { passive: true });
-    document.addEventListener('touchend', onEnd, { passive: true });
-    document.addEventListener('touchcancel', onEnd, { passive: true });
-
-    $('#edge-hit')?.addEventListener('click', () => openDrawer());
-    $('#drawer-scrim')?.addEventListener('click', () => closeDrawer());
-    $('#drawer-close')?.addEventListener('click', () => closeDrawer());
-    $('#drawer')?.addEventListener('click', (e) => {
-      const link = e.target.closest('[data-nav]');
-      if (!link) return;
-      closeDrawer();
-      show(link.dataset.nav);
-      e.stopPropagation();
-    });
   }
 
   function renderCalendar() {
@@ -1527,7 +1471,6 @@ window.EYE_UI = (() => {
     if (scrim) scrim.hidden = false;
     panel.hidden = false;
     document.body.classList.add('ht-open');
-    closeDrawer();
     matchPaused = false;
     syncPauseButton();
     const flash = $('#goal-flash');
@@ -2013,7 +1956,6 @@ window.EYE_UI = (() => {
     });
     document.addEventListener('keydown', (e) => {
       if (e.key !== 'Escape') return;
-      if ($('#drawer')?.classList.contains('open')) { closeDrawer(); return; }
       if ($('#bid-modal') && !$('#bid-modal').hidden) { closeBidModal(); return; }
       if (isHtOpen()) { continueSecondHalf(); return; }
       if (document.getElementById('app')?.classList.contains('entry-open')) {
@@ -2125,7 +2067,6 @@ window.EYE_UI = (() => {
     $('#bid-cancel')?.addEventListener('click', () => closeBidModal());
     $('#bid-close')?.addEventListener('click', () => closeBidModal());
     $('#bid-scrim')?.addEventListener('click', () => closeBidModal());
-    bindEdgeSwipe();
     $('#bid-submit')?.addEventListener('click', () => {
       if (!bidEntryId) return;
       const amount = Number($('#bid-amount').value) || 0;

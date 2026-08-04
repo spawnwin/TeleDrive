@@ -236,11 +236,6 @@
           <span id="hub-budget">—</span>
           <span id="hub-morale" class="pill">—</span>
           <span id="hub-board" class="pill" title="Уверенность совета">Совет —</span>
-          <div class="currency-switch" id="currency-switch" title="Валюта">
-            <button type="button" data-cur="RUB" class="cur-btn">₽</button>
-            <button type="button" data-cur="USD" class="cur-btn">$</button>
-            <button type="button" data-cur="EUR" class="cur-btn">€</button>
-          </div>
         </div>
       </header>
 
@@ -251,38 +246,7 @@
         <button class="btn btn-primary" id="btn-play-match">К матчу</button>
       </div>
 
-      <nav class="dock glass-dock" id="dock">
-        <button data-nav="hub" class="dock-btn active"><span>⌂</span>Центр</button>
-        <button data-nav="squad" class="dock-btn"><span>◈</span>Состав</button>
-        <button data-nav="tactics" class="dock-btn"><span>⬡</span>Тактика</button>
-        <button data-nav="transfers" class="dock-btn"><span>⇄</span>Рынок</button>
-        <button data-nav="more" class="dock-btn"><span>☰</span>Меню</button>
-      </nav>
-
-      <div class="hub-sections">
-        <section class="hub-section">
-          <h3 class="hub-section-title">Соревнования</h3>
-          <div class="hub-grid">
-            <button class="tile glass-panel" data-nav="table"><strong>Таблица</strong><span>Лига и зоны</span></button>
-            <button class="tile glass-panel" data-nav="calendar"><strong>Календарь</strong><span>Туры и кубки</span></button>
-            <button class="tile glass-panel" data-nav="cup"><strong>Кубок</strong><span>EYE Cup</span></button>
-            <button class="tile glass-panel" data-nav="ucl"><strong>ЛЧ</strong><span>Чемпионов</span></button>
-            <button class="tile glass-panel" data-nav="stats"><strong>Статистика</strong><span>Голы · MOTM</span></button>
-          </div>
-        </section>
-        <section class="hub-section">
-          <h3 class="hub-section-title">Клуб</h3>
-          <div class="hub-grid">
-            <button class="tile glass-panel" data-nav="board"><strong>Совет</strong><span>Цели сезона</span></button>
-            <button class="tile glass-panel" data-nav="finance"><strong>Финансы</strong><span>Бюджет и журнал</span></button>
-            <button class="tile glass-panel" data-nav="train"><strong>Тренировка</strong><span>Развитие</span></button>
-            <button class="tile glass-panel" data-nav="club"><strong>Инфра</strong><span>Стадион и штаб</span></button>
-            <button class="tile glass-panel" data-nav="youth"><strong>Академия</strong><span>Молодёжь</span></button>
-            <button class="tile glass-panel" data-nav="inbox"><strong>Почта</strong><span id="inbox-badge">0</span></button>
-          </div>
-        </section>
-      </div>
-
+      <div class="hub-pulse" id="hub-pulse"></div>
       <div class="news-strip" id="news-strip"></div>
     </section>
 
@@ -504,7 +468,7 @@
       <div class="list" id="inbox-list"></div>
     </section>
 
-    <!-- MORE / SETTINGS -->
+    <!-- MORE / MENU (secondary — like 11x11 sections) -->
     <section id="screen-more" class="screen">
       <header class="subhead">
         <button class="icon-back" data-nav="hub">‹</button>
@@ -512,32 +476,31 @@
       </header>
       <div class="more-stack">
         <section class="menu-section phone-only-nav">
-          <h3 class="menu-section-title">Соревнования</h3>
-          <div class="menu-grid">
-            <button class="menu-card glass-panel" data-nav="table"><strong>Таблица</strong><span>Лига</span></button>
-            <button class="menu-card glass-panel" data-nav="calendar"><strong>Календарь</strong><span>Туры</span></button>
-            <button class="menu-card glass-panel" data-nav="cup"><strong>Кубок</strong><span>EYE Cup</span></button>
-            <button class="menu-card glass-panel" data-nav="ucl"><strong>ЛЧ</strong><span>Сетка</span></button>
-            <button class="menu-card glass-panel" data-nav="stats"><strong>Статистика</strong><span>Голы · MOTM</span></button>
+          <h3 class="menu-section-title">Сезон</h3>
+          <div class="menu-list">
+            <button type="button" class="menu-row" data-nav="table"><span class="menu-ico">#</span><span class="menu-txt"><strong>Таблица</strong><small>Лига и зоны</small></span></button>
+            <button type="button" class="menu-row" data-nav="calendar"><span class="menu-ico">▦</span><span class="menu-txt"><strong>Календарь</strong><small>Туры</small></span></button>
+            <button type="button" class="menu-row" data-nav="cup"><span class="menu-ico">◆</span><span class="menu-txt"><strong>Кубок</strong><small>EYE Cup</small></span></button>
+            <button type="button" class="menu-row" data-nav="ucl"><span class="menu-ico">★</span><span class="menu-txt"><strong>Лига чемпионов</strong><small>Сетка</small></span></button>
+            <button type="button" class="menu-row" data-nav="stats"><span class="menu-ico">〡</span><span class="menu-txt"><strong>Статистика</strong><small>Голы · передачи · MOTM</small></span></button>
           </div>
         </section>
         <section class="menu-section phone-only-nav">
           <h3 class="menu-section-title">Клуб</h3>
-          <div class="menu-grid">
-            <button class="menu-card glass-panel" data-nav="board"><strong>Совет</strong><span>Цели</span></button>
-            <button class="menu-card glass-panel" data-nav="youth"><strong>Академия</strong><span>Набор</span></button>
-            <button class="menu-card glass-panel" data-nav="club"><strong>Инфра</strong><span>Объекты</span></button>
-            <button class="menu-card glass-panel" data-nav="finance"><strong>Финансы</strong><span>Журнал</span></button>
-            <button class="menu-card glass-panel" data-nav="train"><strong>Тренировка</strong><span>Фокус</span></button>
-            <button class="menu-card glass-panel" data-nav="inbox"><strong>Почта</strong><span>Сообщения</span></button>
+          <div class="menu-list">
+            <button type="button" class="menu-row" data-nav="board"><span class="menu-ico">○</span><span class="menu-txt"><strong>Совет</strong><small>Цели сезона</small></span></button>
+            <button type="button" class="menu-row" data-nav="youth"><span class="menu-ico">◇</span><span class="menu-txt"><strong>Академия</strong><small>Молодёжь</small></span></button>
+            <button type="button" class="menu-row" data-nav="club"><span class="menu-ico">▣</span><span class="menu-txt"><strong>Инфраструктура</strong><small>Стадион и штаб</small></span></button>
+            <button type="button" class="menu-row" data-nav="finance"><span class="menu-ico">¤</span><span class="menu-txt"><strong>Финансы</strong><small>Бюджет и журнал</small></span></button>
+            <button type="button" class="menu-row" data-nav="train"><span class="menu-ico">▴</span><span class="menu-txt"><strong>Тренировка</strong><small>Фокус недели</small></span></button>
+            <button type="button" class="menu-row" data-nav="inbox"><span class="menu-ico">✉</span><span class="menu-txt"><strong>Почта</strong><small id="inbox-badge">Сообщения</small></span></button>
           </div>
         </section>
         <section class="menu-section">
           <h3 class="menu-section-title">Карьера</h3>
-          <div class="menu-grid">
-            <button class="menu-card glass-panel" data-nav="history"><strong>История</strong><span>Матчи и сезоны</span></button>
-            <button class="menu-card glass-panel phone-only-nav" data-nav="stats"><strong>Статистика</strong><span>Голы · MOTM</span></button>
-            <button class="menu-card glass-panel" data-nav="lobby"><strong>Лобби</strong><span>Новая / продолжить</span></button>
+          <div class="menu-list">
+            <button type="button" class="menu-row" data-nav="history"><span class="menu-ico">◷</span><span class="menu-txt"><strong>История</strong><small>Матчи и сезоны</small></span></button>
+            <button type="button" class="menu-row" data-nav="lobby"><span class="menu-ico">⌂</span><span class="menu-txt"><strong>Лобби</strong><small>Новая карьера / выход</small></span></button>
           </div>
         </section>
         <section class="menu-section">
@@ -654,6 +617,15 @@
     </section>
     </div><!-- /stage -->
 
+    <!-- Persistent mobile dock (11x11-style primary tabs) -->
+    <nav class="dock glass-dock" id="dock" aria-label="Основное меню">
+      <button type="button" data-nav="hub" class="dock-btn active"><span>⌂</span>Центр</button>
+      <button type="button" data-nav="squad" class="dock-btn"><span>◈</span>Состав</button>
+      <button type="button" data-nav="tactics" class="dock-btn"><span>⬡</span>Тактика</button>
+      <button type="button" data-nav="transfers" class="dock-btn"><span>⇄</span>Рынок</button>
+      <button type="button" data-nav="more" class="dock-btn"><span>☰</span>Меню</button>
+    </nav>
+
     <!-- BID MODAL -->
     <div id="bid-modal" class="modal" hidden>
       <button type="button" class="modal-scrim" id="bid-scrim" aria-label="Закрыть"></button>
@@ -672,31 +644,6 @@
         <button class="btn btn-tiny" id="bid-counter" hidden>Принять контрпредложение</button>
       </div>
     </div>
-
-    <!-- EDGE SWIPE DRAWER -->
-    <div id="edge-hit" class="edge-hit" aria-hidden="true"></div>
-    <div id="drawer-scrim" class="drawer-scrim" hidden></div>
-    <aside id="drawer" class="drawer" aria-hidden="true">
-      <div class="drawer-brand">
-        <img src="assets/eye.svg" alt="" width="28" height="28" />
-        <strong>EYE</strong>
-        <button type="button" class="entry-close" id="drawer-close" aria-label="Закрыть">×</button>
-      </div>
-      <nav class="drawer-nav" aria-label="Меню">
-        <button type="button" data-nav="hub" class="drawer-link"><span>⌂</span>Центр</button>
-        <button type="button" data-nav="squad" class="drawer-link"><span>◈</span>Состав</button>
-        <button type="button" data-nav="tactics" class="drawer-link"><span>⬡</span>Тактика</button>
-        <button type="button" data-nav="transfers" class="drawer-link"><span>⇄</span>Рынок</button>
-        <button type="button" data-nav="table" class="drawer-link"><span>#</span>Таблица</button>
-        <button type="button" data-nav="calendar" class="drawer-link"><span>▦</span>Календарь</button>
-        <button type="button" data-nav="inbox" class="drawer-link"><span>✉</span>Почта</button>
-        <button type="button" data-nav="finance" class="drawer-link"><span>¤</span>Финансы</button>
-        <button type="button" data-nav="train" class="drawer-link"><span>▴</span>Тренировка</button>
-        <button type="button" data-nav="lobby" class="drawer-link"><span>◇</span>Лобби</button>
-        <button type="button" data-nav="more" class="drawer-link"><span>☰</span>Ещё</button>
-      </nav>
-      <p class="hint drawer-hint">Свайп от левого края</p>
-    </aside>
 
     <!-- TOAST -->
     <div id="toast" class="toast" hidden></div>

@@ -396,7 +396,17 @@ window.EYE_STATE = (() => {
       if (!state.ucl) state.ucl = createUcl(state.clubs || [], state.clubId);
       if (!state.cup) state.cup = createCup(leagueClubs(), state.clubId);
       if (state.sacked == null) state.sacked = false;
-      if (!state.cup && leagueClubs().length) state.cup = createCup(leagueClubs());
+      // Retrofit: if KO not started yet and player missing, reseat them
+      if (state.ucl && !state.ucl.champion && state.clubId) {
+        const inU = (state.ucl.bracket || []).some(m => m.home === state.clubId || m.away === state.clubId);
+        const started = (state.ucl.bracket || []).some(m => m.played);
+        if (!inU && !started) state.ucl = createUcl(state.clubs || [], state.clubId);
+      }
+      if (state.cup && !state.cup.champion && state.clubId) {
+        const inC = (state.cup.bracket || []).some(m => m.home === state.clubId || m.away === state.clubId);
+        const started = (state.cup.bracket || []).some(m => m.played);
+        if (!inC && !started) state.cup = createCup(leagueClubs(), state.clubId);
+      }
       if (state.cupBest == null) state.cupBest = '';
       if (state.uclBest == null) state.uclBest = '';
       if (!state.otherLeagues) state.otherLeagues = buildOtherLeagues(state.clubs || [], state.leagueId);
