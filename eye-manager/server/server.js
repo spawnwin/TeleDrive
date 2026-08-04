@@ -72,6 +72,38 @@ function normalizeLogin(login) {
   return String(login || '').trim().toLowerCase().replace(/[^a-z0-9_\-\.]/g, '').slice(0, 24);
 }
 
+function clientIp(req) {
+  const xf = req.headers['x-forwarded-for'] || req.headers['x-real-ip'] || '';
+  if (xf) return String(xf).split(',')[0].trim().slice(0, 64);
+  return String(req.socket?.remoteAddress || '').slice(0, 64);
+}
+
+function hasCareerFile(userId) {
+  return fs.existsSync(savePathFor(userId));
+}
+
+function markTeamBound(user, clubName) {
+  user.teamBound = true;
+  user.teamCreatedAt = user.teamCreatedAt || Date.now();
+  if (clubName) user.clubName = String(clubName).slice(0, 40);
+}
+
+function registrationBlocked(db, ip) {
+  const local = !ip || ip === '127.0.0.1' || ip === '::1' || ip === ':ffff:127.0.0.1';
+  const humans = Object.values(db.users).filter((u) => !u.isBot && u.role !== 'bot');
+  const sameIp = humans.filter((u) => u.regIp && u.regIp === ip);
+  if (!sameIp.length) return null;
+  const withTeam = sameIp.find((u) => u.teamBound || hasCareerFile(u.id));
+  if (withTeam) {
+    return 'Мультиаккаунты запрещены: с этой сети уже есть аккаунт с командой. Войдите в существующий.';
+  }
+  // Outside localhost — one registration per IP even before team create
+  if (!local && sameIp.length >= 1) {
+    return 'С этой сети аккаунт уже создан. Перерегистрация запрещена правилами.';
+  }
+  return null;
+}
+
 const cups = createCupsModule({
   dataDir: DATA_DIR,
   usersDb,
@@ -253,11 +285,15 @@ const server = http.createServer(async (req, res) => {
       if (Object.values(db.users).some((u) => u.login === login)) {
         return json(res, 409, { error: 'Логин уже занят' });
       }
+      const ip = clientIp(req);
+      const blocked = registrationBlocked(db, ip);
+      if (blocked) return json(res, 403, { error: blocked, code: 'multi_account' });
       const id = crypto.randomBytes(8).toString('hex');
       const { salt, hash } = hashPassword(password);
       const user = {
         id, login, name, salt, hash, createdAt: Date.now(),
-        role: 'user', isBot: false, level: 1, xp: 0, cupsPlayed: 0, cupsWon: 0
+        role: 'user', isBot: false, level: 1, xp: 0, cupsPlayed: 0, cupsWon: 0,
+        teamBound: false, regIp: ip || null
       };
       db.users[id] = user;
       saveUsers(db);
@@ -281,12 +317,17 @@ const server = http.createServer(async (req, res) => {
       cups.ensureUserProgress(user);
       persistUser(user);
       const token = createSession(user.id);
-      const hasCareer = fs.existsSync(savePathFor(user.id));
+      const hasCareer = hasCareerFile(user.id);
+      if (hasCareer && !user.teamBound) {
+        markTeamBound(user);
+        persistUser(user);
+      }
       return json(res, 200, {
         ok: true,
         token,
         user: cups.enrichPublic(user),
-        hasCareer
+        hasCareer,
+        teamBound: !!(user.teamBound || hasCareer)
       });
     } catch (e) {
       return json(res, 500, { error: String(e.message || e) });
@@ -306,12 +347,18 @@ const server = http.createServer(async (req, res) => {
   if (pathname === '/api/me' && req.method === 'GET') {
     const auth = requireAuth(req, res);
     if (!auth) return;
-    persistUser(auth.user);
-    const hasCareer = fs.existsSync(savePathFor(auth.user.id));
+    const hasCareer = hasCareerFile(auth.user.id);
+    if (hasCareer && !auth.user.teamBound) {
+      markTeamBound(auth.user);
+      persistUser(auth.user);
+    } else {
+      persistUser(auth.user);
+    }
     return json(res, 200, {
       ok: true,
       user: cups.enrichPublic(auth.user),
       hasCareer,
+      teamBound: !!(auth.user.teamBound || hasCareer),
       bracket: cups.bracketForLevel(auth.user.level || 1),
       liveCup: cups.findMyLiveCup(auth.user.id),
       cupEvents: cups.listCupEvents(auth.user.id, { limit: 10 }),
@@ -334,6 +381,40 @@ const server = http.createServer(async (req, res) => {
     try {
       const body = JSON.parse((await readBody(req)).toString('utf8'));
       if (!body || !body.state) return json(res, 400, { error: 'state required' });
+      const mode = body.mode === 'create' ? 'create' : 'save';
+      const exists = hasCareerFile(auth.user.id);
+      const bound = !!(auth.user.teamBound || exists);
+
+      if (mode === 'create' && bound) {
+        return json(res, 403, {
+          error: 'Команда уже создана. Новая команда и пересоздание запрещены (антимультиаккаунт).',
+          code: 'team_bound'
+        });
+      }
+
+      if (exists) {
+        try {
+          const prev = JSON.parse(fs.readFileSync(savePathFor(auth.user.id), 'utf8'));
+          const oldClub = prev.state?.clubId;
+          const newClub = body.state?.clubId;
+          if (oldClub && newClub && oldClub !== newClub) {
+            return json(res, 403, {
+              error: 'Нельзя заменить существующую команду. Пересоздание запрещено правилами.',
+              code: 'team_bound'
+            });
+          }
+        } catch { /* allow write if corrupt */ }
+      }
+
+      if (mode === 'create' || (!exists && !auth.user.teamBound)) {
+        const club = (body.state.clubs || []).find((c) => c.id === body.state.clubId);
+        markTeamBound(auth.user, club?.name || body.state.managerName);
+        persistUser(auth.user);
+      } else if (exists && !auth.user.teamBound) {
+        markTeamBound(auth.user);
+        persistUser(auth.user);
+      }
+
       const payload = {
         id: auth.user.id,
         manager: body.manager || body.state.managerName || auth.user.name,
@@ -342,7 +423,32 @@ const server = http.createServer(async (req, res) => {
         state: body.state
       };
       fs.writeFileSync(savePathFor(auth.user.id), JSON.stringify(payload));
-      return json(res, 200, { ok: true, id: auth.user.id });
+      return json(res, 200, {
+        ok: true,
+        id: auth.user.id,
+        created: mode === 'create' || !exists,
+        teamBound: true
+      });
+    } catch (e) {
+      return json(res, 500, { error: String(e.message || e) });
+    }
+  }
+
+  if (pathname === '/api/career' && req.method === 'DELETE') {
+    const auth = requireAdmin(req, res);
+    if (!auth) return;
+    try {
+      const body = JSON.parse((await readBody(req)).toString('utf8') || '{}');
+      const targetId = body.userId || auth.user.id;
+      const db = usersDb();
+      const u = db.users[targetId];
+      if (!u) return json(res, 404, { error: 'Нет пользователя' });
+      const file = savePathFor(targetId);
+      if (fs.existsSync(file)) fs.unlinkSync(file);
+      u.teamBound = false;
+      u.teamCreatedAt = null;
+      saveUsers(db);
+      return json(res, 200, { ok: true });
     } catch (e) {
       return json(res, 500, { error: String(e.message || e) });
     }

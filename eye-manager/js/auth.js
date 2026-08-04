@@ -95,13 +95,17 @@ window.EYE_AUTH = (() => {
     }
   }
 
-  async function saveCareer(state) {
+  async function saveCareer(state, opts = {}) {
     if (!token || !state) return { ok: false, msg: 'Нужен вход' };
     const data = await request('api/career', {
       method: 'POST',
-      body: { manager: state.managerName, state }
+      body: {
+        manager: state.managerName,
+        state,
+        mode: opts.mode === 'create' ? 'create' : 'save'
+      }
     });
-    return { ok: true, id: data.id };
+    return { ok: true, id: data.id, created: !!data.created, teamBound: !!data.teamBound };
   }
 
   async function loadCareer() {

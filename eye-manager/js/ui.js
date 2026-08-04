@@ -54,6 +54,10 @@ window.EYE_UI = (() => {
     }
     if (id === 'lobby' && !A().isLoggedIn()) id = 'home';
     if ((id === 'onlinecups' || id === 'cupdetail' || id === 'admin') && !A().isLoggedIn()) id = 'auth';
+    if (id === 'create' && A().isLoggedIn() && teamAlreadyBound()) {
+      toast('Команда уже создана. Пересоздание запрещено.');
+      id = S().get() || hasLocalCareer() ? 'hub' : 'lobby';
+    }
     if (id === 'admin' && A().isLoggedIn() && !isAdminUser()) {
       toast('Только для администратора');
       id = S().get() ? 'hub' : 'lobby';
@@ -296,11 +300,13 @@ window.EYE_UI = (() => {
     if (id === 'more') {
       syncCurrencyButtons();
       syncAdminNav();
+      syncCreateLocks();
       const lvlBox = $('#more-account-level');
       if (lvlBox) {
         const user = A().getUser();
         lvlBox.innerHTML = user
-          ? `<strong>Аккаунт · онлайн-уровень</strong>${levelBarHtml(user)}`
+          ? `<strong>Аккаунт · онлайн-уровень</strong>${levelBarHtml(user)}
+             <p class="hint" style="margin:8px 0 0">${teamAlreadyBound() ? 'Команда закреплена за аккаунтом. Пересоздание запрещено.' : 'Команда ещё не создана — доступно один раз.'}</p>`
           : '';
       }
     }
@@ -336,6 +342,28 @@ window.EYE_UI = (() => {
   function hasLocalCareer() {
     if (S().get()) return true;
     try { return !!localStorage.getItem(S().KEY); } catch { return false; }
+  }
+
+  function teamAlreadyBound() {
+    const u = A().getUser();
+    return !!(cloudHasCareer || u?.teamBound || hasLocalCareer() || lastMePayload?.teamBound || lastMePayload?.hasCareer);
+  }
+
+  function syncCreateLocks() {
+    const bound = teamAlreadyBound();
+    const btnNew = $('#btn-new');
+    if (btnNew) {
+      btnNew.hidden = bound;
+      btnNew.disabled = bound;
+    }
+    const btnReset = $('#btn-reset');
+    if (btnReset) {
+      btnReset.hidden = !isAdminUser();
+    }
+    const accHome = $('#btn-account-home');
+    if (accHome) {
+      accHome.textContent = bound ? 'Аккаунт' : 'Аккаунт · создать команду';
+    }
   }
 
   async function enterApp({ toastWelcome } = {}) {
@@ -510,14 +538,23 @@ window.EYE_UI = (() => {
       btnCont.hidden = !canContinue;
       btnCont.textContent = local ? 'В центр управления' : 'Загрузить карьеру';
     }
+    const btnNew = $('#btn-new');
+    const bound = teamAlreadyBound();
+    if (btnNew) {
+      btnNew.hidden = bound;
+      btnNew.disabled = bound;
+    }
     if (lede) {
       lede.textContent = 'Карьера клуба и онлайн-кубки в одном месте.';
     }
     if (hint) {
-      hint.textContent = (local || cloudHasCareer)
-        ? 'Продолжите карьеру или сыграйте онлайн-кубок ниже — всё в одном аккаунте.'
-        : 'Создайте команду для полной карьеры. Онлайн-кубки доступны сразу по уровню.';
+      if (bound) {
+        hint.textContent = 'У аккаунта одна команда навсегда. Новая команда и перерегистрация запрещены (антимультиаккаунт).';
+      } else {
+        hint.textContent = 'Создайте одну команду для карьеры. Потом сменить клуб через новый аккаунт нельзя — мультиаккаунты запрещены.';
+      }
     }
+    syncCreateLocks();
     syncOnlineBackNav();
     syncAdminNav();
     syncDesktopUser();
@@ -774,7 +811,7 @@ window.EYE_UI = (() => {
     if (!A().isLoggedIn()) { show('auth'); return; }
     if (!isAdminUser()) {
       toast('Только для администратора');
-      show('lobby');
+      show(S().get() ? 'hub' : 'lobby');
       return;
     }
     $all('#admin-tabs .tab').forEach((t) => t.classList.toggle('active', t.dataset.ad === adminTab));
@@ -2787,11 +2824,8 @@ window.EYE_UI = (() => {
     }, true);
     $('#btn-new')?.addEventListener('click', () => {
       if (!A().isLoggedIn()) { show('auth'); toast('Сначала войдите'); return; }
-      let hasLocal = !!S().get();
-      if (!hasLocal) {
-        try { hasLocal = !!localStorage.getItem(S().KEY); } catch { hasLocal = false; }
-      }
-      if ((hasLocal || cloudHasCareer) && !confirm('Начать новую карьеру? Текущее сохранение будет перезаписано.')) {
+      if (teamAlreadyBound()) {
+        toast('Команда уже создана. Пересоздание и мультиаккаунты запрещены.');
         return;
       }
       createDirty = false;
@@ -2923,6 +2957,11 @@ window.EYE_UI = (() => {
     $('#form-create')?.addEventListener('submit', async (e) => {
       e.preventDefault();
       if (!A().isLoggedIn()) { show('auth'); return; }
+      if (teamAlreadyBound()) {
+        toast('Команда уже создана. Пересоздание запрещено.');
+        show(S().get() ? 'hub' : 'lobby');
+        return;
+      }
       const fd = new FormData(e.target);
       try {
         const managerName = String(fd.get('manager')).trim() || A().getUser()?.name || 'Менеджер';
@@ -2951,7 +2990,14 @@ window.EYE_UI = (() => {
           S().createCareer({ managerName, clubId, formation, style });
         }
         S().autoLineup();
-        await cloudSave(true);
+        const saved = await cloudSave(true, { mode: 'create' });
+        if (!saved) {
+          // server rejected — wipe local draft so UI stays consistent
+          S().clear();
+          cloudHasCareer = !!(lastMePayload?.hasCareer || A().getUser()?.teamBound);
+          return;
+        }
+        cloudHasCareer = true;
         createDirty = false;
         toast(createMode === 'custom' ? 'Команда создана · состав выдан' : 'Карьера начата');
         show('hub');
@@ -3110,10 +3156,28 @@ window.EYE_UI = (() => {
       $('#youth-msg').textContent = r.msg; toast(r.msg);
       if (r.ok) renderYouth();
     });
-    $('#btn-reset')?.addEventListener('click', () => {
-      if (confirm('Сбросить карьеру EYE?')) {
+    $('#btn-reset')?.addEventListener('click', async () => {
+      if (!isAdminUser()) {
+        toast('Сброс карьеры игрокам недоступен. Одна команда на аккаунт.');
+        return;
+      }
+      if (!confirm('Админ: удалить карьеру этого аккаунта на сервере?')) return;
+      try {
+        await fetch(A().apiBase() + 'api/career', {
+          method: 'DELETE',
+          headers: A().headers(true),
+          body: JSON.stringify({})
+        }).then(async (res) => {
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error(data.error || 'Ошибка');
+        });
         S().clear();
-        show(A().isLoggedIn() ? 'lobby' : 'home');
+        cloudHasCareer = false;
+        if (A().getUser()) A().getUser().teamBound = false;
+        toast('Карьера снята (админ)');
+        show('lobby');
+      } catch (err) {
+        toast(err.message || 'Не удалось сбросить');
       }
     });
     $('#btn-save-cloud')?.addEventListener('click', () => cloudSave());
@@ -3269,13 +3333,14 @@ window.EYE_UI = (() => {
     });
   }
 
-  async function cloudSave(silent = false) {
+  async function cloudSave(silent = false, opts = {}) {
     const st = S().get();
     if (!st) return silent ? null : toast('Нет сохранения');
     if (!A().isLoggedIn()) return silent ? null : toast('Войдите в аккаунт');
     try {
-      await A().saveCareer(st);
+      await A().saveCareer(st, opts);
       cloudHasCareer = true;
+      if (A().getUser()) A().getUser().teamBound = true;
       if (!silent) toast('Облако: сохранено');
       return true;
     } catch (err) {

@@ -112,7 +112,8 @@ function createCupsModule({ dataDir, usersDb, saveUsers, publicUser }) {
       cupsPlayed: u.cupsPlayed,
       cupsWon: u.cupsWon,
       role: u.role || 'user',
-      isBot: !!u.isBot
+      isBot: !!u.isBot,
+      teamBound: !!u.teamBound
     };
     if (u.isBot && u.strength != null) out.strength = u.strength;
     if (u.clubName) out.clubName = u.clubName;
