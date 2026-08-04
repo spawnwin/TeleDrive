@@ -114,4 +114,13 @@ describe('cups system', () => {
     assert.ok(board.length >= 1);
     assert.ok(board[0].rank === 1);
   });
+
+  it('prunes duplicate open cups per bracket and size', () => {
+    cups.adminCreateCup({ size: 4, bracketId: 'l3_4', startInMs: 180_000 });
+    cups.adminCreateCup({ size: 4, bracketId: 'l3_4', startInMs: 180_000 });
+    cups.adminCreateCup({ size: 4, bracketId: 'l3_4', startInMs: 180_000 });
+    cups.tick();
+    const open = cups.listCups({ status: 'open', bracketId: 'l3_4' }).filter((c) => c.size === 4);
+    assert.equal(open.length, 1);
+  });
 });

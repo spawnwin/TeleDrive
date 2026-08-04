@@ -393,7 +393,23 @@ function createCupsModule({ dataDir, usersDb, saveUsers, publicUser, store }) {
     };
   }
 
+  function pruneDuplicateOpenCups(db) {
+    // Keep one newest open cup per size×bracket; archive the rest.
+    const groups = new Map();
+    Object.values(db.cups).forEach((c) => {
+      if (c.status !== 'open') return;
+      const key = `${c.bracketId}|${c.size}`;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(c);
+    });
+    groups.forEach((list) => {
+      list.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+      list.slice(1).forEach((c) => archiveAndDelete(db, c, 'duplicate_open'));
+    });
+  }
+
   function ensureOpenCups(db) {
+    pruneDuplicateOpenCups(db);
     CUP_SIZES.forEach((size) => {
       LEVEL_BRACKETS.forEach((br) => {
         const hasOpen = Object.values(db.cups).some(

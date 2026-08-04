@@ -152,7 +152,8 @@ async function flushMatch(match) {
 }
 
 async function flushCups() {
-  for (const id of Object.keys(cupsCache.cups || {})) {
+  const ids = new Set(Object.keys(cupsCache.cups || {}));
+  for (const id of ids) {
     const cup = cupsCache.cups[id];
     const data = {
       id,
@@ -163,6 +164,25 @@ async function flushCups() {
       dataJson: JSON.stringify(cup)
     };
     await prisma.cup.upsert({ where: { id }, create: data, update: data });
+  }
+  // Cups removed from cache (archived/deleted) must leave the active set,
+  // otherwise every restart rehydrates ghosts and open cups accumulate.
+  if (ids.size === 0) {
+    await prisma.cup.updateMany({
+      where: { archived: false },
+      data: { archived: true, updatedAt: BigInt(Date.now()) }
+    });
+  } else {
+    const stale = await prisma.cup.findMany({
+      where: { archived: false, NOT: { id: { in: [...ids] } } },
+      select: { id: true }
+    });
+    if (stale.length) {
+      await prisma.cup.updateMany({
+        where: { id: { in: stale.map((r) => r.id) } },
+        data: { archived: true, updatedAt: BigInt(Date.now()) }
+      });
+    }
   }
   await prisma.meta.upsert({
     where: { key: 'cups_meta' },
