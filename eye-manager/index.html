@@ -55,15 +55,13 @@
       <h2 class="screen-title">Новая карьера</h2>
       <form id="form-create" class="glass-panel create-form">
         <label>Менеджер<input name="manager" maxlength="24" required placeholder="Ваше имя" autocomplete="nickname" /></label>
-        <label>Клуб<input name="club" maxlength="28" required placeholder="Название клуба" /></label>
-        <label>Цвет формы<input name="color" type="color" value="#5EEAD4" /></label>
         <label>Лига
-          <select name="league">
-            <option value="eye-champ">EYE Championship</option>
-            <option value="eye-premier">EYE Premier</option>
-            <option value="eye-national">EYE National</option>
-          </select>
+          <select name="league" id="sel-league" required></select>
         </label>
+        <label>Клуб
+          <select name="clubId" id="sel-club" required></select>
+        </label>
+        <div class="club-preview glass-panel" id="club-preview" hidden></div>
         <label>Схема
           <select name="formation">
             <option>4-3-3</option>
@@ -83,7 +81,7 @@
             <option value="counter">Контратака</option>
           </select>
         </label>
-        <button class="btn btn-primary" type="submit">Войти в клуб</button>
+        <button class="btn btn-primary" type="submit">Возглавить клуб</button>
       </form>
     </section>
 
@@ -119,9 +117,11 @@
 
       <div class="hub-grid">
         <button class="tile glass-panel" data-nav="table"><strong>Таблица</strong><span>Лига</span></button>
+        <button class="tile glass-panel" data-nav="stats"><strong>Бомбардиры</strong><span>Статистика</span></button>
         <button class="tile glass-panel" data-nav="train"><strong>Тренировка</strong><span>Развитие</span></button>
         <button class="tile glass-panel" data-nav="club"><strong>Клуб</strong><span>Инфраструктура</span></button>
         <button class="tile glass-panel" data-nav="inbox"><strong>Почта</strong><span id="inbox-badge">0</span></button>
+        <button class="tile glass-panel" data-nav="transfers"><strong>Трансферы</strong><span>Рынок</span></button>
       </div>
 
       <div class="news-strip" id="news-strip"></div>
@@ -162,6 +162,41 @@
       <div class="tabs" id="transfer-tabs">
         <button class="tab active" data-tab="market">Рынок</button>
         <button class="tab" data-tab="sell">Продать</button>
+        <button class="tab" data-tab="offers">Предложения</button>
+      </div>
+      <div class="filters glass-panel" id="transfer-filters">
+        <input type="search" id="tf-q" placeholder="Поиск игрока / клуба" />
+        <div class="filter-row">
+          <select id="tf-pos">
+            <option value="ALL">Позиция</option>
+            <option value="GK">ВР</option>
+            <option value="DEF">Защита</option>
+            <option value="MID">Полузащита</option>
+            <option value="ATT">Атака</option>
+            <option value="ST">НАП</option>
+            <option value="CB">ЦЗ</option>
+            <option value="CM">ЦП</option>
+          </select>
+          <select id="tf-league">
+            <option value="ALL">Все лиги</option>
+          </select>
+        </div>
+        <div class="filter-row">
+          <select id="tf-ovr">
+            <option value="0">OVR любой</option>
+            <option value="70">70+</option>
+            <option value="75">75+</option>
+            <option value="80">80+</option>
+            <option value="85">85+</option>
+          </select>
+          <select id="tf-price">
+            <option value="0">Бюджет любой</option>
+            <option value="5000000">до 5 млн</option>
+            <option value="15000000">до 15 млн</option>
+            <option value="40000000">до 40 млн</option>
+            <option value="100000000">до 100 млн</option>
+          </select>
+        </div>
       </div>
       <div class="list" id="transfer-list"></div>
     </section>
@@ -170,9 +205,31 @@
     <section id="screen-table" class="screen">
       <header class="subhead">
         <button class="icon-back" data-nav="hub">‹</button>
-        <h2>Таблица</h2>
+        <h2 id="table-title">Таблица</h2>
       </header>
       <div class="table-wrap glass-panel" id="league-table"></div>
+    </section>
+
+    <!-- STATS -->
+    <section id="screen-stats" class="screen">
+      <header class="subhead">
+        <button class="icon-back" data-nav="hub">‹</button>
+        <h2>Статистика лиги</h2>
+      </header>
+      <div class="tabs" id="stats-tabs">
+        <button class="tab active" data-stab="goals">Голы</button>
+        <button class="tab" data-stab="assists">Ассисты</button>
+      </div>
+      <div class="list" id="stats-list"></div>
+    </section>
+
+    <!-- PLAYER -->
+    <section id="screen-player" class="screen">
+      <header class="subhead">
+        <button class="icon-back" id="player-back" data-nav="squad">‹</button>
+        <h2>Игрок</h2>
+      </header>
+      <div class="player-card glass-panel" id="player-card"></div>
     </section>
 
     <!-- TRAIN -->
@@ -213,6 +270,7 @@
       </header>
       <div class="more-stack">
         <button class="btn btn-glass" data-nav="table">Таблица лиги</button>
+        <button class="btn btn-glass" data-nav="stats">Бомбардиры и ассисты</button>
         <button class="btn btn-glass" data-nav="history">История матчей</button>
         <button class="btn btn-glass" data-nav="train">Тренировки</button>
         <button class="btn btn-glass" data-nav="club">Инфраструктура</button>
@@ -274,6 +332,7 @@
     <div id="toast" class="toast" hidden></div>
   </div>
 
+  <script src="js/world.js"></script>
   <script src="js/data.js"></script>
   <script src="js/engine.js"></script>
   <script src="js/state.js"></script>

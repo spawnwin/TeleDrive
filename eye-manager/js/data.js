@@ -1,29 +1,17 @@
-/* EYE Manager — static world data */
+/* EYE Manager — data helpers + club/player factories on top of EYE_WORLD */
 window.EYE_DATA = (() => {
-  const FIRST = [
-    'Артём','Иван','Максим','Дмитрий','Кирилл','Андрей','Алексей','Никита','Михаил','Егор',
-    'Сергей','Владимир','Роман','Тимур','Даниил','Павел','Илья','Денис','Матвей','Лев',
-    'Марк','Ярослав','Глеб','Савелий','Фёдор','Богдан','Арсений','Платон','Захар','Руслан',
-    'Оскар','Лукас','Эрик','Ноа','Леон','Марко','Лука','Фабио','Педро','Рафа',
-    'Карлос','Диего','Хави','Иньеста','Кай','Юнас','Свен','Томас','Ян','Пиотр'
-  ];
-  const LAST = [
-    'Иванов','Смирнов','Кузнецов','Попов','Васильев','Петров','Соколов','Лебедев','Козлов','Новиков',
-    'Морозов','Волков','Алексеев','Лебедев','Семёнов','Егоров','Павлов','Козлов','Степанов','Николаев',
-    'Орлов','Андреев','Макаров','Никитин','Захаров','Зайцев','Соловьёв','Борисов','Яковлев','Григорьев',
-    'Сильва','Сантос','Оливейра','Фернандес','Росси','Бьянки','Мюллер','Шмидт','Берг','Ларссон',
-    'Ким','Пак','Накамура','Танака','Джонсон','Смит','Браун','Уилсон','Тейлор','Андерсон'
-  ];
-  const NATIONS = ['Россия','Бразилия','Аргентина','Испания','Германия','Франция','Англия','Италия','Португалия','Нидерланды','Бельгия','Хорватия','Япония','Корея','США','Мексика','Уругвай','Колумбия','Турция','Польша'];
-  const CLUB_PREFIX = ['Норд','Аура','Вектор','Орион','Пульс','Квант','Неон','Сириус','Атлас','Эхо','Призма','Фотон','Зенит','Шторм','Импульс','Форсаж','Омега','Титан','Апекс','Рейс'];
-  const CLUB_SUFFIX = ['Юнайтед','Сити','Атлетик','ФК','Динамо','Спорт','Юнион','Роялс','Фокс','Вингс','Легион','Клуб','Форс','Элит','Прайм'];
+  const W = () => window.EYE_WORLD;
+
   const FORMATIONS = {
     '4-4-2':  { slots:['GK','RB','CB','CB','LB','RM','CM','CM','LM','ST','ST'] },
     '4-3-3':  { slots:['GK','RB','CB','CB','LB','CM','CM','CM','RW','ST','LW'] },
     '3-5-2':  { slots:['GK','CB','CB','CB','RWB','CM','CM','CM','LWB','ST','ST'] },
     '4-2-3-1':{ slots:['GK','RB','CB','CB','LB','CDM','CDM','RAM','CAM','LAM','ST'] },
     '5-3-2':  { slots:['GK','RWB','CB','CB','CB','LWB','CM','CM','CM','ST','ST'] },
-    '4-1-4-1':{ slots:['GK','RB','CB','CB','LB','CDM','RM','CM','CM','LM','ST'] }
+    '4-1-4-1':{ slots:['GK','RB','CB','CB','LB','CDM','RM','CM','CM','LM','ST'] },
+    '3-4-3':  { slots:['GK','CB','CB','CB','RWB','CM','CM','LWB','RW','ST','LW'] },
+    '3-4-2-1':{ slots:['GK','CB','CB','CB','RWB','CM','CM','LWB','CAM','CAM','ST'] },
+    '4-2-2-2':{ slots:['GK','RB','CB','CB','LB','CDM','CDM','CAM','CAM','ST','ST'] }
   };
   const POS_GROUP = {
     GK:'GK', RB:'DEF', LB:'DEF', CB:'DEF', RWB:'DEF', LWB:'DEF',
@@ -42,17 +30,13 @@ window.EYE_DATA = (() => {
     { id:'possession', name:'Владение', desc:'Короткий пас, терпение' },
     { id:'counter', name:'Контратака', desc:'Глубоко + вертикаль' }
   ];
-  const LEAGUES = [
-    { id:'eye-premier', name:'EYE Premier', tier:1, teams:12, prize:2.4e6 },
-    { id:'eye-champ', name:'EYE Championship', tier:2, teams:12, prize:9e5 },
-    { id:'eye-national', name:'EYE National', tier:3, teams:12, prize:3.5e5 }
-  ];
   const TRAINING = [
     { id:'fitness', name:'Фитнес', focus:'stamina', boost:3 },
     { id:'tactics', name:'Тактика', focus:'iq', boost:3 },
     { id:'shooting', name:'Удары', focus:'attack', boost:3 },
     { id:'defense', name:'Оборона', focus:'defense', boost:3 },
     { id:'tech', name:'Техника', focus:'tech', boost:3 },
+    { id:'pace', name:'Скорость', focus:'pace', boost:3 },
     { id:'recovery', name:'Восстановление', focus:'condition', boost:8 }
   ];
   const FACILITIES = [
@@ -63,82 +47,135 @@ window.EYE_DATA = (() => {
     { id:'scout', name:'Скаутинг', max:5, base:1.8e5, effect:'scout' }
   ];
 
+  const FILL_SLOTS = ['GK','RB','CB','CB','LB','CDM','CM','CM','CAM','RW','ST','LW','GK','CB','CM','ST','RB','LB'];
+
   function rnd(a, b) { return Math.floor(Math.random() * (b - a + 1)) + a; }
   function pick(arr) { return arr[rnd(0, arr.length - 1)]; }
   function uid(prefix='id') { return prefix + '_' + Math.random().toString(36).slice(2, 10); }
 
-  function genName() { return pick(FIRST) + ' ' + pick(LAST); }
+  const FILL_FIRST = ['Алекс','Марко','Лука','Иван','Педро','Карлос','Юнас','Ноа','Леон','Давид','Саша','Тимур','Эрик','Фабио','Милан','Оливье','Хорхе','Нико','Рафа','Кирилл'];
+  const FILL_LAST = ['Сильва','Сантос','Мюллер','Росси','Берг','Новак','Ковач','Петров','Андерсон','Мора','Фернандес','Ким','Пак','Орtega','Бланко','Риччи','Шмидт','Ларссон','Оливейра','Кузнецов'];
 
-  function genPlayer(pos, overallBias = 70, ageBias = null) {
-    const age = ageBias ?? rnd(17, 34);
-    const peak = age < 24 ? overallBias - 4 : age > 30 ? overallBias - 3 : overallBias;
-    const ovr = Math.max(45, Math.min(94, peak + rnd(-6, 6)));
-    const spread = (base) => Math.max(30, Math.min(99, base + rnd(-8, 8)));
-    let attack = ovr, defense = ovr, tech = ovr, stamina = ovr, iq = ovr;
+  function genName() { return pick(FILL_FIRST) + ' ' + pick(FILL_LAST); }
+
+  function attrsFromOvr(pos, ovr, age) {
+    const spread = (base, j = 8) => Math.max(30, Math.min(99, base + rnd(-j, j)));
     const g = POS_GROUP[pos] || 'MID';
-    if (g === 'GK') { attack = spread(ovr - 25); defense = spread(ovr + 5); tech = spread(ovr); }
-    if (g === 'DEF') { attack = spread(ovr - 12); defense = spread(ovr + 6); tech = spread(ovr - 2); }
-    if (g === 'MID') { attack = spread(ovr); defense = spread(ovr); tech = spread(ovr + 3); }
-    if (g === 'ATT') { attack = spread(ovr + 6); defense = spread(ovr - 14); tech = spread(ovr + 2); }
-    stamina = spread(ovr + (age < 23 ? 4 : age > 30 ? -4 : 0));
-    iq = spread(ovr + (age > 27 ? 3 : -2));
-    const pot = Math.min(95, ovr + (age < 22 ? rnd(6, 16) : age < 26 ? rnd(2, 8) : rnd(0, 3)));
-    const value = Math.round(Math.pow(ovr / 10, 3.1) * (pot / ovr) * (36 - age) * 1200);
-    const wage = Math.round(value / 180);
+    let attack = ovr, defense = ovr, tech = ovr, stamina = ovr, iq = ovr, pace = ovr, pass = ovr, physical = ovr;
+    if (g === 'GK') {
+      attack = spread(ovr - 28); defense = spread(ovr + 6); tech = spread(ovr); pace = spread(ovr - 18);
+      pass = spread(ovr - 5); physical = spread(ovr + 2);
+    } else if (g === 'DEF') {
+      attack = spread(ovr - 14); defense = spread(ovr + 6); tech = spread(ovr - 2); pace = spread(ovr - 2);
+      pass = spread(ovr - 4); physical = spread(ovr + 4);
+    } else if (g === 'MID') {
+      attack = spread(ovr); defense = spread(ovr - 2); tech = spread(ovr + 3); pace = spread(ovr);
+      pass = spread(ovr + 5); physical = spread(ovr);
+    } else {
+      attack = spread(ovr + 6); defense = spread(ovr - 16); tech = spread(ovr + 2); pace = spread(ovr + 5);
+      pass = spread(ovr); physical = spread(ovr + 1);
+    }
+    if (age < 23) { stamina = spread(ovr + 4); pace = Math.min(99, pace + 2); }
+    if (age > 30) { stamina = spread(ovr - 4); pace = Math.max(40, pace - 3); iq = Math.min(99, iq + 2); }
+    iq = spread(ovr + (age > 27 ? 3 : -1));
+    return { attack, defense, tech, stamina, iq, pace, pass, physical };
+  }
+
+  function valueOf(ovr, pot, age) {
+    return Math.round(Math.pow(ovr / 10, 3.15) * (pot / Math.max(ovr, 1)) * Math.max(4, 36 - age) * 1800);
+  }
+
+  function makePlayer({ name, pos, age, ovr, nation, real, clubId }) {
+    const pot = Math.min(95, ovr + (age < 22 ? rnd(5, 14) : age < 26 ? rnd(1, 7) : rnd(0, 2)));
+    const a = attrsFromOvr(pos, ovr, age);
+    const value = valueOf(ovr, pot, age);
     return {
-      id: uid('p'), name: genName(), pos, age, ovr, pot,
-      attack, defense, tech, stamina, iq,
+      id: uid('p'), name, pos, age, ovr, pot, ...a,
       condition: rnd(78, 100), morale: rnd(55, 90),
-      form: rnd(45, 85), energy: rnd(70, 100),
-      goals: 0, assists: 0, apps: 0, seasonGoals: 0, seasonApps: 0,
-      injured: 0, yellow: 0, red: 0, nation: pick(NATIONS),
-      value, wage, contract: rnd(1, 4),
+      form: rnd(48, 88), energy: rnd(70, 100),
+      goals: 0, assists: 0, apps: 0,
+      seasonGoals: 0, seasonAssists: 0, seasonApps: 0,
+      careerGoals: real ? rnd(0, Math.max(0, (34 - age) * 8)) : 0,
+      careerAssists: real ? rnd(0, Math.max(0, (34 - age) * 5)) : 0,
+      injured: 0, yellow: 0, red: 0,
+      nation: typeof nation === 'string' && nation.length <= 3 ? (W().nationName(nation) || nation) : (nation || '—'),
+      nationCode: typeof nation === 'string' && nation.length <= 3 ? nation : '',
+      value, wage: Math.round(value / 160),
+      contract: rnd(1, 4),
+      real: !!real,
+      listed: false, ask: 0,
+      clubId: clubId || null,
       traits: []
     };
   }
 
-  function squadForOverall(baseOvr) {
-    const slots = ['GK','RB','CB','CB','LB','CM','CM','CM','ST','ST','RW','LW','GK','CB','CM','ST','RB','LB'];
-    return slots.map((pos, i) => genPlayer(pos, baseOvr + (i < 11 ? rnd(-2, 3) : rnd(-8, 0))));
+  function genPlayer(pos, overallBias = 70, ageBias = null, clubId = null) {
+    const age = ageBias ?? rnd(17, 34);
+    const peak = age < 24 ? overallBias - 4 : age > 30 ? overallBias - 3 : overallBias;
+    const ovr = Math.max(45, Math.min(90, peak + rnd(-6, 6)));
+    const codes = Object.keys(W().NATIONS);
+    return makePlayer({
+      name: genName(), pos, age, ovr,
+      nation: pick(codes), real: false, clubId
+    });
   }
 
-  function genClub(name, color, baseOvr, leagueId) {
+  function starToPlayer(star, clubId) {
+    const [name, pos, age, ovr, nation] = star;
+    return makePlayer({ name, pos, age, ovr, nation, real: true, clubId });
+  }
+
+  function buildSquadFromTemplate(tpl) {
+    const usedPos = {};
+    const squad = (tpl.stars || []).map(s => {
+      const p = starToPlayer(s, tpl.id);
+      usedPos[p.pos] = (usedPos[p.pos] || 0) + 1;
+      return p;
+    });
+    const target = 20;
+    let i = 0;
+    while (squad.length < target) {
+      const pos = FILL_SLOTS[i % FILL_SLOTS.length];
+      i++;
+      const bias = tpl.rep - 8 - rnd(0, 10);
+      squad.push(genPlayer(pos, bias, null, tpl.id));
+    }
+    return squad;
+  }
+
+  function instantiateClub(tpl, overrides = {}) {
+    const league = W().leagueById(tpl.leagueId);
+    const squad = buildSquadFromTemplate(tpl);
+    const avg = Math.round(squad.reduce((s, p) => s + p.ovr, 0) / squad.length);
     return {
-      id: uid('c'), name, color, leagueId,
-      squad: squadForOverall(baseOvr),
-      formation: '4-3-3', style: 'balance',
-      budget: Math.round(baseOvr * baseOvr * 1800),
-      reputation: baseOvr,
-      facilities: { stadium:1, training:1, youth:1, medical:1, scout:1 },
-      fans: Math.round(baseOvr * 800 + rnd(2000, 12000)),
-      morale: 60
+      id: tpl.id,
+      templateId: tpl.id,
+      name: tpl.name,
+      short: tpl.short,
+      color: tpl.color,
+      leagueId: tpl.leagueId,
+      leagueName: league?.name || tpl.leagueId,
+      stadium: tpl.stadium,
+      formation: overrides.formation || tpl.formation || '4-3-3',
+      style: overrides.style || 'balance',
+      squad,
+      lineup: null,
+      budget: overrides.budget ?? tpl.budget,
+      reputation: tpl.rep,
+      facilities: { stadium: Math.min(5, Math.round(tpl.rep / 20)), training: 2, youth: 2, medical: 2, scout: 2 },
+      fans: tpl.fans,
+      morale: 65,
+      isPlayer: false,
+      avgOvr: avg
     };
   }
 
-  function genLeagueClubs(league, playerClubName) {
-    const clubs = [];
-    const used = new Set([playerClubName?.toLowerCase()]);
-    for (let i = 0; i < league.teams - 1; i++) {
-      let name;
-      do { name = pick(CLUB_PREFIX) + ' ' + pick(CLUB_SUFFIX); } while (used.has(name.toLowerCase()));
-      used.add(name.toLowerCase());
-      const hue = rnd(0, 359);
-      const color = `hsl(${hue} 72% 52%)`;
-      const base = league.tier === 1 ? rnd(72, 82) : league.tier === 2 ? rnd(62, 72) : rnd(52, 64);
-      clubs.push(genClub(name, color, base, league.id));
-    }
-    return clubs;
+  function buildWorldClubs() {
+    return W().CLUBS.map(tpl => instantiateClub(tpl));
   }
 
   function pitchCoords(formation) {
     const slots = FORMATIONS[formation]?.slots || FORMATIONS['4-3-3'].slots;
-    const rows = {};
-    slots.forEach((p, i) => {
-      const key = p;
-      rows[key] = rows[key] || [];
-      rows[key].push(i);
-    });
-    // approximate Y by role depth
     const depth = {
       GK: 8, CB: 22, RB: 28, LB: 28, RWB: 34, LWB: 34,
       CDM: 40, CM: 50, RM: 52, LM: 52, CAM: 62, RAM: 64, LAM: 64,
@@ -151,7 +188,7 @@ window.EYE_DATA = (() => {
       byLine[y].push({ pos, idx });
     });
     const coords = new Array(slots.length);
-    Object.keys(byLine).map(Number).sort((a,b)=>a-b).forEach(y => {
+    Object.keys(byLine).map(Number).sort((a, b) => a - b).forEach(y => {
       const line = byLine[y];
       line.forEach((item, i) => {
         const x = ((i + 1) / (line.length + 1)) * 100;
@@ -161,8 +198,14 @@ window.EYE_DATA = (() => {
     return coords;
   }
 
+  // Legacy aliases used by older code paths
+  const LEAGUES = () => W().LEAGUES;
+
   return {
-    FIRST, LAST, NATIONS, FORMATIONS, POS_GROUP, POS_LABEL, STYLES, LEAGUES, TRAINING, FACILITIES,
-    rnd, pick, uid, genName, genPlayer, squadForOverall, genClub, genLeagueClubs, pitchCoords
+    FORMATIONS, POS_GROUP, POS_LABEL, STYLES, TRAINING, FACILITIES,
+    get LEAGUES() { return W().LEAGUES; },
+    rnd, pick, uid, genName, genPlayer, makePlayer, starToPlayer,
+    buildSquadFromTemplate, instantiateClub, buildWorldClubs, pitchCoords,
+    valueOf, attrsFromOvr
   };
 })();

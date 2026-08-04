@@ -1,8 +1,9 @@
-const CACHE = 'eye-manager-v1';
+const CACHE = 'eye-manager-v2';
 const ASSETS = [
   './',
   './index.html',
   './css/style.css',
+  './js/world.js',
   './js/data.js',
   './js/engine.js',
   './js/state.js',

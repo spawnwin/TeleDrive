@@ -3,9 +3,14 @@ window.EYE_UI = (() => {
   const S = () => window.EYE_STATE;
   const D = () => window.EYE_DATA;
   const E = () => window.EYE_ENGINE;
+  const W = () => window.EYE_WORLD;
 
   let matchAbort = false;
   let matchPlaying = false;
+  let transferTab = 'market';
+  let statsTab = 'goals';
+  let selectedPlayerId = null;
+  let playerBack = 'squad';
 
   function $(sel, root = document) { return root.querySelector(sel); }
   function $all(sel, root = document) { return [...root.querySelectorAll(sel)]; }
@@ -15,11 +20,8 @@ window.EYE_UI = (() => {
     const el = document.getElementById('screen-' + id);
     if (el) el.classList.add('active');
     $all('.dock-btn').forEach(b => b.classList.toggle('active', b.dataset.nav === id || (id === 'hub' && b.dataset.nav === 'hub')));
-    if (['squad','tactics','transfers','table','train','club','inbox','more','prematch','match','result'].includes(id)) {
-      // keep dock highlight for related
-      if (['squad','tactics','transfers','more'].includes(id)) {
-        $all('.dock-btn').forEach(b => b.classList.toggle('active', b.dataset.nav === id));
-      }
+    if (['squad','tactics','transfers','more'].includes(id)) {
+      $all('.dock-btn').forEach(b => b.classList.toggle('active', b.dataset.nav === id));
     }
     window.scrollTo(0, 0);
     refresh(id);
@@ -30,7 +32,7 @@ window.EYE_UI = (() => {
     t.hidden = false;
     t.textContent = msg;
     clearTimeout(toast._t);
-    toast._t = setTimeout(() => { t.hidden = true; }, 2600);
+    toast._t = setTimeout(() => { t.hidden = true; }, 2800);
   }
 
   function refresh(id) {
@@ -39,17 +41,67 @@ window.EYE_UI = (() => {
     if (id === 'hub') renderHub();
     if (id === 'squad') renderSquad();
     if (id === 'tactics') renderTactics();
-    if (id === 'transfers') renderTransfers();
+    if (id === 'transfers') renderTransfers(transferTab);
     if (id === 'table') renderTable();
+    if (id === 'stats') renderStats();
     if (id === 'train') renderTrain();
     if (id === 'club') renderClub();
     if (id === 'inbox') renderInbox();
     if (id === 'prematch') renderPrematch();
     if (id === 'history') renderHistory();
+    if (id === 'player') renderPlayer();
+    if (id === 'create') fillCreateForm();
     if (id === 'home') {
       const cont = $('#btn-continue');
       cont.hidden = !S().load();
     }
+  }
+
+  function fillCreateForm() {
+    const selL = $('#sel-league');
+    const selC = $('#sel-club');
+    if (!selL.options.length) {
+      W().LEAGUES.forEach(l => {
+        const o = document.createElement('option');
+        o.value = l.id;
+        o.textContent = `${l.name} (${l.country})`;
+        selL.appendChild(o);
+      });
+    }
+    const fillClubs = () => {
+      const lid = selL.value;
+      selC.innerHTML = '';
+      W().clubsByLeague(lid).slice().sort((a, b) => b.rep - a.rep).forEach(c => {
+        const o = document.createElement('option');
+        o.value = c.id;
+        o.textContent = `${c.name} · rep ${c.rep}`;
+        selC.appendChild(o);
+      });
+      previewClub();
+    };
+    selL.onchange = fillClubs;
+    selC.onchange = previewClub;
+    fillClubs();
+  }
+
+  function previewClub() {
+    const id = $('#sel-club')?.value;
+    const box = $('#club-preview');
+    const tpl = W().clubTemplate(id);
+    if (!tpl || !box) return;
+    box.hidden = false;
+    const stars = (tpl.stars || []).slice(0, 6).map(s => `${s[0]} (${s[3]})`).join(' · ');
+    box.innerHTML = `
+      <div style="display:flex;gap:10px;align-items:center;margin-bottom:8px">
+        <span class="club-dot" style="background:${tpl.color}"></span>
+        <strong>${tpl.name}</strong>
+      </div>
+      <div class="meta" style="color:var(--muted);font-size:12px;line-height:1.45">
+        ${tpl.stadium} · бюджет ~${S().money(tpl.budget, W().leagueById(tpl.leagueId)?.currency)}
+        · фанаты ${tpl.fans.toLocaleString('ru')}<br/>
+        Звёзды: ${stars}
+      </div>
+    `;
   }
 
   function renderHub() {
@@ -57,11 +109,11 @@ window.EYE_UI = (() => {
     const me = S().club();
     $('#hub-club').textContent = me.name;
     $('#hub-color').style.background = me.color;
-    $('#hub-meta').textContent = `Сезон ${st.season} · Тур ${st.week}`;
+    $('#hub-meta').textContent = `${st.leagueName} · С${st.season} · Тур ${st.week}`;
     $('#hub-budget').textContent = S().money(me.budget);
     $('#hub-morale').textContent = 'Мораль ' + me.morale;
     const unread = st.inbox.filter(m => !m.read).length;
-    $('#inbox-badge').textContent = unread ? unread + ' новых' : 'Пусто';
+    $('#inbox-badge').textContent = unread ? unread + ' новых' : 'Почта';
 
     const pm = S().playerMatch();
     const box = $('#next-fixture');
@@ -79,31 +131,84 @@ window.EYE_UI = (() => {
     }
 
     const news = $('#news-strip');
-    news.innerHTML = (st.news || []).slice(0, 4).map(n =>
-      `<div class="news-item"><strong>${n.title}</strong><div>${n.body}</div><small>${new Date(n.at).toLocaleString('ru')}</small></div>`
+    news.innerHTML = (st.news || []).slice(0, 5).map(n =>
+      `<div class="news-item"><strong>${n.title}</strong><div>${n.body}</div></div>`
     ).join('') || `<div class="news-item">Пока тихо. Готовьте состав к туру.</div>`;
+  }
+
+  function openPlayer(id, back = 'squad') {
+    selectedPlayerId = id;
+    playerBack = back;
+    $('#player-back')?.setAttribute('data-nav', back);
+    show('player');
+  }
+
+  function findPlayer(id) {
+    const st = S().get();
+    for (const c of st.clubs) {
+      const p = c.squad.find(x => x.id === id);
+      if (p) return { player: p, club: c };
+    }
+    const market = (st.transferList || []).find(e => e.player.id === id);
+    if (market) return { player: market.player, club: market.clubId ? S().clubById(market.clubId) : null, market };
+    return null;
+  }
+
+  function renderPlayer() {
+    const found = findPlayer(selectedPlayerId);
+    const box = $('#player-card');
+    if (!found) { box.innerHTML = '<p>Игрок не найден</p>'; return; }
+    const p = found.player;
+    const c = found.club;
+    box.innerHTML = `
+      <div class="player-hero">
+        <div class="ovr big">${p.ovr}</div>
+        <div>
+          <h3>${p.name}</h3>
+          <div class="meta">${D().POS_LABEL[p.pos] || p.pos} · ${p.age} лет · ${p.nation}
+            ${p.real ? ' · ★' : ''}
+            ${c ? ' · ' + c.name : ' · свободный'}</div>
+        </div>
+      </div>
+      <div class="stat-grid">
+        ${bar('Атака', p.attack)}${bar('Защита', p.defense)}${bar('Техника', p.tech)}
+        ${bar('Пас', p.pass || p.tech)}${bar('Темп', p.pace || 70)}${bar('Физика', p.physical || p.stamina)}
+        ${bar('Вынос.', p.stamina)}${bar('IQ', p.iq)}${bar('Форма', p.form)}
+      </div>
+      <div class="meta" style="margin-top:12px;color:var(--muted);font-size:13px;line-height:1.5">
+        Потенциал ${p.pot} · стоимость ${S().money(p.value)} · зарплата ${S().money(p.wage)}/нед<br/>
+        Сезон: ${p.seasonApps || 0} игр, ${p.seasonGoals || 0} голов, ${p.seasonAssists || 0} ассистов<br/>
+        Карьера: ${p.careerGoals || 0} голов, ${p.careerAssists || 0} ассистов · контракт ${p.contract}г
+        ${p.injured ? '<br/>Травма: ' + p.injured + ' тур(а)' : ''}
+      </div>
+    `;
+  }
+
+  function bar(label, val) {
+    const v = Math.max(0, Math.min(99, val | 0));
+    return `<div class="stat-bar"><span>${label}</span><i style="--v:${v}%"></i><b>${v}</b></div>`;
   }
 
   function renderSquad() {
     const me = S().club();
     const avg = Math.round(me.squad.reduce((s, p) => s + p.ovr, 0) / me.squad.length);
-    $('#squad-summary').textContent = `${me.squad.length} игроков · средний OVR ${avg} · схема ${me.formation}`;
-    const list = $('#squad-list');
+    const stars = me.squad.filter(p => p.real).length;
+    $('#squad-summary').textContent = `${me.squad.length} игроков · OVR ${avg} · ${stars} звёзд · ${me.formation} · ${me.stadium || ''}`;
     const sorted = [...me.squad].sort((a, b) => b.ovr - a.ovr);
-    list.innerHTML = sorted.map((p, i) => `
-      <div class="row" data-id="${p.id}">
+    $('#squad-list').innerHTML = sorted.map(p => `
+      <button class="row row-btn" data-player="${p.id}">
         <div class="ovr">${p.ovr}</div>
         <div>
-          <strong>${p.name}</strong>
+          <strong>${p.name}${p.real ? ' ★' : ''}</strong>
           <div class="meta">
             <span class="badge-pos">${D().POS_LABEL[p.pos] || p.pos}</span>
-            · ${p.age} лет · форма ${p.form}
-            ${p.injured ? ' · травма ' + p.injured + 'т' : ''}
-            · ${p.seasonGoals} гол
+            · ${p.age}л · форма ${p.form}
+            ${p.injured ? ' · травма' : ''}
+            · ${p.seasonGoals || 0}Г/${p.seasonAssists || 0}А
           </div>
         </div>
         <div class="meta">${S().money(p.value)}</div>
-      </div>
+      </button>
     `).join('');
   }
 
@@ -130,46 +235,96 @@ window.EYE_UI = (() => {
     const slots = D().FORMATIONS[me.formation].slots;
     S().autoLineup();
     const xi = me.squad.slice(0, 11);
-    const pitch = $('#pitch');
-    pitch.innerHTML = coords.map((c, i) => {
+    $('#pitch').innerHTML = coords.map((c, i) => {
       const p = xi[i];
       return `<div class="player-dot" style="left:${c.x}%;top:${c.y}%;border-color:${me.color}" title="${p?.name || ''}">${D().POS_LABEL[slots[i]] || slots[i]}</div>`;
     }).join('');
   }
 
+  function ensureTransferLeagueFilter() {
+    const sel = $('#tf-league');
+    if (!sel || sel.options.length > 1) return;
+    W().LEAGUES.forEach(l => {
+      const o = document.createElement('option');
+      o.value = l.id; o.textContent = l.short || l.name;
+      sel.appendChild(o);
+    });
+  }
+
   function renderTransfers(tab = 'market') {
-    const list = $('#transfer-list');
+    transferTab = tab;
     $all('#transfer-tabs .tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
+    const filters = $('#transfer-filters');
+    if (filters) filters.style.display = tab === 'market' ? '' : 'none';
+    const list = $('#transfer-list');
+
+    if (tab === 'offers') {
+      const offers = S().get().transferOffers || [];
+      list.innerHTML = offers.map(o => `
+        <div class="row">
+          <div class="ovr">€</div>
+          <div>
+            <strong>${o.playerName}</strong>
+            <div class="meta">${o.fromName} предлагает ${S().money(o.bid)}</div>
+          </div>
+          <div class="row-actions">
+            <button class="btn btn-tiny" data-offer-yes="${o.id}">Да</button>
+            <button class="btn btn-tiny" data-offer-no="${o.id}">Нет</button>
+          </div>
+        </div>
+      `).join('') || `<div class="news-item">Входящих предложений нет</div>`;
+      return;
+    }
+
     if (tab === 'sell') {
       const me = S().club();
       list.innerHTML = me.squad.map(p => `
         <div class="row">
           <div class="ovr">${p.ovr}</div>
-          <div><strong>${p.name}</strong><div class="meta">${D().POS_LABEL[p.pos]} · ${p.age} л · ${S().money(p.value)}</div></div>
+          <div>
+            <strong>${p.name}</strong>
+            <div class="meta">${D().POS_LABEL[p.pos]} · ${p.age}л · ${S().money(p.value)}</div>
+          </div>
           <button class="btn btn-tiny" data-sell="${p.id}">Продать</button>
         </div>
       `).join('');
       return;
     }
-    const market = S().get().transferList || [];
-    list.innerHTML = market.slice(0, 40).map(e => {
+
+    ensureTransferLeagueFilter();
+    const market = S().filterMarket({
+      q: $('#tf-q')?.value || '',
+      pos: $('#tf-pos')?.value || 'ALL',
+      leagueId: $('#tf-league')?.value || 'ALL',
+      minOvr: Number($('#tf-ovr')?.value || 0),
+      maxPrice: Number($('#tf-price')?.value || 0) || undefined
+    });
+    list.innerHTML = market.slice(0, 60).map(e => {
       const p = e.player;
-      const ask = e.ask || p.ask || p.value;
       return `
         <div class="row">
           <div class="ovr">${p.ovr}</div>
           <div>
-            <strong>${p.name}</strong>
-            <div class="meta">${D().POS_LABEL[p.pos]} · ${p.age} л · пот. ${p.pot} · ${e.type === 'free' ? 'свободный' : 'трансфер'}</div>
+            <strong>${p.name}${p.real ? ' ★' : ''}</strong>
+            <div class="meta">
+              ${D().POS_LABEL[p.pos]} · ${p.age}л · пот. ${p.pot}
+              · ${e.clubName || 'свободный'}
+              ${e.type === 'star' ? ' · топ' : ''}
+            </div>
           </div>
-          <button class="btn btn-tiny" data-buy="${p.id}">${S().money(ask)}</button>
+          <div class="row-actions">
+            <button class="btn btn-tiny" data-buy="${e.id}">${S().money(e.ask)}</button>
+            ${e.clubId ? `<button class="btn btn-tiny" data-loan="${e.id}">Аренда</button>` : ''}
+          </div>
         </div>
       `;
-    }).join('') || `<div class="news-item">Рынок пуст</div>`;
+    }).join('') || `<div class="news-item">Никого не найдено — смените фильтры</div>`;
   }
 
   function renderTable() {
     const me = S().club();
+    const st = S().get();
+    $('#table-title').textContent = st.leagueName || 'Таблица';
     const rows = S().sortedTable();
     $('#league-table').innerHTML = `
       <table class="league">
@@ -186,6 +341,24 @@ window.EYE_UI = (() => {
         </tbody>
       </table>
     `;
+  }
+
+  function renderStats() {
+    $all('#stats-tabs .tab').forEach(t => t.classList.toggle('active', t.dataset.stab === statsTab));
+    const rows = S().topScorers(25);
+    const sorted = statsTab === 'assists'
+      ? [...rows].sort((a, b) => b.assists - a.assists || b.goals - a.goals)
+      : rows;
+    $('#stats-list').innerHTML = sorted.map((r, i) => `
+      <div class="row">
+        <div class="ovr">${i + 1}</div>
+        <div>
+          <strong>${r.name}</strong>
+          <div class="meta">${r.club}</div>
+        </div>
+        <div class="meta"><strong>${r.goals}</strong> Г · ${r.assists} А</div>
+      </div>
+    `).join('') || `<div class="news-item">Сыграйте матчи — статистика появится</div>`;
   }
 
   function renderTrain() {
@@ -222,11 +395,9 @@ window.EYE_UI = (() => {
 
   function renderHistory() {
     const st = S().get();
-    const me = S().club();
-    $('#history-list').innerHTML = (st.history || []).slice(0, 40).map(h => {
-      const mine = h.home === me.name || h.away === me.name;
-      return `<div class="news-item"><strong>С${h.season} · Т${h.week}</strong><div>${h.home} ${h.score[0]}:${h.score[1]} ${h.away}</div></div>`;
-    }).join('') || `<div class="news-item">Матчей ещё не было</div>`;
+    $('#history-list').innerHTML = (st.history || []).slice(0, 40).map(h => `
+      <div class="news-item"><strong>С${h.season} · Т${h.week}</strong><div>${h.home} ${h.score[0]}:${h.score[1]} ${h.away}</div></div>
+    `).join('') || `<div class="news-item">Матчей ещё не было</div>`;
   }
 
   function renderPrematch() {
@@ -239,21 +410,20 @@ window.EYE_UI = (() => {
     const myS = E().teamStrength(me, { home: home.id === me.id });
     const opS = E().teamStrength(opp, { home: home.id === opp.id });
     $('#prematch-card').innerHTML = `
-      <div class="next-label">Тур ${S().get().week}</div>
+      <div class="next-label">${S().get().leagueName} · Тур ${S().get().week}</div>
       <div class="vs">${home.name}</div>
       <div style="color:var(--dim)">против</div>
       <div class="vs">${away.name}</div>
       <div class="meta" style="color:var(--muted);margin-top:8px">
         Сила: вы ${Math.round((myS.attack + myS.defense + myS.mid) / 3)}
         · соперник ${Math.round((opS.attack + opS.defense + opS.mid) / 3)}
-        · схема ${me.formation} · ${D().STYLES.find(s => s.id === me.style)?.name || me.style}
+        · ${me.formation} · ${D().STYLES.find(s => s.id === me.style)?.name || me.style}
       </div>
     `;
   }
 
-  function drawMatchFrame(ctx, w, h, minute, score, colors, ball) {
+  function drawMatchFrame(ctx, w, h, minute, colors, ball) {
     ctx.clearRect(0, 0, w, h);
-    // pitch
     const g = ctx.createLinearGradient(0, 0, 0, h);
     g.addColorStop(0, '#0F766E');
     g.addColorStop(1, '#064E3B');
@@ -262,35 +432,21 @@ window.EYE_UI = (() => {
     ctx.strokeStyle = 'rgba(255,255,255,0.25)';
     ctx.lineWidth = 2;
     ctx.strokeRect(16, 16, w - 32, h - 32);
-    ctx.beginPath();
-    ctx.arc(w / 2, h / 2, 36, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(16, h / 2); ctx.lineTo(w - 16, h / 2); ctx.stroke();
-    // players breathing
+    ctx.beginPath(); ctx.arc(w / 2, h / 2, 36, 0, Math.PI * 2); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(16, h / 2); ctx.lineTo(w - 16, h / 2); ctx.stroke();
     const t = minute / 90;
     for (let i = 0; i < 11; i++) {
       const x = 40 + (i % 5) * ((w - 80) / 4) + Math.sin(minute * 0.2 + i) * 4;
       const y = 40 + Math.floor(i / 5) * 70 + Math.cos(minute * 0.15 + i) * 3 + t * 20;
-      ctx.beginPath();
-      ctx.fillStyle = colors.home;
-      ctx.arc(x, y, 7, 0, Math.PI * 2);
-      ctx.fill();
+      ctx.beginPath(); ctx.fillStyle = colors.home; ctx.arc(x, y, 7, 0, Math.PI * 2); ctx.fill();
     }
     for (let i = 0; i < 11; i++) {
       const x = 40 + (i % 5) * ((w - 80) / 4) + Math.cos(minute * 0.18 + i) * 4;
       const y = h - 100 - Math.floor(i / 5) * 70 + Math.sin(minute * 0.12 + i) * 3 - t * 15;
-      ctx.beginPath();
-      ctx.fillStyle = colors.away;
-      ctx.arc(x, y, 7, 0, Math.PI * 2);
-      ctx.fill();
+      ctx.beginPath(); ctx.fillStyle = colors.away; ctx.arc(x, y, 7, 0, Math.PI * 2); ctx.fill();
     }
-    // ball
     if (ball) {
-      ctx.beginPath();
-      ctx.fillStyle = '#F8FAFC';
-      ctx.arc(ball.x, ball.y, 5, 0, Math.PI * 2);
-      ctx.fill();
+      ctx.beginPath(); ctx.fillStyle = '#F8FAFC'; ctx.arc(ball.x, ball.y, 5, 0, Math.PI * 2); ctx.fill();
     }
   }
 
@@ -311,8 +467,8 @@ window.EYE_UI = (() => {
     const ctx = canvas.getContext('2d');
     const feed = $('#match-feed');
     feed.innerHTML = '';
-    $('#m-home').textContent = home.name.slice(0, 12);
-    $('#m-away').textContent = away.name.slice(0, 12);
+    $('#m-home').textContent = home.short || home.name.slice(0, 12);
+    $('#m-away').textContent = away.short || away.name.slice(0, 12);
     $('#m-score').textContent = '0:0';
     let score = [0, 0];
     let ball = { x: canvas.width / 2, y: canvas.height / 2 };
@@ -330,15 +486,9 @@ window.EYE_UI = (() => {
       if (ev.type === 'goal') {
         score = ev.score || score;
         $('#m-score').textContent = score.join(':');
-        ball = {
-          x: ev.side === 'home' ? canvas.width / 2 + 20 : canvas.width / 2 - 20,
-          y: ev.side === 'home' ? 40 : canvas.height - 40
-        };
+        ball = { x: canvas.width / 2, y: ev.side === 'home' ? 40 : canvas.height - 40 };
       } else {
-        ball = {
-          x: canvas.width * (0.3 + Math.random() * 0.4),
-          y: canvas.height * (0.25 + Math.random() * 0.5)
-        };
+        ball = { x: canvas.width * (0.3 + Math.random() * 0.4), y: canvas.height * (0.25 + Math.random() * 0.5) };
       }
       const div = document.createElement('div');
       div.className = 'feed-item' + (ev.type === 'goal' ? ' goal' : '');
@@ -346,13 +496,9 @@ window.EYE_UI = (() => {
       feed.prepend(div);
     }, (minute) => {
       $('#m-min').textContent = minute + '′';
-      drawMatchFrame(ctx, canvas.width, canvas.height, minute, score, { home: home.color, away: away.color }, ball);
-    }, {
-      msPerMinute: matchAbort ? 0 : 120,
-      aborted: () => matchAbort
-    });
+      drawMatchFrame(ctx, canvas.width, canvas.height, minute, { home: home.color, away: away.color }, ball);
+    }, { msPerMinute: 110, aborted: () => matchAbort });
 
-    // if skipped, dump remaining feel
     if (matchAbort) {
       score = result.score;
       $('#m-score').textContent = score.join(':');
@@ -372,8 +518,7 @@ window.EYE_UI = (() => {
   }
 
   function renderResult(result) {
-    const st = S().get();
-    const last = st.lastResult || result;
+    const last = S().get().lastResult || result;
     const [hg, ag] = last.score;
     $('#result-card').innerHTML = `
       <div class="next-label">Итог матча</div>
@@ -393,16 +538,29 @@ window.EYE_UI = (() => {
       const nav = e.target.closest('[data-nav]');
       if (nav) { show(nav.dataset.nav); return; }
 
+      const pl = e.target.closest('[data-player]');
+      if (pl) { openPlayer(pl.dataset.player, 'squad'); return; }
+
       const buy = e.target.closest('[data-buy]');
       if (buy) {
-        const r = S().buyPlayer(buy.dataset.buy);
-        toast(r.msg); renderTransfers('market'); renderHub(); return;
+        const r = S().makeOffer(buy.dataset.buy);
+        toast(r.msg); renderTransfers('market'); return;
+      }
+      const loan = e.target.closest('[data-loan]');
+      if (loan) {
+        const r = S().makeOffer(loan.dataset.loan, 0, true);
+        toast(r.msg); renderTransfers('market'); return;
       }
       const sell = e.target.closest('[data-sell]');
       if (sell) {
         const r = S().sellPlayer(sell.dataset.sell);
         toast(r.msg); renderTransfers('sell'); return;
       }
+      const oy = e.target.closest('[data-offer-yes]');
+      if (oy) { toast(S().respondOffer(oy.dataset.offerYes, true).msg); renderTransfers('offers'); return; }
+      const on = e.target.closest('[data-offer-no]');
+      if (on) { toast(S().respondOffer(on.dataset.offerNo, false).msg); renderTransfers('offers'); return; }
+
       const train = e.target.closest('[data-train]');
       if (train) {
         const r = S().train(train.dataset.train);
@@ -416,23 +574,23 @@ window.EYE_UI = (() => {
     });
 
     $('#btn-new')?.addEventListener('click', () => show('create'));
-    $('#btn-continue')?.addEventListener('click', () => {
-      if (S().load()) show('hub');
-    });
+    $('#btn-continue')?.addEventListener('click', () => { if (S().load()) show('hub'); });
     $('#form-create')?.addEventListener('submit', (e) => {
       e.preventDefault();
       const fd = new FormData(e.target);
-      S().createCareer({
-        managerName: String(fd.get('manager')).trim(),
-        clubName: String(fd.get('club')).trim(),
-        color: String(fd.get('color')),
-        leagueId: String(fd.get('league')),
-        formation: String(fd.get('formation')),
-        style: String(fd.get('style'))
-      });
-      S().autoLineup();
-      toast('Карьера начата');
-      show('hub');
+      try {
+        S().createCareer({
+          managerName: String(fd.get('manager')).trim(),
+          clubId: String(fd.get('clubId')),
+          formation: String(fd.get('formation')),
+          style: String(fd.get('style'))
+        });
+        S().autoLineup();
+        toast('Карьера начата');
+        show('hub');
+      } catch (err) {
+        toast('Ошибка: ' + err.message);
+      }
     });
 
     $('#btn-play-match')?.addEventListener('click', () => show('prematch'));
@@ -444,6 +602,14 @@ window.EYE_UI = (() => {
     $('#transfer-tabs')?.addEventListener('click', (e) => {
       const tab = e.target.closest('.tab');
       if (tab) renderTransfers(tab.dataset.tab);
+    });
+    $('#stats-tabs')?.addEventListener('click', (e) => {
+      const tab = e.target.closest('.tab');
+      if (tab) { statsTab = tab.dataset.stab; renderStats(); }
+    });
+    ['tf-q','tf-pos','tf-league','tf-ovr','tf-price'].forEach(id => {
+      $(`#${id}`)?.addEventListener('input', () => renderTransfers('market'));
+      $(`#${id}`)?.addEventListener('change', () => renderTransfers('market'));
     });
     $('#btn-youth')?.addEventListener('click', () => {
       const r = S().promoteYouth();
@@ -477,9 +643,9 @@ window.EYE_UI = (() => {
     const fill = $('#boot-fill');
     for (let i = 0; i <= 100; i += 4) {
       fill.style.width = i + '%';
-      await E().sleep(18);
+      await E().sleep(16);
     }
-    show(S().load() ? 'home' : 'home');
+    show('home');
     refresh('home');
   }
 
