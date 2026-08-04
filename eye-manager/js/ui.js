@@ -29,12 +29,48 @@ window.EYE_UI = (() => {
     $all('.screen').forEach(s => s.classList.remove('active'));
     const el = document.getElementById('screen-' + id);
     if (el) el.classList.add('active');
-    $all('.dock-btn').forEach(b => b.classList.toggle('active', b.dataset.nav === id || (id === 'hub' && b.dataset.nav === 'hub')));
-    if (['squad','tactics','transfers','more'].includes(id)) {
-      $all('.dock-btn').forEach(b => b.classList.toggle('active', b.dataset.nav === id));
+
+    const dockIds = ['hub', 'squad', 'tactics', 'transfers', 'more'];
+    $all('.dock-btn').forEach(b => b.classList.toggle('active', b.dataset.nav === id));
+    if (!dockIds.includes(id) && id !== 'match' && id !== 'prematch' && id !== 'result') {
+      // secondary screens keep "more" highlighted on phone dock
+      if (['table','calendar','cup','ucl','board','youth','inbox','stats','finance','train','club','history','player'].includes(id)) {
+        $all('.dock-btn').forEach(b => b.classList.toggle('active', b.dataset.nav === 'more'));
+      }
     }
+
+    const deskIds = ['hub','squad','tactics','transfers','table','calendar','cup','ucl','board','youth','inbox','more'];
+    $all('.desk-btn').forEach(b => {
+      const nav = b.dataset.nav;
+      let on = nav === id;
+      if (!deskIds.includes(id) && ['stats','finance','train','club','history','player'].includes(id)) {
+        on = nav === 'more';
+      }
+      b.classList.toggle('active', on);
+    });
+
+    const app = document.getElementById('app');
+    if (app) {
+      app.classList.toggle('menu-mode', ['boot', 'home', 'auth', 'create'].includes(id));
+      app.classList.toggle('match-mode', id === 'match');
+    }
+
     window.scrollTo(0, 0);
     refresh(id);
+  }
+
+  function syncDesktopUser() {
+    const foot = $('#desktop-user');
+    if (!foot) return;
+    const user = A().getUser();
+    const me = S().get() ? S().club() : null;
+    if (me) {
+      foot.innerHTML = `<strong>${me.short || me.name}</strong><small>${user?.login ? '@' + user.login : 'Менеджер'}</small>`;
+    } else if (user) {
+      foot.innerHTML = `<strong>${user.name || user.login}</strong><small>@${user.login}</small>`;
+    } else {
+      foot.innerHTML = `<strong>Гость</strong><small>ПК-версия</small>`;
+    }
   }
 
   function toast(msg) {
@@ -120,6 +156,7 @@ window.EYE_UI = (() => {
       btnCont.hidden = true;
       btnOut.hidden = true;
     }
+    syncDesktopUser();
   }
 
   function fillCreateForm() {
@@ -269,6 +306,7 @@ window.EYE_UI = (() => {
     news.innerHTML = (st.news || []).slice(0, 5).map(n =>
       `<div class="news-item"><strong>${n.title}</strong><div>${n.body}</div></div>`
     ).join('') || `<div class="news-item">Пока тихо. Готовьте состав к туру.</div>`;
+    syncDesktopUser();
   }
 
   function openPlayer(id, back = 'squad') {

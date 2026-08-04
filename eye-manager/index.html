@@ -20,7 +20,33 @@
     <div class="grid-fade"></div>
   </div>
 
-  <div id="app">
+  <div id="app" class="menu-mode">
+    <aside id="desktop-nav" class="desktop-nav" aria-label="Навигация ПК">
+      <div class="desktop-brand">
+        <img src="assets/eye.svg" alt="" width="36" height="36" />
+        <div>
+          <strong>EYE</strong>
+          <small>Менеджер</small>
+        </div>
+      </div>
+      <nav class="desktop-nav-list">
+        <button type="button" data-nav="hub" class="desk-btn active"><span>⌂</span>Центр</button>
+        <button type="button" data-nav="squad" class="desk-btn"><span>◈</span>Состав</button>
+        <button type="button" data-nav="tactics" class="desk-btn"><span>⬡</span>Тактика</button>
+        <button type="button" data-nav="transfers" class="desk-btn"><span>⇄</span>Рынок</button>
+        <button type="button" data-nav="table" class="desk-btn"><span>#</span>Таблица</button>
+        <button type="button" data-nav="calendar" class="desk-btn"><span>▦</span>Календарь</button>
+        <button type="button" data-nav="cup" class="desk-btn"><span>◆</span>Кубок</button>
+        <button type="button" data-nav="ucl" class="desk-btn"><span>★</span>ЛЧ</button>
+        <button type="button" data-nav="board" class="desk-btn"><span>○</span>Совет</button>
+        <button type="button" data-nav="youth" class="desk-btn"><span>◇</span>Академия</button>
+        <button type="button" data-nav="inbox" class="desk-btn"><span>✉</span>Почта</button>
+        <button type="button" data-nav="more" class="desk-btn"><span>···</span>Ещё</button>
+      </nav>
+      <div class="desktop-nav-foot" id="desktop-user"><strong>Гость</strong><small>ПК-версия</small></div>
+    </aside>
+
+    <div id="stage">
     <!-- BOOT -->
     <section id="screen-boot" class="screen active">
       <div class="boot-stage">
@@ -486,6 +512,14 @@
       </div>
     </section>
 
+    <!-- RESULT -->
+    <section id="screen-result" class="screen">
+      <div class="result-card glass-panel" id="result-card"></div>
+      <div class="glass-panel" id="press-card" hidden style="padding:14px;margin-top:12px"></div>
+      <button class="btn btn-primary" data-nav="hub" id="btn-result-hub">В центр управления</button>
+    </section>
+    </div><!-- /stage -->
+
     <!-- BID MODAL -->
     <div id="bid-modal" class="modal" hidden>
       <div class="modal-card glass-panel">
@@ -500,13 +534,6 @@
         <button class="btn btn-tiny" id="bid-counter" hidden>Принять контрпредложение</button>
       </div>
     </div>
-
-    <!-- RESULT -->
-    <section id="screen-result" class="screen">
-      <div class="result-card glass-panel" id="result-card"></div>
-      <div class="glass-panel" id="press-card" hidden style="padding:14px;margin-top:12px"></div>
-      <button class="btn btn-primary" data-nav="hub" id="btn-result-hub">В центр управления</button>
-    </section>
 
     <!-- TOAST -->
     <div id="toast" class="toast" hidden></div>
