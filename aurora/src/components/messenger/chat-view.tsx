@@ -3165,7 +3165,7 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
               <Button
                 onClick={() => (pendingFile ? confirmSendPendingFile() : sendMessage())}
                 disabled={uploading}
-                className="mb-0.5 h-10 w-10 shrink-0 rounded-full bg-primary p-0 text-white shadow-none transition hover:bg-primary/90 disabled:opacity-40"
+                className="mb-0.5 h-10 w-10 shrink-0 rounded-full bg-[linear-gradient(145deg,#3aa0ff,#2dd4bf)] p-0 text-white shadow-[0_8px_20px_rgb(58_160_255_/_28%)] transition hover:brightness-110 disabled:opacity-40"
                 title={t('composer.send')}
               >
                 <AnimatePresence mode="wait" initial={false}>
@@ -3185,7 +3185,7 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
               <Button
                 onClick={handleVoiceMicClick}
                 disabled={uploading}
-                className="mb-0.5 h-10 w-10 shrink-0 rounded-full bg-primary p-0 text-white shadow-none transition hover:bg-primary/90 disabled:opacity-40"
+                className="mb-0.5 h-10 w-10 shrink-0 rounded-full bg-[linear-gradient(145deg,#3aa0ff,#2dd4bf)] p-0 text-white shadow-[0_8px_20px_rgb(58_160_255_/_28%)] transition hover:brightness-110 disabled:opacity-40"
                 title={t('composer.recordVoice')}
               >
                 <Mic className="h-4 w-4" />
