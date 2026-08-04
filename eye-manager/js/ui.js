@@ -24,13 +24,37 @@ window.EYE_UI = (() => {
   let calendarTab = 'mine';
   let historyTab = 'matches';
 
+  let createStep = 1;
+
   function $(sel, root = document) { return root.querySelector(sel); }
   function $all(sel, root = document) { return [...root.querySelectorAll(sel)]; }
 
+  const ENTRY_WINDOWS = new Set(['auth', 'create']);
+
   function show(id) {
-    $all('.screen').forEach(s => s.classList.remove('active'));
-    const el = document.getElementById('screen-' + id);
-    if (el) el.classList.add('active');
+    const isWindow = ENTRY_WINDOWS.has(id);
+
+    $all('.screen').forEach(s => {
+      s.classList.remove('active', 'entry-open', 'entry-backdrop');
+      if (s.classList.contains('entry-screen')) s.setAttribute('aria-hidden', 'true');
+    });
+
+    if (isWindow) {
+      const home = document.getElementById('screen-home');
+      const win = document.getElementById('screen-' + id);
+      if (home) {
+        home.classList.add('active', 'entry-backdrop');
+      }
+      if (win) {
+        win.classList.add('active', 'entry-open');
+        win.setAttribute('aria-hidden', 'false');
+        win.scrollTop = 0;
+      }
+    } else {
+      const el = document.getElementById('screen-' + id);
+      if (el) el.classList.add('active');
+      if (el) el.scrollTop = 0;
+    }
 
     const dockIds = ['hub', 'squad', 'tactics', 'transfers', 'more'];
     $all('.dock-btn').forEach(b => b.classList.toggle('active', b.dataset.nav === id));
@@ -49,11 +73,30 @@ window.EYE_UI = (() => {
     if (app) {
       app.classList.toggle('menu-mode', ['boot', 'home', 'auth', 'create'].includes(id));
       app.classList.toggle('match-mode', id === 'match');
+      app.classList.toggle('entry-open', isWindow);
     }
 
     window.scrollTo(0, 0);
-    if (el) el.scrollTop = 0;
+    if (id === 'create') createStep = 1;
+    if (isWindow) renderHome();
     refresh(id);
+  }
+
+  function setCreateStep(step) {
+    createStep = Math.max(1, Math.min(3, Number(step) || 1));
+    $all('[data-create-pane]').forEach(p => {
+      const on = Number(p.dataset.createPane) === createStep;
+      p.hidden = !on;
+      p.classList.toggle('active', on);
+    });
+    $all('#create-stepper .create-step').forEach(b => {
+      const n = Number(b.dataset.gotoStep);
+      b.classList.toggle('active', n === createStep);
+      b.classList.toggle('done', n < createStep);
+      b.setAttribute('aria-selected', n === createStep ? 'true' : 'false');
+    });
+    const panel = $('#screen-create .entry-panel');
+    if (panel) panel.scrollTop = 0;
   }
 
   function syncDesktopUser() {
@@ -110,7 +153,7 @@ window.EYE_UI = (() => {
 
   function refresh(id) {
     const st = S().get();
-    if (!st && !['boot','home','create'].includes(id)) return;
+    if (!st && !['boot','home','create','auth'].includes(id)) return;
     if (id === 'hub') renderHub();
     if (id === 'squad') renderSquad();
     if (id === 'tactics') renderTactics();
@@ -130,14 +173,20 @@ window.EYE_UI = (() => {
     if (id === 'board') renderBoard();
     if (id === 'finance') renderFinance();
     if (id === 'result') renderResult();
-    if (id === 'create') fillCreateForm();
+    if (id === 'create') {
+      setCreateStep(createStep || 1);
+      fillCreateForm();
+    }
     if (id === 'more') syncCurrencyButtons();
     if (id === 'auth') renderAuth();
     if (id === 'home') renderHome();
   }
 
   function renderAuth() {
-    // no-op; tabs handled in bind
+    requestAnimationFrame(() => {
+      const form = $('#form-login')?.hidden ? $('#form-register') : $('#form-login');
+      form?.querySelector('input')?.focus();
+    });
   }
 
   async function renderHome() {
@@ -1534,6 +1583,40 @@ window.EYE_UI = (() => {
       if (!A().isLoggedIn()) { show('auth'); toast('Сначала войдите'); return; }
       show('create');
     });
+    document.body.addEventListener('click', (e) => {
+      const next = e.target.closest('[data-create-next]');
+      if (next) {
+        const step = Number(next.dataset.createNext);
+        if (step === 2) {
+          const mgr = document.querySelector('#form-create input[name="manager"]');
+          if (mgr && !String(mgr.value || '').trim()) {
+            mgr.focus();
+            toast('Укажите имя менеджера');
+            return;
+          }
+          if (!$('#sel-league')?.value) { toast('Выберите лигу'); return; }
+        }
+        if (step === 3 && !$('#sel-club')?.value) { toast('Выберите клуб'); return; }
+        setCreateStep(step);
+        e.preventDefault();
+        return;
+      }
+      const goto = e.target.closest('[data-goto-step]');
+      if (goto) {
+        const step = Number(goto.dataset.gotoStep);
+        // allow going back freely; forward only if previous filled
+        if (step > createStep) {
+          if (step >= 2) {
+            const mgr = document.querySelector('#form-create input[name="manager"]');
+            if (mgr && !String(mgr.value || '').trim()) { toast('Сначала имя менеджера'); return; }
+            if (!$('#sel-league')?.value) { toast('Сначала лигу'); return; }
+          }
+          if (step >= 3 && !$('#sel-club')?.value) { toast('Сначала клуб'); return; }
+        }
+        setCreateStep(step);
+        e.preventDefault();
+      }
+    });
     $('#btn-continue')?.addEventListener('click', async () => {
       if (!A().isLoggedIn()) { show('auth'); return; }
       if (S().load()) { show('hub'); return; }
@@ -1563,6 +1646,15 @@ window.EYE_UI = (() => {
       $all('#auth-tabs .tab').forEach(t => t.classList.toggle('active', t === tab));
       $('#form-login').hidden = mode !== 'login';
       $('#form-register').hidden = mode !== 'register';
+      requestAnimationFrame(() => {
+        const form = mode === 'login' ? $('#form-login') : $('#form-register');
+        form?.querySelector('input')?.focus();
+      });
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && document.getElementById('app')?.classList.contains('entry-open')) {
+        show('home');
+      }
     });
     $('#form-login')?.addEventListener('submit', async (e) => {
       e.preventDefault();

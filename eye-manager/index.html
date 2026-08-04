@@ -87,93 +87,109 @@
       </header>
       <div class="home-user glass-panel" id="home-user" hidden></div>
       <div class="home-actions">
-        <button class="btn btn-primary btn-glow" id="btn-auth" hidden>Войти</button>
-        <button class="btn btn-primary btn-glow" id="btn-new" hidden>Новая карьера</button>
-        <button class="btn btn-glass" id="btn-continue" hidden>Продолжить</button>
-        <button class="btn btn-glass" id="btn-logout" hidden>Выйти</button>
-      </div>
-      <div class="home-pillars" aria-hidden="true">
-        <span>Аккаунт</span>
-        <span>Сезон</span>
-        <span>Матч</span>
-        <span>Трансферы</span>
+        <button class="btn btn-primary btn-glow" id="btn-auth" type="button" hidden>Войти</button>
+        <button class="btn btn-primary btn-glow" id="btn-new" type="button" hidden>Новая карьера</button>
+        <button class="btn btn-glass" id="btn-continue" type="button" hidden>Продолжить</button>
+        <button class="btn btn-glass" id="btn-logout" type="button" hidden>Выйти</button>
       </div>
     </section>
 
-    <!-- AUTH -->
-    <section id="screen-auth" class="screen">
-      <header class="subhead">
-        <button class="icon-back" data-nav="home" aria-label="Назад">‹</button>
-        <h2>Аккаунт</h2>
-      </header>
-      <div class="tabs" id="auth-tabs">
-        <button type="button" class="tab active" data-auth-tab="login">Вход</button>
-        <button type="button" class="tab" data-auth-tab="register">Регистрация</button>
+    <!-- AUTH (window over home) -->
+    <section id="screen-auth" class="screen entry-screen" aria-hidden="true">
+      <button type="button" class="entry-scrim" data-nav="home" aria-label="Закрыть"></button>
+      <div class="entry-panel glass-panel" role="dialog" aria-modal="true" aria-labelledby="auth-title">
+        <header class="entry-head">
+          <h2 id="auth-title">Аккаунт</h2>
+          <button type="button" class="entry-close" data-nav="home" aria-label="Закрыть">×</button>
+        </header>
+        <div class="tabs" id="auth-tabs">
+          <button type="button" class="tab active" data-auth-tab="login">Вход</button>
+          <button type="button" class="tab" data-auth-tab="register">Регистрация</button>
+        </div>
+        <form id="form-login" class="create-form entry-form">
+          <label>Логин<input name="login" required minlength="3" maxlength="24" autocomplete="username" placeholder="login" /></label>
+          <label>Пароль<input name="password" type="password" required minlength="4" autocomplete="current-password" placeholder="••••" /></label>
+          <button class="btn btn-primary" type="submit">Войти</button>
+          <p class="hint" id="login-msg"></p>
+        </form>
+        <form id="form-register" class="create-form entry-form" hidden>
+          <label>Логин<input name="login" required minlength="3" maxlength="24" autocomplete="username" placeholder="login" /></label>
+          <label>Имя менеджера<input name="name" maxlength="32" autocomplete="nickname" placeholder="Как вас зовут" /></label>
+          <label>Пароль<input name="password" type="password" required minlength="4" autocomplete="new-password" placeholder="минимум 4 символа" /></label>
+          <button class="btn btn-primary" type="submit">Создать аккаунт</button>
+          <p class="hint" id="register-msg"></p>
+        </form>
       </div>
-      <form id="form-login" class="glass-panel create-form">
-        <label>Логин<input name="login" required minlength="3" maxlength="24" autocomplete="username" placeholder="login" /></label>
-        <label>Пароль<input name="password" type="password" required minlength="4" autocomplete="current-password" placeholder="••••" /></label>
-        <button class="btn btn-primary" type="submit">Войти</button>
-        <p class="hint" id="login-msg"></p>
-      </form>
-      <form id="form-register" class="glass-panel create-form" hidden>
-        <label>Логин<input name="login" required minlength="3" maxlength="24" autocomplete="username" placeholder="login" /></label>
-        <label>Имя менеджера<input name="name" maxlength="32" autocomplete="nickname" placeholder="Как вас зовут" /></label>
-        <label>Пароль<input name="password" type="password" required minlength="4" autocomplete="new-password" placeholder="минимум 4 символа" /></label>
-        <button class="btn btn-primary" type="submit">Создать аккаунт</button>
-        <p class="hint" id="register-msg"></p>
-      </form>
     </section>
 
-    <!-- CREATE -->
-    <section id="screen-create" class="screen">
-      <header class="subhead">
-        <button class="icon-back" data-nav="home" aria-label="Назад">‹</button>
-        <h2>Новая карьера</h2>
-      </header>
-      <form id="form-create" class="glass-panel create-form">
-        <label>Менеджер
-          <input name="manager" maxlength="24" required placeholder="Ваше имя" autocomplete="nickname" />
-        </label>
-
-        <div class="field-block">
-          <span class="field-label">Лига</span>
-          <div class="league-pills" id="league-pills" role="listbox" aria-label="Лига"></div>
-          <input type="hidden" name="league" id="sel-league" required />
+    <!-- CREATE (window over home, stepped) -->
+    <section id="screen-create" class="screen entry-screen" aria-hidden="true">
+      <button type="button" class="entry-scrim" data-nav="home" aria-label="Закрыть"></button>
+      <div class="entry-panel entry-panel-wide glass-panel" role="dialog" aria-modal="true" aria-labelledby="create-title">
+        <header class="entry-head">
+          <h2 id="create-title">Новая карьера</h2>
+          <button type="button" class="entry-close" data-nav="home" aria-label="Закрыть">×</button>
+        </header>
+        <div class="create-stepper" id="create-stepper" role="tablist" aria-label="Шаги">
+          <button type="button" class="create-step active" data-goto-step="1" role="tab" aria-selected="true">1 · Лига</button>
+          <button type="button" class="create-step" data-goto-step="2" role="tab" aria-selected="false">2 · Клуб</button>
+          <button type="button" class="create-step" data-goto-step="3" role="tab" aria-selected="false">3 · Старт</button>
         </div>
+        <form id="form-create" class="create-form entry-form">
+          <div class="create-pane active" data-create-pane="1">
+            <label>Менеджер
+              <input name="manager" maxlength="24" required placeholder="Ваше имя" autocomplete="nickname" />
+            </label>
+            <div class="field-block">
+              <span class="field-label">Лига</span>
+              <div class="league-pills" id="league-pills" role="listbox" aria-label="Лига"></div>
+              <input type="hidden" name="league" id="sel-league" required />
+            </div>
+            <button type="button" class="btn btn-primary" data-create-next="2">Далее · клуб</button>
+          </div>
 
-        <div class="field-block">
-          <span class="field-label">Клуб</span>
-          <div class="club-picker" id="club-picker" role="listbox" aria-label="Клуб"></div>
-          <input type="hidden" name="clubId" id="sel-club" required />
-        </div>
+          <div class="create-pane" data-create-pane="2" hidden>
+            <div class="field-block">
+              <span class="field-label">Клуб</span>
+              <div class="club-picker" id="club-picker" role="listbox" aria-label="Клуб"></div>
+              <input type="hidden" name="clubId" id="sel-club" required />
+            </div>
+            <div class="club-preview glass-panel" id="club-preview" hidden></div>
+            <div class="create-nav-row">
+              <button type="button" class="btn btn-glass" data-create-next="1">Назад</button>
+              <button type="button" class="btn btn-primary" data-create-next="3">Далее · тактика</button>
+            </div>
+          </div>
 
-        <div class="club-preview glass-panel" id="club-preview" hidden></div>
-
-        <div class="create-row">
-          <label>Схема
-            <select name="formation">
-              <option>4-3-3</option>
-              <option>4-4-2</option>
-              <option>4-2-3-1</option>
-              <option>3-5-2</option>
-              <option>5-3-2</option>
-              <option>4-1-4-1</option>
-            </select>
-          </label>
-          <label>Стиль
-            <select name="style">
-              <option value="balance">Баланс</option>
-              <option value="attack">Атака</option>
-              <option value="defend">Оборона</option>
-              <option value="possession">Владение</option>
-              <option value="counter">Контратака</option>
-            </select>
-          </label>
-        </div>
-
-        <button class="btn btn-primary create-submit" type="submit">Возглавить клуб</button>
-      </form>
+          <div class="create-pane" data-create-pane="3" hidden>
+            <div class="create-row">
+              <label>Схема
+                <select name="formation">
+                  <option>4-3-3</option>
+                  <option>4-4-2</option>
+                  <option>4-2-3-1</option>
+                  <option>3-5-2</option>
+                  <option>5-3-2</option>
+                  <option>4-1-4-1</option>
+                </select>
+              </label>
+              <label>Стиль
+                <select name="style">
+                  <option value="balance">Баланс</option>
+                  <option value="attack">Атака</option>
+                  <option value="defend">Оборона</option>
+                  <option value="possession">Владение</option>
+                  <option value="counter">Контратака</option>
+                </select>
+              </label>
+            </div>
+            <div class="create-nav-row">
+              <button type="button" class="btn btn-glass" data-create-next="2">Назад</button>
+              <button class="btn btn-primary create-submit" type="submit">Возглавить клуб</button>
+            </div>
+          </div>
+        </form>
+      </div>
     </section>
 
     <!-- HUB -->
