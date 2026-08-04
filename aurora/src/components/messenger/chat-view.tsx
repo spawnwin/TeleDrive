@@ -286,7 +286,11 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
   }, [])
   const [showScrollFab, setShowScrollFab] = useState(false)
   const [belowViewportUnread, setBelowViewportUnread] = useState(0)
+  const [hasMoreOlder, setHasMoreOlder] = useState(false)
+  const [loadingOlder, setLoadingOlder] = useState(false)
   const isAtBottomRef = useRef(true)
+  const loadingOlderRef = useRef(false)
+  const hasMoreOlderRef = useRef(false)
   const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const lastTypingSentRef = useRef<number>(0)
   const notifyRef = useRef<(title: string, body: string, chatId: string) => void>(() => {})
@@ -350,9 +354,16 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
             (isEncryptedRef.current(msg.content) ? t('chat.encrypted') : messagePreview(display, t))
           notifyRef.current(msg.sender.name, notifyBody, msg.chatId)
         }
+        // Only clear unread / send read receipts when the user can actually see
+        // the new message (scrolled to bottom). Otherwise the badge vanishes while
+        // the message stays below the viewport.
         if (msg.chatId === activeChatId && msg.senderId !== currentUser?.id) {
-          markChatRead(msg.chatId)
-          markReadRef.current(msg.chatId)
+          if (isAtBottomRef.current) {
+            markChatRead(msg.chatId)
+            if (!loadHideReadReceipts(msg.chatId)) {
+              markReadRef.current(msg.chatId)
+            }
+          }
         } else if (msg.chatId !== activeChatId && msg.senderId !== currentUser?.id) {
           incrementUnread(msg.chatId)
         }
@@ -851,11 +862,21 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
     // typing for the chat we just opened (the list no longer needs it).
     setInput(useAppStore.getState().drafts[activeChatId] ?? '')
     clearChatTyping(activeChatId)
+    setHasMoreOlder(false)
+    hasMoreOlderRef.current = false
     fetch(`/api/chats/${activeChatId}/messages?take=50`)
-      .then((r) => r.json())
+      .then(async (r) => {
+        const data = await r.json().catch(() => ({}))
+        if (!r.ok) throw new Error(data.error || 'load failed')
+        return data
+      })
       .then((data) => {
         if (cancelled) return
-        setMessages(data.messages || [])
+        const loaded = (data.messages || []) as ChatMessage[]
+        setMessages(loaded)
+        const more = loaded.length >= 50
+        setHasMoreOlder(more)
+        hasMoreOlderRef.current = more
         setCommentsEnabled(!!data.commentsEnabled)
         setIsForum(!!data.isForum)
         setPinnedMessage(data.pinnedMessage ?? null)
@@ -876,6 +897,11 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
           markReadRef.current(activeChatId)
         }
       })
+      .catch(() => {
+        if (cancelled) return
+        setMessages([])
+        toast.error(t('misc.error'))
+      })
       .finally(() => {
         if (!cancelled) setLoadingMessages(false)
       })
@@ -888,7 +914,7 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
     return () => {
       cancelled = true
     }
-  }, [activeChatId, markChatRead, clearChatTyping])
+  }, [activeChatId, markChatRead, clearChatTyping, t])
 
   useEffect(() => {
     messagesRef.current = messages
@@ -921,7 +947,57 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
     isAtBottomRef.current = true
     setShowScrollFab(false)
     setBelowViewportUnread(0)
-  }, [])
+    if (activeChatId) {
+      markChatRead(activeChatId)
+      if (!loadHideReadReceipts(activeChatId)) {
+        markReadRef.current(activeChatId)
+      }
+    }
+  }, [activeChatId, markChatRead])
+
+  const loadOlderMessages = useCallback(async () => {
+    if (!activeChatId || loadingOlderRef.current || !hasMoreOlderRef.current) return
+    if (searchQuery || showFavorites) return
+    const cursor = messagesRef.current[0]?.id
+    if (!cursor) return
+
+    loadingOlderRef.current = true
+    setLoadingOlder(true)
+    skipAutoScrollRef.current = true
+    try {
+      const qs = new URLSearchParams({ cursor, take: '50' })
+      if (activeTopicId) qs.set('topicId', activeTopicId)
+      const res = await fetch(`/api/chats/${activeChatId}/messages?${qs}`)
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) return
+      const older = (data.messages || []) as ChatMessage[]
+      if (older.length === 0) {
+        setHasMoreOlder(false)
+        hasMoreOlderRef.current = false
+        return
+      }
+      const container = scrollRef.current
+      const prevScrollHeight = container?.scrollHeight ?? 0
+      const prevScrollTop = container?.scrollTop ?? 0
+      setMessages((prev) => {
+        const seen = new Set(prev.map((m) => m.id))
+        const merged = [...older.filter((m) => !seen.has(m.id)), ...prev]
+        messagesRef.current = merged
+        return merged
+      })
+      const more = older.length >= 50
+      setHasMoreOlder(more)
+      hasMoreOlderRef.current = more
+      requestAnimationFrame(() => {
+        if (container) {
+          container.scrollTop = prevScrollTop + (container.scrollHeight - prevScrollHeight)
+        }
+      })
+    } finally {
+      loadingOlderRef.current = false
+      setLoadingOlder(false)
+    }
+  }, [activeChatId, activeTopicId, searchQuery, showFavorites])
 
   const handleMessagesScroll = useCallback(() => {
     const el = scrollRef.current
@@ -931,8 +1007,18 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
     setShowScrollFab(!atBottom)
     if (atBottom) {
       setBelowViewportUnread(0)
+      if (activeChatId) {
+        markChatRead(activeChatId)
+        if (!loadHideReadReceipts(activeChatId)) {
+          markReadRef.current(activeChatId)
+        }
+      }
     }
-  }, [])
+    // Prefetch older history near the top.
+    if (el.scrollTop < 120) {
+      void loadOlderMessages()
+    }
+  }, [activeChatId, markChatRead, loadOlderMessages])
 
   const jumpToMessage = useCallback(
     async (messageId: string) => {
@@ -955,9 +1041,9 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
       let pageCount = 0
       while (pageCount < MAX_PAGES) {
         pageCount++
-        const res = await fetch(
-          `/api/chats/${activeChatId}/messages?cursor=${cursor}&take=50`,
-        )
+        const qs = new URLSearchParams({ cursor, take: '50' })
+        if (activeTopicId) qs.set('topicId', activeTopicId)
+        const res = await fetch(`/api/chats/${activeChatId}/messages?${qs}`)
         const data = await res.json()
         const older: ChatMessage[] = data.messages || []
         if (older.length === 0) break
@@ -971,6 +1057,9 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
           const prevScrollTop = container?.scrollTop ?? 0
 
           setMessages(current)
+          const more = older.length >= 50
+          setHasMoreOlder(more)
+          hasMoreOlderRef.current = more
           requestAnimationFrame(() => {
             requestAnimationFrame(() => {
               if (container) {
@@ -989,7 +1078,7 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
 
       toast.error(t('msg.notFound'))
     },
-    [activeChatId, scrollAndHighlightMessage, t],
+    [activeChatId, activeTopicId, scrollAndHighlightMessage, t],
   )
 
   useEffect(() => {
@@ -2532,6 +2621,11 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
         >
         {/* justify-end keeps short threads glued to the bottom (Telegram-style). */}
         <div className="relative flex min-h-full flex-col justify-end">
+        {loadingOlder && (
+          <div className="flex justify-center py-2">
+            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+          </div>
+        )}
         {loadingMessages ? (
           <div className="flex flex-1 items-center justify-center py-10">
             <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />

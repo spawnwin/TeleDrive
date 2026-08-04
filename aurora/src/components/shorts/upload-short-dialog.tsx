@@ -288,6 +288,9 @@ export function UploadShortDialog({
         const data = await res.json()
         if (!res.ok) throw new Error(data.error || t('misc.error'))
         toast.success(t('shorts.upload.published'))
+        if (shareToFeed && data.sharedToFeed === false) {
+          toast.error(t('feed.shareFailed'))
+        }
         reset()
         onOpenChange(false)
         onPublished()
@@ -419,6 +422,9 @@ export function UploadShortDialog({
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || t('misc.error'))
       toast.success(t('shorts.upload.published'))
+      if (shareToFeed && data.sharedToFeed === false) {
+        toast.error(t('feed.shareFailed'))
+      }
       reset()
       onOpenChange(false)
       onPublished()

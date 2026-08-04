@@ -128,17 +128,26 @@ export function MarketplaceDialog({ open, onOpenChange }: MarketplaceDialogProps
         const res = await fetch(`/api/marketplace/${encodeURIComponent(listingId)}`)
         const data = await res.json().catch(() => ({}))
         if (res.ok && data.listing) {
-          setSelected(data.listing as Listing)
+          setSelected({
+            ...(data.listing as Listing),
+            order: data.order ?? (data.listing as Listing).order ?? null,
+          })
           setView('detail')
           setEditing(false)
+          return
         }
+        setSelected(null)
+        setView('browse')
+        toast.error(data.error || t('marketplace.notFound'))
       } catch {
-        /* ignore */
+        setSelected(null)
+        setView('browse')
+        toast.error(t('misc.error'))
       }
     }
     window.addEventListener('aurora:open-marketplace', handler)
     return () => window.removeEventListener('aurora:open-marketplace', handler)
-  }, [])
+  }, [t])
 
   const resetForm = () => {
     setFormTitle('')
@@ -190,6 +199,9 @@ export function MarketplaceDialog({ open, onOpenChange }: MarketplaceDialogProps
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || t('misc.error'))
       toast.success(t('marketplace.published'))
+      if (shareToFeed && data.sharedToFeed === false) {
+        toast.error(t('feed.shareFailed'))
+      }
       resetForm()
       setView('browse')
       load()

@@ -498,6 +498,7 @@ const ru: Dict = {
   'feed.shareKind.stream': 'Стрим',
   'feed.shareKind.listing': 'Объявление',
   'feed.shareFailed': 'Не удалось опубликовать в ленте',
+  'feed.loadOlderComments': 'Показать более ранние',
   'shorts.endOfFeed': '· конец ленты ·',
   'nav.earnings': 'Заработок',
 
@@ -654,6 +655,7 @@ const ru: Dict = {
   'marketplace.digitalLabel': 'Цифровой товар (без доставки)',
   'marketplace.publish': 'Опубликовать',
   'marketplace.published': 'Объявление опубликовано',
+  'marketplace.notFound': 'Объявление не найдено или недоступно',
   'marketplace.errorTitle': 'Введите название',
   'marketplace.errorPrice': 'Укажите цену',
   'marketplace.purchased': 'Покупка совершена!',
@@ -1853,6 +1855,7 @@ const en: Dict = {
   'feed.shareKind.stream': 'Stream',
   'feed.shareKind.listing': 'Listing',
   'feed.shareFailed': 'Could not post to the feed',
+  'feed.loadOlderComments': 'Show earlier comments',
   'shorts.endOfFeed': '· end of feed ·',
   'nav.earnings': 'Earnings',
 
@@ -2009,6 +2012,7 @@ const en: Dict = {
   'marketplace.digitalLabel': 'Digital item (no shipping)',
   'marketplace.publish': 'Publish',
   'marketplace.published': 'Listing published',
+  'marketplace.notFound': 'Listing not found or unavailable',
   'marketplace.errorTitle': 'Enter a title',
   'marketplace.errorPrice': 'Set a price',
   'marketplace.purchased': 'Purchase complete!',

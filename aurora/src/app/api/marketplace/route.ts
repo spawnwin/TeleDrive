@@ -129,9 +129,10 @@ export const POST = withJsonApi(async function POST(req: NextRequest) {
     },
   })
 
+  let sharedToFeed = false
   if (shareToFeed) {
     const imgs = serializeListingImages(listing.images)
-    await createFeedSharePost({
+    const created = await createFeedSharePost({
       userId: me.id,
       kind: 'listing',
       targetId: listing.id,
@@ -141,7 +142,8 @@ export const POST = withJsonApi(async function POST(req: NextRequest) {
       }`,
       coverUrl: imgs[0] || null,
     })
+    sharedToFeed = !!created
   }
 
-  return NextResponse.json({ listing: serialize(listing) })
+  return NextResponse.json({ listing: serialize(listing), sharedToFeed })
 })

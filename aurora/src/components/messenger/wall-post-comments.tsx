@@ -47,6 +47,8 @@ export function WallPostComments({
   const { setProfileUserId } = useAppStore()
   const [comments, setComments] = useState<WallComment[]>([])
   const [loading, setLoading] = useState(false)
+  const [loadingOlder, setLoadingOlder] = useState(false)
+  const [nextBefore, setNextBefore] = useState<string | null>(null)
   const [text, setText] = useState('')
   const [sending, setSending] = useState(false)
   const [loaded, setLoaded] = useState(false)
@@ -54,10 +56,11 @@ export function WallPostComments({
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const res = await fetch(`/api/feed/${encodeURIComponent(postId)}/comments?take=100`)
+      const res = await fetch(`/api/feed/${encodeURIComponent(postId)}/comments?take=50`)
       const data = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(data.error || t('misc.error'))
       setComments((data.comments || []) as WallComment[])
+      setNextBefore(typeof data.nextBefore === 'string' ? data.nextBefore : null)
       setLoaded(true)
       if (typeof data.commentsCount === 'number' || typeof data.commentsClosed === 'boolean') {
         onMetaChange?.({
@@ -75,9 +78,31 @@ export function WallPostComments({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [postId, t])
 
+  const loadOlder = useCallback(async () => {
+    if (!nextBefore || loadingOlder) return
+    setLoadingOlder(true)
+    try {
+      const qs = new URLSearchParams({ take: '50', before: nextBefore })
+      const res = await fetch(`/api/feed/${encodeURIComponent(postId)}/comments?${qs}`)
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error || t('misc.error'))
+      const older = (data.comments || []) as WallComment[]
+      setComments((prev) => {
+        const seen = new Set(prev.map((c) => c.id))
+        return [...older.filter((c) => !seen.has(c.id)), ...prev]
+      })
+      setNextBefore(typeof data.nextBefore === 'string' ? data.nextBefore : null)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : t('misc.error'))
+    } finally {
+      setLoadingOlder(false)
+    }
+  }, [nextBefore, loadingOlder, postId, t])
+
   useEffect(() => {
     setLoaded(false)
     setComments([])
+    setNextBefore(null)
   }, [postId])
 
   useEffect(() => {
@@ -190,6 +215,18 @@ export function WallPostComments({
 
           {!loading && comments.length === 0 && !commentsClosed && (
             <p className="py-2 text-center text-xs text-muted-foreground">{t('feed.noComments')}</p>
+          )}
+
+          {nextBefore && (
+            <button
+              type="button"
+              disabled={loadingOlder}
+              onClick={() => void loadOlder()}
+              className="mx-auto flex items-center gap-1.5 rounded-lg px-2 py-1 text-[11px] font-medium text-[#3390ec] hover:bg-[#3390ec]/10 disabled:opacity-50"
+            >
+              {loadingOlder ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
+              {t('feed.loadOlderComments')}
+            </button>
           )}
 
           {comments.map((c) => (

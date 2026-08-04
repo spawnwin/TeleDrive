@@ -293,7 +293,7 @@ export function FriendsDialog({
                 <FriendRow
                   key={r.id}
                   user={r.user}
-                  online={isFriendOnline(r.user.id, r.user.online, onlineUserIds, presenceSynced)}
+                  online={isFriendOnline(r.user.id, r.user.online, onlineUserIds, presenceSynced, r.user.lastSeen)}
                   onProfile={() => {
                     setProfileUserId(r.user.id)
                     onOpenChange(false)

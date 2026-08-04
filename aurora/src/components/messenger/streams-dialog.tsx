@@ -247,6 +247,9 @@ export function StreamsDialog({ open, onOpenChange }: StreamsDialogProps) {
       setShowGoLive(false)
       setTitle('')
       setGoLiveGameId('')
+      if (shareToFeed && data.sharedToFeed === false) {
+        toast.error(t('feed.shareFailed'))
+      }
       setShareToFeed(true)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : t('misc.error'))

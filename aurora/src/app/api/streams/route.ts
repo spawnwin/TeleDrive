@@ -94,8 +94,9 @@ export const POST = withJsonApi(async function POST(req: NextRequest) {
     },
   })
 
+  let sharedToFeed = false
   if (body?.shareToFeed === true) {
-    await createFeedSharePost({
+    const created = await createFeedSharePost({
       userId: me.id,
       kind: 'stream',
       targetId: stream.id,
@@ -103,6 +104,7 @@ export const POST = withJsonApi(async function POST(req: NextRequest) {
       content: stream.game ? `${stream.title} · ${stream.game.title}` : stream.title,
       coverUrl: me.avatarUrl,
     })
+    sharedToFeed = !!created
   }
 
   return NextResponse.json({
@@ -115,5 +117,6 @@ export const POST = withJsonApi(async function POST(req: NextRequest) {
       host: stream.host,
       game: stream.game,
     },
+    sharedToFeed,
   })
 })

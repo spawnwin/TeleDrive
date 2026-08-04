@@ -191,8 +191,9 @@ export const POST = withJsonApi(async function POST(req: NextRequest) {
     },
   })
 
+  let sharedToFeed = false
   if (shareToFeed === true) {
-    await createFeedSharePost({
+    const created = await createFeedSharePost({
       userId: me.id,
       kind: 'short',
       targetId: short.id,
@@ -200,9 +201,11 @@ export const POST = withJsonApi(async function POST(req: NextRequest) {
       content: short.description || short.title,
       coverUrl: short.thumbnailUrl,
     })
+    sharedToFeed = !!created
   }
 
   return NextResponse.json({
     short: serializeShort(short, false),
+    sharedToFeed,
   })
 })

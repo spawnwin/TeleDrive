@@ -24,7 +24,8 @@ export const GET = withJsonApi(async function GET(
 
   const url = new URL(req.url)
   const cursor = url.searchParams.get('cursor')
-  const take = Number(url.searchParams.get('take') ?? 50)
+  const takeRaw = Number(url.searchParams.get('take') ?? 50)
+  const take = Math.min(100, Math.max(1, Number.isFinite(takeRaw) ? takeRaw : 50))
   const search = url.searchParams.get('q')?.trim()
   const favoritesOnly = url.searchParams.get('favorites') === '1'
   const topicId = url.searchParams.get('topicId') || null
@@ -48,7 +49,7 @@ export const GET = withJsonApi(async function GET(
       // "Delete for me" — hide from this user's history only
       hiddenFor: { none: { userId: me.id } },
     },
-    orderBy: { createdAt: 'desc' },
+    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
     take,
     ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
     include: {

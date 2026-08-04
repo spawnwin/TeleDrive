@@ -17,14 +17,20 @@ export const GET = withJsonApi(async function GET(
   if (!gate.ok) return NextResponse.json({ error: gate.error }, { status: gate.status })
 
   const url = new URL(req.url)
-  const take = Math.min(100, Math.max(1, Number(url.searchParams.get('take') || 50)))
+  const takeRaw = Number(url.searchParams.get('take') || 50)
+  const take = Math.min(100, Math.max(1, Number.isFinite(takeRaw) ? takeRaw : 50))
+  // Cursor = oldest comment id already loaded; fetch the next older page.
+  const before = url.searchParams.get('before')
 
-  const comments = await db.wallPostComment.findMany({
+  // Newest page first so comments beyond the earliest 50 stay visible.
+  const commentsDesc = await db.wallPostComment.findMany({
     where: { postId },
-    orderBy: { createdAt: 'asc' },
+    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
     take,
+    ...(before ? { skip: 1, cursor: { id: before } } : {}),
     include: { user: { select: wallAuthorSelect } },
   })
+  const comments = [...commentsDesc].reverse()
 
   const canModerate =
     gate.post.authorId === me.id || gate.post.profileId === me.id
@@ -41,6 +47,8 @@ export const GET = withJsonApi(async function GET(
     commentsClosed: gate.post.commentsClosed,
     commentsCount: gate.post.comments,
     canModerate,
+    nextBefore:
+      commentsDesc.length === take ? commentsDesc[commentsDesc.length - 1]?.id ?? null : null,
   })
 })
 
