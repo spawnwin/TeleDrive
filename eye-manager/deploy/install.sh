@@ -21,7 +21,6 @@ rsync -a --delete \
 
 chown -R "$SERVICE_USER":"$SERVICE_USER" "$APP_DIR"
 
-# systemd unit
 cat >/etc/systemd/system/eye-manager.service <<EOF
 [Unit]
 Description=EYE Football Manager
@@ -45,36 +44,58 @@ systemctl daemon-reload
 systemctl enable eye-manager
 systemctl restart eye-manager
 
-# nginx snippet for http://IP/eye/
+# Dedicated nginx site for /eye/ on the public IP — does not modify Aurora site
+cat >/etc/nginx/sites-available/eye <<EOF
+# EYE Football Manager — isolated from Aurora
+server {
+    listen 80;
+    listen [::]:80;
+    server_name 135.106.173.99;
+
+    location /eye/ {
+        proxy_pass http://127.0.0.1:${PORT}/;
+        proxy_http_version 1.1;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+    }
+}
+EOF
+
+# Prefer injecting into existing IP vhost (rubezh) if present, else enable eye site.
 if [[ -f /etc/nginx/sites-enabled/rubezh ]]; then
   if ! grep -q 'location /eye/' /etc/nginx/sites-enabled/rubezh; then
-    python3 - <<'PY'
-from pathlib import Path
-p = Path('/etc/nginx/sites-enabled/rubezh')
-text = p.read_text()
-snippet = '''
-    # EYE Football Manager (do not touch Aurora)
-    location /eye/ {
-        proxy_pass http://127.0.0.1:9140/;
-        proxy_http_version 1.1;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-'''
-    if 'location /api/' in text:
-        text = text.replace('location /api/', snippet + '\n    location /api/', 1)
-    else:
-        text = text.replace('location / {', snippet + '\n    location / {', 1)
-    p.write_text(text)
-    print('[EYE] nginx /eye/ location added')
-PY
-    nginx -t && systemctl reload nginx
+    # Insert before the first "location / {" using awk (no indented Python)
+    awk '
+      BEGIN{done=0}
+      /location \/ \{/ && !done {
+        print "    # EYE Football Manager (do not touch Aurora)"
+        print "    location /eye/ {"
+        print "        proxy_pass http://127.0.0.1:'"$PORT"'/;"
+        print "        proxy_http_version 1.1;"
+        print "        proxy_set_header Host $host;"
+        print "        proxy_set_header X-Real-IP $remote_addr;"
+        print "        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;"
+        print "        proxy_set_header X-Forwarded-Proto $scheme;"
+        print "    }"
+        print ""
+        done=1
+      }
+      {print}
+    ' /etc/nginx/sites-enabled/rubezh > /tmp/rubezh.eye.conf
+    mv /tmp/rubezh.eye.conf /etc/nginx/sites-enabled/rubezh
+    echo "[EYE] nginx /eye/ location added to rubezh vhost"
   else
     echo "[EYE] nginx /eye/ already present"
   fi
+  rm -f /etc/nginx/sites-enabled/eye
+else
+  ln -sfn /etc/nginx/sites-available/eye /etc/nginx/sites-enabled/eye
 fi
+
+nginx -t
+systemctl reload nginx
 
 sleep 1
 curl -sf "http://127.0.0.1:$PORT/api/health" && echo
