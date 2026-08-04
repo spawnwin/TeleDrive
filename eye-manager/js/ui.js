@@ -443,7 +443,10 @@ window.EYE_UI = (() => {
     if (hubClub) hubClub.textContent = me.name;
     if (hubColor) hubColor.style.background = me.color;
     if (hubMeta) hubMeta.textContent = `${st.leagueName} · Сезон ${st.season} · Тур ${st.week}`;
-    if (hubBudget) hubBudget.textContent = S().money(me.budget);
+    if (hubBudget) {
+      hubBudget.textContent = S().money(me.budget);
+      hubBudget.classList.toggle('neg', (me.budget || 0) < 0);
+    }
     if (hubMorale) hubMorale.textContent = 'Мораль ' + me.morale;
     const board = st.board;
     const boardEl = $('#hub-board');
@@ -481,6 +484,12 @@ window.EYE_UI = (() => {
       } else if (next && next.type !== 'league') {
         const label = next.type === 'cwc' ? 'Матч ЧМ' : next.type === 'ucl' ? 'Матч ЛЧ' : 'Кубок';
         chips.push(`<button type="button" class="hub-chip" data-nav="hub">${label} в очереди</button>`);
+      }
+      const fin = S().financeSummary?.();
+      if (fin && fin.statusLevel >= 2) {
+        chips.push(`<button type="button" class="hub-chip warn" data-nav="finance">${fin.statusLabel}${fin.embargo ? ' · эмбарго' : ''}</button>`);
+      } else if (fin && fin.statusLevel === 1) {
+        chips.push(`<button type="button" class="hub-chip" data-nav="finance">Касса напряжена</button>`);
       }
       pulse.innerHTML = chips.join('');
     }
@@ -525,8 +534,10 @@ window.EYE_UI = (() => {
       const home = S().clubById(next.match.home);
       const away = S().clubById(next.match.away);
       if (label) label.textContent = 'Следующий матч · ' + matchTypeLabel(next.type);
-      const riv = S().matchRivalry(home.id, away.id);
-      if (box) box.textContent = `${riv ? '⚡ ' : ''}${home.name} — ${away.name}${riv ? ' · ' + riv.name : ''}`;
+      const riv = home && away ? S().matchRivalry(home.id, away.id) : null;
+      if (box) box.textContent = home && away
+        ? `${riv ? '⚡ ' : ''}${home.name} — ${away.name}${riv ? ' · ' + riv.name : ''}`
+        : 'Матч';
       if (btn) {
         btn.disabled = false;
         btn.textContent = next.type === 'ucl' ? 'Матч ЛЧ'
@@ -821,12 +832,12 @@ window.EYE_UI = (() => {
         <div class="row">
           <div class="ovr">${p.ovr}</div>
           <div>
-            <strong>${p.name}</strong>
-            <div class="meta">${D().POS_LABEL[p.pos]} · ${p.age}л · ${S().money(p.value)}</div>
+            <strong>${p.name}${p.listed ? ' · в продаже' : ''}</strong>
+            <div class="meta">${D().POS_LABEL[p.pos]} · ${p.age}л · ${S().money(p.value)}${p.listed && p.ask ? ' · лот ' + S().money(p.ask) : ''}</div>
           </div>
-          <button class="btn btn-tiny" data-sell="${p.id}">Продать</button>
+          <button class="btn btn-tiny" data-sell="${p.id}" type="button">${p.listed ? 'Ещё раз' : 'Продать'}</button>
         </div>
-      `).join('');
+      `).join('') || `<div class="news-item">Состав пуст</div>`;
       return;
     }
 
@@ -1169,22 +1180,43 @@ window.EYE_UI = (() => {
   function renderFinance() {
     const f = S().financeSummary();
     const sp = f.sponsor;
+    const neg = (f.budget || 0) < 0;
+    const statusCls = ({ healthy: 'ok', tight: 'mid', deficit: 'bad', critical: 'bad', insolvent: 'bad' })[f.status] || '';
     const led = (f.ledger || []).map(e => {
       const sign = e.amount >= 0 ? '+' : '';
       const cls = e.amount >= 0 ? 'ok' : 'bad';
-      const bal = e.balance != null ? `<em>${S().money(e.balance)}</em>` : '';
+      const bal = e.balance != null ? `<em class="${e.balance < 0 ? 'bad' : ''}">${S().money(e.balance)}</em>` : '';
       return `<div class="ledger-row ${cls}"><span>С${e.season}·Т${e.week} · ${e.label}</span><strong>${sign}${S().money(e.amount)}</strong>${bal}</div>`;
     }).join('') || `<div class="hint">Движений пока нет</div>`;
+    const flowIn = (f.breakdown?.in || []).map(x =>
+      `<div class="flow-row"><span>${x.label}</span><strong class="ok">+${S().money(x.amount)}</strong></div>`
+    ).join('');
+    const flowOut = (f.breakdown?.out || []).map(x =>
+      `<div class="flow-row"><span>${x.label}</span><strong class="bad">${S().money(x.amount)}</strong></div>`
+    ).join('');
     $('#finance-card').innerHTML = `
+      <div class="finance-status ${statusCls}">
+        <strong>${f.statusLabel || 'Стабильно'}</strong>
+        <div class="hint">${f.restrictions || (neg ? 'Касса в минусе — начисляются проценты' : `Запас хода ~${f.runwayWeeks} нед.`)}</div>
+      </div>
       <div class="stat-grid finance-grid">
-        <div class="news-item"><strong>Бюджет</strong><div class="kpi">${S().money(f.budget)}</div><small>${S().moneyHint(f.budget)}</small></div>
+        <div class="news-item${neg ? ' fin-neg' : ''}"><strong>${neg ? 'Долг / касса' : 'Бюджет'}</strong><div class="kpi">${S().money(f.budget)}</div><small>${S().moneyHint(f.budget)}</small></div>
+        <div class="news-item"><strong>Кредитный лимит</strong><div class="kpi">${S().money(f.creditLimit || 0)}</div><small>осталось ${S().money(f.creditLeft || 0)}</small></div>
         <div class="news-item"><strong>Зарплаты игроков</strong><div class="kpi">${S().money(f.weeklyWages)}</div><small>/ нед</small></div>
-        <div class="news-item"><strong>Зарплаты штаба</strong><div class="kpi">${S().money(f.staffWages || 0)}</div><small>/ нед</small></div>
+        <div class="news-item"><strong>Штаб + база</strong><div class="kpi">${S().money((f.staffWages || 0) + (f.upkeep || 0))}</div><small>штаб ${S().money(f.staffWages || 0)} · база ${S().money(f.upkeep || 0)}</small></div>
         <div class="news-item"><strong>Спонсор</strong><div class="kpi">${sp ? S().money(sp.weekly) : '—'}</div><small>${sp ? sp.name + ' / нед' : 'нет'}</small></div>
-        <div class="news-item"><strong>Касса матча</strong><div class="kpi">${S().money(f.incomePerMatch)}</div><small>домашний матч · ориентир</small></div>
+        <div class="news-item"><strong>ТВ-пул</strong><div class="kpi">${S().money(f.tvWeekly || 0)}</div><small>/ нед</small></div>
+        <div class="news-item"><strong>Касса матча</strong><div class="kpi">${S().money(f.incomePerMatch)}</div><small>дома · в гостях ~${S().money(f.incomeAwayEst || 0)}</small></div>
+        <div class="news-item"><strong>Проценты</strong><div class="kpi">${S().money(f.interest || 0)}</div><small>${f.debtWeeks ? `недель в минусе: ${f.debtWeeks}` : 'нет долга'}</small></div>
+        <div class="news-item"><strong>Долг по зарплате</strong><div class="kpi">${S().money(f.wageArrears || 0)}</div><small>${f.embargo ? 'эмбарго активно' : 'ок'}</small></div>
         <div class="news-item"><strong>Стоимость состава</strong><div class="kpi">${S().money(f.squadValue)}</div></div>
-        <div class="news-item"><strong>Болельщики</strong><div class="kpi">${f.fans.toLocaleString('ru')}</div></div>
-        <div class="news-item"><strong>Баланс недели</strong><div class="kpi">${S().money(f.weeklyNet)}</div><small>спонсор − игроки − штаб</small></div>
+        <div class="news-item"><strong>Болельщики</strong><div class="kpi">${(f.fans || 0).toLocaleString('ru')}</div></div>
+        <div class="news-item"><strong>Баланс недели</strong><div class="kpi">${S().money(f.weeklyNet)}</div><small>доходы − расходы (без кассы матча)</small></div>
+      </div>
+      <h3 class="section-label" style="margin:16px 0 8px;font-family:var(--display)">План недели</h3>
+      <div class="finance-flow">
+        <div><div class="field-label">Доходы</div>${flowIn || '<div class="hint">—</div>'}</div>
+        <div><div class="field-label">Расходы</div>${flowOut || '<div class="hint">—</div>'}</div>
       </div>
       <h3 class="section-label" style="margin:16px 0 8px;font-family:var(--display)">Журнал</h3>
       <div class="ledger-list">${led}</div>
@@ -1207,7 +1239,8 @@ window.EYE_UI = (() => {
     const rows = S().sortedTable(tableLeagueId);
     const n = rows.length;
     const uclSlots = ({ epl: 3, laliga: 3, seriea: 3, bundesliga: 3, ligue1: 2, rpl: 2 })[tableLeagueId] || 2;
-    const relegN = Math.min(2, Math.max(1, Math.floor(n / 6)));
+    // Match ladder: last 2 places risk relegation when league has 10+ clubs
+    const relegN = n >= 10 ? 2 : 1;
     $('#league-table').innerHTML = `
       <div class="hint" style="margin:0 0 10px">Зелёная зона — квалификация в ЛЧ (топ-${uclSlots}). Красная — риск вылета.</div>
       <table class="league">
@@ -1222,7 +1255,7 @@ window.EYE_UI = (() => {
             return `
             <tr class="${r.id === me.id ? 'me' : ''} ${zone}">
               <td class="pos">${i + 1}</td>
-              <td>${name}${i < uclSlots ? ' <span class="zone-tag">ЛЧ</span>' : ''}</td>
+              <td>${name}${i < uclSlots ? ' <span class="zone-tag">ЛЧ</span>' : ''}${i >= n - relegN ? ' <span class="zone-tag bot">вылет</span>' : ''}</td>
               <td>${r.played}</td><td>${r.w}</td><td>${r.d}</td><td>${r.l}</td>
               <td>${r.gf}:${r.ga}</td><td class="gd">${gdStr}</td><td><strong>${r.pts}</strong></td>
             </tr>`;
@@ -1396,7 +1429,7 @@ window.EYE_UI = (() => {
   function renderInbox() {
     const st = S().get();
     st.inbox.forEach(m => {
-      if ((m.type === 'request' && !m.resolved) || (m.type === 'contract_ask' && !m.resolved) || m.type === 'youth_intake') return;
+      if ((m.type === 'request' && !m.resolved) || (m.type === 'contract_ask' && !m.resolved)) return;
       m.read = true;
     });
     S().save();
@@ -1418,6 +1451,7 @@ window.EYE_UI = (() => {
             <button class="btn btn-tiny" data-nav="youth">Открыть академию</button>
           </div>`;
         m.resolved = true;
+        m.read = true;
       }
       return `<div class="news-item${m.resolved ? ' resolved' : ''}"><strong>${m.title}</strong><div>${m.body}</div>${actions}</div>`;
     }).join('') || `<div class="news-item">Писем нет</div>`;
@@ -1463,6 +1497,7 @@ window.EYE_UI = (() => {
     const home = S().clubById(pm.home);
     const away = S().clubById(pm.away);
     const me = S().club();
+    if (!home || !away || !me) { show('hub'); return; }
     const opp = home.id === me.id ? away : home;
     S().ensureLineup();
     const rivalry = S().matchRivalry(home.id, away.id);
@@ -1542,8 +1577,13 @@ window.EYE_UI = (() => {
     if (!board) { box.innerHTML = ''; return; }
     const xiS = board.xiStrength;
     const bS = board.benchStrength;
-    const edge = (xiS.power || 0) - (bS.power || 0);
-    const edgeLabel = edge >= 8 ? 'основа заметно сильнее' : edge >= 3 ? 'основа чуть сильнее' : edge <= -3 ? 'запас конкурентоспособен' : 'силы близки';
+    const edge = (xiS.avgOvr || 0) - (bS.avgOvr || 0);
+    const fitEdge = (xiS.power || 0) - (bS.power || 0);
+    const edgeLabel = fitEdge <= -6
+      ? 'запас свежее основы — подумайте о ротации'
+      : edge >= 5 ? 'основа заметно сильнее по рейтингу'
+      : edge <= -3 ? 'запас близок по рейтингу'
+      : 'силы близки';
 
     const rowHtml = (p, i) => {
       if (!p) return '';
@@ -1566,17 +1606,17 @@ window.EYE_UI = (() => {
       <div class="pm-strength">
         <div class="pm-str-card">
           <span class="field-label">Основа</span>
-          <div class="pm-str-kpi">${xiS.power}</div>
-          <small>OVR ${xiS.avgOvr} · конд. ${xiS.avgCond} · энерг. ${xiS.avgEnergy}</small>
+          <div class="pm-str-kpi">${xiS.avgOvr}</div>
+          <small>сила ${xiS.power} · конд. ${xiS.avgCond} · энерг. ${xiS.avgEnergy}</small>
         </div>
         <div class="pm-str-vs" title="${edgeLabel}">${edge > 0 ? '+' : ''}${edge}</div>
         <div class="pm-str-card">
           <span class="field-label">Запас (7)</span>
-          <div class="pm-str-kpi">${bS.power || '—'}</div>
-          <small>OVR ${bS.avgOvr || '—'} · конд. ${bS.avgCond || '—'} · энерг. ${bS.avgEnergy || '—'}</small>
+          <div class="pm-str-kpi">${bS.avgOvr || '—'}</div>
+          <small>сила ${bS.power || '—'} · конд. ${bS.avgCond || '—'} · энерг. ${bS.avgEnergy || '—'}</small>
         </div>
       </div>
-      <div class="hint" style="margin:8px 0 4px">${edgeLabel}. Сила учитывает рейтинг, форму и свежесть.</div>
+      <div class="hint" style="margin:8px 0 4px">${edgeLabel}. Δ — разница среднего OVR; «сила» учитывает свежесть.</div>
       <div class="pm-cols">
         <div class="pm-col">
           <div class="pm-col-title">Основной состав · ${board.xi.filter(Boolean).length}</div>
@@ -1809,19 +1849,25 @@ window.EYE_UI = (() => {
       : (bench.map(p => {
           let slot = slots.findIndex((pos, i) => pos === p.pos && me.lineup[i]);
           if (slot < 0) {
+            slot = slots.findIndex((pos) => D().POS_GROUP[pos] === D().POS_GROUP[p.pos]);
+          }
+          // Never park a non-GK into GK or GK into outfield via fallback
+          if (slot < 0) {
             slot = slots.findIndex((pos, i) => {
-              const group = (a) => a === 'GK' ? 'GK' : ['CB','RB','LB'].includes(a) ? 'DF' : ['ST','RW','LW'].includes(a) ? 'FW' : 'MF';
-              return group(pos) === group(p.pos);
+              const sg = D().POS_GROUP[pos];
+              const pg = D().POS_GROUP[p.pos];
+              if (sg === 'GK' || pg === 'GK') return false;
+              return true;
             });
           }
-          if (slot < 0) slot = 10;
+          if (slot < 0) return '';
           return `
-            <button class="row row-btn" data-ht-sub="${p.id}" data-ht-slot="${slot}">
+            <button class="row row-btn" data-ht-sub="${p.id}" data-ht-slot="${slot}" type="button">
               <div class="ovr">${p.ovr}</div>
-              <div><strong>${p.name}</strong><div class="meta">замена · ${D().POS_LABEL[p.pos]}</div></div>
+              <div><strong>${p.name}</strong><div class="meta">замена · ${D().POS_LABEL[p.pos]} → ${D().POS_LABEL[slots[slot]] || slots[slot]}</div></div>
             </button>
           `;
-        }).join('') || `<div class="news-item">Нет запасных</div>`);
+        }).filter(Boolean).join('') || `<div class="news-item">Нет запасных</div>`);
   }
 
   function closeHtPanel() {
@@ -1925,8 +1971,8 @@ window.EYE_UI = (() => {
     const last = S().get()?.lastResult;
     if (!last) return;
     const [hg, ag] = last.score;
-    const scorersH = (last.scorersH || []).map(s => `${s.minute}′ ${s.player.name}`).join(', ');
-    const scorersA = (last.scorersA || []).map(s => `${s.minute}′ ${s.player.name}`).join(', ');
+    const scorersH = (last.scorersH || []).map(s => `${s.minute}′ ${s.player?.name || '—'}`).join(', ');
+    const scorersA = (last.scorersA || []).map(s => `${s.minute}′ ${s.player?.name || '—'}`).join(', ');
     const highs = (last.highlights || []).slice(0, 8).map(h =>
       `<div class="feed-item ${h.type === 'goal' ? 'goal' : h.type === 'red' ? 'red' : h.type === 'injury' ? 'injury' : ''}">${h.minute || '?'}′ ${h.text}</div>`
     ).join('');
@@ -1934,10 +1980,11 @@ window.EYE_UI = (() => {
     const mySide = last.homeId === me?.id ? 'home' : last.awayId === me?.id ? 'away' : null;
     const ratingsHtml = (mySide ? (last.ratings?.[mySide] || []) : (last.ratings?.list || []).slice(0, 11))
       .slice()
-      .sort((a, b) => b.rating - a.rating)
+      .filter(r => r && r.name)
+      .sort((a, b) => (b.rating || 0) - (a.rating || 0))
       .map(r => {
         const motm = last.motm?.id === r.id;
-        return `<div class="rating-row${motm ? ' motm' : ''}"><span>${r.name}</span><strong>${r.rating.toFixed(1)}</strong></div>`;
+        return `<div class="rating-row${motm ? ' motm' : ''}"><span>${r.name}</span><strong>${Number(r.rating || 0).toFixed(1)}</strong></div>`;
       }).join('');
     const motmLine = last.motm
       ? `<div class="motm-banner">Игрок матча: <strong>${last.motm.name}</strong> · ${Number(last.motm.rating).toFixed(1)}</div>`
@@ -2001,7 +2048,8 @@ window.EYE_UI = (() => {
       const nav = e.target.closest('[data-nav]');
       if (nav) {
         const dest = nav.dataset.nav;
-        if (dest === 'hub' && document.getElementById('screen-result')?.classList.contains('active') && S().pendingPress()?.options?.length) {
+        const onResult = document.getElementById('screen-result')?.classList.contains('active');
+        if (onResult && S().pendingPress()?.options?.length && dest !== 'result') {
           toast('Сначала ответьте на вопросы прессы');
           return;
         }
@@ -2011,6 +2059,9 @@ window.EYE_UI = (() => {
 
       const tl = e.target.closest('[data-table-league]');
       if (tl) { tableLeagueId = tl.dataset.tableLeague; renderTable(); return; }
+
+      const ttab = e.target.closest('#transfer-tabs [data-tab]');
+      if (ttab) { renderTransfers(ttab.dataset.tab); return; }
 
       const pl = e.target.closest('[data-player]');
       if (pl) { openPlayer(pl.dataset.player, 'squad'); return; }
@@ -2053,8 +2104,8 @@ window.EYE_UI = (() => {
       }
       const htForm = e.target.closest('[data-ht-form]');
       if (htForm) {
-        S().setTactics(htForm.dataset.htForm, null);
-        toast('Схема: ' + htForm.dataset.htForm + ' · XI переложен');
+        S().setTactics(htForm.dataset.htForm, null, { stickToXi: true });
+        toast('Схема: ' + htForm.dataset.htForm + ' · тот же XI');
         showHtPanel();
         return;
       }
@@ -2242,7 +2293,12 @@ window.EYE_UI = (() => {
               const local = JSON.parse(raw);
               const lS = local.season || 0, lW = local.week || 0;
               const rS = remote.season || 0, rW = remote.week || 0;
-              preferRemote = rS > lS || (rS === lS && rW >= lW);
+              const lAt = local.savedAt || 0;
+              const rAt = remote.savedAt || 0;
+              // Strictly newer remote week wins; same week → prefer newer timestamp / local
+              if (rS > lS || (rS === lS && rW > lW)) preferRemote = true;
+              else if (rS === lS && rW === lW && rAt > lAt && rAt > 0) preferRemote = true;
+              else preferRemote = false;
               localNewer = !preferRemote;
             }
           } catch { preferRemote = true; }
@@ -2403,8 +2459,7 @@ window.EYE_UI = (() => {
     });
     $('#btn-skip-half')?.addEventListener('click', () => {
       if (isHtOpen()) {
-        // Already at HT — same as continue
-        continueSecondHalf();
+        toast('Уже перерыв — нажмите «Второй тайм» или «Пропустить»');
         return;
       }
       if (!matchPlaying) return;
@@ -2429,8 +2484,12 @@ window.EYE_UI = (() => {
     $('#sel-formation')?.addEventListener('change', (e) => { S().setTactics(e.target.value, null); S().autoLineup(); drawPitch(); renderBench(); });
     $('#sel-style')?.addEventListener('change', (e) => { S().setTactics(null, e.target.value); });
     $('#btn-second-half')?.addEventListener('click', () => continueSecondHalf());
-    $('#btn-ht-close')?.addEventListener('click', () => continueSecondHalf());
-    $('#ht-scrim')?.addEventListener('click', () => continueSecondHalf());
+    $('#btn-ht-close')?.addEventListener('click', () => {
+      toast('Нажмите «Второй тайм», чтобы продолжить');
+    });
+    $('#ht-scrim')?.addEventListener('click', () => {
+      toast('Нажмите «Второй тайм», чтобы продолжить');
+    });
     $('#btn-cup-play')?.addEventListener('click', () => {
       const next = S().nextMatch();
       if (next?.type !== 'cup') {
