@@ -653,7 +653,7 @@ export function ChatSidebar({
                 <h1 className="aurora-chats-title truncate text-[1.35rem] xl:text-lg">
                   {t('sidebar.archived')}
                 </h1>
-                <p className="truncate text-[11px] tracking-wide text-[#8fa0b5]">
+                <p className="truncate text-[11px] tracking-wide text-[#9ec0e0]">
                   {t('sidebar.archivedCount').replace('{count}', String(archivedCount))}
                 </p>
               </span>
@@ -667,7 +667,7 @@ export function ChatSidebar({
                 <h1 className="aurora-chats-title truncate text-[1.35rem] xl:text-lg">
                   {t('nav.chats')}
                 </h1>
-                <p className="truncate text-[11px] tracking-wide text-[#8fa0b5]">
+                <p className="truncate text-[11px] tracking-wide text-[#9ec0e0]">
                   {t('sidebar.subtitle')}
                 </p>
               </div>
@@ -678,7 +678,7 @@ export function ChatSidebar({
           <Button
             variant="ghost"
             size="icon"
-            className="h-9 w-9 rounded-full text-[#3aa0ff] hover:bg-white/5 hover:text-[#7cc4ff]"
+            className="h-9 w-9 rounded-full text-[#6ec8ff] hover:bg-[rgb(58_180_255_/_12%)] hover:text-white"
             onClick={() => openNewChat('search')}
             title={t('sidebar.newChat')}
             aria-label={t('sidebar.newChat')}
@@ -690,7 +690,7 @@ export function ChatSidebar({
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-9 w-9 rounded-full text-[#8fa0b5] hover:bg-white/5 hover:text-white"
+                className="h-9 w-9 rounded-full text-[#9ec0e0] hover:bg-[rgb(58_180_255_/_12%)] hover:text-white"
                 title={t('chat.more')}
               >
                 <MoreVertical className="h-5 w-5" />
@@ -1288,12 +1288,12 @@ function ArchiveFolderRow({ count, onOpen }: { count: number; onOpen: () => void
       onClick={onOpen}
       className="aurora-chats-row group flex w-full items-center gap-3 px-3 py-2.5 text-left sm:px-4"
     >
-      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-white/[0.08] bg-white/[0.06] text-[#3aa0ff]">
+      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[linear-gradient(145deg,#3aa0ff,#2dd4bf)] text-white shadow-[0_8px_20px_rgb(58_180_255_/_28%)]">
         <Archive className="h-5 w-5" strokeWidth={2} />
       </div>
       <div className="min-w-0 flex-1">
-        <p className="truncate text-[15px] font-semibold leading-tight">{t('sidebar.archived')}</p>
-        <p className="mt-0.5 truncate text-[13px] text-muted-foreground">
+        <p className="aurora-chats-name truncate text-[15px] font-semibold leading-tight">{t('sidebar.archived')}</p>
+        <p className="aurora-chats-preview mt-0.5 truncate text-[13px]">
           {t('sidebar.archivedCount').replace('{count}', String(count))}
         </p>
       </div>
@@ -1491,7 +1491,7 @@ function SavedChatRow({ chat, selectionMode = false }: { chat: ChatListItem; sel
         <div className="flex items-center justify-between gap-2">
           <p
             className={cn(
-              'truncate text-[15px] leading-tight',
+              'aurora-chats-name truncate text-[15px] leading-tight',
               chat.unread > 0 ? 'font-semibold' : 'font-medium',
             )}
           >
@@ -1501,7 +1501,7 @@ function SavedChatRow({ chat, selectionMode = false }: { chat: ChatListItem; sel
             <span
               className={cn(
                 'shrink-0 text-[12px] tabular-nums',
-                chat.unread > 0 ? 'font-semibold text-primary' : 'text-muted-foreground',
+                chat.unread > 0 ? 'font-semibold text-[#6ec8ff]' : 'text-[#9ec0e0]',
               )}
             >
               {formatChatTime(chat.lastMessage.createdAt, lang)}
@@ -1511,7 +1511,7 @@ function SavedChatRow({ chat, selectionMode = false }: { chat: ChatListItem; sel
         <p
           className={cn(
             'mt-0.5 truncate text-[13px] leading-snug',
-            draftText ? 'text-rose-500' : 'text-muted-foreground',
+            draftText ? 'text-rose-400' : 'aurora-chats-preview',
           )}
         >
           {draftText ? (
@@ -1527,7 +1527,7 @@ function SavedChatRow({ chat, selectionMode = false }: { chat: ChatListItem; sel
       <UnreadBadge
         count={chat.unread}
         title={unreadLabel(chat.unread, t)}
-        className="h-5 min-w-[20px] px-1.5 text-[10px]"
+        className="aurora-chats-badge h-5 min-w-[20px] border-0 px-1.5 text-[10px] text-[#041018] shadow-none"
       />
     </motion.div>
   )
@@ -1825,8 +1825,8 @@ function ChatListItemRow({
           <div className="flex min-w-0 items-center gap-1">
             <p
               className={cn(
-                'truncate text-[15px] leading-tight',
-                chat.unread > 0 ? 'font-semibold text-foreground' : 'font-medium',
+                'aurora-chats-name truncate text-[15px] leading-tight',
+                chat.unread > 0 ? 'font-semibold' : 'font-medium',
               )}
             >
               <span className="inline-flex max-w-full items-center gap-1">
@@ -1837,18 +1837,18 @@ function ChatListItemRow({
               </span>
             </p>
             {chat.isMuted && (
-              <BellOff className="h-3 w-3 shrink-0 text-muted-foreground" />
+              <BellOff className="h-3 w-3 shrink-0 text-[#7eb8e8]" />
             )}
           </div>
           <div className="flex shrink-0 items-center gap-1">
             {chat.isArchived && (
-              <Archive className="h-3 w-3 text-muted-foreground" />
+              <Archive className="h-3 w-3 text-[#7eb8e8]" />
             )}
             {chat.lastMessage && (
               <span
                 className={cn(
                   'text-[12px] tabular-nums',
-                  chat.unread > 0 ? 'font-semibold text-primary' : 'text-muted-foreground',
+                  chat.unread > 0 ? 'font-semibold text-[#6ec8ff]' : 'text-[#9ec0e0]',
                 )}
               >
                 {formatChatTime(chat.lastMessage.createdAt, lang)}
@@ -1861,16 +1861,16 @@ function ChatListItemRow({
             className={cn(
               'flex min-w-0 items-center gap-1 truncate text-[13px] leading-snug',
               showTyping
-                ? 'text-primary'
+                ? 'text-[#6ec8ff]'
                 : showDraft
-                  ? 'text-rose-500'
-                  : 'text-muted-foreground',
+                  ? 'text-rose-400'
+                  : 'aurora-chats-preview',
             )}
           >
             {showTyping ? (
-              <span className="inline-flex items-center gap-1 truncate text-primary" title={t('chat.typing')} aria-label={t('chat.typing')}>
+              <span className="inline-flex items-center gap-1 truncate text-[#6ec8ff]" title={t('chat.typing')} aria-label={t('chat.typing')}>
                 <span className="truncate">{typingNames.join(', ')}</span>
-                <TypingDots className="text-primary" size={3} gap={1.5} />
+                <TypingDots className="text-[#6ec8ff]" size={3} gap={1.5} />
               </span>
             ) : showDraft ? (
               <>
@@ -1880,13 +1880,13 @@ function ChatListItemRow({
             ) : (
               <>
                 {lastMsgMine && chat.lastMessage && (
-                  <CheckCheck className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                  <CheckCheck className="h-3.5 w-3.5 shrink-0 text-[#7eb8e8]" />
                 )}
                 {isImage && !lastMsgMine && (
-                  <ImageIcon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                  <ImageIcon className="h-3.5 w-3.5 shrink-0 text-[#7eb8e8]" />
                 )}
                 {isVoice && !lastMsgMine && (
-                  <Mic className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                  <Mic className="h-3.5 w-3.5 shrink-0 text-[#7eb8e8]" />
                 )}
                 <span className="truncate">{previewText()}</span>
               </>
@@ -1897,11 +1897,14 @@ function ChatListItemRow({
               count={chat.unread}
               muted={chat.isMuted}
               title={unreadLabel(chat.unread, t)}
-              className="h-5 min-w-[20px] px-1.5 text-[10px]"
+              className={cn(
+                'h-5 min-w-[20px] px-1.5 text-[10px]',
+                !chat.isMuted && 'aurora-chats-badge border-0 text-[#041018] shadow-none',
+              )}
             />
             <button
               onClick={toggleArchive}
-              className="hidden h-6 w-6 items-center justify-center rounded-md text-muted-foreground opacity-0 transition hover:bg-muted group-hover:opacity-100 sm:flex"
+              className="hidden h-6 w-6 items-center justify-center rounded-md text-[#7eb8e8] opacity-0 transition hover:bg-white/5 hover:text-white group-hover:opacity-100 sm:flex"
               title={chat.isArchived ? t('chat.unarchive') : t('chat.archive')}
             >
               {chat.isArchived ? (
@@ -2501,7 +2504,7 @@ function NewChatDialog({
             />
             <Button
               onClick={createChannel}
-              className="mt-4 w-full bg-[#3390ec] text-white hover:bg-[#2b82d9]"
+              className="mt-4 w-full bg-[linear-gradient(145deg,#3aa0ff,#2dd4bf)] text-[#041018] hover:brightness-110"
             >
               <Sparkles className="mr-2 h-4 w-4" />
               {t('channel.createBtn')}

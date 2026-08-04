@@ -715,18 +715,20 @@ body[data-lightbox-open] [data-slot="sheet-content"] {
 
 /* ===== Chats — same premium Aurora language as feed ===== */
 .aurora-chats {
-  --chats-ink: #e8eef6;
-  --chats-muted: #8fa0b5;
-  --chats-line: rgb(255 255 255 / 8%);
-  --chats-glass: rgb(18 28 40 / 72%);
-  --chats-accent: #3aa0ff;
+  --chats-ink: #f2f7ff;
+  --chats-muted: #9ec0e0;
+  --chats-line: rgb(90 180 255 / 16%);
+  --chats-glass: rgb(16 36 56 / 78%);
+  --chats-accent: #4eb3ff;
+  --bubble-in: rgb(24 48 72 / 92%);
+  --bubble-out: #3aa0ff;
   position: relative;
   isolation: isolate;
   background:
-    radial-gradient(900px 420px at 8% -10%, rgb(45 160 255 / 16%), transparent 55%),
-    radial-gradient(700px 380px at 96% 4%, rgb(45 212 191 / 10%), transparent 50%),
-    radial-gradient(640px 480px at 40% 110%, rgb(51 144 236 / 9%), transparent 55%),
-    linear-gradient(180deg, #0b131c 0%, #0e1621 45%, #0b121a 100%);
+    radial-gradient(980px 480px at 6% -12%, rgb(58 180 255 / 32%), transparent 58%),
+    radial-gradient(760px 420px at 98% 0%, rgb(45 230 200 / 22%), transparent 52%),
+    radial-gradient(700px 520px at 45% 108%, rgb(80 140 255 / 18%), transparent 58%),
+    linear-gradient(180deg, #071525 0%, #0a1a2e 42%, #06101c 100%);
   color: var(--chats-ink);
 }
 
@@ -736,12 +738,12 @@ body[data-lightbox-open] [data-slot="sheet-content"] {
   position: absolute;
   inset: 0;
   z-index: 0;
-  opacity: 0.28;
+  opacity: 0.18;
   background-image:
-    linear-gradient(rgb(255 255 255 / 2.2%) 1px, transparent 1px),
-    linear-gradient(90deg, rgb(255 255 255 / 2.2%) 1px, transparent 1px);
+    linear-gradient(rgb(120 200 255 / 4%) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(120 200 255 / 4%) 1px, transparent 1px);
   background-size: 48px 48px;
-  mask-image: linear-gradient(180deg, rgb(0 0 0 / 50%), transparent 72%);
+  mask-image: linear-gradient(180deg, rgb(0 0 0 / 55%), transparent 72%);
 }
 
 .aurora-chats > * {
@@ -751,9 +753,9 @@ body[data-lightbox-open] [data-slot="sheet-content"] {
 
 .aurora-chats-header {
   border-bottom: 1px solid var(--chats-line);
-  background: linear-gradient(180deg, rgb(11 19 28 / 90%), rgb(11 19 28 / 58%));
-  backdrop-filter: blur(18px) saturate(1.2);
-  -webkit-backdrop-filter: blur(18px) saturate(1.2);
+  background: linear-gradient(180deg, rgb(8 24 42 / 92%), rgb(8 24 42 / 55%));
+  backdrop-filter: blur(18px) saturate(1.35);
+  -webkit-backdrop-filter: blur(18px) saturate(1.35);
 }
 
 .aurora-chats-title {
@@ -765,42 +767,42 @@ body[data-lightbox-open] [data-slot="sheet-content"] {
 }
 
 .aurora-chats-search {
-  border: 1px solid var(--chats-line);
+  border: 1px solid rgb(90 180 255 / 22%);
   background:
-    linear-gradient(165deg, rgb(255 255 255 / 5%) 0%, rgb(255 255 255 / 1.2%) 50%, transparent 100%),
-    rgb(18 28 40 / 65%);
+    linear-gradient(165deg, rgb(90 190 255 / 12%) 0%, rgb(255 255 255 / 2%) 50%, transparent 100%),
+    rgb(12 32 52 / 72%);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  box-shadow: 0 1px 0 rgb(255 255 255 / 4%) inset;
+  box-shadow: 0 1px 0 rgb(120 200 255 / 8%) inset;
   transition: border-color 180ms ease, box-shadow 180ms ease;
 }
 
 .aurora-chats-search:focus-within {
-  border-color: rgb(58 160 255 / 35%);
+  border-color: rgb(78 179 255 / 55%);
   box-shadow:
-    0 1px 0 rgb(255 255 255 / 5%) inset,
-    0 0 0 3px rgb(58 160 255 / 12%);
+    0 1px 0 rgb(120 200 255 / 10%) inset,
+    0 0 0 3px rgb(58 160 255 / 18%);
 }
 
 .aurora-chats-seg {
-  border: 1px solid var(--chats-line);
-  background: rgb(18 28 40 / 55%);
+  border: 1px solid rgb(90 180 255 / 20%);
+  background: rgb(12 32 52 / 65%);
   backdrop-filter: blur(10px);
 }
 
 .aurora-chats-seg-btn {
-  color: var(--chats-muted);
+  color: #9ec0e0;
   transition: background 160ms ease, color 160ms ease, box-shadow 160ms ease;
 }
 
 .aurora-chats-seg-btn.is-active {
-  background: linear-gradient(135deg, rgb(58 160 255 / 22%), rgb(45 212 191 / 12%));
+  background: linear-gradient(135deg, rgb(58 180 255 / 38%), rgb(45 220 190 / 22%));
   color: #fff;
-  box-shadow: 0 1px 0 rgb(255 255 255 / 6%) inset;
+  box-shadow: 0 1px 0 rgb(255 255 255 / 10%) inset;
 }
 
 .aurora-chats-row {
-  border-bottom: 1px solid rgb(255 255 255 / 4%);
+  border-bottom: 1px solid rgb(90 180 255 / 8%);
   transition:
     background 160ms ease,
     border-color 160ms ease;
@@ -828,50 +830,52 @@ body[data-lightbox-open] [data-slot="sheet-content"] {
 }
 
 .aurora-chats-row:hover {
-  background: rgb(255 255 255 / 4%);
+  background: linear-gradient(90deg, rgb(58 180 255 / 10%), rgb(45 212 191 / 4%) 60%, transparent);
 }
 
 .aurora-chats-row.is-active {
   background:
-    linear-gradient(90deg, rgb(58 160 255 / 16%), rgb(58 160 255 / 4%) 70%, transparent);
-  border-bottom-color: rgb(58 160 255 / 12%);
+    linear-gradient(90deg, rgb(58 180 255 / 28%), rgb(45 212 191 / 10%) 55%, transparent);
+  border-bottom-color: rgb(78 179 255 / 22%);
+  box-shadow: inset 3px 0 0 #4eb3ff;
 }
 
 .aurora-chats-row.is-selected {
-  background: rgb(58 160 255 / 14%);
+  background: linear-gradient(90deg, rgb(58 180 255 / 22%), rgb(45 212 191 / 10%));
 }
 
 .aurora-chats-composer {
   border-top: 1px solid var(--chats-line);
-  background: linear-gradient(180deg, rgb(11 19 28 / 55%), rgb(11 19 28 / 88%));
-  backdrop-filter: blur(16px) saturate(1.15);
-  -webkit-backdrop-filter: blur(16px) saturate(1.15);
+  background: linear-gradient(180deg, rgb(8 28 48 / 55%), rgb(6 20 36 / 92%));
+  backdrop-filter: blur(16px) saturate(1.25);
+  -webkit-backdrop-filter: blur(16px) saturate(1.25);
 }
 
 .aurora-chats-input-shell {
-  border: 1px solid var(--chats-line);
+  border: 1px solid rgb(90 180 255 / 22%);
   background:
-    linear-gradient(165deg, rgb(255 255 255 / 5%) 0%, transparent 55%),
-    rgb(18 28 40 / 70%);
+    linear-gradient(165deg, rgb(90 190 255 / 12%) 0%, transparent 55%),
+    rgb(12 32 52 / 78%);
   backdrop-filter: blur(10px);
   transition: border-color 160ms ease, box-shadow 160ms ease;
 }
 
 .aurora-chats-input-shell:focus-within {
-  border-color: rgb(58 160 255 / 32%);
-  box-shadow: 0 0 0 3px rgb(58 160 255 / 10%);
+  border-color: rgb(78 179 255 / 50%);
+  box-shadow: 0 0 0 3px rgb(58 160 255 / 16%);
 }
 
 .aurora-chats-empty {
-  border: 1px solid var(--chats-line);
+  border: 1px solid rgb(90 180 255 / 22%);
   background:
-    linear-gradient(165deg, rgb(255 255 255 / 5%) 0%, transparent 55%),
-    rgb(18 28 40 / 55%);
+    linear-gradient(165deg, rgb(90 190 255 / 14%) 0%, rgb(45 212 191 / 6%) 45%, transparent 100%),
+    rgb(12 32 52 / 62%);
   backdrop-filter: blur(12px);
+  box-shadow: 0 12px 40px rgb(20 80 160 / 18%);
 }
 
 .aurora-chats .text-muted-foreground {
-  color: var(--chats-muted) !important;
+  color: #9ec0e0 !important;
 }
 
 .aurora-chats .border-sidebar-border,
@@ -882,111 +886,113 @@ body[data-lightbox-open] [data-slot="sheet-content"] {
   border-color: var(--chats-line) !important;
 }
 
-/* Premium bubble palette inside chats surface */
-.aurora-chats {
-  --bubble-in: rgb(22 34 48 / 88%);
-  --bubble-out: #2b7fd0;
-}
-
 .aurora-chats-bubble-out {
-  background: linear-gradient(145deg, #3aa0ff 0%, #2b7fd0 55%, #1fa8b8 100%) !important;
+  background: linear-gradient(145deg, #5cbcff 0%, #3aa0ff 48%, #2dd4bf 100%) !important;
   box-shadow:
-    0 1px 0 rgb(255 255 255 / 12%) inset,
-    0 8px 22px rgb(58 160 255 / 18%) !important;
+    0 1px 0 rgb(255 255 255 / 18%) inset,
+    0 10px 28px rgb(58 180 255 / 28%) !important;
   color: #fff !important;
 }
 
 .aurora-chats-bubble-in {
   background:
-    linear-gradient(165deg, rgb(255 255 255 / 6%) 0%, transparent 55%),
-    rgb(22 34 48 / 86%) !important;
-  border: 1px solid rgb(255 255 255 / 7%);
-  box-shadow: 0 1px 0 rgb(255 255 255 / 4%) inset !important;
-  color: var(--chats-ink) !important;
+    linear-gradient(165deg, rgb(120 200 255 / 14%) 0%, transparent 55%),
+    rgb(18 42 68 / 90%) !important;
+  border: 1px solid rgb(90 180 255 / 16%);
+  box-shadow: 0 1px 0 rgb(120 200 255 / 8%) inset !important;
+  color: #f2f7ff !important;
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
 }
 
 .aurora-chats-day {
-  border: 1px solid rgb(255 255 255 / 8%);
-  background: rgb(18 28 40 / 72%);
-  color: var(--chats-muted);
+  border: 1px solid rgb(90 180 255 / 18%);
+  background: rgb(12 36 58 / 78%);
+  color: #b7d4f0;
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  box-shadow: 0 1px 0 rgb(255 255 255 / 4%) inset;
+  box-shadow: 0 1px 0 rgb(120 200 255 / 8%) inset;
 }
 
 .aurora-chats-strip {
   border-color: var(--chats-line);
-  background: linear-gradient(180deg, rgb(11 19 28 / 55%), rgb(11 19 28 / 78%));
+  background: linear-gradient(180deg, rgb(8 32 54 / 70%), rgb(6 22 40 / 88%));
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
 }
 
 .aurora-chats-strip-pin {
-  border-left-color: #3aa0ff !important;
-  background: linear-gradient(90deg, rgb(58 160 255 / 14%), rgb(18 28 40 / 55%) 70%);
+  border-left-color: #4eb3ff !important;
+  background: linear-gradient(90deg, rgb(58 180 255 / 24%), rgb(12 36 58 / 55%) 70%);
 }
 
 .aurora-chats-strip-pin:hover {
-  background: linear-gradient(90deg, rgb(58 160 255 / 20%), rgb(18 28 40 / 65%) 70%);
+  background: linear-gradient(90deg, rgb(58 180 255 / 32%), rgb(12 36 58 / 65%) 70%);
 }
 
 .aurora-chats-stories {
   border-bottom: 1px solid var(--chats-line);
-  background: linear-gradient(180deg, rgb(11 19 28 / 72%), rgb(11 19 28 / 42%));
-  backdrop-filter: blur(14px) saturate(1.15);
-  -webkit-backdrop-filter: blur(14px) saturate(1.15);
+  background: linear-gradient(180deg, rgb(8 28 48 / 82%), rgb(8 24 42 / 40%));
+  backdrop-filter: blur(14px) saturate(1.25);
+  -webkit-backdrop-filter: blur(14px) saturate(1.25);
 }
 
 .aurora-chats-mobile-glass {
-  border: 1px solid rgb(255 255 255 / 10%);
+  border: 1px solid rgb(90 180 255 / 18%);
   background:
-    linear-gradient(165deg, rgb(255 255 255 / 6%) 0%, transparent 50%),
-    rgb(14 22 33 / 88%);
+    linear-gradient(165deg, rgb(90 190 255 / 12%) 0%, transparent 50%),
+    rgb(8 24 42 / 90%);
   box-shadow:
-    0 1px 0 rgb(255 255 255 / 5%) inset,
-    0 12px 36px rgb(0 0 0 / 38%);
-  backdrop-filter: blur(22px) saturate(1.25);
-  -webkit-backdrop-filter: blur(22px) saturate(1.25);
+    0 1px 0 rgb(120 200 255 / 8%) inset,
+    0 12px 36px rgb(0 40 90 / 42%);
+  backdrop-filter: blur(22px) saturate(1.35);
+  -webkit-backdrop-filter: blur(22px) saturate(1.35);
 }
 
 .aurora-chats-mobile-active {
-  color: #5eb3f6;
+  color: #6ec8ff;
 }
 
 .aurora-chats-call-pill {
-  border: 1px solid rgb(255 255 255 / 8%);
-  background: rgb(18 28 40 / 72%);
-  color: var(--chats-muted);
+  border: 1px solid rgb(90 180 255 / 16%);
+  background: rgb(14 38 62 / 78%);
+  color: #b7d4f0;
   backdrop-filter: blur(10px);
 }
 
 .aurora-chats-dialog {
-  --chats-ink: #e8eef6;
-  --chats-muted: #8fa0b5;
-  --chats-line: rgb(255 255 255 / 8%);
+  --chats-ink: #f2f7ff;
+  --chats-muted: #9ec0e0;
+  --chats-line: rgb(90 180 255 / 16%);
   border: 1px solid var(--chats-line) !important;
   background:
-    radial-gradient(520px 260px at 12% -20%, rgb(45 160 255 / 18%), transparent 55%),
-    radial-gradient(420px 220px at 100% 0%, rgb(45 212 191 / 10%), transparent 50%),
-    linear-gradient(180deg, #0e1621 0%, #0b131c 100%) !important;
+    radial-gradient(560px 280px at 12% -20%, rgb(58 180 255 / 28%), transparent 55%),
+    radial-gradient(460px 240px at 100% 0%, rgb(45 230 200 / 16%), transparent 50%),
+    linear-gradient(180deg, #0a1c32 0%, #071525 100%) !important;
   color: var(--chats-ink);
 }
 
 .aurora-chats-dialog .text-muted-foreground {
-  color: var(--chats-muted) !important;
+  color: #9ec0e0 !important;
 }
 
 .aurora-chats-section {
-  color: #8fa0b5;
+  color: #7eb8e8;
   letter-spacing: 0.08em;
 }
 
 .aurora-chats-badge {
-  background: linear-gradient(145deg, #3aa0ff, #2dd4bf);
+  background: linear-gradient(145deg, #5cbcff, #2dd4bf);
   color: #041018;
-  box-shadow: 0 4px 12px rgb(58 160 255 / 28%);
+  box-shadow: 0 4px 14px rgb(58 180 255 / 36%);
+}
+
+.aurora-chats-preview {
+  color: #b7d4f0 !important;
+}
+
+.aurora-chats-name {
+  color: #ffffff !important;
 }
 
 @media (prefers-reduced-motion: reduce) {
