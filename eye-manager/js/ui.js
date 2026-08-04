@@ -614,7 +614,7 @@ window.EYE_UI = (() => {
         <div class="glass-panel contract-box" style="margin-top:12px;padding:12px;display:grid;gap:10px">
           <label>Фокус развития<select id="sel-dev-focus">${focusOpts}</select></label>
           ${isYouth ? `
-            <button class="btn btn-primary" id="btn-promote-card" type="button">Выпустить в основу</button>
+            <button class="btn btn-primary" id="btn-promote-card" type="button">Выпустить в основу · ${S().money(S().youthPromoteCost?.() || 0)}</button>
           ` : `
             <div class="create-row">
               <label>Срок (лет)<select id="renew-years"><option value="1">1</option><option value="2" selected>2</option><option value="3">3</option><option value="4">4</option></select></label>
@@ -795,6 +795,7 @@ window.EYE_UI = (() => {
     if (filters) filters.style.display = tab === 'market' ? '' : 'none';
     const list = $('#transfer-list');
     const open = S().transferWindowOpen();
+    const winLabel = S().transferWindowInfo?.()?.label || '1–8 и 20–28';
 
     if (tab === 'offers') {
       const offers = S().get().transferOffers || [];
@@ -841,8 +842,8 @@ window.EYE_UI = (() => {
       maxPrice: Number($('#tf-price')?.value || 0) || undefined
     });
     const banner = open
-      ? `<div class="news-item"><strong>Окно открыто</strong><div>Туры 1–8 и 20–28 · можно покупать</div></div>`
-      : `<div class="news-item"><strong>Окно закрыто</strong><div>Покупки недоступны · аренда возможна. Откроется в турах 1–8 и 20–28</div></div>`;
+      ? `<div class="news-item"><strong>Окно открыто</strong><div>Туры ${winLabel} · можно покупать</div></div>`
+      : `<div class="news-item"><strong>Окно закрыто</strong><div>Покупки недоступны · аренда возможна. Откроется в турах ${winLabel}</div></div>`;
     list.innerHTML = banner + (market.slice(0, 60).map(e => {
       const p = e.player;
       const counter = (S().pendingCounters() || {})[e.id];
@@ -1177,11 +1178,13 @@ window.EYE_UI = (() => {
     $('#finance-card').innerHTML = `
       <div class="stat-grid finance-grid">
         <div class="news-item"><strong>Бюджет</strong><div class="kpi">${S().money(f.budget)}</div><small>${S().moneyHint(f.budget)}</small></div>
-        <div class="news-item"><strong>Зарплаты / нед</strong><div class="kpi">${S().money(f.weeklyWages)}</div></div>
+        <div class="news-item"><strong>Зарплаты игроков</strong><div class="kpi">${S().money(f.weeklyWages)}</div><small>/ нед</small></div>
+        <div class="news-item"><strong>Зарплаты штаба</strong><div class="kpi">${S().money(f.staffWages || 0)}</div><small>/ нед</small></div>
         <div class="news-item"><strong>Спонсор</strong><div class="kpi">${sp ? S().money(sp.weekly) : '—'}</div><small>${sp ? sp.name + ' / нед' : 'нет'}</small></div>
+        <div class="news-item"><strong>Касса матча</strong><div class="kpi">${S().money(f.incomePerMatch)}</div><small>домашний матч · ориентир</small></div>
         <div class="news-item"><strong>Стоимость состава</strong><div class="kpi">${S().money(f.squadValue)}</div></div>
         <div class="news-item"><strong>Болельщики</strong><div class="kpi">${f.fans.toLocaleString('ru')}</div></div>
-        <div class="news-item"><strong>Баланс недели</strong><div class="kpi">${S().money(f.weeklyNet)}</div><small>спонсор − зарплаты</small></div>
+        <div class="news-item"><strong>Баланс недели</strong><div class="kpi">${S().money(f.weeklyNet)}</div><small>спонсор − игроки − штаб</small></div>
       </div>
       <h3 class="section-label" style="margin:16px 0 8px;font-family:var(--display)">Журнал</h3>
       <div class="ledger-list">${led}</div>
@@ -1301,10 +1304,17 @@ window.EYE_UI = (() => {
       : `Пропущено (травма/бан): ${r.skipped || 0}`;
     box.hidden = false;
     box.innerHTML = `
-      <strong>Отчёт: ${r.training?.name || 'Тренировка'}</strong>
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
+        <strong>Отчёт: ${r.training?.name || 'Тренировка'}</strong>
+        <button type="button" class="btn btn-tiny" id="btn-train-report-close">Закрыть</button>
+      </div>
       <div class="hint" style="margin:6px 0 10px">${r.msg} · ${extra}</div>
       ${lines}
     `;
+    $('#btn-train-report-close')?.addEventListener('click', () => {
+      box.hidden = true;
+      box.innerHTML = '';
+    });
   }
 
   function renderClub() {
@@ -1352,13 +1362,16 @@ window.EYE_UI = (() => {
     const me = S().club();
     const list = me.youth || [];
     const intake = list.filter(p => p.intake).length;
+    const cost = S().youthPromoteCost?.() || Math.max(40000, 150000 - (me.facilities?.youth || 1) * 18000);
     $('#youth-status').innerHTML = `
       <strong>Академия ур. ${me.facilities?.youth || 1}</strong>
       <div class="meta" style="color:var(--muted);margin-top:4px;font-size:13px">
         Воспитанников: ${list.length}${intake ? ` · новый набор: ${intake}` : ''}.
-        Карточка — фокус развития. Выпуск — в основу.
+        Выпуск в основу: ${S().money(cost)}.
       </div>
     `;
+    const bestBtn = $('#btn-youth-best');
+    if (bestBtn) bestBtn.textContent = `Выпустить лучшего · ${S().money(cost)}`;
     $('#youth-list').innerHTML = list.slice().sort((a, b) => b.pot - a.pot).map(p => {
       D().ensureTraits(p);
       const trait = (p.traits || [])[0] ? D().traitInfo(p.traits[0]).name : '';
@@ -1369,11 +1382,11 @@ window.EYE_UI = (() => {
           <div class="ovr">${p.ovr}</div>
           <div>
             <strong>${p.name}${p.intake ? ' · новый' : ''}</strong>
-            <div class="meta">${D().POS_LABEL[p.pos]} · ${p.age}л · пот. ${p.pot}${trait ? ' · ' + trait : ''}${focus ? ' · 🎯' + focus : ''}</div>
+            <div class="meta">${D().POS_LABEL[p.pos]} · ${p.age}л · пот. ${p.pot}${trait ? ' · ' + trait : ''}${focus ? ' · ' + focus : ''}</div>
           </div>
         </button>
         <div class="row-actions">
-          <button class="btn btn-tiny" data-promote="${p.id}">В основу</button>
+          <button class="btn btn-tiny" data-promote="${p.id}">В основу · ${S().money(cost)}</button>
           <button class="btn btn-tiny" data-youth-drop="${p.id}">Отчислить</button>
         </div>
       </div>`;
@@ -1872,6 +1885,10 @@ window.EYE_UI = (() => {
     const chemLine = (last.chemistryHome != null && mySide)
       ? `<div class="hint">Химия XI: ${mySide === 'home' ? last.chemistryHome : last.chemistryAway}</div>`
       : '';
+    const stats = last.stats || {};
+    const poss = Array.isArray(stats.possession) ? stats.possession.join('% — ') + '%' : '—';
+    const shots = Array.isArray(stats.shots) ? stats.shots.join(' — ') : '—';
+    const onT = Array.isArray(stats.onTarget) ? stats.onTarget.join(' — ') : '—';
     $('#result-card').innerHTML = `
       <div class="result-layout">
         <div class="result-scoreboard">
@@ -1886,8 +1903,8 @@ window.EYE_UI = (() => {
           <div class="result-meta">
             ${scorersH ? `<div><strong>Голы ${last.home}:</strong> ${scorersH}</div>` : ''}
             ${scorersA ? `<div><strong>Голы ${last.away}:</strong> ${scorersA}</div>` : ''}
-            <div>Владение ${last.stats.possession.join('% — ')}%</div>
-            <div>Удары ${last.stats.shots.join(' — ')} · в створ ${last.stats.onTarget.join(' — ')}</div>
+            <div>Владение ${poss}</div>
+            <div>Удары ${shots} · в створ ${onT}</div>
             ${last.prize != null ? `<div>Призовые ${S().money(last.prize)}${last.income ? ' · касса ' + S().money(last.income) : ''}${last.competition ? ' · ' + last.competition : ''}</div>` : ''}
           </div>
           ${highs ? `<div class="result-highs">${highs}</div>` : ''}
@@ -1897,6 +1914,7 @@ window.EYE_UI = (() => {
     `;
     const press = S().pendingPress();
     const card = $('#press-card');
+    const hubBtn = $('#btn-result-hub');
     if (press && press.options?.length) {
       card.hidden = false;
       card.innerHTML = `
@@ -1904,16 +1922,32 @@ window.EYE_UI = (() => {
         <div class="hint">${press.context}</div>
         ${press.options.map(o => `<button class="btn btn-glass" data-press="${o.id}">${o.label}</button>`).join('')}
       `;
+      if (hubBtn) {
+        hubBtn.disabled = true;
+        hubBtn.textContent = 'Сначала ответьте прессе';
+      }
     } else {
       card.hidden = true;
       card.innerHTML = '';
+      if (hubBtn) {
+        hubBtn.disabled = false;
+        hubBtn.textContent = 'В центр управления';
+      }
     }
   }
 
   function bind() {
     document.body.addEventListener('click', (e) => {
       const nav = e.target.closest('[data-nav]');
-      if (nav) { show(nav.dataset.nav); return; }
+      if (nav) {
+        const dest = nav.dataset.nav;
+        if (dest === 'hub' && document.getElementById('screen-result')?.classList.contains('active') && S().pendingPress()?.options?.length) {
+          toast('Сначала ответьте на вопросы прессы');
+          return;
+        }
+        show(dest);
+        return;
+      }
 
       const tl = e.target.closest('[data-table-league]');
       if (tl) { tableLeagueId = tl.dataset.tableLeague; renderTable(); return; }

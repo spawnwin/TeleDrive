@@ -1,4 +1,4 @@
-const CACHE = 'eye-manager-v32';
+const CACHE = 'eye-manager-v33';
 const ASSETS = [
   './',
   './index.html',

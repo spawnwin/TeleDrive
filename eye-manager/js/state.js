@@ -649,6 +649,8 @@ window.EYE_STATE = (() => {
   function refreshTransferMarket() {
     if (!state) return;
     const me = club();
+    // Keep player's own listings so weekly refresh doesn't wipe them
+    const ownListings = (state.transferList || []).filter(e => e.clubId === me.id);
     const list = [];
     // Free agents
     for (let i = 0; i < 24; i++) {
@@ -687,7 +689,7 @@ window.EYE_STATE = (() => {
         });
       });
     });
-    state.transferList = list;
+    state.transferList = [...ownListings, ...list];
   }
 
   function filterMarket({ pos, maxPrice, minOvr, maxAge, leagueId, q } = {}) {
@@ -911,7 +913,7 @@ window.EYE_STATE = (() => {
     simOtherLeaguesWeek();
     maybePlayCupAiWeek();
     maybePlayUclAiWeek();
-    queuePressConference(won, drew, false);
+    queuePressConference(won, drew, state.leagueName || 'Матч лиги');
     advanceWeek();
     save();
   }
@@ -1255,7 +1257,7 @@ window.EYE_STATE = (() => {
     p.request = 'playtime';
     state.inbox.unshift({
       id: D().uid('m'), type: 'request', title: `${p.name}: мало игрового времени`,
-      body: `Хочет место в основе. Приложений: ${p.seasonApps || 0}, мораль ${Math.round(p.morale || 0)}. Можно пообещать минуты, выставить на трансфер или отказать.`,
+      body: `Хочет место в основе. Игр: ${p.seasonApps || 0}, мораль ${Math.round(p.morale || 0)}. Можно пообещать минуты, выставить на трансфер или отказать.`,
       playerId: p.id, action: 'playtime', read: false, at: Date.now(), week: state.week
     });
   }
@@ -1748,7 +1750,8 @@ window.EYE_STATE = (() => {
 
   function makeOffer(entryId, bid, loan = false, wageOffer = null) {
     if (!transferWindowOpen() && !loan) {
-      return { ok: false, msg: 'Трансферное окно закрыто (открыто туры 1–8 и 20–28)' };
+      const info = transferWindowInfo();
+      return { ok: false, msg: `Трансферное окно закрыто (открыто туры ${info.label})` };
     }
     const me = club();
     const item = state.transferList.find(e => e.id === entryId || e.player.id === entryId);
@@ -1829,6 +1832,14 @@ window.EYE_STATE = (() => {
     return makeOffer(entryId, null, false);
   }
 
+  function purgeFromLineup(playerId) {
+    const me = club();
+    if (!me?.lineup) return;
+    const before = me.lineup.length;
+    me.lineup = me.lineup.filter(p => p && p.id !== playerId);
+    if (me.lineup.length < 11 || me.lineup.length !== before) autoLineup();
+  }
+
   function sellPlayer(playerId, minPrice) {
     const me = club();
     const p = me.squad.find(x => x.id === playerId);
@@ -1841,15 +1852,19 @@ window.EYE_STATE = (() => {
       // list on market
       p.listed = true;
       p.ask = Math.round(p.value * 1.1);
-      state.transferList.unshift({
-        id: D().uid('t'), type: 'transfer', player: p, clubId: me.id,
-        clubName: me.name, leagueId: me.leagueId, ask: p.ask, wageAsk: p.wage
-      });
+      state.transferList = state.transferList || [];
+      if (!state.transferList.some(e => e.player?.id === p.id && e.clubId === me.id)) {
+        state.transferList.unshift({
+          id: D().uid('t'), type: 'transfer', player: p, clubId: me.id,
+          clubName: me.name, leagueId: me.leagueId, ask: p.ask, wageAsk: p.wage
+        });
+      }
       save();
       return { ok: true, msg: `${p.name} выставлен за ${money(p.ask)}` };
     }
     const buyer = D().pick(buyers);
     me.squad = me.squad.filter(x => x.id !== playerId);
+    purgeFromLineup(playerId);
     adjustBudget(offer, `Продажа: ${p.name} → ${buyer.name}`);
     buyer.squad.push({ ...p, clubId: buyer.id, listed: false });
     buyer.budget -= offer;
@@ -1888,14 +1903,16 @@ window.EYE_STATE = (() => {
     if (!offer) return { ok: false, msg: 'Нет предложения' };
     const me = club();
     const p = me.squad.find(x => x.id === offer.playerId);
-    state.transferOffers = state.transferOffers.filter(o => o.id !== offerId);
     if (!accept || !p) {
+      state.transferOffers = state.transferOffers.filter(o => o.id !== offerId);
       save();
       return { ok: true, msg: 'Отказ отправлен' };
     }
     if (me.squad.length <= 16) return { ok: false, msg: 'Состав слишком мал' };
+    state.transferOffers = state.transferOffers.filter(o => o.id !== offerId);
     const buyer = clubById(offer.fromId);
     me.squad = me.squad.filter(x => x.id !== p.id);
+    purgeFromLineup(p.id);
     adjustBudget(offer.bid, `Продажа: ${p.name}`);
     if (buyer) {
       buyer.squad.push({ ...p, clubId: buyer.id });
@@ -1924,30 +1941,36 @@ window.EYE_STATE = (() => {
     return { ok: true, msg: `${f.name} → ур. ${level + 1}` };
   }
 
+  function youthPromoteCost(me = club()) {
+    ensureClubExtras(me);
+    return Math.max(40000, 150000 - (me.facilities?.youth || 1) * 18000);
+  }
+
   function promoteYouth(playerId = null) {
     const me = club();
     ensureClubExtras(me);
     refillYouth(me);
     if (me.squad.length >= 30) return { ok: false, msg: 'Состав полон' };
+    const cost = youthPromoteCost(me);
+    if (me.budget < cost) return { ok: false, msg: 'Нужно ' + money(cost) };
     let p;
     if (playerId) {
       p = me.youth.find(x => x.id === playerId);
       if (!p) return { ok: false, msg: 'Нет в академии' };
       me.youth = me.youth.filter(x => x.id !== playerId);
     } else {
-      const cost = Math.max(40000, 150000 - me.facilities.youth * 18000);
-      if (me.budget < cost) return { ok: false, msg: 'Нужно ' + money(cost) };
       if (!me.youth.length) refillYouth(me, true);
       me.youth.sort((a, b) => b.pot - a.pot);
       p = me.youth.shift();
-      adjustBudget(-cost, `Выпуск из академии: ${p?.name || 'молодёжь'}`);
     }
+    if (!p) return { ok: false, msg: 'Академия пуста' };
+    adjustBudget(-cost, `Выпуск из академии: ${p.name}`);
     delete p.youth;
     p.clubId = me.id;
     p.contract = Math.max(p.contract || 1, 2);
     me.squad.push(p);
     save();
-    return { ok: true, msg: `В основу: ${p.name} (${D().POS_LABEL[p.pos]}, ${p.ovr} / пот. ${p.pot})`, player: p };
+    return { ok: true, msg: `В основу: ${p.name} (${D().POS_LABEL[p.pos]}, ${p.ovr} / пот. ${p.pot}) · −${money(cost)}`, player: p };
   }
 
   function hireStaff(roleId) {
@@ -1965,16 +1988,19 @@ window.EYE_STATE = (() => {
     return { ok: true, msg: `${role.name} → ур. ${level + 1} (−${money(cost)})` };
   }
 
-  function queuePressConference(won, drew, isCup) {
+  function queuePressConference(won, drew, competitionLabel) {
     const pool = D().PRESS_OPTIONS.filter(o => {
       if (won) return ['confident', 'humble', 'defend_squad', 'silent'].includes(o.id);
       if (drew) return ['humble', 'promise', 'defend_squad', 'silent'].includes(o.id);
       return ['promise', 'defend_squad', 'attack_board', 'silent', 'humble'].includes(o.id);
     });
     const picked = pool.sort(() => Math.random() - 0.5).slice(0, 3);
+    const label = typeof competitionLabel === 'string' && competitionLabel
+      ? competitionLabel
+      : (competitionLabel === true ? 'Кубковый матч' : 'Матч лиги');
     state.pendingPress = {
       title: won ? 'Пресс-конференция: победа' : drew ? 'Пресс-конференция: ничья' : 'Пресс-конференция: поражение',
-      context: isCup ? 'Кубковый матч' : 'Матч лиги',
+      context: label,
       options: picked
     };
   }
@@ -2074,9 +2100,24 @@ window.EYE_STATE = (() => {
     return xi;
   }
 
+  function transferWindowInfo() {
+    const total = Math.max(8, state?.fixtures?.length || 38);
+    const summerEnd = Math.min(8, Math.max(4, Math.ceil(total * 0.22)));
+    const winterStart = Math.max(summerEnd + 2, Math.floor(total * 0.52));
+    const winterEnd = Math.min(total, winterStart + Math.max(3, Math.floor(total * 0.18)));
+    return {
+      summerEnd,
+      winterStart,
+      winterEnd,
+      total,
+      label: `1–${summerEnd} и ${winterStart}–${winterEnd}`
+    };
+  }
+
   function transferWindowOpen() {
     const w = state?.week || 1;
-    return (w >= 1 && w <= 8) || (w >= 20 && w <= 28);
+    const { summerEnd, winterStart, winterEnd } = transferWindowInfo();
+    return (w >= 1 && w <= summerEnd) || (w >= winterStart && w <= winterEnd);
   }
 
   function ensureLineup() {
@@ -2147,19 +2188,26 @@ window.EYE_STATE = (() => {
   function financeSummary() {
     const me = club();
     ensureMeta();
+    ensureClubExtras(me);
     if (!state.sponsor) pickSponsor(me);
     const wages = me.squad.reduce((s, p) => s + (p.wage || 0), 0);
     const values = me.squad.reduce((s, p) => s + (p.value || 0), 0);
+    const staffLvl = (me.staff.coach || 1) + (me.staff.physio || 1) + (me.staff.scoutDir || 1);
+    const staffWages = staffLvl * 12000;
     const weekIn = (state.sponsor?.weekly || 0);
-    const weekOut = wages + ((me.staff.coach || 1) + (me.staff.physio || 1) + (me.staff.scoutDir || 1)) * 12000;
+    const weekOut = wages + staffWages;
+    const incomePerMatch = Math.round(me.fans * (0.9 + me.facilities.stadium * 0.3) * 16);
     return {
       budget: me.budget,
       weeklyWages: wages,
+      staffWages,
       squadValue: values,
       fans: me.fans,
-      incomePerMatch: Math.round(me.fans * (0.9 + me.facilities.stadium * 0.3) * 16),
+      incomePerMatch,
       sponsor: state.sponsor,
       weeklyNet: weekIn - weekOut,
+      weekIn,
+      weekOut,
       ledger: (state.ledger || []).slice(0, 24)
     };
   }
@@ -2632,7 +2680,7 @@ window.EYE_STATE = (() => {
       body: `${result.home} ${score[0]}:${score[1]} ${result.away}`,
       at: Date.now()
     });
-    queuePressConference(won, drew, true);
+    queuePressConference(won, drew, label);
     state.knockoutPlayedWeek = state.week;
     save();
   }
@@ -2677,6 +2725,7 @@ window.EYE_STATE = (() => {
     state.leagueId = next.leagueId;
     state.leagueName = next.leagueName;
     state.sacked = false;
+    state.season = (state.season || 1) + 1;
     state.board = B().createBoard(next);
     const lc = leagueClubs();
     state.table = emptySeasonTable(lc);
@@ -2702,14 +2751,15 @@ window.EYE_STATE = (() => {
     ensureClubExtras(next);
     pickSponsor(next);
     refillYouth(next, true);
+    autoLineup();
     state.inbox.unshift({
       id: D().uid('m'), type: 'welcome', title: 'Новый контракт',
-      body: `Вы возглавили «${next.name}». Цель: ${state.board.targetLabel}.`,
+      body: `Вы возглавили «${next.name}». Сезон ${state.season}. Цель: ${state.board.targetLabel}.`,
       read: false, at: Date.now()
     });
     refreshTransferMarket();
     save();
-    return { ok: true, msg: `Контракт с «${next.name}»` };
+    return { ok: true, msg: `Контракт с «${next.name}» · сезон ${state.season}` };
   }
 
   function storeCounter(entryId, counter) {
@@ -2729,9 +2779,9 @@ window.EYE_STATE = (() => {
     upgradeFacility, promoteYouth, setTactics, setLineup, autoLineup, ensureLineup, swapIntoXi,
     renewContract, negotiateContract, setDevFocus, financeSummary, resolveCupRoundAI, scoutPlayer, takeNewJob,
     hireStaff, answerPress, refillYouth, releaseYouth, runYouthIntake, pendingPress: () => state?.pendingPress || null,
-    xiStatus, fixXi, matchRivalry, transferWindowOpen, listLeagueTables,
+    xiStatus, fixXi, matchRivalry, transferWindowOpen, transferWindowInfo, listLeagueTables,
     resolvePlayerRequest, seasonLog: () => state?.seasonLog || [], avgSeasonRating,
     squadReadiness, opponentBrief, boardProgress, isClubInCwc, isClubInUcl: isClubInUclBracket,
-    teamDevSummary, refreshClubLevel
+    teamDevSummary, refreshClubLevel, youthPromoteCost
   };
 })();
