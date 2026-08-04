@@ -45,12 +45,18 @@ window.EYE_UI = (() => {
   const ENTRY_WINDOWS = new Set(['auth', 'register', 'create']);
 
   function show(id) {
-    if (id === 'home' && A().isLoggedIn()) id = 'lobby';
+    if (id === 'home' && A().isLoggedIn()) {
+      id = hasLocalCareer() ? 'hub' : 'lobby';
+      if (id === 'hub' && !S().get()) {
+        try { S().load(); } catch {}
+        if (!S().get()) id = 'lobby';
+      }
+    }
     if (id === 'lobby' && !A().isLoggedIn()) id = 'home';
     if ((id === 'onlinecups' || id === 'cupdetail' || id === 'admin') && !A().isLoggedIn()) id = 'auth';
     if (id === 'admin' && A().isLoggedIn() && !isAdminUser()) {
       toast('Только для администратора');
-      id = S().get() ? 'more' : 'lobby';
+      id = S().get() ? 'hub' : 'lobby';
     }
 
     // Block leaving a live match (finishMatch clears matchPlaying before show('result'))
@@ -320,11 +326,63 @@ window.EYE_UI = (() => {
   }
 
   function syncOnlineBackNav() {
-    const target = S().get() ? 'more' : 'lobby';
+    const target = S().get() || hasLocalCareer() ? 'hub' : 'lobby';
     const back = $('#onlinecups-back');
     if (back) back.setAttribute('data-nav', target);
     const aback = $('#admin-back');
     if (aback) aback.setAttribute('data-nav', target);
+  }
+
+  function hasLocalCareer() {
+    if (S().get()) return true;
+    try { return !!localStorage.getItem(S().KEY); } catch { return false; }
+  }
+
+  async function enterApp({ toastWelcome } = {}) {
+    if (!A().isLoggedIn()) {
+      show('home');
+      return;
+    }
+    try {
+      const me = await A().refreshMe();
+      lastMePayload = me;
+      cloudHasCareer = !!me?.hasCareer;
+    } catch {}
+
+    let localRaw = null;
+    try { localRaw = localStorage.getItem(S().KEY); } catch {}
+    let remote = null;
+    if (cloudHasCareer || !localRaw) {
+      try { remote = await A().loadCareer(); } catch { remote = null; }
+    }
+
+    if (remote) {
+      let preferRemote = true;
+      try {
+        if (localRaw) {
+          const local = JSON.parse(localRaw);
+          const lS = local.season || 0, lW = local.week || 0;
+          const rS = remote.season || 0, rW = remote.week || 0;
+          const lAt = local.savedAt || 0;
+          const rAt = remote.savedAt || 0;
+          if (rS > lS || (rS === lS && rW > lW)) preferRemote = true;
+          else if (rS === lS && rW === lW && rAt > lAt && rAt > 0) preferRemote = true;
+          else preferRemote = false;
+        }
+      } catch { preferRemote = true; }
+      if (preferRemote) {
+        try { localStorage.setItem(S().KEY, JSON.stringify(remote)); } catch {}
+      } else {
+        cloudSave(true);
+      }
+    }
+
+    if (S().load() || (hasLocalCareer() && S().load())) {
+      if (toastWelcome) toast('С возвращением');
+      show('hub');
+      return;
+    }
+    show('lobby');
   }
 
   function levelBarHtml(user) {
@@ -443,25 +501,73 @@ window.EYE_UI = (() => {
     if (box && user) {
       box.innerHTML = `<div><strong>${user.name || user.login}</strong><small>@${user.login}${isAdminUser(user) ? ' · админ' : ''}</small></div>${levelBarHtml(user)}`;
     }
-    let local = !!S().get();
-    if (!local) {
-      try { local = !!localStorage.getItem(S().KEY); } catch { local = false; }
-    }
+    const local = hasLocalCareer();
     const btnCont = $('#btn-continue');
     const hint = $('#lobby-hint');
+    const lede = $('#lobby-lede');
     if (btnCont) {
       const canContinue = local || cloudHasCareer;
       btnCont.hidden = !canContinue;
-      btnCont.textContent = local ? 'Продолжить карьеру' : 'Загрузить из облака';
+      btnCont.textContent = local ? 'В центр управления' : 'Загрузить карьеру';
+    }
+    if (lede) {
+      lede.textContent = 'Карьера клуба и онлайн-кубки в одном месте.';
     }
     if (hint) {
       hint.textContent = (local || cloudHasCareer)
-        ? 'Можно продолжить сохранение или создать новую команду. Онлайн-кубки доступны по уровню.'
-        : 'Сохранений нет — создайте команду или зайдите в онлайн-кубки по уровню.';
+        ? 'Продолжите карьеру или сыграйте онлайн-кубок ниже — всё в одном аккаунте.'
+        : 'Создайте команду для полной карьеры. Онлайн-кубки доступны сразу по уровню.';
     }
     syncOnlineBackNav();
     syncAdminNav();
     syncDesktopUser();
+    await renderLobbyCups();
+  }
+
+  async function renderLobbyCups() {
+    const list = $('#lobby-cups-list');
+    const liveBox = $('#lobby-cups-live');
+    if (!list) return;
+    if (!A().isLoggedIn()) {
+      list.innerHTML = '';
+      if (liveBox) liveBox.hidden = true;
+      return;
+    }
+    list.innerHTML = '<div class="hint">Загрузка кубков…</div>';
+    try {
+      let mePayload = lastMePayload;
+      try {
+        mePayload = await A().refreshMe();
+        lastMePayload = mePayload;
+      } catch {}
+      const bracket = mePayload?.bracket;
+      const user = A().getUser();
+      if (liveBox) {
+        const live = mePayload?.liveCup;
+        if (live) {
+          liveBox.hidden = false;
+          liveBox.innerHTML = `<div class="lobby-live-row">
+            <div><strong>Идёт ваш кубок</strong><small>${live.name} · ${live.round || 'раунд'}</small></div>
+            <button type="button" class="btn btn-primary btn-tiny" data-cup-open="${live.id}">Открыть</button>
+          </div>`;
+        } else {
+          liveBox.hidden = true;
+          liveBox.innerHTML = '';
+        }
+      }
+      const data = await O().listCups({
+        status: 'open',
+        bracketId: bracket?.id && !isAdminUser(user) ? bracket.id : undefined
+      });
+      let cups = (data.cups || []).slice(0, 6);
+      if (!cups.length) {
+        list.innerHTML = '<div class="hint">Открытых кубков вашего уровня пока нет — загляните во «Все кубки».</div>';
+      } else {
+        list.innerHTML = cups.map((c) => cupRowHtml(c, user)).join('');
+      }
+    } catch (err) {
+      list.innerHTML = `<div class="hint">${err.message || 'Кубки недоступны'}</div>`;
+    }
   }
 
   async function renderOnlineCups() {
@@ -2744,46 +2850,9 @@ window.EYE_UI = (() => {
     });
     $('#btn-continue')?.addEventListener('click', async () => {
       if (!A().isLoggedIn()) { show('auth'); return; }
-      toast('Синхронизация…');
-      try {
-        const remote = await A().loadCareer();
-        if (remote) {
-          let preferRemote = true;
-          let localNewer = false;
-          try {
-            const raw = localStorage.getItem(S().KEY);
-            if (raw) {
-              const local = JSON.parse(raw);
-              const lS = local.season || 0, lW = local.week || 0;
-              const rS = remote.season || 0, rW = remote.week || 0;
-              const lAt = local.savedAt || 0;
-              const rAt = remote.savedAt || 0;
-              // Strictly newer remote week wins; same week → prefer newer timestamp / local
-              if (rS > lS || (rS === lS && rW > lW)) preferRemote = true;
-              else if (rS === lS && rW === lW && rAt > lAt && rAt > 0) preferRemote = true;
-              else preferRemote = false;
-              localNewer = !preferRemote;
-            }
-          } catch { preferRemote = true; }
-          if (preferRemote) {
-            try { localStorage.setItem(S().KEY, JSON.stringify(remote)); } catch {}
-          }
-          if (S().load()) {
-            cloudHasCareer = true;
-            if (localNewer) cloudSave(true);
-            toast(preferRemote ? 'Карьера загружена' : 'Локальное сохранение новее — продолжаем его');
-            show('hub');
-            return;
-          }
-        }
-      } catch {}
-      if (S().load()) {
-        cloudHasCareer = true;
-        toast('Карьера загружена');
-        show('hub');
-        return;
-      }
-      toast('Сохранение не найдено');
+      toast('Открываем…');
+      await enterApp();
+      if (!S().get() && !cloudHasCareer) toast('Сохранение не найдено — создайте команду');
     });
     async function doLogout() {
       await A().logout();
@@ -2806,13 +2875,13 @@ window.EYE_UI = (() => {
         cloudHasCareer = !!data.hasCareer;
         $('#login-msg').textContent = '';
         toast('Добро пожаловать, ' + (data.user.name || data.user.login));
-        if (!cloudHasCareer) {
+        if (!cloudHasCareer && !hasLocalCareer()) {
           createMode = 'custom';
           createDirty = false;
           createStep = 1;
           show('create');
         } else {
-          show('lobby');
+          await enterApp();
         }
       } catch (err) {
         $('#login-msg').textContent = err.message;
@@ -3231,7 +3300,8 @@ window.EYE_UI = (() => {
     }
     const me = await A().refreshMe();
     cloudHasCareer = !!me?.hasCareer;
-    if (A().isLoggedIn()) show('lobby');
+    lastMePayload = me;
+    if (A().isLoggedIn()) await enterApp({ toastWelcome: true });
     else show('home');
   }
 

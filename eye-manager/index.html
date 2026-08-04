@@ -103,24 +103,39 @@
       </div>
     </section>
 
-    <!-- LOBBY (after auth — career gate inside the game) -->
+    <!-- LOBBY (единый вход: карьера + онлайн в одном месте) -->
     <section id="screen-lobby" class="screen">
       <header class="lobby-hero">
         <div class="eye-logo hero-eye" style="width:64px;height:64px;margin:0 auto 8px">
           <img src="assets/eye.svg" alt="" width="56" height="56" />
         </div>
-        <h1 class="lobby-title">Карьера</h1>
-        <p class="hint" id="lobby-lede">Создайте свою команду со случайным составом и развивайте её.</p>
+        <h1 class="lobby-title">EYE</h1>
+        <p class="hint" id="lobby-lede">Карьера и онлайн-кубки — в одном менеджере.</p>
       </header>
       <div class="lobby-user glass-panel" id="lobby-user"></div>
-      <div class="lobby-actions">
-        <button class="btn btn-primary btn-glow" id="btn-continue" type="button" hidden>Продолжить</button>
-        <button class="btn btn-glass" id="btn-new" type="button">Создать команду</button>
-        <button class="btn btn-glass" data-nav="onlinecups" type="button">Кубки онлайн</button>
+
+      <section class="lobby-block">
+        <h3 class="lobby-block-title">Клуб</h3>
+        <div class="lobby-actions">
+          <button class="btn btn-primary btn-glow" id="btn-continue" type="button" hidden>Продолжить</button>
+          <button class="btn btn-glass" id="btn-new" type="button">Создать команду</button>
+        </div>
+        <p class="hint" id="lobby-hint"></p>
+      </section>
+
+      <section class="lobby-block">
+        <div class="lobby-block-head">
+          <h3 class="lobby-block-title">Онлайн-кубки</h3>
+          <button type="button" class="link-btn" data-nav="onlinecups" id="btn-lobby-cups-all">Все кубки</button>
+        </div>
+        <div class="glass-panel" id="lobby-cups-live" style="padding:12px;margin-bottom:8px" hidden></div>
+        <div class="list" id="lobby-cups-list"></div>
+      </section>
+
+      <div class="lobby-actions lobby-actions-foot">
         <button class="btn btn-glass" data-nav="admin" id="btn-lobby-admin" type="button" hidden>Админ-панель</button>
         <button class="btn btn-glass" id="btn-logout" type="button">Выйти из аккаунта</button>
       </div>
-      <p class="hint" id="lobby-hint"></p>
     </section>
 
     <!-- ONLINE CUPS -->
@@ -642,7 +657,7 @@
           <h3 class="menu-section-title">Карьера</h3>
           <div class="menu-list">
             <button type="button" class="menu-row" data-nav="history"><span class="menu-ico">◷</span><span class="menu-txt"><strong>История</strong><small>Матчи и сезоны</small></span></button>
-            <button type="button" class="menu-row" data-nav="lobby"><span class="menu-ico">⌂</span><span class="menu-txt"><strong>Лобби</strong><small>Новая карьера / выход</small></span></button>
+            <button type="button" class="menu-row" data-nav="hub" id="menu-home-row"><span class="menu-ico">⌂</span><span class="menu-txt"><strong>Центр</strong><small>Карьера и онлайн</small></span></button>
           </div>
         </section>
         <section class="menu-section">
@@ -657,9 +672,10 @@
               <button type="button" data-cur="EUR" class="cur-btn">Евро €</button>
             </div>
           </div>
-          <p class="hint" id="eye-build-ver" style="margin:0 0 10px">EYE · сборка v43</p>
+          <p class="hint" id="eye-build-ver" style="margin:0 0 10px">EYE · сборка v44</p>
           <div class="menu-actions">
             <button class="btn btn-glass" id="btn-save-cloud">Сохранить в облако</button>
+            <button class="btn btn-glass" data-nav="lobby" id="btn-account-home">Аккаунт · новая команда</button>
             <button class="btn btn-glass" id="btn-logout-more">Выйти из аккаунта</button>
             <button class="btn btn-danger" id="btn-reset">Сбросить карьеру</button>
           </div>
