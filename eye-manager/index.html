@@ -94,38 +94,34 @@
             <img src="assets/eye.svg" alt="" width="72" height="72" />
           </div>
           <h1 class="brand">EYE</h1>
-          <p class="lede">Симулятор футбольного менеджера. Глаз видит поле целиком.</p>
+          <p class="lede" id="home-lede">Войдите в аккаунт, затем выберите режим.</p>
         </header>
-        <div class="home-actions">
-          <button class="btn btn-primary btn-glow" id="btn-auth" type="button" hidden>Войти</button>
-          <button class="btn btn-glass" id="btn-register" type="button" hidden>Создать аккаунт</button>
+        <div class="home-actions" id="home-guest-actions">
+          <button class="btn btn-primary btn-glow" id="btn-auth" type="button">Войти</button>
+          <button class="btn btn-glass" id="btn-register" type="button">Создать аккаунт</button>
         </div>
+        <div class="home-actions" id="home-mode-actions" hidden>
+          <button class="btn btn-primary btn-glow" id="btn-career" type="button">Карьера</button>
+          <button class="btn btn-glass" id="btn-online" type="button">Онлайн</button>
+        </div>
+        <p class="hint home-mode-hint" id="home-hint"></p>
       </div>
     </section>
 
-    <!-- LOBBY (единый вход: карьера + онлайн в одном месте) -->
+    <!-- LOBBY — онлайн с другими игроками -->
     <section id="screen-lobby" class="screen">
       <header class="lobby-hero">
         <div class="eye-logo hero-eye" style="width:64px;height:64px;margin:0 auto 8px">
           <img src="assets/eye.svg" alt="" width="56" height="56" />
         </div>
-        <h1 class="lobby-title">EYE</h1>
-        <p class="hint" id="lobby-lede">Карьера и онлайн-кубки — в одном менеджере.</p>
+        <h1 class="lobby-title">Онлайн</h1>
+        <p class="hint" id="lobby-lede">Кубки с реальными менеджерами. Карьера — отдельно: реальные лиги и клубы против ИИ.</p>
       </header>
       <div class="lobby-user glass-panel" id="lobby-user"></div>
 
       <section class="lobby-block">
-        <h3 class="lobby-block-title">Клуб</h3>
-        <div class="lobby-actions">
-          <button class="btn btn-primary btn-glow" id="btn-continue" type="button" hidden>Продолжить</button>
-          <button class="btn btn-glass" id="btn-new" type="button">Создать команду</button>
-        </div>
-        <p class="hint" id="lobby-hint"></p>
-      </section>
-
-      <section class="lobby-block">
         <div class="lobby-block-head">
-          <h3 class="lobby-block-title">Онлайн-кубки</h3>
+          <h3 class="lobby-block-title">Кубки онлайн</h3>
           <button type="button" class="link-btn" data-nav="onlinecups" id="btn-lobby-cups-all">Все кубки</button>
         </div>
         <div class="glass-panel" id="lobby-cups-live" style="padding:12px;margin-bottom:8px" hidden></div>
@@ -133,9 +129,13 @@
       </section>
 
       <div class="lobby-actions lobby-actions-foot">
+        <button class="btn btn-glass" data-nav="home" id="btn-lobby-modes" type="button">Режимы</button>
+        <button class="btn btn-primary btn-glow" id="btn-continue" type="button" hidden>В карьеру</button>
+        <button class="btn btn-glass" id="btn-new" type="button" hidden>Новая карьера</button>
         <button class="btn btn-glass" data-nav="admin" id="btn-lobby-admin" type="button" hidden>Админ-панель</button>
-        <button class="btn btn-glass" id="btn-logout" type="button">Выйти из аккаунта</button>
+        <button class="btn btn-glass" id="btn-logout" type="button">Выйти</button>
       </div>
+      <p class="hint" id="lobby-hint" style="text-align:center;margin-top:8px"></p>
     </section>
 
     <!-- ONLINE CUPS -->
@@ -250,21 +250,21 @@
           <p class="hint" id="register-msg"></p>
         </form>
         <p class="entry-switch">Уже есть аккаунт? <button type="button" class="link-btn" data-nav="auth">Войти</button></p>
-        <p class="hint" style="margin-top:8px">Один аккаунт — одна команда. Перерегистрация для новой карьеры запрещена.</p>
+        <p class="hint" style="margin-top:8px">Один аккаунт — одна карьера. Выберите реальную лигу и клуб при старте.</p>
       </div>
     </section>
 
-    <!-- CREATE (window over lobby, stepped) -->
+    <!-- CREATE — карьера: реальная лига + клуб -->
     <section id="screen-create" class="screen entry-screen" aria-hidden="true">
-      <button type="button" class="entry-scrim" data-nav="lobby" aria-label="Закрыть"></button>
+      <button type="button" class="entry-scrim" data-nav="home" id="create-scrim" aria-label="Закрыть"></button>
       <div class="entry-panel entry-panel-wide glass-panel" role="dialog" aria-modal="true" aria-labelledby="create-title">
         <header class="entry-head">
-          <h2 id="create-title">Создать команду</h2>
-          <button type="button" class="entry-close" data-nav="lobby" aria-label="Закрыть">×</button>
+          <h2 id="create-title">Новая карьера</h2>
+          <button type="button" class="entry-close" data-nav="home" id="create-close" aria-label="Закрыть">×</button>
         </header>
         <div class="create-stepper" id="create-stepper" role="tablist" aria-label="Шаги">
           <button type="button" class="create-step active" data-goto-step="1" role="tab" aria-selected="true">1 · Лига</button>
-          <button type="button" class="create-step" data-goto-step="2" role="tab" aria-selected="false">2 · Команда</button>
+          <button type="button" class="create-step" data-goto-step="2" role="tab" aria-selected="false">2 · Клуб</button>
           <button type="button" class="create-step" data-goto-step="3" role="tab" aria-selected="false">3 · Старт</button>
         </div>
         <form id="form-create" class="create-form entry-form">
@@ -273,21 +273,21 @@
               <input name="manager" maxlength="24" required placeholder="Ваше имя" autocomplete="nickname" />
             </label>
             <div class="field-block">
-              <span class="field-label">Лига</span>
+              <span class="field-label">Реальная лига</span>
               <div class="league-pills" id="league-pills" role="listbox" aria-label="Лига"></div>
               <input type="hidden" name="league" id="sel-league" required />
             </div>
-            <p class="hint">После регистрации вы создаёте свой клуб и получаете случайный состав из 18 игроков.</p>
-            <button type="button" class="btn btn-primary" data-create-next="2">Далее · команда</button>
+            <p class="hint">Карьера в аккаунте: реальные лиги и клубы, соперники — ИИ. Без других игроков.</p>
+            <button type="button" class="btn btn-primary" data-create-next="2">Далее · клуб</button>
           </div>
 
           <div class="create-pane" data-create-pane="2" hidden>
-            <div class="mode-switch" id="create-mode-switch" role="tablist">
-              <button type="button" class="mode-chip active" data-create-mode="custom">Создать клуб</button>
-              <button type="button" class="mode-chip" data-create-mode="takeover">Возглавить клуб</button>
+            <div class="mode-switch" id="create-mode-switch" role="tablist" hidden>
+              <button type="button" class="mode-chip" data-create-mode="custom">Свой клуб</button>
+              <button type="button" class="mode-chip active" data-create-mode="takeover">Реальный клуб</button>
             </div>
 
-            <div id="create-custom-block">
+            <div id="create-custom-block" hidden>
               <label>Название клуба
                 <input name="clubName" id="inp-club-name" maxlength="28" placeholder="Например, Северный Шторм" />
               </label>
@@ -307,14 +307,14 @@
               <div class="club-preview glass-panel" id="custom-preview">
                 <div class="club-preview-body">
                   <strong>Случайный состав</strong>
-                  <div class="meta">18 игроков · OVR ~52–63 · база и академия ур. 1 · бюджет старта. Развивайте команду тренировками, инфраструктурой и молодёжью.</div>
+                  <div class="meta">18 игроков · OVR ~52–63 · база и академия ур. 1 · бюджет старта.</div>
                 </div>
               </div>
             </div>
 
-            <div id="create-takeover-block" hidden>
+            <div id="create-takeover-block">
               <div class="field-block">
-                <span class="field-label">Клуб</span>
+                <span class="field-label">Выберите клуб лиги</span>
                 <div class="club-picker" id="club-picker" role="listbox" aria-label="Клуб"></div>
                 <input type="hidden" name="clubId" id="sel-club" />
               </div>
@@ -352,7 +352,7 @@
             <div class="glass-panel" id="create-summary" style="padding:12px"></div>
             <div class="create-nav-row">
               <button type="button" class="btn btn-glass" data-create-next="2">Назад</button>
-              <button class="btn btn-primary create-submit" type="submit" id="btn-create-submit">Создать команду</button>
+              <button class="btn btn-primary create-submit" type="submit" id="btn-create-submit">Начать карьеру</button>
             </div>
           </div>
         </form>
@@ -658,7 +658,8 @@
           <h3 class="menu-section-title">Карьера</h3>
           <div class="menu-list">
             <button type="button" class="menu-row" data-nav="history"><span class="menu-ico">◷</span><span class="menu-txt"><strong>История</strong><small>Матчи и сезоны</small></span></button>
-            <button type="button" class="menu-row" data-nav="hub" id="menu-home-row"><span class="menu-ico">⌂</span><span class="menu-txt"><strong>Центр</strong><small>Карьера и онлайн</small></span></button>
+            <button type="button" class="menu-row" data-nav="hub" id="menu-home-row"><span class="menu-ico">⌂</span><span class="menu-txt"><strong>Центр</strong><small>Карьера · лига ИИ</small></span></button>
+            <button type="button" class="menu-row" data-nav="home" id="menu-modes-row"><span class="menu-ico">◈</span><span class="menu-txt"><strong>Режимы</strong><small>Карьера · Онлайн</small></span></button>
           </div>
         </section>
         <section class="menu-section">
@@ -673,7 +674,7 @@
               <button type="button" data-cur="EUR" class="cur-btn">Евро €</button>
             </div>
           </div>
-          <p class="hint" id="eye-build-ver" style="margin:0 0 10px">EYE · сборка v46</p>
+          <p class="hint" id="eye-build-ver" style="margin:0 0 10px">EYE · сборка v47</p>
           <div class="menu-actions">
             <button class="btn btn-glass" data-nav="lobby" id="btn-account-home">Аккаунт</button>
             <button class="btn btn-glass" id="btn-logout-more">Выйти из аккаунта</button>

@@ -28,7 +28,7 @@ window.EYE_UI = (() => {
   let historyTab = 'matches';
 
   let createStep = 1;
-  let createMode = 'custom'; // custom | takeover
+  let createMode = 'takeover'; // takeover (real clubs) | custom
   let createDirty = false;
   let onlineCupsTab = 'open';
   let onlineCupId = null;
@@ -45,22 +45,17 @@ window.EYE_UI = (() => {
   const ENTRY_WINDOWS = new Set(['auth', 'register', 'create']);
 
   function show(id) {
-    if (id === 'home' && A().isLoggedIn()) {
-      id = hasLocalCareer() ? 'hub' : 'lobby';
-      if (id === 'hub' && !S().get()) {
-        try { S().load(); } catch {}
-        if (!S().get()) id = 'lobby';
-      }
-    }
+    // home = mode select when logged in; guest sees login
     if (id === 'lobby' && !A().isLoggedIn()) id = 'home';
     if ((id === 'onlinecups' || id === 'cupdetail' || id === 'admin') && !A().isLoggedIn()) id = 'auth';
+    if (id === 'create' && !A().isLoggedIn()) id = 'auth';
     if (id === 'create' && A().isLoggedIn() && teamAlreadyBound()) {
-      toast('Команда уже создана. Пересоздание запрещено.');
-      id = S().get() || hasLocalCareer() ? 'hub' : 'lobby';
+      toast('Карьера уже создана. Пересоздание запрещено.');
+      id = S().get() || hasLocalCareer() ? 'hub' : 'home';
     }
     if (id === 'admin' && A().isLoggedIn() && !isAdminUser()) {
       toast('Только для администратора');
-      id = S().get() ? 'hub' : 'lobby';
+      id = 'home';
     }
 
     // Block leaving a live match (finishMatch clears matchPlaying before show('result'))
@@ -77,7 +72,7 @@ window.EYE_UI = (() => {
     });
 
     if (isWindow) {
-      const backdropId = (id === 'create') ? 'lobby' : 'home';
+      const backdropId = 'home';
       const backdrop = document.getElementById('screen-' + backdropId);
       const win = document.getElementById('screen-' + id);
       if (backdrop) {
@@ -135,10 +130,7 @@ window.EYE_UI = (() => {
 
     window.scrollTo(0, 0);
     if (id === 'create' && !createDirty) createStep = 1;
-    if (isWindow) {
-      if (id === 'create') renderLobby();
-      else renderHome();
-    }
+    if (isWindow) renderHome();
     refresh(id);
   }
 
@@ -162,7 +154,7 @@ window.EYE_UI = (() => {
   }
 
   function setCreateMode(mode) {
-    createMode = mode === 'takeover' ? 'takeover' : 'custom';
+    createMode = mode === 'custom' ? 'custom' : 'takeover';
     $all('#create-mode-switch .mode-chip').forEach(b => {
       b.classList.toggle('active', b.dataset.createMode === createMode);
     });
@@ -171,7 +163,7 @@ window.EYE_UI = (() => {
     if (custom) custom.hidden = createMode !== 'custom';
     if (take) take.hidden = createMode !== 'takeover';
     const submit = $('#btn-create-submit');
-    if (submit) submit.textContent = createMode === 'custom' ? 'Создать команду' : 'Возглавить клуб';
+    if (submit) submit.textContent = createMode === 'custom' ? 'Создать команду' : 'Начать карьеру';
     if (createMode === 'takeover') previewClub();
     else updateCustomPreview();
   }
@@ -332,11 +324,35 @@ window.EYE_UI = (() => {
   }
 
   function syncOnlineBackNav() {
-    const target = S().get() || hasLocalCareer() ? 'hub' : 'lobby';
     const back = $('#onlinecups-back');
-    if (back) back.setAttribute('data-nav', target);
+    if (back) back.setAttribute('data-nav', 'lobby');
     const aback = $('#admin-back');
-    if (aback) aback.setAttribute('data-nav', target);
+    if (aback) aback.setAttribute('data-nav', 'lobby');
+  }
+
+  function openCareerMode() {
+    if (!A().isLoggedIn()) {
+      show('auth');
+      toast('Войдите в аккаунт');
+      return;
+    }
+    if (hasLocalCareer() || cloudHasCareer) {
+      enterApp({ toastWelcome: false });
+      return;
+    }
+    createDirty = false;
+    createMode = 'takeover';
+    createStep = 1;
+    show('create');
+  }
+
+  function openOnlineMode() {
+    if (!A().isLoggedIn()) {
+      show('auth');
+      toast('Войдите в аккаунт для онлайн');
+      return;
+    }
+    show('lobby');
   }
 
   function hasLocalCareer() {
@@ -362,15 +378,13 @@ window.EYE_UI = (() => {
     }
     const accHome = $('#btn-account-home');
     if (accHome) {
-      accHome.textContent = bound ? 'Аккаунт' : 'Аккаунт · создать команду';
+      accHome.textContent = 'Онлайн';
+      accHome.setAttribute('data-nav', 'lobby');
     }
   }
 
-  async function enterApp({ toastWelcome } = {}) {
-    if (!A().isLoggedIn()) {
-      show('home');
-      return;
-    }
+  async function syncCareerFromCloud() {
+    if (!A().isLoggedIn()) return false;
     try {
       const me = await A().refreshMe();
       lastMePayload = me;
@@ -404,13 +418,26 @@ window.EYE_UI = (() => {
         cloudSave(true);
       }
     }
+    return !!(S().load() || (hasLocalCareer() && S().load()));
+  }
 
-    if (S().load() || (hasLocalCareer() && S().load())) {
+  async function enterApp({ toastWelcome, toModes } = {}) {
+    if (!A().isLoggedIn()) {
+      show('home');
+      return;
+    }
+    const loaded = await syncCareerFromCloud();
+    if (toModes) {
+      if (toastWelcome) toast('С возвращением');
+      show('home');
+      return;
+    }
+    if (loaded) {
       if (toastWelcome) toast('С возвращением');
       show('hub');
       return;
     }
-    show('lobby');
+    show('home');
   }
 
   function levelBarHtml(user) {
@@ -516,10 +543,32 @@ window.EYE_UI = (() => {
   }
 
   async function renderHome() {
-    const btnAuth = $('#btn-auth');
-    const btnReg = $('#btn-register');
-    if (btnAuth) btnAuth.hidden = false;
-    if (btnReg) btnReg.hidden = false;
+    const logged = A().isLoggedIn();
+    const guest = $('#home-guest-actions');
+    const modes = $('#home-mode-actions');
+    const lede = $('#home-lede');
+    const hint = $('#home-hint');
+    if (guest) guest.hidden = logged;
+    if (modes) modes.hidden = !logged;
+    if (lede) {
+      lede.textContent = logged
+        ? 'Выберите режим: карьера против ИИ или онлайн с игроками.'
+        : 'Войдите в аккаунт, затем выберите режим.';
+    }
+    if (hint) {
+      if (!logged) {
+        hint.textContent = 'Карьера и онлайн привязаны к аккаунту.';
+      } else if (hasLocalCareer() || cloudHasCareer) {
+        hint.textContent = 'Карьера: реальные лиги и клубы · соперники ИИ. Онлайн: кубки с людьми.';
+      } else {
+        hint.textContent = 'В карьере выберите реальную лигу и клуб. Онлайн — кубки с другими менеджерами.';
+      }
+    }
+    const btnCareer = $('#btn-career');
+    if (btnCareer) {
+      btnCareer.textContent = (hasLocalCareer() || cloudHasCareer) ? 'Продолжить карьеру' : 'Карьера';
+    }
+    syncCreateLocks();
     syncDesktopUser();
   }
 
@@ -531,28 +580,25 @@ window.EYE_UI = (() => {
     }
     const local = hasLocalCareer();
     const btnCont = $('#btn-continue');
+    const btnNew = $('#btn-new');
     const hint = $('#lobby-hint');
     const lede = $('#lobby-lede');
-    if (btnCont) {
-      const canContinue = local || cloudHasCareer;
-      btnCont.hidden = !canContinue;
-      btnCont.textContent = 'В центр управления';
-    }
-    const btnNew = $('#btn-new');
     const bound = teamAlreadyBound();
+    if (btnCont) {
+      btnCont.hidden = !(local || cloudHasCareer);
+      btnCont.textContent = 'В карьеру';
+    }
     if (btnNew) {
       btnNew.hidden = bound;
       btnNew.disabled = bound;
     }
     if (lede) {
-      lede.textContent = 'Карьера клуба и онлайн-кубки в одном месте.';
+      lede.textContent = 'Кубки с реальными менеджерами. Карьера — отдельно: реальные лиги и клубы против ИИ.';
     }
     if (hint) {
-      if (bound) {
-        hint.textContent = 'У аккаунта одна команда навсегда. Новая команда и перерегистрация запрещены (антимультиаккаунт).';
-      } else {
-        hint.textContent = 'Создайте одну команду для карьеры. Потом сменить клуб через новый аккаунт нельзя — мультиаккаунты запрещены.';
-      }
+      hint.textContent = bound
+        ? 'Карьера уже привязана к аккаунту. Здесь — только онлайн.'
+        : 'Карьеру с реальной лигой и клубом можно начать из меню режимов.';
     }
     syncCreateLocks();
     syncOnlineBackNav();
@@ -975,7 +1021,7 @@ window.EYE_UI = (() => {
       p.classList.toggle('active', p.dataset.league === hidL.value);
     });
     fillClubs(hidC.value);
-    setCreateMode(createMode || 'custom');
+    setCreateMode(createMode || 'takeover');
     updateCustomPreview();
   }
 
@@ -2808,6 +2854,20 @@ window.EYE_UI = (() => {
 
     // Home entry actions — capture so nothing can swallow the tap
     document.body.addEventListener('click', (e) => {
+      const career = e.target.closest('#btn-career');
+      if (career) {
+        e.preventDefault();
+        e.stopPropagation();
+        openCareerMode();
+        return;
+      }
+      const online = e.target.closest('#btn-online');
+      if (online) {
+        e.preventDefault();
+        e.stopPropagation();
+        openOnlineMode();
+        return;
+      }
       const reg = e.target.closest('#btn-register');
       if (reg) {
         e.preventDefault();
@@ -2825,11 +2885,11 @@ window.EYE_UI = (() => {
     $('#btn-new')?.addEventListener('click', () => {
       if (!A().isLoggedIn()) { show('auth'); toast('Сначала войдите'); return; }
       if (teamAlreadyBound()) {
-        toast('Команда уже создана. Пересоздание и мультиаккаунты запрещены.');
+        toast('Карьера уже создана. Пересоздание запрещено.');
         return;
       }
       createDirty = false;
-      createMode = 'custom';
+      createMode = 'takeover';
       createStep = 1;
       show('create');
     });
@@ -2865,7 +2925,6 @@ window.EYE_UI = (() => {
       const goto = e.target.closest('[data-goto-step]');
       if (goto) {
         const step = Number(goto.dataset.gotoStep);
-        // allow going back freely; forward only if previous filled
         if (step > createStep) {
           if (step >= 2) {
             const mgr = document.querySelector('#form-create input[name="manager"]');
@@ -2884,9 +2943,9 @@ window.EYE_UI = (() => {
     });
     $('#btn-continue')?.addEventListener('click', async () => {
       if (!A().isLoggedIn()) { show('auth'); return; }
-      toast('Открываем…');
+      toast('Открываем карьеру…');
       await enterApp();
-      if (!S().get() && !cloudHasCareer) toast('Сохранение не найдено — создайте команду');
+      if (!S().get() && !cloudHasCareer) toast('Карьера не найдена — начните новую');
     });
     async function doLogout() {
       await A().logout();
@@ -2909,14 +2968,7 @@ window.EYE_UI = (() => {
         cloudHasCareer = !!data.hasCareer;
         $('#login-msg').textContent = '';
         toast('Добро пожаловать, ' + (data.user.name || data.user.login));
-        if (!cloudHasCareer && !hasLocalCareer()) {
-          createMode = 'custom';
-          createDirty = false;
-          createStep = 1;
-          show('create');
-        } else {
-          await enterApp();
-        }
+        await enterApp({ toastWelcome: false, toModes: true });
       } catch (err) {
         $('#login-msg').textContent = err.message;
       }
@@ -2933,11 +2985,8 @@ window.EYE_UI = (() => {
         });
         cloudHasCareer = false;
         $('#register-msg').textContent = '';
-        toast('Аккаунт создан — создайте команду');
-        createMode = 'custom';
-        createDirty = false;
-        createStep = 1;
-        show('create');
+        toast('Аккаунт создан — выберите режим');
+        show('home');
       } catch (err) {
         $('#register-msg').textContent = err.message;
       }
@@ -2950,16 +2999,15 @@ window.EYE_UI = (() => {
         return;
       }
       if (document.getElementById('app')?.classList.contains('entry-open')) {
-        const createOpen = $('#screen-create')?.classList.contains('entry-open');
-        show(createOpen && A().isLoggedIn() ? 'lobby' : 'home');
+        show('home');
       }
     });
     $('#form-create')?.addEventListener('submit', async (e) => {
       e.preventDefault();
       if (!A().isLoggedIn()) { show('auth'); return; }
       if (teamAlreadyBound()) {
-        toast('Команда уже создана. Пересоздание запрещено.');
-        show(S().get() ? 'hub' : 'lobby');
+        toast('Карьера уже создана. Пересоздание запрещено.');
+        show(S().get() ? 'hub' : 'home');
         return;
       }
       const fd = new FormData(e.target);
@@ -2967,6 +3015,7 @@ window.EYE_UI = (() => {
         const managerName = String(fd.get('manager')).trim() || A().getUser()?.name || 'Менеджер';
         const formation = String(fd.get('formation'));
         const style = String(fd.get('style'));
+        // Default path: real league + real club
         if (createMode === 'custom') {
           const name = String(fd.get('clubName') || '').trim();
           if (!name) { toast('Укажите название клуба'); setCreateStep(2); return; }
@@ -2992,14 +3041,13 @@ window.EYE_UI = (() => {
         S().autoLineup();
         const saved = await cloudSave(true, { mode: 'create' });
         if (!saved) {
-          // server rejected — wipe local draft so UI stays consistent
           S().clear();
           cloudHasCareer = !!(lastMePayload?.hasCareer || A().getUser()?.teamBound);
           return;
         }
         cloudHasCareer = true;
         createDirty = false;
-        toast(createMode === 'custom' ? 'Команда создана · состав выдан' : 'Карьера начата');
+        toast('Карьера начата · реальный клуб против ИИ');
         show('hub');
       } catch (err) {
         toast('Ошибка: ' + err.message);
@@ -3363,8 +3411,11 @@ window.EYE_UI = (() => {
     const me = await A().refreshMe();
     cloudHasCareer = !!me?.hasCareer;
     lastMePayload = me;
-    if (A().isLoggedIn()) await enterApp({ toastWelcome: true });
-    else show('home');
+    if (A().isLoggedIn()) {
+      await syncCareerFromCloud();
+      toast('С возвращением');
+    }
+    show('home');
   }
 
   return { show, toast, boot, refresh };
