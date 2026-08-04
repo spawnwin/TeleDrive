@@ -94,7 +94,7 @@ window.EYE_STATE = (() => {
     const board = B().createBoard(me);
 
     state = {
-      version: 3,
+      version: 4,
       createdAt: Date.now(),
       managerName,
       season: 1,
@@ -206,6 +206,8 @@ window.EYE_STATE = (() => {
     c.staff = c.staff || { coach: 1, physio: 1, scoutDir: 1 };
     c.youth = c.youth || [];
     c.facilities = c.facilities || { stadium: 1, training: 1, youth: 1, medical: 1, scout: 1 };
+    (c.squad || []).forEach(p => D().ensureTraits(p));
+    (c.youth || []).forEach(p => D().ensureTraits(p));
   }
 
   function refillYouth(clubObj, force = false) {
@@ -547,9 +549,11 @@ window.EYE_STATE = (() => {
         m.played = true;
         m.score = res.score;
         applyToAnyTable(lg.table, m.home, m.away, res.score);
-        if (Math.random() < 0.08) {
+        if (Math.random() < 0.18) {
+          const upset = Math.abs(res.score[0] - res.score[1]) >= 3 || (home.reputation > away.reputation + 8 && res.score[0] < res.score[1]);
           state.news.unshift({
-            id: D().uid('n'), title: lg.name,
+            id: D().uid('n'),
+            title: upset ? `${lg.name}: сенсация` : lg.name,
             body: `${res.home} ${res.score[0]}:${res.score[1]} ${res.away}`,
             at: Date.now()
           });
@@ -612,11 +616,75 @@ window.EYE_STATE = (() => {
     if (state.week % 4 === 0) refreshTransferMarket();
     processIncomingOffers();
     processSquadRequests();
+    processContractPressure();
     midSeasonBoardCheck();
+    pulseWorldNews();
     maybePlayCupAiWeek();
     maybePlayUclAiWeek();
     const allPlayed = state.fixtures.every(r => r.matches.every(m => m.played));
     if (allPlayed) endSeason();
+  }
+
+  function processContractPressure() {
+    const me = club();
+    if (!me || state.week % 4 !== 2) return;
+    const recent = (state.inbox || []).some(m => m.type === 'contract_ask' && state.week - (m.week || 0) < 4);
+    if (recent) return;
+    const p = me.squad
+      .filter(x => (x.contract || 1) <= 1 && x.ovr >= 72 && !x.loan)
+      .sort((a, b) => b.ovr - a.ovr)[0];
+    if (!p) return;
+    const wantWage = Math.round(p.wage * (1.12 + Math.random() * 0.18));
+    state.inbox.unshift({
+      id: D().uid('m'), type: 'contract_ask', title: `${p.name}: новый контракт`,
+      body: `Контракт истекает через ${p.contract} г. Хочет ~${money(wantWage)}/нед. Откройте карточку игрока для переговоров.`,
+      playerId: p.id, wantWage, read: false, at: Date.now(), week: state.week
+    });
+  }
+
+  function pulseWorldNews() {
+    if (!state) return;
+    const roll = Math.random();
+    // title race / shock already partly from other leagues — add flavoured pulses
+    if (roll < 0.35) {
+      const leagues = Object.values(state.otherLeagues || {});
+      if (!leagues.length) return;
+      const lg = D().pick(leagues);
+      const table = Object.values(lg.table || {}).sort((a, b) => b.pts - a.pts || (b.gf - b.ga) - (a.gf - a.ga));
+      if (table.length < 2) return;
+      const lead = table[0];
+      const chase = table[1];
+      const gap = (lead.pts || 0) - (chase.pts || 0);
+      state.news.unshift({
+        id: D().uid('n'),
+        title: gap <= 3 ? `${lg.name}: интрига наверху` : `${lg.name}: ${lead.name} лидирует`,
+        body: gap <= 3
+          ? `${lead.name} ${lead.pts} очк., ${chase.name} ${chase.pts} — отрыв ${gap}.`
+          : `${lead.name} уверенно ведёт (${lead.pts} очк., РМ ${(lead.gf - lead.ga) >= 0 ? '+' : ''}${lead.gf - lead.ga}).`,
+        at: Date.now()
+      });
+    } else if (roll < 0.55) {
+      const stars = state.transferList?.filter(e => e.type === 'star' || (e.player?.ovr || 0) >= 84) || [];
+      if (stars.length) {
+        const e = D().pick(stars);
+        state.news.unshift({
+          id: D().uid('n'), title: 'Трансферный слух',
+          body: `${e.player.name} (${e.player.ovr}) из ${e.clubName || 'свободных'} может сменить клуб. Запрос ${money(e.ask)}.`,
+          at: Date.now()
+        });
+      }
+    } else if (roll < 0.7) {
+      const me = club();
+      const injured = me?.squad.filter(p => p.injured > 0)[0];
+      if (injured) {
+        state.news.unshift({
+          id: D().uid('n'), title: 'Медкарта клуба',
+          body: `${injured.name} вне игры ещё ~${injured.injured} тур(а).`,
+          at: Date.now()
+        });
+      }
+    }
+    if (state.news.length > 40) state.news.length = 40;
   }
 
   function processSquadRequests() {
@@ -889,13 +957,19 @@ window.EYE_STATE = (() => {
     adjustBudget(-cost, `Тренировка «${t.name}»`);
     const boost = t.boost + me.facilities.training + Math.floor((me.staff.coach || 1) / 2);
     me.squad.forEach(p => {
+      D().ensureTraits(p);
       if (p.injured || p.suspended) return;
       if (t.focus === 'condition') {
         p.condition = Math.min(100, p.condition + boost);
         p.energy = Math.min(100, p.energy + boost);
       } else {
-        p[t.focus] = Math.min(99, (p[t.focus] || 60) + (Math.random() < 0.55 ? 1 : 0));
-        if (Math.random() < 0.12 + me.facilities.training * 0.02 + (me.staff.coach || 1) * 0.01) {
+        const focusHit = p.devFocus && D().DEV_FOCUS.find(f => f.id === p.devFocus)?.attr === t.focus;
+        p[t.focus] = Math.min(99, (p[t.focus] || 60) + (Math.random() < (focusHit ? 0.78 : 0.55) ? 1 : 0));
+        if (focusHit && Math.random() < 0.35) {
+          const alt = D().DEV_FOCUS.find(f => f.id === p.devFocus)?.attr;
+          if (alt) p[alt] = Math.min(99, (p[alt] || 60) + (alt === t.focus ? 0 : 1));
+        }
+        if (Math.random() < 0.12 + me.facilities.training * 0.02 + (me.staff.coach || 1) * 0.01 + (focusHit ? 0.06 : 0)) {
           p.ovr = Math.min(p.pot, p.ovr + 1);
         }
         p.condition = Math.max(45, p.condition - 3);
@@ -904,6 +978,44 @@ window.EYE_STATE = (() => {
     });
     save();
     return { ok: true, msg: `Тренировка «${t.name}» (−${money(cost)})` };
+  }
+
+  function setDevFocus(playerId, focusId) {
+    const me = club();
+    const p = me?.squad.find(x => x.id === playerId);
+    if (!p) return { ok: false, msg: 'Нет игрока' };
+    if (focusId && !D().DEV_FOCUS.some(f => f.id === focusId)) return { ok: false, msg: 'Нет фокуса' };
+    p.devFocus = focusId || null;
+    const label = focusId ? (D().DEV_FOCUS.find(f => f.id === focusId)?.name || focusId) : 'сброшен';
+    save();
+    return { ok: true, msg: `Фокус ${p.name}: ${label}` };
+  }
+
+  function negotiateContract(playerId, years = 2, wageOffer = null) {
+    const me = club();
+    const p = me?.squad.find(x => x.id === playerId);
+    if (!p) return { ok: false, msg: 'Нет игрока' };
+    years = Math.max(1, Math.min(4, Number(years) || 2));
+    const wantWage = Math.round(p.wage * (1.08 + years * 0.02 + Math.random() * 0.08));
+    const wage = Math.round(Number(wageOffer) || wantWage);
+    const bonus = Math.round(wage * 6 * years);
+    if (me.budget < bonus) return { ok: false, msg: 'Нужен бонус ' + money(bonus) };
+    const wageOk = wage >= wantWage * 0.95;
+    if (!wageOk) {
+      return {
+        ok: false,
+        msg: `${p.name} хочет ~${money(wantWage)}/нед`,
+        counterWage: wantWage,
+        years
+      };
+    }
+    adjustBudget(-bonus, `Контракт: ${p.name}`);
+    p.contract = Math.max(p.contract || 0, 0) + years;
+    p.wage = wage;
+    p.morale = Math.min(100, (p.morale || 60) + 10);
+    p.value = D().valueOf(p.ovr, p.pot, p.age);
+    save();
+    return { ok: true, msg: `${p.name}: +${years} г, ${money(wage)}/нед (−${money(bonus)})` };
   }
 
   function makeOffer(entryId, bid, loan = false, wageOffer = null) {
@@ -1510,8 +1622,9 @@ window.EYE_STATE = (() => {
       name: p.name,
       pot: Math.max(40, Math.min(95, p.pot + D().rnd(-noise, noise))),
       age: p.age,
-      injuryRisk: p.age > 30 ? 'высокий' : p.stamina < 65 ? 'средний' : 'низкий',
+      injuryRisk: D().hasTrait(p, 'injury_prone') ? 'высокий' : D().hasTrait(p, 'iron') ? 'низкий' : (p.age > 30 ? 'высокий' : p.stamina < 65 ? 'средний' : 'низкий'),
       hiddenForm: Math.max(30, Math.min(95, (p.form || 60) + D().rnd(-noise, noise))),
+      traits: (p.traits || []).map(id => D().traitInfo(id).name),
       recommendation: p.pot - p.ovr >= 8 ? 'Перспектива' : p.ovr >= 84 ? 'Топ сейчас' : 'Рабочая лошадка',
       at: Date.now(),
       cost
@@ -1568,7 +1681,7 @@ window.EYE_STATE = (() => {
     storeCounter, pendingCounters: () => state?.pendingCounters || {},
     pendingWage: () => state?.pendingWage || {},
     upgradeFacility, promoteYouth, setTactics, setLineup, autoLineup, ensureLineup, swapIntoXi,
-    renewContract, financeSummary, resolveCupRoundAI, scoutPlayer, takeNewJob,
+    renewContract, negotiateContract, setDevFocus, financeSummary, resolveCupRoundAI, scoutPlayer, takeNewJob,
     hireStaff, answerPress, refillYouth, pendingPress: () => state?.pendingPress || null,
     xiStatus, fixXi, matchRivalry, transferWindowOpen, listLeagueTables,
     resolvePlayerRequest, seasonLog: () => state?.seasonLog || []

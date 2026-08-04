@@ -59,6 +59,57 @@ window.EYE_DATA = (() => {
     { id: 'promise', label: 'Обещаю исправить', morale: -1, board: 3, risk: 0 },
     { id: 'silent', label: 'Без комментариев', morale: 0, board: -1, risk: 0 }
   ];
+  const TRAITS = [
+    { id: 'finisher', name: 'Снайпер', desc: 'Чаще завершает моменты', groups: ['ATT'] },
+    { id: 'playmaker', name: 'Плеймейкер', desc: 'Острее пас и ассисты', groups: ['MID', 'ATT'] },
+    { id: 'leader', name: 'Лидер', desc: 'Поднимает мораль XI', groups: ['GK', 'DEF', 'MID', 'ATT'] },
+    { id: 'pacey', name: 'Спринтер', desc: 'Темп усиливает атаки', groups: ['ATT', 'MID', 'DEF'] },
+    { id: 'tank', name: 'Танк', desc: 'Мощнее в обороне', groups: ['DEF', 'MID'] },
+    { id: 'engine', name: 'Мотор', desc: 'Держит midfield', groups: ['MID', 'DEF'] },
+    { id: 'iron', name: 'Железо', desc: 'Реже травмируется', groups: ['GK', 'DEF', 'MID', 'ATT'] },
+    { id: 'injury_prone', name: 'Хрупкий', desc: 'Выше риск травм', groups: ['GK', 'DEF', 'MID', 'ATT'] }
+  ];
+  const DEV_FOCUS = [
+    { id: 'attack', name: 'Удар', attr: 'attack' },
+    { id: 'defense', name: 'Оборона', attr: 'defense' },
+    { id: 'tech', name: 'Техника', attr: 'tech' },
+    { id: 'pace', name: 'Скорость', attr: 'pace' },
+    { id: 'pass', name: 'Пас', attr: 'pass' },
+    { id: 'iq', name: 'Видение', attr: 'iq' },
+    { id: 'stamina', name: 'Выносливость', attr: 'stamina' }
+  ];
+
+  function hasTrait(p, id) {
+    return !!(p && (p.traits || []).includes(id));
+  }
+
+  function traitInfo(id) {
+    return TRAITS.find(t => t.id === id) || { id, name: id, desc: '' };
+  }
+
+  function rollTraits(pos, ovr, age) {
+    const g = POS_GROUP[pos] || 'MID';
+    const pool = TRAITS.filter(t => (t.groups || []).includes(g));
+    const shuffled = [...pool].sort(() => Math.random() - 0.5);
+    const want = ovr >= 84 ? 2 : 1;
+    const out = [];
+    for (const t of shuffled) {
+      if (out.length >= want) break;
+      if (t.id === 'injury_prone' && (age < 23 || Math.random() < 0.55)) continue;
+      if (t.id === 'iron' && Math.random() < 0.45) continue;
+      if (out.length === 0 || Math.random() < 0.62) out.push(t.id);
+    }
+    if (!out.length && shuffled[0]) out.push(shuffled[0].id);
+    return out;
+  }
+
+  function ensureTraits(p) {
+    if (!p) return;
+    if (!Array.isArray(p.traits) || !p.traits.length) {
+      p.traits = rollTraits(p.pos, p.ovr || 70, p.age || 24);
+    }
+    if (p.devFocus === undefined) p.devFocus = null;
+  }
   const RIVALRIES = [
     { a: 'rma', b: 'bar', name: 'Эль Класико' },
     { a: 'int', b: 'mil', name: 'Дерби Милана' },
@@ -139,7 +190,8 @@ window.EYE_DATA = (() => {
       real: !!real,
       listed: false, ask: 0,
       clubId: clubId || null,
-      traits: []
+      traits: rollTraits(pos, ovr, age),
+      devFocus: null
     };
   }
 
@@ -242,9 +294,10 @@ window.EYE_DATA = (() => {
 
   return {
     FORMATIONS, POS_GROUP, POS_LABEL, STYLES, TRAINING, FACILITIES, STAFF_ROLES, PRESS_OPTIONS, RIVALRIES,
+    TRAITS, DEV_FOCUS,
     get LEAGUES() { return W().LEAGUES; },
     rnd, pick, uid, genName, genPlayer, makePlayer, starToPlayer,
     buildSquadFromTemplate, instantiateClub, buildWorldClubs, pitchCoords,
-    valueOf, attrsFromOvr, findRivalry
+    valueOf, attrsFromOvr, findRivalry, hasTrait, traitInfo, rollTraits, ensureTraits
   };
 })();

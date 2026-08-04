@@ -348,6 +348,16 @@ window.EYE_UI = (() => {
     if (!found) { box.innerHTML = '<p>Игрок не найден</p>'; return; }
     const p = found.player;
     const c = found.club;
+    D().ensureTraits(p);
+    const traits = (p.traits || []).map(id => {
+      const t = D().traitInfo(id);
+      return `<span class="trait-chip" title="${t.desc || ''}">${t.name}</span>`;
+    }).join('');
+    const focusOpts = [`<option value="">Фокус развития</option>`]
+      .concat(D().DEV_FOCUS.map(f => `<option value="${f.id}"${p.devFocus === f.id ? ' selected' : ''}>${f.name}</option>`))
+      .join('');
+    const mine = !!found.club?.isPlayer;
+    const report = (S().get().scoutReports || {})[p.id];
     box.innerHTML = `
       <div class="player-hero">
         <div class="ovr big">${p.ovr}</div>
@@ -356,6 +366,7 @@ window.EYE_UI = (() => {
           <div class="meta">${D().POS_LABEL[p.pos] || p.pos} · ${p.age} лет · ${p.nation}
             ${p.real ? ' · ★' : ''}
             ${c ? ' · ' + c.name : ' · свободный'}</div>
+          <div class="trait-row">${traits || '<span class="meta">без ярких черт</span>'}</div>
         </div>
       </div>
       <div class="stat-grid">
@@ -371,13 +382,33 @@ window.EYE_UI = (() => {
         ${p.injured ? '<br/>Травма: ' + p.injured + ' тур(а)' : ''}
         ${p.suspended ? '<br/>Дисквалификация: ' + p.suspended + ' матч(а)' : ''}
         ${(p.seasonYellows || p.yellow) ? '<br/>Жёлтые в сезоне: ' + (p.seasonYellows || p.yellow) : ''}
+        ${report ? `<br/>Скаут: пот. ~${report.pot}, форма ~${report.hiddenForm}, травмы ${report.injuryRisk}${report.traits?.length ? ', ' + report.traits.join(', ') : ''} · ${report.recommendation}` : ''}
       </div>
-      ${found.club?.isPlayer ? `<button class="btn btn-primary" id="btn-renew" data-renew="${p.id}" style="margin-top:12px">Продлить контракт (+2 г)</button>` : ''}
+      ${mine ? `
+        <div class="glass-panel contract-box" style="margin-top:12px;padding:12px;display:grid;gap:10px">
+          <label>Фокус развития<select id="sel-dev-focus">${focusOpts}</select></label>
+          <div class="create-row">
+            <label>Срок (лет)<select id="renew-years"><option value="1">1</option><option value="2" selected>2</option><option value="3">3</option><option value="4">4</option></select></label>
+            <label>Зарплата / нед (€)<input type="number" id="renew-wage" min="0" step="1000" value="${Math.round(p.wage * 1.12)}" /></label>
+          </div>
+          <button class="btn btn-primary" id="btn-renew" type="button">Предложить контракт</button>
+          <p class="hint" id="renew-msg">Бонус зависит от зарплаты и срока</p>
+        </div>
+      ` : ''}
     `;
+    $('#sel-dev-focus')?.addEventListener('change', (e) => {
+      const r = S().setDevFocus(p.id, e.target.value || null);
+      toast(r.msg);
+    });
     $('#btn-renew')?.addEventListener('click', () => {
-      const r = S().renewContract(p.id, 2);
+      const years = Number($('#renew-years')?.value || 2);
+      const wage = Number($('#renew-wage')?.value || p.wage);
+      const r = S().negotiateContract(p.id, years, wage);
+      const msg = $('#renew-msg');
+      if (msg) msg.textContent = r.msg + (r.counterWage ? ` · контр ${S().money(r.counterWage)}` : '');
       toast(r.msg);
       if (r.ok) renderPlayer();
+      else if (r.counterWage && $('#renew-wage')) $('#renew-wage').value = r.counterWage;
     });
   }
 
@@ -392,7 +423,10 @@ window.EYE_UI = (() => {
     const stars = me.squad.filter(p => p.real).length;
     $('#squad-summary').textContent = `${me.squad.length} игроков · рейтинг ${avg} · ${stars} звёзд · ${me.formation} · ${me.stadium || ''}`;
     const sorted = [...me.squad].sort((a, b) => b.ovr - a.ovr);
-    $('#squad-list').innerHTML = sorted.map(p => `
+    $('#squad-list').innerHTML = sorted.map(p => {
+      D().ensureTraits(p);
+      const trait = (p.traits || [])[0] ? D().traitInfo(p.traits[0]).name : '';
+      return `
       <button class="row row-btn" data-player="${p.id}">
         <div class="ovr">${p.ovr}</div>
         <div>
@@ -400,6 +434,8 @@ window.EYE_UI = (() => {
           <div class="meta">
             <span class="badge-pos">${D().POS_LABEL[p.pos] || p.pos}</span>
             · ${p.age}л · форма ${p.form}
+            ${trait ? ' · ' + trait : ''}
+            ${p.devFocus ? ' · фокус' : ''}
             ${p.injured ? ' · травма ' + p.injured : ''}
             ${p.suspended ? ' · бан ' + p.suspended : ''}
             · ${p.seasonGoals || 0}Г/${p.seasonAssists || 0}А
@@ -407,8 +443,8 @@ window.EYE_UI = (() => {
           </div>
         </div>
         <div class="meta">${S().money(p.value)}</div>
-      </button>
-    `).join('');
+      </button>`;
+    }).join('');
   }
 
   function renderTactics() {
@@ -1281,7 +1317,10 @@ window.EYE_UI = (() => {
       if (scout) {
         const r = S().scoutPlayer(scout.dataset.scout);
         toast(r.msg);
-        if (r.ok && r.report) toast(`${r.report.name}: ${r.report.recommendation}, пот. ~${r.report.pot}`);
+        if (r.ok && r.report) {
+          const tr = (r.report.traits || []).join(', ');
+          toast(`${r.report.name}: ${r.report.recommendation} · пот.~${r.report.pot} · форма~${r.report.hiddenForm} · травмы ${r.report.injuryRisk}${tr ? ' · ' + tr : ''}`);
+        }
         renderTransfers('market');
         return;
       }

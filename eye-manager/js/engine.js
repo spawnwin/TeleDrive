@@ -35,22 +35,31 @@ window.EYE_ENGINE = (() => {
       return pick;
     });
     let atk = 0, def = 0, mid = 0, cond = 0;
+    let leaders = 0;
     XI.forEach((p, i) => {
+      D().ensureTraits(p);
       const pos = slots[i];
       const g = D().POS_GROUP[pos];
       const formMod = (p.form || 60) / 70;
       const condMod = (p.condition || 80) / 90;
       const moraleMod = (p.morale || 60) / 70;
       const m = formMod * condMod * moraleMod;
-      const a = p.attack * m;
-      const d = p.defense * m;
-      const t = ((p.tech + p.iq) / 2) * m;
+      let a = p.attack * m;
+      let d = p.defense * m;
+      let t = ((p.tech + p.iq) / 2) * m;
+      if (D().hasTrait(p, 'finisher')) a *= 1.08;
+      if (D().hasTrait(p, 'pacey')) a *= 1.04;
+      if (D().hasTrait(p, 'tank')) d *= 1.07;
+      if (D().hasTrait(p, 'playmaker')) t *= 1.07;
+      if (D().hasTrait(p, 'engine')) t *= 1.05;
+      if (D().hasTrait(p, 'leader')) leaders++;
       if (g === 'ATT') { atk += a * 1.25; mid += t * 0.4; }
       else if (g === 'MID') { mid += t * 1.1; atk += a * 0.55; def += d * 0.45; }
       else if (g === 'DEF') { def += d * 1.2; mid += t * 0.35; }
       else { def += d * 1.35; }
       cond += (p.condition || 80);
     });
+    const leaderBoost = 1 + Math.min(0.04, leaders * 0.015);
     const style = club.style || 'balance';
     const styleMod = {
       attack: { a: 1.12, d: 0.9, m: 1 },
@@ -62,9 +71,9 @@ window.EYE_ENGINE = (() => {
     const homeBoost = opts.home ? 1.04 : 1;
     const derbyBoost = opts.derby ? 1.05 : 1;
     return {
-      attack: (atk / 11) * styleMod.a * homeBoost * derbyBoost,
-      defense: (def / 11) * styleMod.d * (opts.derby ? 0.98 : 1),
-      mid: (mid / 11) * styleMod.m * derbyBoost,
+      attack: (atk / 11) * styleMod.a * homeBoost * derbyBoost * leaderBoost,
+      defense: (def / 11) * styleMod.d * (opts.derby ? 0.98 : 1) * leaderBoost,
+      mid: (mid / 11) * styleMod.m * derbyBoost * leaderBoost,
       condition: cond / 11,
       xi: XI,
       slots,
@@ -82,7 +91,9 @@ window.EYE_ENGINE = (() => {
   function pickScorer(xi, slots) {
     const weights = xi.map((p, i) => {
       const g = D().POS_GROUP[slots[i]];
-      const w = g === 'ATT' ? 3.2 : g === 'MID' ? 1.4 : g === 'DEF' ? 0.35 : 0.05;
+      let w = g === 'ATT' ? 3.2 : g === 'MID' ? 1.4 : g === 'DEF' ? 0.35 : 0.05;
+      if (D().hasTrait(p, 'finisher')) w *= 1.45;
+      if (D().hasTrait(p, 'pacey')) w *= 1.12;
       return Math.max(0.1, w * (p.attack / 70) * ((p.form || 60) / 60));
     });
     const sum = weights.reduce((a, b) => a + b, 0);
@@ -98,7 +109,18 @@ window.EYE_ENGINE = (() => {
     const pool = xi.filter(p => p.id !== scorer.id && D().POS_GROUP[p.pos] !== 'GK');
     if (!pool.length) return null;
     if (Math.random() < 0.28) return null;
-    return D().pick(pool);
+    const weights = pool.map(p => {
+      let w = (p.pass || p.tech || 60) / 60;
+      if (D().hasTrait(p, 'playmaker')) w *= 1.55;
+      return w;
+    });
+    const sum = weights.reduce((a, b) => a + b, 0);
+    let r = Math.random() * sum;
+    for (let i = 0; i < pool.length; i++) {
+      r -= weights[i];
+      if (r <= 0) return pool[i];
+    }
+    return pool[0];
   }
 
   const COMMENT = {
@@ -221,10 +243,25 @@ window.EYE_ENGINE = (() => {
         const side = Math.random() < 0.5 ? 'home' : 'away';
         const xi = side === 'home' ? homeS.xi : awayS.xi;
         const med = side === 'home' ? medH + physioH * 0.4 : medA + physioA * 0.4;
-        const p = D().pick(xi.filter(x => !(x.injured > 0)));
+        const candidates = xi.filter(x => !(x.injured > 0));
+        const weights = candidates.map(p => {
+          let w = 1;
+          if (D().hasTrait(p, 'injury_prone')) w *= 2.2;
+          if (D().hasTrait(p, 'iron')) w *= 0.45;
+          return w;
+        });
+        const sum = weights.reduce((a, b) => a + b, 0) || 1;
+        let r = Math.random() * sum;
+        let p = candidates[0];
+        for (let i = 0; i < candidates.length; i++) {
+          r -= weights[i];
+          if (r <= 0) { p = candidates[i]; break; }
+        }
         if (p) {
           const base = D().rnd(1, 5);
           p.injured = Math.max(1, base - Math.floor(med / 2));
+          if (D().hasTrait(p, 'injury_prone')) p.injured = Math.min(6, p.injured + 1);
+          if (D().hasTrait(p, 'iron')) p.injured = Math.max(1, p.injured - 1);
           events.push({ minute, type: 'injury', side, player: p, text: `${D().pick(COMMENT.injury)} ${p.name} (~${p.injured} тур)` });
         }
       }
