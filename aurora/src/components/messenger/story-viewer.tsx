@@ -17,20 +17,37 @@ import { cn } from '@/lib/utils'
 interface StoryViewerProps {
   feed: StoryFeedUser[]
   initialUserIndex?: number
+  /** Open this specific story within the user bucket (feed share cards). */
+  initialStoryId?: string | null
   onClose: () => void
   onRefresh?: () => void
+}
+
+function resolveInitialStoryIndex(
+  feed: StoryFeedUser[],
+  userIndex: number,
+  storyId?: string | null,
+): number {
+  if (!storyId) return 0
+  const stories = feed[userIndex]?.stories
+  if (!stories?.length) return 0
+  const idx = stories.findIndex((s) => s.id === storyId)
+  return idx >= 0 ? idx : 0
 }
 
 export function StoryViewer({
   feed,
   initialUserIndex = 0,
+  initialStoryId = null,
   onClose,
   onRefresh,
 }: StoryViewerProps) {
   const { t } = useI18n()
   const { openShareToChat } = useAppStore()
   const [userIndex, setUserIndex] = useState(initialUserIndex)
-  const [storyIndex, setStoryIndex] = useState(0)
+  const [storyIndex, setStoryIndex] = useState(() =>
+    resolveInitialStoryIndex(feed, initialUserIndex, initialStoryId),
+  )
   const [progress, setProgress] = useState(0)
   const [paused, setPaused] = useState(false)
   const [views, setViews] = useState<number | null>(null)

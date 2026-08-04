@@ -2,7 +2,12 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getCurrentUser } from '@/lib/auth'
 import { withJsonApi } from '@/lib/with-json-api'
-import { serializeWallPosts, wallAuthorSelect, type WallPostRow } from '@/lib/wall-feed'
+import {
+  assertCanAccessWallPost,
+  serializeWallPosts,
+  wallAuthorSelect,
+  type WallPostRow,
+} from '@/lib/wall-feed'
 
 /** Edit own feed/wall post text and/or open/close comments. */
 export const PATCH = withJsonApi(async function PATCH(
@@ -13,8 +18,9 @@ export const PATCH = withJsonApi(async function PATCH(
   if (!me) return NextResponse.json({ error: 'Не авторизован' }, { status: 401 })
 
   const { postId } = await params
-  const post = await db.wallPost.findUnique({ where: { id: postId } })
-  if (!post) return NextResponse.json({ error: 'Запись не найдена' }, { status: 404 })
+  const gate = await assertCanAccessWallPost(me.id, postId)
+  if (!gate.ok) return NextResponse.json({ error: gate.error }, { status: gate.status })
+  const post = gate.post
 
   const body = await req.json().catch(() => ({}))
   const hasContent = typeof body?.content === 'string'
@@ -67,8 +73,9 @@ export const DELETE = withJsonApi(async function DELETE(
   if (!me) return NextResponse.json({ error: 'Не авторизован' }, { status: 401 })
 
   const { postId } = await params
-  const post = await db.wallPost.findUnique({ where: { id: postId } })
-  if (!post) return NextResponse.json({ error: 'Запись не найдена' }, { status: 404 })
+  const gate = await assertCanAccessWallPost(me.id, postId)
+  if (!gate.ok) return NextResponse.json({ error: gate.error }, { status: gate.status })
+  const post = gate.post
   if (post.authorId !== me.id && post.profileId !== me.id) {
     return NextResponse.json({ error: 'Недостаточно прав' }, { status: 403 })
   }

@@ -40,7 +40,8 @@ export function formatLastSeen(
   lang: 'ru' | 'en' = 'ru',
 ): string {
   if (online) return lang === 'ru' ? 'в сети' : 'online'
-  if (!iso) return lang === 'ru' ? 'не в сети' : 'offline'
+  // Privacy may hide the timestamp while still allowing "offline" presence.
+  if (!iso) return lang === 'ru' ? 'недавно' : 'recently'
   const d = typeof iso === 'string' ? new Date(iso) : iso
   const now = new Date()
   const diffSec = Math.floor((now.getTime() - d.getTime()) / 1000)

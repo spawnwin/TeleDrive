@@ -1,5 +1,8 @@
 import { db } from '@/lib/db'
 import { areUsersBlocked } from '@/lib/user-blocks'
+import { parseFeedShareRef } from '@/lib/feed-share'
+import { canViewerSeeStory } from '@/lib/story-visibility'
+import { activeStoryFilter } from '@/lib/story-api'
 
 export const wallAuthorSelect = {
   id: true,
@@ -80,6 +83,91 @@ export async function getAcceptedFriendIds(userId: string): Promise<string[]> {
     select: { requesterId: true, addresseeId: true },
   })
   return rows.map((r) => (r.requesterId === userId ? r.addresseeId : r.requesterId))
+}
+
+/**
+ * Hide feed/wall share cards whose targets are not visible to the viewer
+ * (pending/rejected shorts, expired/private stories, missing listings).
+ */
+export async function filterShareTargetsForViewer<
+  T extends {
+    type: string
+    attachmentUrl: string | null
+    attachmentMime: string | null
+    author: { id: string }
+  },
+>(meId: string, posts: T[]): Promise<T[]> {
+  const refs = posts
+    .map((p) => ({ post: p, ref: parseFeedShareRef(p.attachmentUrl, p.attachmentMime) }))
+    .filter((x): x is { post: T; ref: NonNullable<typeof x.ref> } => !!x.ref)
+
+  if (refs.length === 0) return posts
+
+  const shortIds = [...new Set(refs.filter((r) => r.ref.kind === 'short').map((r) => r.ref.id))]
+  const storyIds = [...new Set(refs.filter((r) => r.ref.kind === 'story').map((r) => r.ref.id))]
+  const listingIds = [...new Set(refs.filter((r) => r.ref.kind === 'listing').map((r) => r.ref.id))]
+
+  const [shorts, stories, listings] = await Promise.all([
+    shortIds.length
+      ? db.short.findMany({
+          where: { id: { in: shortIds } },
+          select: { id: true, creatorId: true, isHidden: true, reviewStatus: true },
+        })
+      : Promise.resolve([]),
+    storyIds.length
+      ? db.story.findMany({
+          where: { id: { in: storyIds }, ...activeStoryFilter() },
+          select: { id: true, userId: true, visibility: true, audienceIds: true },
+        })
+      : Promise.resolve([]),
+    listingIds.length
+      ? db.marketplaceListing.findMany({
+          where: { id: { in: listingIds } },
+          select: { id: true, sellerId: true, status: true },
+        })
+      : Promise.resolve([]),
+  ])
+
+  const shortById = new Map(shorts.map((s) => [s.id, s]))
+  const storyById = new Map(stories.map((s) => [s.id, s]))
+  const listingById = new Map(listings.map((l) => [l.id, l]))
+
+  const hide = new Set<T>()
+  for (const { post, ref } of refs) {
+    if (ref.kind === 'short') {
+      const s = shortById.get(ref.id)
+      if (!s || s.isHidden || s.reviewStatus === 'rejected') {
+        hide.add(post)
+        continue
+      }
+      if (s.reviewStatus !== 'approved' && s.creatorId !== meId) {
+        hide.add(post)
+      }
+      continue
+    }
+    if (ref.kind === 'story') {
+      const s = storyById.get(ref.id)
+      if (!s) {
+        hide.add(post)
+        continue
+      }
+      // Author always sees their own share card.
+      if (s.userId !== meId && !(await canViewerSeeStory(meId, s))) {
+        hide.add(post)
+      }
+      continue
+    }
+    if (ref.kind === 'listing') {
+      const l = listingById.get(ref.id)
+      if (!l || (l.status !== 'active' && l.sellerId !== meId)) {
+        hide.add(post)
+      }
+    }
+    // Streams: keep the card even after the stream ends (client shows a toast).
+  }
+
+  if (hide.size === 0) return posts
+  return posts.filter((p) => !hide.has(p))
 }
 
 /** Load a wall post and ensure the viewer is not blocked from interacting. */

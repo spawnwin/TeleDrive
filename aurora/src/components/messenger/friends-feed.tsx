@@ -72,11 +72,18 @@ export function FriendsFeed({ onBack }: FriendsFeedProps) {
   const [imagePreview, setImagePreview] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const sentinelRef = useRef<HTMLDivElement>(null)
+  const loadingMoreRef = useRef(false)
+  const likeInFlightRef = useRef<Set<string>>(new Set())
 
   const load = useCallback(
     async (opts?: { cursor?: string | null; append?: boolean }) => {
-      if (opts?.append) setLoadingMore(true)
-      else setLoading(true)
+      if (opts?.append) {
+        if (loadingMoreRef.current) return
+        loadingMoreRef.current = true
+        setLoadingMore(true)
+      } else {
+        setLoading(true)
+      }
       try {
         const qs = new URLSearchParams({ take: '20' })
         if (opts?.cursor) qs.set('cursor', opts.cursor)
@@ -84,13 +91,25 @@ export function FriendsFeed({ onBack }: FriendsFeedProps) {
         const data = await res.json().catch(() => ({}))
         if (!res.ok) throw new Error(data.error || t('misc.error'))
         const next = (data.posts || []) as FeedPost[]
-        setPosts((prev) => (opts?.append ? [...prev, ...next] : next))
+        setPosts((prev) => {
+          if (!opts?.append) return next
+          const seen = new Set(prev.map((p) => p.id))
+          const merged = [...prev]
+          for (const p of next) {
+            if (!seen.has(p.id)) {
+              seen.add(p.id)
+              merged.push(p)
+            }
+          }
+          return merged
+        })
         setCursor(typeof data.nextCursor === 'string' ? data.nextCursor : null)
       } catch (err) {
         toast.error(err instanceof Error ? err.message : t('misc.error'))
       } finally {
         setLoading(false)
         setLoadingMore(false)
+        loadingMoreRef.current = false
       }
     },
     [t],
@@ -105,7 +124,7 @@ export function FriendsFeed({ onBack }: FriendsFeedProps) {
     if (!el || !cursor) return
     const io = new IntersectionObserver(
       (entries) => {
-        if (entries[0]?.isIntersecting && cursor && !loadingMore) {
+        if (entries[0]?.isIntersecting && cursor && !loadingMoreRef.current) {
           void load({ cursor, append: true })
         }
       },
@@ -159,6 +178,8 @@ export function FriendsFeed({ onBack }: FriendsFeedProps) {
   }
 
   const toggleLike = async (postId: string) => {
+    if (likeInFlightRef.current.has(postId)) return
+    likeInFlightRef.current.add(postId)
     setPosts((prev) =>
       prev.map((p) =>
         p.id === postId
@@ -186,6 +207,8 @@ export function FriendsFeed({ onBack }: FriendsFeedProps) {
     } catch (err) {
       void load()
       toast.error(err instanceof Error ? err.message : t('misc.error'))
+    } finally {
+      likeInFlightRef.current.delete(postId)
     }
   }
 

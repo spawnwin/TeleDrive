@@ -204,6 +204,9 @@ export function AddStoryDialog({ open, onOpenChange, onCreated }: AddStoryDialog
       if (!res.ok) throw new Error(data.error || t('stories.errorPublish'))
 
       toast.success(t('stories.published'))
+      if (shareToFeed && data.sharedToFeed === false) {
+        toast.error(t('feed.shareFailed'))
+      }
       onCreated?.()
       handleClose(false)
     } catch (err) {

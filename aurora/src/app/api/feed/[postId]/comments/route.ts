@@ -69,15 +69,17 @@ export const POST = withJsonApi(async function POST(
     return NextResponse.json({ error: 'Комментарий слишком длинный' }, { status: 400 })
   }
 
-  const comment = await db.wallPostComment.create({
-    data: { postId, userId: me.id, content },
-    include: { user: { select: wallAuthorSelect } },
-  })
-  const updated = await db.wallPost.update({
-    where: { id: postId },
-    data: { comments: { increment: 1 } },
-    select: { comments: true },
-  })
+  const [comment, updated] = await db.$transaction([
+    db.wallPostComment.create({
+      data: { postId, userId: me.id, content },
+      include: { user: { select: wallAuthorSelect } },
+    }),
+    db.wallPost.update({
+      where: { id: postId },
+      data: { comments: { increment: 1 } },
+      select: { comments: true },
+    }),
+  ])
 
   // Notify post author (and wall owner if different) — fire-and-forget.
   const notifyIds = new Set<string>()
@@ -143,17 +145,23 @@ export const DELETE = withJsonApi(async function DELETE(
     return NextResponse.json({ error: 'Нельзя удалить чужой комментарий' }, { status: 403 })
   }
 
-  await db.wallPostComment.delete({ where: { id: commentId } })
-  const updated = await db.wallPost
-    .update({
-      where: { id: postId },
-      data: { comments: { decrement: 1 } },
-      select: { comments: true },
-    })
-    .catch(() => null)
+  let commentsCount = Math.max(0, gate.post.comments - 1)
+  try {
+    const [, updated] = await db.$transaction([
+      db.wallPostComment.delete({ where: { id: commentId } }),
+      db.wallPost.update({
+        where: { id: postId },
+        data: { comments: { decrement: 1 } },
+        select: { comments: true },
+      }),
+    ])
+    commentsCount = Math.max(0, updated.comments)
+  } catch (e: unknown) {
+    if ((e as { code?: string })?.code !== 'P2025') throw e
+  }
 
   return NextResponse.json({
     ok: true,
-    commentsCount: Math.max(0, updated?.comments ?? gate.post.comments - 1),
+    commentsCount,
   })
 })

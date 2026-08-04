@@ -23,7 +23,10 @@ export function isUserOnline(
   // otherwise a user who disconnected ungracefully shows "в сети" then flips to
   // "был вчера" once presence:sync arrives — the flicker bug.
   if (!presenceSynced && dbOnline) {
-    if (lastSeen == null) return false
+    // Null lastSeen with online=true usually means privacy redacted the
+    // timestamp but still allows the online flag — trust it briefly until
+    // presence:sync arrives (stale-row rejection needs a real timestamp).
+    if (lastSeen == null) return true
     const ts = typeof lastSeen === 'string' ? new Date(lastSeen).getTime() : lastSeen.getTime()
     if (!Number.isFinite(ts) || Date.now() - ts > ONLINE_STALE_MS) return false
     return true

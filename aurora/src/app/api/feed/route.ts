@@ -4,6 +4,7 @@ import { getCurrentUser } from '@/lib/auth'
 import { withJsonApi } from '@/lib/with-json-api'
 import { getPlatformFlags } from '@/lib/platform-settings'
 import {
+  filterShareTargetsForViewer,
   getAcceptedFriendIds,
   serializeWallPosts,
   wallAuthorSelect,
@@ -19,7 +20,8 @@ export const GET = withJsonApi(async function GET(req: NextRequest) {
   if (!me) return NextResponse.json({ error: 'Не авторизован' }, { status: 401 })
 
   const url = new URL(req.url)
-  const take = Math.min(40, Math.max(1, Number(url.searchParams.get('take') || 20)))
+  const takeRaw = Number(url.searchParams.get('take') || 20)
+  const take = Math.min(40, Math.max(1, Number.isFinite(takeRaw) ? takeRaw : 20))
   const cursor = url.searchParams.get('cursor')
 
   const friendIds = await getAcceptedFriendIds(me.id)
@@ -46,14 +48,17 @@ export const GET = withJsonApi(async function GET(req: NextRequest) {
     where: {
       OR: visibleAuthors.map((id) => ({ authorId: id, profileId: id })),
     },
-    orderBy: { createdAt: 'desc' },
+    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
     take,
     ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
     include: { author: { select: wallAuthorSelect } },
   })) as WallPostRow[]
 
+  const serialized = await serializeWallPosts(me.id, posts)
+  const visible = await filterShareTargetsForViewer(me.id, serialized)
+
   return NextResponse.json({
-    posts: await serializeWallPosts(me.id, posts),
+    posts: visible,
     nextCursor: posts.length === take ? posts[posts.length - 1]?.id : null,
   })
 })
@@ -73,7 +78,11 @@ export const POST = withJsonApi(async function POST(req: NextRequest) {
 
   const body = await req.json().catch(() => ({}))
   const content = (typeof body?.content === 'string' ? body.content : '').trim()
-  const type = ['text', 'image', 'voice', 'drawing', 'music', 'share'].includes(body?.type)
+  // Share cards are created only via createFeedSharePost (server-side).
+  if (body?.type === 'share') {
+    return NextResponse.json({ error: 'Нельзя создать репост напрямую' }, { status: 400 })
+  }
+  const type = ['text', 'image', 'voice', 'drawing', 'music'].includes(body?.type)
     ? body.type
     : 'text'
   const attachmentUrl = typeof body?.attachmentUrl === 'string' ? body.attachmentUrl : null

@@ -497,6 +497,7 @@ const ru: Dict = {
   'feed.shareKind.short': 'Шортс',
   'feed.shareKind.stream': 'Стрим',
   'feed.shareKind.listing': 'Объявление',
+  'feed.shareFailed': 'Не удалось опубликовать в ленте',
   'shorts.endOfFeed': '· конец ленты ·',
   'nav.earnings': 'Заработок',
 
@@ -715,6 +716,8 @@ const ru: Dict = {
   'streams.gameNone': 'Без категории',
   'streams.gameSearchPlaceholder': 'Поиск игры...',
   'streams.noStreamsForGame': 'Пока никто не стримит эту игру',
+  'streams.ended': 'Стрим уже завершён',
+  'streams.notFound': 'Стрим не найден',
 
   // Misc additional
   'shorts.report': 'Пожаловаться',
@@ -1849,6 +1852,7 @@ const en: Dict = {
   'feed.shareKind.short': 'Short',
   'feed.shareKind.stream': 'Stream',
   'feed.shareKind.listing': 'Listing',
+  'feed.shareFailed': 'Could not post to the feed',
   'shorts.endOfFeed': '· end of feed ·',
   'nav.earnings': 'Earnings',
 
@@ -2067,6 +2071,8 @@ const en: Dict = {
   'streams.gameNone': 'No category',
   'streams.gameSearchPlaceholder': 'Search for a game...',
   'streams.noStreamsForGame': 'No one is streaming this game right now',
+  'streams.ended': 'This stream has ended',
+  'streams.notFound': 'Stream not found',
 
   // Misc additional
   'shorts.report': 'Report',

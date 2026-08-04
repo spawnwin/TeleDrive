@@ -1058,6 +1058,7 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
   // message. Mobile often mounts the transcript while the pane is still
   // `hidden` (zero height) or before images expand — a single scrollTop set
   // is not enough, so we retry + ResizeObserver until layout settles.
+  // Stop immediately if the user scrolls away from the bottom.
   useEffect(() => {
     if (!activeChatId || loadingMessages || searchQuery || showFavorites) return
     if (pendingMessageJump?.chatId === activeChatId) return
@@ -1066,13 +1067,18 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
     if (!el) return
 
     let stopPinning = false
+    let lastDistFromBottom = 0
     isAtBottomRef.current = true
     setShowScrollFab(false)
     setBelowViewportUnread(0)
 
+    const distFromBottom = () =>
+      Math.max(0, el.scrollHeight - el.clientHeight - el.scrollTop)
+
     const pin = () => {
       if (stopPinning) return
       el.scrollTop = el.scrollHeight
+      lastDistFromBottom = 0
       isAtBottomRef.current = true
     }
 
@@ -1081,14 +1087,28 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
       pin()
       requestAnimationFrame(pin)
     })
-    const timers = [32, 80, 160, 320, 640, 1200].map((ms) => window.setTimeout(pin, ms))
+    const timers = [32, 80, 160, 320, 640].map((ms) => window.setTimeout(pin, ms))
 
-    const onUserScrollIntent = () => {
-      const atBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - BOTTOM_THRESHOLD
-      if (!atBottom) stopPinning = true
+    const releasePinning = () => {
+      stopPinning = true
     }
-    el.addEventListener('wheel', onUserScrollIntent, { passive: true })
-    el.addEventListener('touchmove', onUserScrollIntent, { passive: true })
+
+    const onScroll = () => {
+      if (stopPinning) return
+      const dist = distFromBottom()
+      // User moved away from bottom (not our own pin, which keeps dist ≈ 0).
+      if (dist > 12 && dist > lastDistFromBottom + 4) {
+        releasePinning()
+        isAtBottomRef.current = false
+        setShowScrollFab(true)
+        return
+      }
+      lastDistFromBottom = dist
+    }
+
+    el.addEventListener('wheel', releasePinning, { passive: true })
+    el.addEventListener('touchmove', releasePinning, { passive: true })
+    el.addEventListener('scroll', onScroll, { passive: true })
 
     const ro = new ResizeObserver(() => {
       if (!stopPinning) pin()
@@ -1097,9 +1117,7 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
     const inner = el.firstElementChild
     if (inner) ro.observe(inner)
 
-    const release = window.setTimeout(() => {
-      stopPinning = true
-    }, 1500)
+    const release = window.setTimeout(releasePinning, 900)
 
     return () => {
       stopPinning = true
@@ -1107,8 +1125,9 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
       timers.forEach((id) => clearTimeout(id))
       clearTimeout(release)
       ro.disconnect()
-      el.removeEventListener('wheel', onUserScrollIntent)
-      el.removeEventListener('touchmove', onUserScrollIntent)
+      el.removeEventListener('wheel', releasePinning)
+      el.removeEventListener('touchmove', releasePinning)
+      el.removeEventListener('scroll', onScroll)
     }
   }, [
     activeChatId,

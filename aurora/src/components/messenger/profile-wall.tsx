@@ -716,7 +716,13 @@ function WallPostCard({
 
       {post.type === 'share' && (() => {
         const ref = parseFeedShareRef(post.attachmentUrl, post.attachmentMime)
-        if (!ref) return null
+        if (!ref) {
+          return post.content ? (
+            <p className="mb-2 whitespace-pre-wrap break-words text-sm">{post.content}</p>
+          ) : post.attachmentName ? (
+            <p className="mb-2 text-sm text-muted-foreground">{post.attachmentName}</p>
+          ) : null
+        }
         const kindLabel =
           ref.kind === 'story'
             ? t('feed.shareKind.story')

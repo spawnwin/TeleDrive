@@ -94,20 +94,42 @@ export function StreamsDialog({ open, onOpenChange }: StreamsDialogProps) {
       const streamId = (e as CustomEvent<{ streamId?: string }>).detail?.streamId
       if (!streamId) return
       try {
-        const res = await fetch('/api/streams')
-        const data = await res.json().catch(() => ({}))
-        const found = (data.streams || []).find((s: StreamSummary) => s.id === streamId)
-        if (found) {
-          setActiveStream(found)
-          setIsHost(found.host?.id === currentUser?.id)
+        // Prefer the live list (already openable), then fall back to detail.
+        const listRes = await fetch('/api/streams')
+        const listData = await listRes.json().catch(() => ({}))
+        const live = (listData.streams || []).find((s: StreamSummary) => s.id === streamId)
+        if (live) {
+          setActiveStream(live)
+          setIsHost(live.host?.id === currentUser?.id)
+          return
         }
+        const res = await fetch(`/api/streams/${encodeURIComponent(streamId)}`)
+        const data = await res.json().catch(() => ({}))
+        if (!res.ok || !data.stream) {
+          toast.error(data.error || t('streams.notFound'))
+          return
+        }
+        if (data.stream.status !== 'live') {
+          toast.error(t('streams.ended'))
+          return
+        }
+        setActiveStream({
+          id: data.stream.id,
+          title: data.stream.title,
+          roomId: data.stream.roomId,
+          viewerCount: data.stream.viewerCount,
+          startedAt: data.stream.startedAt,
+          host: data.stream.host,
+          game: data.stream.game,
+        })
+        setIsHost(data.stream.host?.id === currentUser?.id)
       } catch {
-        /* ignore */
+        toast.error(t('misc.error'))
       }
     }
     window.addEventListener('aurora:open-streams', handler)
     return () => window.removeEventListener('aurora:open-streams', handler)
-  }, [currentUser?.id])
+  }, [currentUser?.id, t])
 
   const load = async (gameId?: string | null) => {
     setLoading(true)

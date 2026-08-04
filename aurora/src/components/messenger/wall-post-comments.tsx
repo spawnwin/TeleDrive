@@ -188,10 +188,8 @@ export function WallPostComments({
             </div>
           )}
 
-          {!loading && comments.length === 0 && (
-            <p className="py-2 text-center text-xs text-muted-foreground">
-              {commentsClosed ? t('feed.commentsClosedHint') : t('feed.noComments')}
-            </p>
+          {!loading && comments.length === 0 && !commentsClosed && (
+            <p className="py-2 text-center text-xs text-muted-foreground">{t('feed.noComments')}</p>
           )}
 
           {comments.map((c) => (

@@ -5,7 +5,12 @@ import { withJsonApi } from '@/lib/with-json-api'
 import { getPlatformFlags } from '@/lib/platform-settings'
 import { areUsersBlocked } from '@/lib/user-blocks'
 import { assertCanMessage } from '@/lib/privacy-server'
-import { serializeWallPosts, wallAuthorSelect, type WallPostRow } from '@/lib/wall-feed'
+import {
+  filterShareTargetsForViewer,
+  serializeWallPosts,
+  wallAuthorSelect,
+  type WallPostRow,
+} from '@/lib/wall-feed'
 
 // List wall posts for a user profile (newest first).
 export const GET = withJsonApi(async function GET(
@@ -26,19 +31,23 @@ export const GET = withJsonApi(async function GET(
   }
 
   const url = new URL(req.url)
-  const take = Math.min(50, Math.max(1, Number(url.searchParams.get('take') || 50)))
+  const takeRaw = Number(url.searchParams.get('take') || 50)
+  const take = Math.min(50, Math.max(1, Number.isFinite(takeRaw) ? takeRaw : 50))
   const cursor = url.searchParams.get('cursor')
 
   const posts = (await db.wallPost.findMany({
     where: { profileId: id },
-    orderBy: { createdAt: 'desc' },
+    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
     take,
     ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
     include: { author: { select: wallAuthorSelect } },
   })) as WallPostRow[]
 
+  const serialized = await serializeWallPosts(me.id, posts)
+  const visible = await filterShareTargetsForViewer(me.id, serialized)
+
   return NextResponse.json({
-    posts: await serializeWallPosts(me.id, posts),
+    posts: visible,
     nextCursor: posts.length === take ? posts[posts.length - 1]?.id : null,
   })
 })
@@ -78,7 +87,10 @@ export const POST = withJsonApi(async function POST(
 
   const body = await req.json().catch(() => ({}))
   const content = (typeof body?.content === 'string' ? body.content : '').trim()
-  const type = ['text', 'image', 'voice', 'drawing', 'music', 'share'].includes(body?.type)
+  if (body?.type === 'share') {
+    return NextResponse.json({ error: 'Нельзя создать репост напрямую' }, { status: 400 })
+  }
+  const type = ['text', 'image', 'voice', 'drawing', 'music'].includes(body?.type)
     ? body.type
     : 'text'
   const attachmentUrl = typeof body?.attachmentUrl === 'string' ? body.attachmentUrl : null

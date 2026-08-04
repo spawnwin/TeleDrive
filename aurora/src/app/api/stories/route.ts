@@ -99,9 +99,11 @@ export const POST = withJsonApi(async function POST(req: NextRequest) {
     })
   }
 
-  if (shareToFeed === true) {
+  let sharedToFeed = false
+  // Restricted audiences must not leak captions/covers into the friends feed.
+  if (shareToFeed === true && (vis === 'everyone' || vis === 'contacts' || vis === 'friends')) {
     const caption = story.content || (type === 'text' ? 'Статус' : 'Новый статус')
-    await createFeedSharePost({
+    const created = await createFeedSharePost({
       userId: me.id,
       kind: 'story',
       targetId: story.id,
@@ -109,7 +111,8 @@ export const POST = withJsonApi(async function POST(req: NextRequest) {
       content: caption,
       coverUrl: type === 'photo' || type === 'video' ? story.mediaUrl : null,
     })
+    sharedToFeed = !!created
   }
 
-  return NextResponse.json({ story: serializeStory(story as any) })
+  return NextResponse.json({ story: serializeStory(story as any), sharedToFeed })
 })

@@ -316,6 +316,7 @@ export function ChatSidebar({
   const [joiningSlug, setJoiningSlug] = useState<string | null>(null)
   const [storyFeed, setStoryFeed] = useState<StoryFeedUser[]>([])
   const [storyViewerIndex, setStoryViewerIndex] = useState<number | null>(null)
+  const [storyViewerStoryId, setStoryViewerStoryId] = useState<string | null>(null)
   const [showAddStory, setShowAddStory] = useState(false)
 
   const refreshStories = async () => {
@@ -344,20 +345,24 @@ export function ChatSidebar({
       const storyId = (e as CustomEvent<{ storyId?: string }>).detail?.storyId
       if (!storyId) return
       try {
-        await refreshStories()
         const res = await fetch('/api/stories/feed')
         const data = await readJsonResponse<{ users?: StoryFeedUser[] }>(res)
         const users = data?.users || []
         if (users.length) setStoryFeed(users)
         const idx = users.findIndex((u) => u.stories?.some((s) => s.id === storyId))
-        if (idx >= 0) setStoryViewerIndex(idx)
+        if (idx >= 0) {
+          setStoryViewerStoryId(storyId)
+          setStoryViewerIndex(idx)
+        } else {
+          toast.error(t('stories.expired'))
+        }
       } catch {
-        /* ignore */
+        toast.error(t('misc.error'))
       }
     }
     window.addEventListener('aurora:open-story', handler)
     return () => window.removeEventListener('aurora:open-story', handler)
-  }, [])
+  }, [t])
 
   const storyByUserId = useMemo(() => {
     const map = new Map<string, StoryFeedUser>()
@@ -832,7 +837,10 @@ export function ChatSidebar({
                   feed={storyFeed}
                   currentUser={currentUser}
                   onAddStory={() => setShowAddStory(true)}
-                  onOpenViewer={(idx) => setStoryViewerIndex(idx)}
+                  onOpenViewer={(idx) => {
+                    setStoryViewerStoryId(null)
+                    setStoryViewerIndex(idx)
+                  }}
                 />
               )}
               {showArchived && (
@@ -1029,7 +1037,10 @@ export function ChatSidebar({
                           storyUser={chat.type === 'private' ? storyByUserId.get(chat.members.find((m) => m.id !== currentUser?.id)?.id || '') : undefined}
                           onOpenStories={(userId) => {
                             const idx = storyFeed.findIndex((u) => u.id === userId)
-                            if (idx >= 0) setStoryViewerIndex(idx)
+                            if (idx >= 0) {
+                              setStoryViewerStoryId(null)
+                              setStoryViewerIndex(idx)
+                            }
                           }}
                           selectionMode={selectionMode}
                           selected={selectedIds.has(chat.id)}
@@ -1049,7 +1060,10 @@ export function ChatSidebar({
                       storyUser={chat.type === 'private' ? storyByUserId.get(chat.members.find((m) => m.id !== currentUser?.id)?.id || '') : undefined}
                       onOpenStories={(userId) => {
                         const idx = storyFeed.findIndex((u) => u.id === userId)
-                        if (idx >= 0) setStoryViewerIndex(idx)
+                        if (idx >= 0) {
+                          setStoryViewerStoryId(null)
+                          setStoryViewerIndex(idx)
+                        }
                       }}
                       selectionMode={selectionMode}
                       selected={selectedIds.has(chat.id)}
@@ -1064,7 +1078,10 @@ export function ChatSidebar({
                       storyUser={chat.type === 'private' ? storyByUserId.get(chat.members.find((m) => m.id !== currentUser?.id)?.id || '') : undefined}
                       onOpenStories={(userId) => {
                         const idx = storyFeed.findIndex((u) => u.id === userId)
-                        if (idx >= 0) setStoryViewerIndex(idx)
+                        if (idx >= 0) {
+                          setStoryViewerStoryId(null)
+                          setStoryViewerIndex(idx)
+                        }
                       }}
                       selectionMode={selectionMode}
                       selected={selectedIds.has(chat.id)}
@@ -1239,8 +1256,10 @@ export function ChatSidebar({
         <StoryViewer
           feed={storyFeed}
           initialUserIndex={storyViewerIndex}
+          initialStoryId={storyViewerStoryId}
           onClose={() => {
             setStoryViewerIndex(null)
+            setStoryViewerStoryId(null)
             void refreshStories()
           }}
           onRefresh={refreshStories}

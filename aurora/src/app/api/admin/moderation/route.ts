@@ -62,6 +62,18 @@ export const PATCH = withJsonApi(async function PATCH(req: Request) {
     const short = await db.short.findUnique({ where: { id: shortId }, select: { id: true } })
     if (!short) return NextResponse.json({ error: 'Short не найден' }, { status: 404 })
     await db.short.update({ where: { id: shortId }, data: { reviewStatus } })
+    // Rejected shorts must not keep a friends-feed card with title/thumbnail.
+    if (reviewStatus === 'rejected') {
+      await db.wallPost
+        .deleteMany({
+          where: {
+            type: 'share',
+            attachmentUrl: `short:${shortId}`,
+            attachmentMime: 'application/x-aurora-short',
+          },
+        })
+        .catch(() => {})
+    }
     return NextResponse.json({ ok: true })
   }
 
