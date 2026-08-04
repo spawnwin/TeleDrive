@@ -156,6 +156,14 @@ window.EYE_STATE = (() => {
       seasonLog: [],
       ledger: [],
       sponsor: null,
+      finance: {
+        debtWeeks: 0,
+        wageArrears: 0,
+        embargo: false,
+        emergencyLoanSeason: 0,
+        lastStatus: 'healthy',
+        unpaidStreak: 0
+      },
       transferList: [],
       transferOffers: [],
       news: [],
@@ -282,7 +290,20 @@ window.EYE_STATE = (() => {
     if (!state) return;
     state.seasonLog = state.seasonLog || [];
     state.ledger = state.ledger || [];
-    state.version = Math.max(state.version || 3, 4);
+    state.version = Math.max(state.version || 3, 6);
+    ensureFinance();
+  }
+
+  function ensureFinance() {
+    if (!state) return;
+    state.finance = state.finance || {};
+    const f = state.finance;
+    if (f.debtWeeks == null) f.debtWeeks = 0;
+    if (f.wageArrears == null) f.wageArrears = 0;
+    if (f.embargo == null) f.embargo = false;
+    if (f.emergencyLoanSeason == null) f.emergencyLoanSeason = 0;
+    if (f.lastStatus == null) f.lastStatus = 'healthy';
+    if (f.unpaidStreak == null) f.unpaidStreak = 0;
   }
 
   function pushLedger(amount, label) {
@@ -301,12 +322,360 @@ window.EYE_STATE = (() => {
     if (state.ledger.length > 100) state.ledger.length = 100;
   }
 
+  function squadValueOf(me = club()) {
+    return (me?.squad || []).reduce((s, p) => s + (p.value || 0), 0);
+  }
+
+  function weeklyPlayerWages(me = club()) {
+    return (me?.squad || []).reduce((s, p) => s + (p.wage || 0), 0);
+  }
+
+  function weeklyStaffWages(me = club()) {
+    ensureClubExtras(me);
+    const staff = me.staff || {};
+    return ((staff.coach || 1) + (staff.physio || 1) + (staff.scoutDir || 1)) * 12000;
+  }
+
+  function weeklyUpkeep(me = club()) {
+    ensureClubExtras(me);
+    const f = me.facilities || {};
+    const levels = (f.stadium || 1) + (f.training || 1) + (f.youth || 1) + (f.medical || 1) + (f.scout || 1);
+    return levels * 7500;
+  }
+
+  function weeklyTvIncome(me = club()) {
+    const league = W().LEAGUES.find(l => l.id === (me?.leagueId || state?.leagueId));
+    const prize = league?.prize || 8e6;
+    const weeks = Math.max(20, state?.fixtures?.length || 38);
+    const base = prize / weeks / Math.max(10, leagueClubs().length || 16);
+    const row = state?.table?.[me.id];
+    const played = row?.played || 0;
+    const pts = row?.pts || 0;
+    const formBoost = played ? 0.85 + Math.min(0.45, (pts / Math.max(1, played * 3)) * 0.6) : 1;
+    return Math.round(base * 2.4 * formBoost * ((me.reputation || 70) / 78));
+  }
+
+  function matchGateIncome(me, isHome) {
+    const fans = me.fans || 8000;
+    const stadium = me.facilities?.stadium || 1;
+    const base = fans * (0.9 + stadium * 0.3);
+    if (isHome) return Math.round(base * (14 + Math.random() * 10));
+    return Math.round(base * (3.5 + Math.random() * 2.5)); // away share
+  }
+
+  /** Кредитный лимит: сколько клуб может уйти в минус */
+  function creditLimit(me = club()) {
+    if (!me) return 250000;
+    const value = squadValueOf(me);
+    const fans = me.fans || 8000;
+    const rep = me.reputation || 70;
+    const stadium = me.facilities?.stadium || 1;
+    let limit = value * 0.07 + fans * 55 + rep * 90000 + stadium * 280000;
+    if (me.customClub) limit *= 0.55;
+    return Math.round(Math.max(180000, Math.min(45e6, limit)));
+  }
+
+  function debtInterestDue(me = club()) {
+    const debt = Math.max(0, -(me?.budget || 0));
+    if (debt <= 0) return 0;
+    // ~1.1%/нед от долга, минимум 3к
+    return Math.max(3000, Math.round(debt * 0.011));
+  }
+
+  function cashflowForecast(me = club()) {
+    ensureFinance();
+    if (!state.sponsor) pickSponsor(me);
+    const wages = weeklyPlayerWages(me);
+    const staff = weeklyStaffWages(me);
+    const upkeep = weeklyUpkeep(me);
+    const interest = debtInterestDue(me);
+    const arrearsPlan = Math.min(state.finance.wageArrears || 0, Math.round(wages * 0.35));
+    const sponsor = state.sponsor?.weekly || 0;
+    const tv = weeklyTvIncome(me);
+    const income = sponsor + tv;
+    const expenses = wages + staff + upkeep + interest + arrearsPlan;
+    return {
+      wages, staff, upkeep, interest, arrearsPlan,
+      sponsor, tv, income, expenses,
+      net: income - expenses,
+      gateHomeEst: Math.round((me.fans || 8000) * (0.9 + (me.facilities?.stadium || 1) * 0.3) * 16),
+      gateAwayEst: Math.round((me.fans || 8000) * (0.9 + (me.facilities?.stadium || 1) * 0.3) * 4.5)
+    };
+  }
+
+  function financeStatus(me = club()) {
+    ensureFinance();
+    if (!me) {
+      return { id: 'healthy', label: 'Стабильно', level: 0 };
+    }
+    const budget = me.budget || 0;
+    const credit = creditLimit(me);
+    const debt = Math.max(0, -budget);
+    const cf = cashflowForecast(me);
+    const runway = cf.expenses > 0 ? budget / cf.expenses : 99;
+    const f = state.finance;
+    let id = 'healthy';
+    let label = 'Стабильно';
+    let level = 0;
+    if (debt >= credit || f.wageArrears > wagesSoftCap(me) || f.debtWeeks >= 6) {
+      id = 'insolvent'; label = 'Банкротство'; level = 4;
+    } else if (debt >= credit * 0.55 || f.debtWeeks >= 3 || f.wageArrears > 0 || f.unpaidStreak >= 2) {
+      id = 'critical'; label = 'Кризис'; level = 3;
+    } else if (budget < 0) {
+      id = 'deficit'; label = 'Дефицит'; level = 2;
+    } else if (runway < 4 || cf.net < 0) {
+      id = 'tight'; label = 'Напряжённо'; level = 1;
+    }
+    return {
+      id, label, level,
+      budget, debt, credit,
+      creditLeft: Math.max(0, credit - debt),
+      runwayWeeks: Math.max(0, Math.round(runway * 10) / 10),
+      embargo: !!f.embargo || id === 'insolvent' || id === 'critical',
+      wageArrears: f.wageArrears || 0,
+      debtWeeks: f.debtWeeks || 0
+    };
+  }
+
+  function wagesSoftCap(me = club()) {
+    return weeklyPlayerWages(me) * 3;
+  }
+
+  /**
+   * Discretionary spend gate. Wages/interest always apply via settle.
+   * kind: transfer|facility|staff|youth|train|scout|contract
+   */
+  function canAfford(amount, kind = 'spend') {
+    const me = club();
+    if (!me) return { ok: false, msg: 'Нет клуба' };
+    ensureFinance();
+    const cost = Math.max(0, Math.round(Number(amount) || 0));
+    const st = financeStatus(me);
+    const after = (me.budget || 0) - cost;
+    const debtAfter = Math.max(0, -after);
+
+    if (cost <= 0) return { ok: true, msg: '' };
+
+    if (st.id === 'insolvent') {
+      return { ok: false, msg: 'Касса закрыта: клуб фактически банкрот. Продавайте игроков или ждите помощи совета.' };
+    }
+    if ((kind === 'transfer' || kind === 'facility' || kind === 'staff') && st.embargo) {
+      return { ok: false, msg: 'Финансовое эмбарго: покупки и стройки заморожены до выхода из кризиса' };
+    }
+    if (kind === 'transfer' && st.id === 'deficit' && cost > Math.max(150000, st.credit * 0.08)) {
+      return { ok: false, msg: 'В дефиците крупные трансферы запрещены советом' };
+    }
+    if (debtAfter > st.credit) {
+      return { ok: false, msg: `Превышен кредитный лимит (${money(st.credit)}). Нужно ${money(cost)}, доступно с овердрафтом ${money(me.budget + st.credit)}` };
+    }
+    if (after < 0 && (kind === 'facility' || kind === 'staff') && st.level >= 2) {
+      return { ok: false, msg: 'В минусе нельзя расширять инфраструктуру и штаб' };
+    }
+    if (me.budget < cost && st.id === 'healthy' && debtAfter > st.credit * 0.35) {
+      // soft warn still allow within credit
+    }
+    return { ok: true, msg: after < 0 ? `Платёж уведёт кассу в минус (${money(after)})` : '' };
+  }
+
   function adjustBudget(delta, label) {
     const me = club();
     if (!me) return 0;
-    me.budget += delta;
+    ensureFinance();
+    me.budget = Math.round((me.budget || 0) + delta);
     pushLedger(delta, label);
+    if (!state._settlingFinance) refreshFinanceFlags(me);
     return me.budget;
+  }
+
+  function refreshFinanceFlags(me = club()) {
+    ensureFinance();
+    if (!me) return;
+    const f = state.finance;
+    const st = financeStatus(me);
+    f.embargo = st.id === 'critical' || st.id === 'insolvent';
+    if (me.budget >= 0) {
+      f.debtWeeks = 0;
+    }
+    // status transition mail
+    if (f.lastStatus !== st.id) {
+      const worse = st.level > (STATUS_LEVEL[f.lastStatus] || 0);
+      if (worse && st.level >= 2) {
+        state.inbox.unshift({
+          id: D().uid('m'), type: 'finance',
+          title: `Финансы: ${st.label}`,
+          body: financeStatusMessage(st),
+          read: false, at: Date.now(), week: state.week
+        });
+      } else if (st.id === 'healthy' && (STATUS_LEVEL[f.lastStatus] || 0) >= 2) {
+        state.inbox.unshift({
+          id: D().uid('m'), type: 'finance',
+          title: 'Финансы стабилизированы',
+          body: 'Касса снова в плюсе. Эмбарго снято — можно планировать трансферы и стройки.',
+          read: false, at: Date.now(), week: state.week
+        });
+      }
+      f.lastStatus = st.id;
+    }
+  }
+
+  const STATUS_LEVEL = { healthy: 0, tight: 1, deficit: 2, critical: 3, insolvent: 4 };
+
+  function financeStatusMessage(st) {
+    if (st.id === 'insolvent') {
+      return `Долг ${money(st.debt)} при лимите ${money(st.credit)}. Покупки закрыты. Совет требует распродажи и может уволить при провале результатов.`;
+    }
+    if (st.id === 'critical') {
+      return `Кризис: долг ${money(st.debt)}, недель в минусе: ${st.debtWeeks}. Трансферное эмбарго и запрет строек.`;
+    }
+    if (st.id === 'deficit') {
+      return `Касса в минусе (${money(-st.debt)}). Идут проценты по овердрафту. Крупные покупки ограничены.`;
+    }
+    return `Бюджет под давлением. Запас хода ~${st.runwayWeeks} нед.`;
+  }
+
+  /** Недельный расчёт: доходы, зарплаты (с недоплатой), проценты, кризис */
+  function settleWeeklyFinances() {
+    const me = club();
+    if (!me) return;
+    ensureFinance();
+    ensureClubExtras(me);
+    if (!state.sponsor) pickSponsor(me);
+    const f = state.finance;
+    const cf = cashflowForecast(me);
+    state._settlingFinance = true;
+
+    // 1) Income first
+    if (cf.sponsor) adjustBudget(cf.sponsor, 'Спонсор: ' + (state.sponsor?.name || 'партнёр'));
+    if (cf.tv) adjustBudget(cf.tv, 'ТВ-пул лиги');
+
+    // 2) Soft costs
+    if (cf.upkeep) adjustBudget(-cf.upkeep, 'Содержание базы');
+
+    // 3) Debt interest on opening debt after income/upkeep
+    const interest = debtInterestDue(me);
+    if (interest > 0) adjustBudget(-interest, 'Проценты по долгу');
+
+    // 4) Wages — may partially pay if beyond credit
+    const wagesDue = cf.wages + cf.staff;
+    const credit = creditLimit(me);
+    const room = me.budget + credit; // how much we can still go down
+    let paid = wagesDue;
+    let deferred = 0;
+    if (wagesDue > 0 && room < wagesDue) {
+      paid = Math.max(0, Math.floor(room));
+      deferred = wagesDue - paid;
+      f.wageArrears = (f.wageArrears || 0) + deferred;
+      f.unpaidStreak = (f.unpaidStreak || 0) + 1;
+      adjustBudget(-paid, paid > 0 ? 'Зарплаты (частично)' : 'Зарплаты не выплачены');
+      if (deferred > 0) {
+        pushLedger(0, `Задолженность по зарплате +${money(deferred)}`);
+        me.morale = Math.max(15, (me.morale || 60) - (8 + Math.min(10, Math.floor(deferred / Math.max(1, wagesDue) * 12))));
+        me.squad.forEach(p => {
+          p.morale = Math.max(15, (p.morale || 60) - D().rnd(3, 9));
+        });
+        state.inbox.unshift({
+          id: D().uid('m'), type: 'finance',
+          title: 'Задержка зарплат',
+          body: `Выплачено ${money(paid)} из ${money(wagesDue)}. Долг по зарплате: ${money(f.wageArrears)}. Мораль падает.`,
+          read: false, at: Date.now(), week: state.week
+        });
+        if (state.board) state.board.confidence = Math.max(0, state.board.confidence - 6);
+      }
+    } else {
+      adjustBudget(-wagesDue, 'Зарплаты состава и штаба');
+      f.unpaidStreak = 0;
+      if (f.wageArrears > 0 && me.budget > 0) {
+        const repay = Math.min(f.wageArrears, Math.round(me.budget * 0.4), Math.round(cf.wages * 0.5));
+        if (repay > 0) {
+          adjustBudget(-repay, 'Погашение долга по зарплате');
+          f.wageArrears = Math.max(0, f.wageArrears - repay);
+          me.morale = Math.min(100, (me.morale || 60) + 3);
+        }
+      }
+    }
+
+    // 5) Debt week counter
+    if (me.budget < 0) f.debtWeeks = (f.debtWeeks || 0) + 1;
+    else f.debtWeeks = 0;
+
+    state._settlingFinance = false;
+    refreshFinanceFlags(me);
+    processFinancialCrisis(me);
+  }
+
+  function processFinancialCrisis(me = club()) {
+    ensureFinance();
+    const st = financeStatus(me);
+    const f = state.finance;
+    if (!st || st.level < 3) return;
+
+    // Board pressure
+    if (state.board) {
+      const hit = st.id === 'insolvent' ? 8 : 4;
+      state.board.confidence = Math.max(0, state.board.confidence - hit);
+      if (st.id === 'insolvent' && state.board.confidence < 28) {
+        state.board.warnings = (state.board.warnings || 0) + 1;
+      }
+    }
+
+    // Emergency loan once per season when insolvent/critical
+    if ((st.id === 'insolvent' || (st.id === 'critical' && f.debtWeeks >= 4))
+      && f.emergencyLoanSeason !== state.season) {
+      const loan = Math.round(Math.min(st.credit * 0.35, Math.max(250000, st.debt * 0.55)));
+      f.emergencyLoanSeason = state.season;
+      adjustBudget(loan, 'Экстренный кредит совета');
+      if (state.board) state.board.confidence = Math.max(0, state.board.confidence - 10);
+      state.inbox.unshift({
+        id: D().uid('m'), type: 'finance',
+        title: 'Экстренный кредит совета',
+        body: `Совет влил ${money(loan)} под жёсткий контроль. Уверенность совета падает. Продайте лишних и режьте ФОТ.`,
+        read: false, at: Date.now(), week: state.week
+      });
+    }
+
+    // Forced listing of expensive players when insolvent
+    if (st.id === 'insolvent' || (st.id === 'critical' && f.debtWeeks >= 3)) {
+      const xiIds = new Set((me.lineup || []).map(x => x?.id).filter(Boolean));
+      const pool = [...(me.squad || [])].filter(p => p && !p.listed);
+      const benchFirst = [
+        ...pool.filter(p => !xiIds.has(p.id)).sort((a, b) => (b.wage || 0) - (a.wage || 0)),
+        ...pool.filter(p => xiIds.has(p.id)).sort((a, b) => (b.wage || 0) - (a.wage || 0))
+      ];
+      const targets = benchFirst.slice(0, 2);
+      let listed = 0;
+      targets.forEach(p => {
+        if (p.listed) return;
+        p.listed = true;
+        p.ask = Math.round((p.value || 0) * 0.85);
+        state.transferList = state.transferList || [];
+        if (!state.transferList.some(e => e.player?.id === p.id && e.clubId === me.id)) {
+          state.transferList.unshift({
+            id: D().uid('t'), type: 'transfer', player: p, clubId: me.id,
+            clubName: me.name, leagueId: me.leagueId, ask: p.ask, wageAsk: p.wage
+          });
+        }
+        listed++;
+      });
+      if (listed) {
+        state.news.unshift({
+          id: D().uid('n'), title: 'Распродажа',
+          body: 'Финансовый контроль выставил игроков на трансфер.',
+          at: Date.now()
+        });
+      }
+    }
+
+    // Sack on prolonged insolvency
+    if (st.id === 'insolvent' && f.debtWeeks >= 5 && state.board && state.board.confidence < 25 && !state.sacked) {
+      state.sacked = true;
+      state.board.sacked = true;
+      state.inbox.unshift({
+        id: D().uid('m'), type: 'board',
+        title: 'Увольнение · финансы',
+        body: 'Совет не выдержал долговой ямы. Вас уволили. Найдите новый клуб.',
+        read: false, at: Date.now(), week: state.week
+      });
+    }
   }
 
   function pickSponsor(me) {
@@ -325,10 +694,13 @@ window.EYE_STATE = (() => {
     if (rep >= 84 || stadium >= 4) idx = 2;
     if (rep >= 90 || stadium >= 5) idx = 3;
     const t = tiers[idx];
+    // Debt-stressed clubs get worse sponsor terms
+    const stress = Math.max(0, -(clubObj.budget || 0));
+    const stressCut = stress > 0 ? Math.max(0.72, 1 - Math.min(0.28, stress / Math.max(1, creditLimit(clubObj)))) : 1;
     state.sponsor = {
       id: t.id,
       name: t.name,
-      weekly: Math.round(t.base * (0.85 + stadium * 0.1) * (rep / 82))
+      weekly: Math.round(t.base * (0.85 + stadium * 0.1) * (rep / 82) * stressCut)
     };
     return state.sponsor;
   }
@@ -872,8 +1244,9 @@ window.EYE_STATE = (() => {
     if (won) { prize = 250000; me.morale = Math.min(100, me.morale + 4); }
     else if (drew) { prize = 100000; me.morale = Math.min(100, me.morale + 1); }
     else { prize = 40000; me.morale = Math.max(20, me.morale - 3); }
-    const income = Math.round(me.fans * (0.9 + me.facilities.stadium * 0.3) * (14 + Math.random() * 10));
-    adjustBudget(prize + income, won ? 'Победа: призовые и касса' : drew ? 'Ничья: касса' : 'Поражение: касса');
+    const income = matchGateIncome(me, isHome);
+    adjustBudget(prize, won ? 'Победа: призовые' : drew ? 'Ничья: призовые' : 'Поражение: призовые');
+    adjustBudget(income, isHome ? 'Касса домашнего матча' : 'Гостевая доля кассы');
 
     if (state.board) {
       B().applyMatchConfidence(state.board, won, drew, false);
@@ -1005,13 +1378,7 @@ window.EYE_STATE = (() => {
     state.week++;
     const me = club();
     ensureClubExtras(me);
-    const wages = me.squad.reduce((s, p) => s + (p.wage || 0), 0);
-    const staffWage = ((me.staff.coach || 1) + (me.staff.physio || 1) + (me.staff.scoutDir || 1)) * 12000;
-    adjustBudget(-(wages + staffWage), 'Зарплаты состава и штаба');
-    if (!state.sponsor) pickSponsor(me);
-    if (state.sponsor?.weekly) {
-      adjustBudget(state.sponsor.weekly, 'Спонсор: ' + state.sponsor.name);
-    }
+    settleWeeklyFinances();
     const xiIds = new Set((me.lineup || me.squad.slice(0, 11)).map(p => p.id));
     const heal = 1 + Math.floor(((me.facilities.medical || 1) + (me.staff.physio || 1)) / 3);
     me.squad.forEach(p => {
@@ -1554,7 +1921,8 @@ window.EYE_STATE = (() => {
       return { ok: false, msg: 'Восстановление уже проводили на этом туре' };
     }
     const cost = 12000 + me.facilities.training * 3000;
-    if (me.budget < cost) return { ok: false, msg: 'Не хватает бюджета' };
+    const gate = canAfford(cost, 'train');
+    if (!gate.ok) return { ok: false, msg: gate.msg };
     adjustBudget(-cost, `Тренировка «${t.name}»`);
     if (isRecovery) state.recoverCountWeek = (state.recoverCountWeek || 0) + 1;
     else state.trainCountWeek = used + 1;
@@ -1796,7 +2164,8 @@ window.EYE_STATE = (() => {
       || Math.round(p.wage * (1.08 + years * 0.02 + Math.random() * 0.08));
     const wage = Math.round(Number(wageOffer) || wantWage);
     const bonus = Math.round(wage * 6 * years);
-    if (me.budget < bonus) return { ok: false, msg: 'Нужен бонус ' + money(bonus) };
+    const gate = canAfford(bonus, 'contract');
+    if (!gate.ok) return { ok: false, msg: gate.msg };
     const wageOk = wage >= wantWage * 0.95;
     if (!wageOk) {
       return {
@@ -1833,7 +2202,14 @@ window.EYE_STATE = (() => {
     const offer = bid || ask;
     const wageAsk = item.wageAsk || item.player.wage || 10000;
     const wage = wageOffer != null ? wageOffer : wageAsk;
-    if (!loan && me.budget < offer) return { ok: false, msg: 'Недостаточно средств' };
+    if (!loan) {
+      const gate = canAfford(offer, 'transfer');
+      if (!gate.ok) return { ok: false, msg: gate.msg };
+    } else {
+      const loanFee = Math.round((item.wageAsk || item.player.wage || 10000) * 0.5);
+      const gate = canAfford(loanFee, 'transfer');
+      if (!gate.ok) return { ok: false, msg: gate.msg };
+    }
     if (me.squad.length >= 30) return { ok: false, msg: 'Лимит состава 30' };
 
     let accept = false;
@@ -2002,7 +2378,8 @@ window.EYE_STATE = (() => {
     const level = me.facilities[id] || 1;
     if (level >= f.max) return { ok: false, msg: 'Максимум' };
     const cost = Math.round(f.base * Math.pow(1.65, level - 1));
-    if (me.budget < cost) return { ok: false, msg: 'Нужно ' + money(cost) };
+    const gate = canAfford(cost, 'facility');
+    if (!gate.ok) return { ok: false, msg: gate.msg };
     adjustBudget(-cost, `Инфраструктура: ${f.name}`);
     me.facilities[id] = level + 1;
     if (id === 'stadium') {
@@ -2025,7 +2402,8 @@ window.EYE_STATE = (() => {
     refillYouth(me);
     if (me.squad.length >= 30) return { ok: false, msg: 'Состав полон' };
     const cost = youthPromoteCost(me);
-    if (me.budget < cost) return { ok: false, msg: 'Нужно ' + money(cost) };
+    const gate = canAfford(cost, 'youth');
+    if (!gate.ok) return { ok: false, msg: gate.msg };
     let p;
     if (playerId) {
       p = me.youth.find(x => x.id === playerId);
@@ -2054,7 +2432,8 @@ window.EYE_STATE = (() => {
     const level = me.staff[roleId] || 1;
     if (level >= role.max) return { ok: false, msg: 'Максимум' };
     const cost = Math.round(role.base * Math.pow(1.55, level - 1));
-    if (me.budget < cost) return { ok: false, msg: 'Нужно ' + money(cost) };
+    const gate = canAfford(cost, 'staff');
+    if (!gate.ok) return { ok: false, msg: gate.msg };
     adjustBudget(-cost, `Штаб: ${role.name}`);
     me.staff[roleId] = level + 1;
     save();
@@ -2263,25 +2642,55 @@ window.EYE_STATE = (() => {
     ensureMeta();
     ensureClubExtras(me);
     if (!state.sponsor) pickSponsor(me);
-    const wages = me.squad.reduce((s, p) => s + (p.wage || 0), 0);
-    const values = me.squad.reduce((s, p) => s + (p.value || 0), 0);
-    const staffLvl = (me.staff.coach || 1) + (me.staff.physio || 1) + (me.staff.scoutDir || 1);
-    const staffWages = staffLvl * 12000;
-    const weekIn = (state.sponsor?.weekly || 0);
-    const weekOut = wages + staffWages;
-    const incomePerMatch = Math.round(me.fans * (0.9 + me.facilities.stadium * 0.3) * 16);
+    const st = financeStatus(me);
+    const cf = cashflowForecast(me);
+    const values = squadValueOf(me);
     return {
       budget: me.budget,
-      weeklyWages: wages,
-      staffWages,
+      debt: st.debt,
+      creditLimit: st.credit,
+      creditLeft: st.creditLeft,
+      status: st.id,
+      statusLabel: st.label,
+      statusLevel: st.level,
+      embargo: st.embargo,
+      debtWeeks: st.debtWeeks,
+      wageArrears: st.wageArrears,
+      runwayWeeks: st.runwayWeeks,
+      weeklyWages: cf.wages,
+      staffWages: cf.staff,
+      upkeep: cf.upkeep,
+      interest: cf.interest,
+      tvWeekly: cf.tv,
       squadValue: values,
       fans: me.fans,
-      incomePerMatch,
+      incomePerMatch: cf.gateHomeEst,
+      incomeAwayEst: cf.gateAwayEst,
       sponsor: state.sponsor,
-      weeklyNet: weekIn - weekOut,
-      weekIn,
-      weekOut,
-      ledger: (state.ledger || []).slice(0, 24)
+      weeklyNet: cf.net,
+      weekIn: cf.income,
+      weekOut: cf.expenses,
+      breakdown: {
+        in: [
+          { label: 'Спонсор', amount: cf.sponsor },
+          { label: 'ТВ-пул', amount: cf.tv }
+        ],
+        out: [
+          { label: 'Зарплаты игроков', amount: -cf.wages },
+          { label: 'Штаб', amount: -cf.staff },
+          { label: 'Содержание базы', amount: -cf.upkeep },
+          { label: 'Проценты по долгу', amount: -cf.interest },
+          { label: 'Погашение зарплатного долга (план)', amount: -cf.arrearsPlan }
+        ].filter(x => x.amount)
+      },
+      restrictions: st.embargo
+        ? 'Эмбарго: нельзя покупать игроков и строить инфраструктуру'
+        : st.id === 'deficit'
+          ? 'Дефицит: крупные трансферы ограничены, проценты растут'
+          : st.id === 'tight'
+            ? 'Касса напряжена — следите за ФОТ'
+            : '',
+      ledger: (state.ledger || []).slice(0, 30)
     };
   }
 
@@ -2291,7 +2700,8 @@ window.EYE_STATE = (() => {
     if (!p) return { ok: false, msg: 'Нет игрока' };
     const cost = Math.round(p.wage * 8 * years);
     const newWage = Math.round(p.wage * (1.08 + Math.random() * 0.12));
-    if (me.budget < cost) return { ok: false, msg: 'Нужен бонус ' + money(cost) };
+    const gate = canAfford(cost, 'contract');
+    if (!gate.ok) return { ok: false, msg: gate.msg };
     adjustBudget(-cost, `Контракт: ${p.name}`);
     p.contract = Math.max(p.contract || 0, 0) + years;
     p.wage = newWage;
@@ -2763,7 +3173,8 @@ window.EYE_STATE = (() => {
     const item = state.transferList.find(e => e.id === entryId);
     if (!item) return { ok: false, msg: 'Нет на рынке' };
     const cost = Math.max(10000, 80000 - me.facilities.scout * 10000 - (me.staff?.scoutDir || 1) * 8000);
-    if (me.budget < cost) return { ok: false, msg: 'Нужно ' + money(cost) };
+    const gate = canAfford(cost, 'scout');
+    if (!gate.ok) return { ok: false, msg: gate.msg };
     adjustBudget(-cost, `Скаут: ${item.player.name}`);
     const p = item.player;
     const noise = Math.max(0, 6 - me.facilities.scout - Math.floor((me.staff?.scoutDir || 1) / 2));
@@ -2821,6 +3232,14 @@ window.EYE_STATE = (() => {
     state.transferOffers = [];
     state.knockoutPlayedWeek = null;
     state.sponsor = null;
+    state.finance = {
+      debtWeeks: 0,
+      wageArrears: 0,
+      embargo: false,
+      emergencyLoanSeason: 0,
+      lastStatus: 'healthy',
+      unpaidStreak: 0
+    };
     ensureClubExtras(next);
     pickSponsor(next);
     refillYouth(next, true);
@@ -2850,7 +3269,8 @@ window.EYE_STATE = (() => {
     storeCounter, pendingCounters: () => state?.pendingCounters || {},
     pendingWage: () => state?.pendingWage || {},
     upgradeFacility, promoteYouth, setTactics, setLineup, autoLineup, ensureLineup, swapIntoXi,
-    renewContract, negotiateContract, setDevFocus, financeSummary, resolveCupRoundAI, scoutPlayer, takeNewJob,
+    renewContract, negotiateContract, setDevFocus, financeSummary, financeStatus, canAfford, creditLimit,
+    resolveCupRoundAI, scoutPlayer, takeNewJob,
     hireStaff, answerPress, refillYouth, releaseYouth, runYouthIntake, pendingPress: () => state?.pendingPress || null,
     xiStatus, fixXi, matchRivalry, transferWindowOpen, transferWindowInfo, listLeagueTables,
     resolvePlayerRequest, seasonLog: () => state?.seasonLog || [], avgSeasonRating,

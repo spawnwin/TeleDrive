@@ -443,7 +443,10 @@ window.EYE_UI = (() => {
     if (hubClub) hubClub.textContent = me.name;
     if (hubColor) hubColor.style.background = me.color;
     if (hubMeta) hubMeta.textContent = `${st.leagueName} · Сезон ${st.season} · Тур ${st.week}`;
-    if (hubBudget) hubBudget.textContent = S().money(me.budget);
+    if (hubBudget) {
+      hubBudget.textContent = S().money(me.budget);
+      hubBudget.classList.toggle('neg', (me.budget || 0) < 0);
+    }
     if (hubMorale) hubMorale.textContent = 'Мораль ' + me.morale;
     const board = st.board;
     const boardEl = $('#hub-board');
@@ -481,6 +484,12 @@ window.EYE_UI = (() => {
       } else if (next && next.type !== 'league') {
         const label = next.type === 'cwc' ? 'Матч ЧМ' : next.type === 'ucl' ? 'Матч ЛЧ' : 'Кубок';
         chips.push(`<button type="button" class="hub-chip" data-nav="hub">${label} в очереди</button>`);
+      }
+      const fin = S().financeSummary?.();
+      if (fin && fin.statusLevel >= 2) {
+        chips.push(`<button type="button" class="hub-chip warn" data-nav="finance">${fin.statusLabel}${fin.embargo ? ' · эмбарго' : ''}</button>`);
+      } else if (fin && fin.statusLevel === 1) {
+        chips.push(`<button type="button" class="hub-chip" data-nav="finance">Касса напряжена</button>`);
       }
       pulse.innerHTML = chips.join('');
     }
@@ -1169,22 +1178,43 @@ window.EYE_UI = (() => {
   function renderFinance() {
     const f = S().financeSummary();
     const sp = f.sponsor;
+    const neg = (f.budget || 0) < 0;
+    const statusCls = ({ healthy: 'ok', tight: 'mid', deficit: 'bad', critical: 'bad', insolvent: 'bad' })[f.status] || '';
     const led = (f.ledger || []).map(e => {
       const sign = e.amount >= 0 ? '+' : '';
       const cls = e.amount >= 0 ? 'ok' : 'bad';
-      const bal = e.balance != null ? `<em>${S().money(e.balance)}</em>` : '';
+      const bal = e.balance != null ? `<em class="${e.balance < 0 ? 'bad' : ''}">${S().money(e.balance)}</em>` : '';
       return `<div class="ledger-row ${cls}"><span>С${e.season}·Т${e.week} · ${e.label}</span><strong>${sign}${S().money(e.amount)}</strong>${bal}</div>`;
     }).join('') || `<div class="hint">Движений пока нет</div>`;
+    const flowIn = (f.breakdown?.in || []).map(x =>
+      `<div class="flow-row"><span>${x.label}</span><strong class="ok">+${S().money(x.amount)}</strong></div>`
+    ).join('');
+    const flowOut = (f.breakdown?.out || []).map(x =>
+      `<div class="flow-row"><span>${x.label}</span><strong class="bad">${S().money(x.amount)}</strong></div>`
+    ).join('');
     $('#finance-card').innerHTML = `
+      <div class="finance-status ${statusCls}">
+        <strong>${f.statusLabel || 'Стабильно'}</strong>
+        <div class="hint">${f.restrictions || (neg ? 'Касса в минусе — начисляются проценты' : `Запас хода ~${f.runwayWeeks} нед.`)}</div>
+      </div>
       <div class="stat-grid finance-grid">
-        <div class="news-item"><strong>Бюджет</strong><div class="kpi">${S().money(f.budget)}</div><small>${S().moneyHint(f.budget)}</small></div>
+        <div class="news-item${neg ? ' fin-neg' : ''}"><strong>${neg ? 'Долг / касса' : 'Бюджет'}</strong><div class="kpi">${S().money(f.budget)}</div><small>${S().moneyHint(f.budget)}</small></div>
+        <div class="news-item"><strong>Кредитный лимит</strong><div class="kpi">${S().money(f.creditLimit || 0)}</div><small>осталось ${S().money(f.creditLeft || 0)}</small></div>
         <div class="news-item"><strong>Зарплаты игроков</strong><div class="kpi">${S().money(f.weeklyWages)}</div><small>/ нед</small></div>
-        <div class="news-item"><strong>Зарплаты штаба</strong><div class="kpi">${S().money(f.staffWages || 0)}</div><small>/ нед</small></div>
+        <div class="news-item"><strong>Штаб + база</strong><div class="kpi">${S().money((f.staffWages || 0) + (f.upkeep || 0))}</div><small>штаб ${S().money(f.staffWages || 0)} · база ${S().money(f.upkeep || 0)}</small></div>
         <div class="news-item"><strong>Спонсор</strong><div class="kpi">${sp ? S().money(sp.weekly) : '—'}</div><small>${sp ? sp.name + ' / нед' : 'нет'}</small></div>
-        <div class="news-item"><strong>Касса матча</strong><div class="kpi">${S().money(f.incomePerMatch)}</div><small>домашний матч · ориентир</small></div>
+        <div class="news-item"><strong>ТВ-пул</strong><div class="kpi">${S().money(f.tvWeekly || 0)}</div><small>/ нед</small></div>
+        <div class="news-item"><strong>Касса матча</strong><div class="kpi">${S().money(f.incomePerMatch)}</div><small>дома · в гостях ~${S().money(f.incomeAwayEst || 0)}</small></div>
+        <div class="news-item"><strong>Проценты</strong><div class="kpi">${S().money(f.interest || 0)}</div><small>${f.debtWeeks ? `недель в минусе: ${f.debtWeeks}` : 'нет долга'}</small></div>
+        <div class="news-item"><strong>Долг по зарплате</strong><div class="kpi">${S().money(f.wageArrears || 0)}</div><small>${f.embargo ? 'эмбарго активно' : 'ок'}</small></div>
         <div class="news-item"><strong>Стоимость состава</strong><div class="kpi">${S().money(f.squadValue)}</div></div>
-        <div class="news-item"><strong>Болельщики</strong><div class="kpi">${f.fans.toLocaleString('ru')}</div></div>
-        <div class="news-item"><strong>Баланс недели</strong><div class="kpi">${S().money(f.weeklyNet)}</div><small>спонсор − игроки − штаб</small></div>
+        <div class="news-item"><strong>Болельщики</strong><div class="kpi">${(f.fans || 0).toLocaleString('ru')}</div></div>
+        <div class="news-item"><strong>Баланс недели</strong><div class="kpi">${S().money(f.weeklyNet)}</div><small>доходы − расходы (без кассы матча)</small></div>
+      </div>
+      <h3 class="section-label" style="margin:16px 0 8px;font-family:var(--display)">План недели</h3>
+      <div class="finance-flow">
+        <div><div class="field-label">Доходы</div>${flowIn || '<div class="hint">—</div>'}</div>
+        <div><div class="field-label">Расходы</div>${flowOut || '<div class="hint">—</div>'}</div>
       </div>
       <h3 class="section-label" style="margin:16px 0 8px;font-family:var(--display)">Журнал</h3>
       <div class="ledger-list">${led}</div>
