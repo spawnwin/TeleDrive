@@ -1255,7 +1255,7 @@ window.EYE_UI = (() => {
             return `
             <tr class="${r.id === me.id ? 'me' : ''} ${zone}">
               <td class="pos">${i + 1}</td>
-              <td>${name}${i < uclSlots ? ' <span class="zone-tag">ЛЧ</span>' : ''}</td>
+              <td>${name}${i < uclSlots ? ' <span class="zone-tag">ЛЧ</span>' : ''}${i >= n - relegN ? ' <span class="zone-tag bot">вылет</span>' : ''}</td>
               <td>${r.played}</td><td>${r.w}</td><td>${r.d}</td><td>${r.l}</td>
               <td>${r.gf}:${r.ga}</td><td class="gd">${gdStr}</td><td><strong>${r.pts}</strong></td>
             </tr>`;

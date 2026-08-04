@@ -2613,7 +2613,8 @@ window.EYE_STATE = (() => {
     const ghosts = xi.some(p => p && !me.squad.some(s => s.id === p.id));
     const gkSlot = slots.findIndex(s => D().POS_GROUP[s] === 'GK');
     const gkBad = gkSlot >= 0 && xi[gkSlot] && D().POS_GROUP[xi[gkSlot].pos] !== 'GK';
-    if (xi.length < 11 || ghosts || gkBad) autoLineup();
+    const unavailable = xi.some(p => p && ((p.injured > 0) || (p.suspended > 0)));
+    if (xi.length < 11 || ghosts || gkBad || unavailable) autoLineup();
     return me.lineup;
   }
 
