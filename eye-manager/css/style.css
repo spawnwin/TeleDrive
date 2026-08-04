@@ -995,7 +995,14 @@ input:focus, select:focus { border-color: rgba(94,234,212,.45); box-shadow: 0 0 
 .league tr.zone-top .pos { color: var(--accent-2); }
 .league tr.zone-ucl .pos { color: var(--accent-2); }
 .league tr.zone-ucl td:nth-child(2) { color: var(--accent-2); }
+.league tr.zone-ucl {
+  background: linear-gradient(90deg, rgba(45,212,191,.14), transparent 72%);
+}
 .league tr.zone-bot .pos { color: var(--danger); }
+.league tr.zone-bot td:nth-child(2) { color: #FDA4AF; }
+.league tr.zone-bot {
+  background: linear-gradient(90deg, rgba(251,113,133,.2), transparent 72%);
+}
 .zone-tag {
   display: inline-block;
   margin-left: 6px;
@@ -1007,6 +1014,10 @@ input:focus, select:focus { border-color: rgba(94,234,212,.45); box-shadow: 0 0 
   color: #06241f;
   background: var(--accent-2);
   vertical-align: middle;
+}
+.zone-tag.bot {
+  color: #fff1f2;
+  background: rgba(251,113,133,.55);
 }
 .league .gd { font-variant-numeric: tabular-nums; color: var(--muted); }
 
