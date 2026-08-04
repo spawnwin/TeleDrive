@@ -132,6 +132,7 @@
         <button class="tile glass-panel" data-nav="finance"><strong>Финансы</strong><span>Бюджет</span></button>
         <button class="tile glass-panel" data-nav="train"><strong>Тренировка</strong><span>Развитие</span></button>
         <button class="tile glass-panel" data-nav="club"><strong>Клуб</strong><span>Инфраструктура</span></button>
+        <button class="tile glass-panel" data-nav="youth"><strong>Академия</strong><span>Молодёжь</span></button>
         <button class="tile glass-panel" data-nav="inbox"><strong>Почта</strong><span id="inbox-badge">0</span></button>
       </div>
 
@@ -311,8 +312,22 @@
         <h2>Клуб</h2>
       </header>
       <div class="facility-list" id="facility-list"></div>
-      <button class="btn btn-glass" id="btn-youth">Выпустить из академии</button>
+      <h3 class="section-label" style="margin:14px 0 8px;font-family:var(--display)">Штаб</h3>
+      <div class="facility-list" id="staff-list"></div>
+      <button class="btn btn-glass" data-nav="youth">Академия</button>
       <p class="hint" id="club-msg"></p>
+    </section>
+
+    <!-- YOUTH -->
+    <section id="screen-youth" class="screen">
+      <header class="subhead">
+        <button class="icon-back" data-nav="hub">‹</button>
+        <h2>Академия</h2>
+      </header>
+      <div class="glass-panel" id="youth-status" style="padding:14px;margin-bottom:10px"></div>
+      <div class="list" id="youth-list"></div>
+      <button class="btn btn-primary" id="btn-youth-best">Выпустить лучшего</button>
+      <p class="hint" id="youth-msg"></p>
     </section>
 
     <!-- INBOX -->
@@ -343,6 +358,7 @@
         <button class="btn btn-glass" data-nav="table">Таблица лиги</button>
         <button class="btn btn-glass" data-nav="ucl">Лига чемпионов</button>
         <button class="btn btn-glass" data-nav="board">Совет директоров</button>
+        <button class="btn btn-glass" data-nav="youth">Академия</button>
         <button class="btn btn-glass" data-nav="stats">Бомбардиры и ассисты</button>
         <button class="btn btn-glass" data-nav="history">История матчей</button>
         <button class="btn btn-glass" data-nav="train">Тренировки</button>
@@ -421,7 +437,8 @@
     <!-- RESULT -->
     <section id="screen-result" class="screen">
       <div class="result-card glass-panel" id="result-card"></div>
-      <button class="btn btn-primary" data-nav="hub">В центр управления</button>
+      <div class="glass-panel" id="press-card" hidden style="padding:14px;margin-top:12px"></div>
+      <button class="btn btn-primary" data-nav="hub" id="btn-result-hub">В центр управления</button>
     </section>
 
     <!-- TOAST -->

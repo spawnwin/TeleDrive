@@ -127,12 +127,39 @@ window.EYE_STATE = (() => {
       settings: { sfx: true, speed: 1 },
       lastResult: null,
       cup: createCup(leagueClubs),
+      cupBest: '',
+      uclBest: '',
       stats: { scorers: {}, assisters: {} },
-      sacked: false
+      sacked: false,
+      pendingPress: null
     };
+    ensureClubExtras(me);
+    refillYouth(me, true);
     refreshTransferMarket();
     save();
     return state;
+  }
+
+  function ensureClubExtras(c) {
+    if (!c) return;
+    c.staff = c.staff || { coach: 1, physio: 1, scoutDir: 1 };
+    c.youth = c.youth || [];
+    c.facilities = c.facilities || { stadium: 1, training: 1, youth: 1, medical: 1, scout: 1 };
+  }
+
+  function refillYouth(clubObj, force = false) {
+    ensureClubExtras(clubObj);
+    const target = 4 + (clubObj.facilities.youth || 1);
+    if (!force && clubObj.youth.length >= Math.min(3, target)) return;
+    while (clubObj.youth.length < target) {
+      const pos = D().pick(['CB', 'CM', 'ST', 'RW', 'LW', 'RB', 'LB', 'CAM', 'CDM']);
+      const base = 48 + (clubObj.facilities.youth || 1) * 3 + D().rnd(0, 5);
+      const p = D().genPlayer(pos, base, D().rnd(15, 18), clubObj.id);
+      p.pot = Math.min(94, p.ovr + D().rnd(10, 20) + (clubObj.facilities.youth || 1));
+      p.youth = true;
+      p.wage = Math.max(500, Math.round(p.wage * 0.25));
+      clubObj.youth.push(p);
+    }
   }
 
   function createUcl(allClubs) {
@@ -254,6 +281,10 @@ window.EYE_STATE = (() => {
       if (!state.ucl) state.ucl = createUcl(state.clubs || []);
       if (state.sacked == null) state.sacked = false;
       if (!state.cup && leagueClubs().length) state.cup = createCup(leagueClubs());
+      if (state.cupBest == null) state.cupBest = '';
+      if (state.uclBest == null) state.uclBest = '';
+      state.clubs?.forEach(ensureClubExtras);
+      if (club()) refillYouth(club());
       if (!state.transferList?.length) refreshTransferMarket();
       return state;
     } catch { return null; }
@@ -283,24 +314,26 @@ window.EYE_STATE = (() => {
   }
 
   function trackStats(result) {
-    (result.scorersH || []).forEach(s => {
-      state.stats.scorers[s.player.id] = state.stats.scorers[s.player.id] || { id: s.player.id, name: s.player.name, club: result.home, goals: 0, assists: 0 };
+    const bump = (s, clubName) => {
+      state.stats.scorers[s.player.id] = state.stats.scorers[s.player.id] || {
+        id: s.player.id, name: s.player.name, club: clubName, goals: 0, assists: 0
+      };
       state.stats.scorers[s.player.id].goals++;
+      s.player.seasonGoals = (s.player.seasonGoals || 0) + 1;
+      s.player.goals = (s.player.goals || 0) + 1;
+      s.player.careerGoals = (s.player.careerGoals || 0) + 1;
       if (s.assist) {
-        state.stats.scorers[s.assist.id] = state.stats.scorers[s.assist.id] || { id: s.assist.id, name: s.assist.name, club: result.home, goals: 0, assists: 0 };
+        state.stats.scorers[s.assist.id] = state.stats.scorers[s.assist.id] || {
+          id: s.assist.id, name: s.assist.name, club: clubName, goals: 0, assists: 0
+        };
         state.stats.scorers[s.assist.id].assists++;
         s.assist.seasonAssists = (s.assist.seasonAssists || 0) + 1;
+        s.assist.assists = (s.assist.assists || 0) + 1;
+        s.assist.careerAssists = (s.assist.careerAssists || 0) + 1;
       }
-    });
-    (result.scorersA || []).forEach(s => {
-      state.stats.scorers[s.player.id] = state.stats.scorers[s.player.id] || { id: s.player.id, name: s.player.name, club: result.away, goals: 0, assists: 0 };
-      state.stats.scorers[s.player.id].goals++;
-      if (s.assist) {
-        state.stats.scorers[s.assist.id] = state.stats.scorers[s.assist.id] || { id: s.assist.id, name: s.assist.name, club: result.away, goals: 0, assists: 0 };
-        state.stats.scorers[s.assist.id].assists++;
-        s.assist.seasonAssists = (s.assist.seasonAssists || 0) + 1;
-      }
-    });
+    };
+    (result.scorersH || []).forEach(s => bump(s, result.home));
+    (result.scorersA || []).forEach(s => bump(s, result.away));
   }
 
   function applyResultToTable(homeId, awayId, score) {
@@ -383,7 +416,9 @@ window.EYE_STATE = (() => {
 
     finishRoundExcept(match);
     simOtherLeaguesWeek();
+    maybePlayCupAiWeek();
     maybePlayUclAiWeek();
+    queuePressConference(won, drew, false);
     advanceWeek();
     save();
   }
@@ -410,32 +445,49 @@ window.EYE_STATE = (() => {
   function advanceWeek() {
     state.week++;
     const me = club();
+    ensureClubExtras(me);
     const wages = me.squad.reduce((s, p) => s + (p.wage || 0), 0);
-    me.budget -= wages;
+    const staffWage = ((me.staff.coach || 1) + (me.staff.physio || 1) + (me.staff.scoutDir || 1)) * 12000;
+    me.budget -= wages + staffWage;
     const xiIds = new Set((me.lineup || me.squad.slice(0, 11)).map(p => p.id));
+    const heal = 1 + Math.floor(((me.facilities.medical || 1) + (me.staff.physio || 1)) / 3);
     me.squad.forEach(p => {
-      if (p.injured > 0) p.injured = Math.max(0, p.injured - 1);
+      if (p.suspended > 0) p.suspended = Math.max(0, p.suspended - 1);
+      if (p.injured > 0) p.injured = Math.max(0, p.injured - heal);
       else {
-        p.condition = Math.min(100, (p.condition || 70) + 6 + me.facilities.medical);
+        p.condition = Math.min(100, (p.condition || 70) + 6 + me.facilities.medical + (me.staff.physio || 1));
         p.energy = Math.min(100, (p.energy || 70) + 10);
       }
       p.form = Math.max(30, Math.min(95, (p.form || 60) + D().rnd(-2, 2)));
-      // playing-time morale
+      p.red = 0;
+      p.matchYellows = 0;
       if (xiIds.has(p.id)) p.morale = Math.min(100, (p.morale || 60) + 1);
       else if ((p.seasonApps || 0) < state.week / 3 && p.ovr >= me.reputation - 5) {
         p.morale = Math.max(25, (p.morale || 60) - 2);
       }
     });
+    (me.youth || []).forEach(p => {
+      if (Math.random() < 0.25 + me.facilities.youth * 0.05) {
+        if (p.ovr < p.pot) p.ovr = Math.min(p.pot, p.ovr + 1);
+        p.form = Math.min(95, (p.form || 60) + 2);
+      }
+    });
     state.clubs.forEach(c => {
       if (c.id === me.id) return;
+      ensureClubExtras(c);
       c.squad.forEach(p => {
-        if (p.injured > 0) p.injured--;
+        if (p.suspended > 0) p.suspended--;
+        if (p.injured > 0) p.injured = Math.max(0, p.injured - 1);
         else p.condition = Math.min(100, (p.condition || 70) + 5);
         p.form = Math.max(30, Math.min(95, (p.form || 60) + D().rnd(-2, 2)));
+        p.red = 0;
+        p.matchYellows = 0;
       });
     });
     if (state.week % 4 === 0) refreshTransferMarket();
     processIncomingOffers();
+    maybePlayCupAiWeek();
+    maybePlayUclAiWeek();
     const allPlayed = state.fixtures.every(r => r.matches.every(m => m.played));
     if (allPlayed) endSeason();
   }
@@ -496,7 +548,7 @@ window.EYE_STATE = (() => {
 
     // Board season review
     if (!state.board) state.board = B().createBoard(me);
-    const cupReached = state.cup?.champion === me.id ? 'Чемпион' : state.cup?.round || '';
+    const cupReached = state.cup?.champion === me.id ? 'Чемпион' : (state.cupBest || '');
     const review = B().seasonReview(state.board, pos, cupReached);
     let boardMsg = review.ok
       ? `Цели выполнены (${state.board.targetLabel}). Уверенность: ${state.board.confidence}%.`
@@ -524,12 +576,16 @@ window.EYE_STATE = (() => {
     state.season++;
     state.week = 1;
     state.board = B().createBoard(me);
+    state.cupBest = '';
+    state.uclBest = '';
     const lc = leagueClubs();
     state.table = emptySeasonTable(lc);
     state.fixtures = buildFixtures(lc.map(c => c.id));
     state.stats = { scorers: {}, assisters: {} };
     state.cup = createCup(lc);
     state.ucl = createUcl(state.clubs);
+    refillYouth(me, true);
+    me.squad.forEach(p => { p.seasonYellows = 0; p.yellow = 0; p.suspended = 0; });
     state.inbox.unshift({
       id: D().uid('m'), type: 'board', title: 'Новые цели совета',
       body: `${state.board.targetLabel}. Уверенность: ${state.board.confidence}%.`,
@@ -569,20 +625,23 @@ window.EYE_STATE = (() => {
 
   function train(typeId) {
     const me = club();
+    ensureClubExtras(me);
     const t = D().TRAINING.find(x => x.id === typeId);
     if (!t) return { ok: false, msg: 'Нет такой тренировки' };
     const cost = 12000 + me.facilities.training * 3000;
     if (me.budget < cost) return { ok: false, msg: 'Не хватает бюджета' };
     me.budget -= cost;
-    const boost = t.boost + me.facilities.training;
+    const boost = t.boost + me.facilities.training + Math.floor((me.staff.coach || 1) / 2);
     me.squad.forEach(p => {
-      if (p.injured) return;
+      if (p.injured || p.suspended) return;
       if (t.focus === 'condition') {
         p.condition = Math.min(100, p.condition + boost);
         p.energy = Math.min(100, p.energy + boost);
       } else {
         p[t.focus] = Math.min(99, (p[t.focus] || 60) + (Math.random() < 0.55 ? 1 : 0));
-        if (Math.random() < 0.12 + me.facilities.training * 0.02) p.ovr = Math.min(p.pot, p.ovr + 1);
+        if (Math.random() < 0.12 + me.facilities.training * 0.02 + (me.staff.coach || 1) * 0.01) {
+          p.ovr = Math.min(p.pot, p.ovr + 1);
+        }
         p.condition = Math.max(45, p.condition - 3);
         p.form = Math.min(99, p.form + 1);
       }
@@ -762,19 +821,79 @@ window.EYE_STATE = (() => {
     return { ok: true, msg: `${f.name} → ур. ${level + 1}` };
   }
 
-  function promoteYouth() {
+  function promoteYouth(playerId = null) {
     const me = club();
-    const cost = 150000 - me.facilities.youth * 18000;
-    if (me.budget < cost) return { ok: false, msg: 'Нужно ' + money(cost) };
+    ensureClubExtras(me);
+    refillYouth(me);
     if (me.squad.length >= 30) return { ok: false, msg: 'Состав полон' };
-    me.budget -= cost;
-    const pos = D().pick(['CB','CM','ST','RW','LW','RB','LB','CAM']);
-    const base = 54 + me.facilities.youth * 4 + D().rnd(0, 6);
-    const p = D().genPlayer(pos, base, D().rnd(16, 19), me.id);
-    p.pot = Math.min(94, p.ovr + D().rnd(8, 18));
+    let p;
+    if (playerId) {
+      p = me.youth.find(x => x.id === playerId);
+      if (!p) return { ok: false, msg: 'Нет в академии' };
+      me.youth = me.youth.filter(x => x.id !== playerId);
+    } else {
+      const cost = Math.max(40000, 150000 - me.facilities.youth * 18000);
+      if (me.budget < cost) return { ok: false, msg: 'Нужно ' + money(cost) };
+      if (!me.youth.length) refillYouth(me, true);
+      me.youth.sort((a, b) => b.pot - a.pot);
+      p = me.youth.shift();
+      me.budget -= cost;
+    }
+    delete p.youth;
+    p.clubId = me.id;
+    p.contract = Math.max(p.contract || 1, 2);
     me.squad.push(p);
     save();
-    return { ok: true, msg: `Академия: ${p.name} (${D().POS_LABEL[pos]}, ${p.ovr})`, player: p };
+    return { ok: true, msg: `В основу: ${p.name} (${D().POS_LABEL[p.pos]}, ${p.ovr} / пот. ${p.pot})`, player: p };
+  }
+
+  function hireStaff(roleId) {
+    const me = club();
+    ensureClubExtras(me);
+    const role = D().STAFF_ROLES.find(r => r.id === roleId);
+    if (!role) return { ok: false, msg: 'Нет роли' };
+    const level = me.staff[roleId] || 1;
+    if (level >= role.max) return { ok: false, msg: 'Максимум' };
+    const cost = Math.round(role.base * Math.pow(1.55, level - 1));
+    if (me.budget < cost) return { ok: false, msg: 'Нужно ' + money(cost) };
+    me.budget -= cost;
+    me.staff[roleId] = level + 1;
+    save();
+    return { ok: true, msg: `${role.name} → ур. ${level + 1} (−${money(cost)})` };
+  }
+
+  function queuePressConference(won, drew, isCup) {
+    const pool = D().PRESS_OPTIONS.filter(o => {
+      if (won) return ['confident', 'humble', 'defend_squad', 'silent'].includes(o.id);
+      if (drew) return ['humble', 'promise', 'defend_squad', 'silent'].includes(o.id);
+      return ['promise', 'defend_squad', 'attack_board', 'silent', 'humble'].includes(o.id);
+    });
+    const picked = pool.sort(() => Math.random() - 0.5).slice(0, 3);
+    state.pendingPress = {
+      title: won ? 'Пресс-конференция: победа' : drew ? 'Пресс-конференция: ничья' : 'Пресс-конференция: поражение',
+      context: isCup ? 'Кубковый матч' : 'Матч лиги',
+      options: picked
+    };
+  }
+
+  function answerPress(optionId) {
+    if (!state?.pendingPress) return { ok: false, msg: 'Нет вопросов' };
+    const opt = (state.pendingPress.options || []).find(o => o.id === optionId)
+      || D().PRESS_OPTIONS.find(o => o.id === optionId);
+    if (!opt) return { ok: false, msg: 'Нет варианта' };
+    const me = club();
+    me.morale = Math.max(20, Math.min(100, me.morale + (opt.morale || 0)));
+    if (state.board) {
+      state.board.confidence = Math.max(0, Math.min(100, state.board.confidence + (opt.board || 0)));
+    }
+    state.news.unshift({
+      id: D().uid('n'), title: 'Пресса',
+      body: `Вы сказали: «${opt.label}». Мораль ${me.morale}%, совет ${state.board?.confidence ?? '—'}%.`,
+      at: Date.now()
+    });
+    state.pendingPress = null;
+    save();
+    return { ok: true, msg: `Ответ: ${opt.label}` };
   }
 
   function setTactics(formation, style) {
@@ -801,7 +920,7 @@ window.EYE_STATE = (() => {
     const xi = slots.map(slot => {
       const g = D().POS_GROUP[slot];
       const pool = me.squad
-        .filter(p => !used.has(p.id) && !p.injured && !p.red)
+        .filter(p => !used.has(p.id) && !(p.injured > 0) && !(p.suspended > 0) && !p.red)
         .map(p => {
           const pg = D().POS_GROUP[p.pos];
           let score = p.ovr + (p.form || 0) / 10 + (p.condition || 0) / 20;
@@ -829,7 +948,7 @@ window.EYE_STATE = (() => {
     ensureLineup();
     const xi = [...me.lineup];
     const bench = me.squad.find(p => p.id === benchPlayerId);
-    if (!bench || bench.injured) return { ok: false, msg: 'Игрок недоступен' };
+    if (!bench || bench.injured || bench.suspended) return { ok: false, msg: 'Игрок недоступен' };
     if (slotIndex < 0 || slotIndex > 10) return { ok: false, msg: 'Слот' };
     const out = xi[slotIndex];
     xi[slotIndex] = bench;
@@ -920,14 +1039,15 @@ window.EYE_STATE = (() => {
   }
 
   function nextMatch() {
+    const canKo = state.knockoutPlayedWeek !== state.week;
     const ucl = playerUclMatch();
-    if (ucl && state.week % 5 === 1) return { type: 'ucl', match: ucl };
     const cup = playerCupMatch();
-    if (cup && state.week % 3 === 0) return { type: 'cup', match: cup };
+    if (canKo && ucl && state.week % 5 === 1) return { type: 'ucl', match: ucl };
+    if (canKo && cup && state.week % 3 === 0) return { type: 'cup', match: cup };
     const lg = playerMatch();
     if (lg) return { type: 'league', match: lg };
-    if (ucl) return { type: 'ucl', match: ucl };
-    if (cup) return { type: 'cup', match: cup };
+    if (canKo && ucl) return { type: 'ucl', match: ucl };
+    if (canKo && cup) return { type: 'cup', match: cup };
     return null;
   }
 
@@ -979,9 +1099,16 @@ window.EYE_STATE = (() => {
     advanceKnockout(state.cup, 'Кубок EYE', 800000);
   }
 
+  function maybePlayCupAiWeek() {
+    if (!state.cup || state.cup.champion) return;
+    const pending = playerCupMatch();
+    if (pending) return;
+    resolveCompAI(state.cup, null);
+    advanceKnockout(state.cup, 'Кубок EYE', 800000);
+  }
+
   function maybePlayUclAiWeek() {
     if (!state.ucl || state.ucl.champion) return;
-    // progress AI matches if player not in pending
     const pending = playerUclMatch();
     if (pending) return;
     resolveCompAI(state.ucl, null);
@@ -996,6 +1123,19 @@ window.EYE_STATE = (() => {
     return recordKnockoutMatch(match, result, 'ucl', 'Лига чемпионов EYE', 350000);
   }
 
+  function noteKnockoutProgress(kind, won, roundLabel) {
+    const order = ['1/8', '1/4', '1/2', 'Финал', 'Чемпион'];
+    const key = kind === 'ucl' ? 'uclBest' : 'cupBest';
+    if (won) {
+      const next = roundLabel === 'Финал' ? 'Чемпион' : roundLabel;
+      const cur = state[key] || '';
+      if (order.indexOf(next) >= order.indexOf(cur)) state[key] = next || roundLabel;
+    } else {
+      const cur = state[key] || '';
+      if (!cur) state[key] = roundLabel || '1/8';
+    }
+  }
+
   function recordKnockoutMatch(match, result, kind, label, prizeWin) {
     match.played = true;
     let score = result.score;
@@ -1006,6 +1146,7 @@ window.EYE_STATE = (() => {
     }
     match.score = score;
     trackStats(result);
+    const roundBefore = kind === 'cup' ? state.cup?.round : state.ucl?.round;
     if (kind === 'cup') {
       resolveCupRoundAI(match);
       maybeAdvanceCup();
@@ -1019,6 +1160,7 @@ window.EYE_STATE = (() => {
     const myGoals = isHome ? score[0] : score[1];
     const oppGoals = isHome ? score[1] : score[0];
     const won = myGoals > oppGoals;
+    noteKnockoutProgress(kind, won, roundBefore);
     const prize = won ? prizeWin : 50000;
     me.budget += prize;
     me.morale = Math.min(100, me.morale + (won ? 5 : -2));
@@ -1033,7 +1175,9 @@ window.EYE_STATE = (() => {
       body: `${result.home} ${score[0]}:${score[1]} ${result.away}`,
       at: Date.now()
     });
-    advanceWeek();
+    queuePressConference(won, false, true);
+    // Кубок/ЛЧ — midweek: не крутим лиговый advanceWeek (зарплаты уже списаны за тур)
+    state.knockoutPlayedWeek = state.week;
     save();
   }
 
@@ -1041,11 +1185,11 @@ window.EYE_STATE = (() => {
     const me = club();
     const item = state.transferList.find(e => e.id === entryId);
     if (!item) return { ok: false, msg: 'Нет на рынке' };
-    const cost = Math.max(15000, 80000 - me.facilities.scout * 12000);
+    const cost = Math.max(10000, 80000 - me.facilities.scout * 10000 - (me.staff?.scoutDir || 1) * 8000);
     if (me.budget < cost) return { ok: false, msg: 'Нужно ' + money(cost) };
     me.budget -= cost;
     const p = item.player;
-    const noise = Math.max(0, 6 - me.facilities.scout);
+    const noise = Math.max(0, 6 - me.facilities.scout - Math.floor((me.staff?.scoutDir || 1) / 2));
     const report = {
       id: p.id,
       name: p.name,
@@ -1109,6 +1253,7 @@ window.EYE_STATE = (() => {
     storeCounter, pendingCounters: () => state?.pendingCounters || {},
     pendingWage: () => state?.pendingWage || {},
     upgradeFacility, promoteYouth, setTactics, setLineup, autoLineup, ensureLineup, swapIntoXi,
-    renewContract, financeSummary, resolveCupRoundAI, scoutPlayer, takeNewJob
+    renewContract, financeSummary, resolveCupRoundAI, scoutPlayer, takeNewJob,
+    hireStaff, answerPress, refillYouth, pendingPress: () => state?.pendingPress || null
   };
 })();

@@ -2,13 +2,38 @@
 window.EYE_ENGINE = (() => {
   const D = () => window.EYE_DATA;
 
+  function isUnavailable(p) {
+    return !p || (p.injured > 0) || (p.suspended > 0);
+  }
+
   function teamStrength(club, opts = {}) {
     const form = club.formation || '4-3-3';
     const slots = D().FORMATIONS[form].slots;
-    const XI = (club.lineup && club.lineup.length >= 11
+    let XI = (club.lineup && club.lineup.length >= 11
       ? club.lineup
       : club.squad.slice(0, 11)).slice(0, 11);
-    while (XI.length < 11) XI.push(D().genPlayer(slots[XI.length] || 'CM', 55));
+    // replace unavailable XI with best available squad mates
+    const used = new Set();
+    XI = slots.map((slot, i) => {
+      let p = XI[i];
+      if (p && !isUnavailable(p) && !used.has(p.id)) {
+        used.add(p.id);
+        return p;
+      }
+      const g = D().POS_GROUP[slot];
+      const pool = (club.squad || [])
+        .filter(x => !used.has(x.id) && !isUnavailable(x))
+        .map(x => {
+          let score = x.ovr + (x.form || 0) / 10;
+          if (D().POS_GROUP[x.pos] === g) score += 10;
+          if (x.pos === slot) score += 6;
+          return { x, score };
+        })
+        .sort((a, b) => b.score - a.score);
+      const pick = pool[0]?.x || D().genPlayer(slot, 52);
+      if (pick.id) used.add(pick.id);
+      return pick;
+    });
     let atk = 0, def = 0, mid = 0, cond = 0;
     XI.forEach((p, i) => {
       const pos = slots[i];
@@ -16,7 +41,7 @@ window.EYE_ENGINE = (() => {
       const formMod = (p.form || 60) / 70;
       const condMod = (p.condition || 80) / 90;
       const moraleMod = (p.morale || 60) / 70;
-      const m = formMod * condMod * moraleMod * (p.injured > 0 ? 0.4 : 1) * (p.red ? 0 : 1);
+      const m = formMod * condMod * moraleMod;
       const a = p.attack * m;
       const d = p.defense * m;
       const t = ((p.tech + p.iq) / 2) * m;
@@ -47,7 +72,7 @@ window.EYE_ENGINE = (() => {
 
   function chance(homeS, awayS, minute) {
     const hChance = homeS.attack / (homeS.attack + awayS.defense + 1) * (0.55 + homeS.mid / (homeS.mid + awayS.mid + 1) * 0.45);
-    const aChance = awayS.attack / (awayS.attack + homeS.defense + 1) * (0.55 + awayS.mid / (awayS.mid + homeS.mid + 1) * 0.45);
+    const aChance = awayS.attack / (awayS.attack + homeS.defense + 1) * (0.55 + awayS.mid / (homeS.mid + awayS.mid + 1) * 0.45);
     const fatigue = minute > 75 ? 1.15 : minute > 60 ? 1.05 : 1;
     return { home: hChance * fatigue, away: aChance * fatigue };
   }
@@ -86,8 +111,31 @@ window.EYE_ENGINE = (() => {
     sub: ['Замена.', 'Тренер меняет игрока.', 'Свежие ноги на поле.']
   };
 
+  function bookPlayer(p, events, minute, side) {
+    p.matchYellows = (p.matchYellows || 0) + 1;
+    p.seasonYellows = (p.seasonYellows || 0) + 1;
+    p.yellow = (p.yellow || 0) + 1;
+    if (p.matchYellows >= 2) {
+      p.suspended = Math.max(p.suspended || 0, 1);
+      p.matchYellows = 0;
+      events.push({ minute, type: 'red', side, player: p, text: `${D().pick(COMMENT.red)} ${p.name} (2ЖК)` });
+      return;
+    }
+    events.push({ minute, type: 'card', side, player: p, text: `${D().pick(COMMENT.card)} ${p.name}` });
+    if (p.seasonYellows > 0 && p.seasonYellows % 5 === 0) {
+      p.suspended = Math.max(p.suspended || 0, 1);
+      events.push({ minute, type: 'card', side, player: p, text: `${p.name} дисквалифицирован за набор жёлтых.` });
+    }
+  }
+
+  function sendOff(p, events, minute, side) {
+    p.suspended = Math.max(p.suspended || 0, D().rnd(2, 3));
+    p.matchYellows = 0;
+    events.push({ minute, type: 'red', side, player: p, text: `${D().pick(COMMENT.red)} ${p.name}` });
+  }
+
   /**
-   * options: startMinute, endMinute, score, stats, applyFatigue, scorersH/A
+   * options: startMinute, endMinute, score, stats, applyFatigue, scorersH/A, medicalLevel
    */
   function simulateMatch(home, away, options = {}) {
     const startMinute = options.startMinute || 1;
@@ -104,6 +152,10 @@ window.EYE_ENGINE = (() => {
     let onA = options.stats?.onTarget?.[1] ?? 0;
     const scorersH = options.scorersH ? [...options.scorersH] : [];
     const scorersA = options.scorersA ? [...options.scorersA] : [];
+    const medH = options.medicalHome ?? home.facilities?.medical ?? 2;
+    const medA = options.medicalAway ?? away.facilities?.medical ?? 2;
+    const physioH = home.staff?.physio || 1;
+    const physioA = away.staff?.physio || 1;
 
     for (let minute = startMinute; minute <= endMinute; minute++) {
       const midDiff = homeS.mid - awayS.mid;
@@ -150,80 +202,36 @@ window.EYE_ENGINE = (() => {
         const side = Math.random() < 0.5 ? 'home' : 'away';
         const xi = side === 'home' ? homeS.xi : awayS.xi;
         const p = D().pick(xi);
-        if (Math.random() < 0.85) {
-          p.yellow = (p.yellow || 0) + 1;
-          events.push({ minute, type: 'card', side, player: p, text: `${D().pick(COMMENT.card)} ${p.name}` });
-        } else {
-          p.red = (p.red || 0) + 1;
-          events.push({ minute, type: 'red', side, player: p, text: `${D().pick(COMMENT.red)} ${p.name}` });
-        }
+        if (Math.random() < 0.82) bookPlayer(p, events, minute, side);
+        else sendOff(p, events, minute, side);
       }
-      if (Math.random() < 0.004) {
+      if (Math.random() < 0.0045) {
         const side = Math.random() < 0.5 ? 'home' : 'away';
         const xi = side === 'home' ? homeS.xi : awayS.xi;
-        const p = D().pick(xi.filter(x => !x.injured));
+        const med = side === 'home' ? medH + physioH * 0.4 : medA + physioA * 0.4;
+        const p = D().pick(xi.filter(x => !(x.injured > 0)));
         if (p) {
-          p.injured = D().rnd(1, 4);
-          events.push({ minute, type: 'injury', side, player: p, text: `${D().pick(COMMENT.injury)} ${p.name}` });
+          const base = D().rnd(1, 5);
+          p.injured = Math.max(1, base - Math.floor(med / 2));
+          events.push({ minute, type: 'injury', side, player: p, text: `${D().pick(COMMENT.injury)} ${p.name} (~${p.injured} тур)` });
         }
       }
     }
 
     if (options.applyFatigue !== false && endMinute >= 90 && startMinute <= 1) {
-      homeS.xi.forEach(p => {
-        p.seasonApps = (p.seasonApps || 0) + 1; p.apps = (p.apps || 0) + 1;
-        p.condition = Math.max(40, (p.condition || 80) - D().rnd(4, 12));
-        p.energy = Math.max(30, (p.energy || 80) - D().rnd(8, 18));
-      });
-      awayS.xi.forEach(p => {
-        p.seasonApps = (p.seasonApps || 0) + 1; p.apps = (p.apps || 0) + 1;
-        p.condition = Math.max(40, (p.condition || 80) - D().rnd(4, 12));
-        p.energy = Math.max(30, (p.energy || 80) - D().rnd(8, 18));
-      });
+      applyFatigue(homeS.xi);
+      applyFatigue(awayS.xi);
     } else if (options.applyFatigue && endMinute === 90) {
-      // second half fatigue only
-      homeS.xi.forEach(p => {
-        p.seasonApps = (p.seasonApps || 0) + 1; p.apps = (p.apps || 0) + 1;
-        p.condition = Math.max(40, (p.condition || 80) - D().rnd(4, 12));
-        p.energy = Math.max(30, (p.energy || 80) - D().rnd(8, 18));
-      });
-      awayS.xi.forEach(p => {
-        p.seasonApps = (p.seasonApps || 0) + 1; p.apps = (p.apps || 0) + 1;
-        p.condition = Math.max(40, (p.condition || 80) - D().rnd(4, 12));
-        p.energy = Math.max(30, (p.energy || 80) - D().rnd(8, 18));
-      });
+      applyFatigue(homeS.xi);
+      applyFatigue(awayS.xi);
     }
 
-    // only count new scorers from this segment for season stats when finishing
+    // Season goal tallies are applied once in state.trackStats — avoid double-count here.
     if (options.finalizeStats) {
-      const baseH = (options.scorersH || []).length;
-      const baseA = (options.scorersA || []).length;
-      scorersH.slice(baseH).forEach(s => {
-        s.player.seasonGoals = (s.player.seasonGoals || 0) + 1;
-        s.player.goals = (s.player.goals || 0) + 1;
-        s.player.form = Math.min(99, (s.player.form || 60) + 3);
-        if (s.assist) { s.assist.assists = (s.assist.assists || 0) + 1; s.assist.seasonAssists = (s.assist.seasonAssists || 0) + 1; }
+      const all = [...scorersH, ...scorersA];
+      all.forEach(s => {
+        s.player.form = Math.min(99, (s.player.form || 60) + 2);
       });
-      scorersA.slice(baseA).forEach(s => {
-        s.player.seasonGoals = (s.player.seasonGoals || 0) + 1;
-        s.player.goals = (s.player.goals || 0) + 1;
-        s.player.form = Math.min(99, (s.player.form || 60) + 3);
-        if (s.assist) { s.assist.assists = (s.assist.assists || 0) + 1; s.assist.seasonAssists = (s.assist.seasonAssists || 0) + 1; }
-      });
-    } else if (!options.startMinute || options.startMinute === 1) {
-      // legacy full-match path
-      if (endMinute >= 90 && startMinute === 1) {
-        scorersH.forEach(s => {
-          s.player.seasonGoals = (s.player.seasonGoals || 0) + 1; s.player.goals = (s.player.goals || 0) + 1;
-          s.player.form = Math.min(99, (s.player.form || 60) + 3);
-          if (s.assist) { s.assist.assists = (s.assist.assists || 0) + 1; s.assist.seasonAssists = (s.assist.seasonAssists || 0) + 1; }
-        });
-        scorersA.forEach(s => {
-          s.player.seasonGoals = (s.player.seasonGoals || 0) + 1; s.player.goals = (s.player.goals || 0) + 1;
-          s.player.form = Math.min(99, (s.player.form || 60) + 3);
-          if (s.assist) { s.assist.assists = (s.assist.assists || 0) + 1; s.assist.seasonAssists = (s.assist.seasonAssists || 0) + 1; }
-        });
-      }
     }
 
     return {
@@ -240,6 +248,16 @@ window.EYE_ENGINE = (() => {
       homeColor: home.color, awayColor: away.color,
       startMinute, endMinute
     };
+  }
+
+  function applyFatigue(xi) {
+    xi.forEach(p => {
+      p.seasonApps = (p.seasonApps || 0) + 1;
+      p.apps = (p.apps || 0) + 1;
+      p.condition = Math.max(40, (p.condition || 80) - D().rnd(4, 12));
+      p.energy = Math.max(30, (p.energy || 80) - D().rnd(8, 18));
+      p.matchYellows = 0;
+    });
   }
 
   function mergeResults(a, b) {
@@ -281,5 +299,5 @@ window.EYE_ENGINE = (() => {
 
   function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
-  return { teamStrength, simulateMatch, mergeResults, playLive, sleep, COMMENT };
+  return { teamStrength, simulateMatch, mergeResults, playLive, sleep, COMMENT, isUnavailable };
 })();

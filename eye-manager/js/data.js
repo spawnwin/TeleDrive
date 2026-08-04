@@ -46,6 +46,19 @@ window.EYE_DATA = (() => {
     { id:'medical', name:'Медицина', max:5, base:2e5, effect:'injury' },
     { id:'scout', name:'Скаутинг', max:5, base:1.8e5, effect:'scout' }
   ];
+  const STAFF_ROLES = [
+    { id: 'coach', name: 'Ассистент', max: 5, base: 90000, effect: 'training' },
+    { id: 'physio', name: 'Врач', max: 5, base: 75000, effect: 'injury' },
+    { id: 'scoutDir', name: 'Главный скаут', max: 5, base: 80000, effect: 'scout' }
+  ];
+  const PRESS_OPTIONS = [
+    { id: 'confident', label: 'Мы заслужили победу', morale: 3, board: 2, risk: 0 },
+    { id: 'humble', label: 'Уважаем соперника', morale: 1, board: 1, risk: 0 },
+    { id: 'attack_board', label: 'Совет давит лишнее', morale: 2, board: -6, risk: 1 },
+    { id: 'defend_squad', label: 'Игроки выложились', morale: 4, board: 0, risk: 0 },
+    { id: 'promise', label: 'Обещаю исправить', morale: -1, board: 3, risk: 0 },
+    { id: 'silent', label: 'Без комментариев', morale: 0, board: -1, risk: 0 }
+  ];
 
   const FILL_SLOTS = ['GK','RB','CB','CB','LB','CDM','CM','CM','CAM','RW','ST','LW','GK','CB','CM','ST','RB','LB'];
 
@@ -97,7 +110,7 @@ window.EYE_DATA = (() => {
       seasonGoals: 0, seasonAssists: 0, seasonApps: 0,
       careerGoals: real ? rnd(0, Math.max(0, (34 - age) * 8)) : 0,
       careerAssists: real ? rnd(0, Math.max(0, (34 - age) * 5)) : 0,
-      injured: 0, yellow: 0, red: 0,
+      injured: 0, yellow: 0, red: 0, suspended: 0, seasonYellows: 0, matchYellows: 0,
       nation: typeof nation === 'string' && nation.length <= 3 ? (W().nationName(nation) || nation) : (nation || '—'),
       nationCode: typeof nation === 'string' && nation.length <= 3 ? nation : '',
       value, wage: Math.round(value / 160),
@@ -166,6 +179,8 @@ window.EYE_DATA = (() => {
       budget: overrides.budget ?? tpl.budget,
       reputation: tpl.rep,
       facilities: { stadium: Math.min(5, Math.round(tpl.rep / 20)), training: 2, youth: 2, medical: 2, scout: 2 },
+      staff: { coach: 1, physio: 1, scoutDir: 1 },
+      youth: [],
       fans: tpl.fans,
       morale: 65,
       isPlayer: false,
@@ -205,7 +220,7 @@ window.EYE_DATA = (() => {
   const LEAGUES = () => W().LEAGUES;
 
   return {
-    FORMATIONS, POS_GROUP, POS_LABEL, STYLES, TRAINING, FACILITIES,
+    FORMATIONS, POS_GROUP, POS_LABEL, STYLES, TRAINING, FACILITIES, STAFF_ROLES, PRESS_OPTIONS,
     get LEAGUES() { return W().LEAGUES; },
     rnd, pick, uid, genName, genPlayer, makePlayer, starToPlayer,
     buildSquadFromTemplate, instantiateClub, buildWorldClubs, pitchCoords,

@@ -67,6 +67,7 @@ window.EYE_UI = (() => {
     if (id === 'stats') renderStats();
     if (id === 'train') renderTrain();
     if (id === 'club') renderClub();
+    if (id === 'youth') renderYouth();
     if (id === 'inbox') renderInbox();
     if (id === 'prematch') renderPrematch();
     if (id === 'history') renderHistory();
@@ -76,6 +77,7 @@ window.EYE_UI = (() => {
     if (id === 'ucl') renderUcl();
     if (id === 'board') renderBoard();
     if (id === 'finance') renderFinance();
+    if (id === 'result') renderResult();
     if (id === 'create') fillCreateForm();
     if (id === 'more') syncCurrencyButtons();
     if (id === 'home') {
@@ -239,6 +241,8 @@ window.EYE_UI = (() => {
         Сезон: ${p.seasonApps || 0} игр, ${p.seasonGoals || 0} голов, ${p.seasonAssists || 0} ассистов<br/>
         Карьера: ${p.careerGoals || 0} голов, ${p.careerAssists || 0} ассистов · контракт ${p.contract} г
         ${p.injured ? '<br/>Травма: ' + p.injured + ' тур(а)' : ''}
+        ${p.suspended ? '<br/>Дисквалификация: ' + p.suspended + ' матч(а)' : ''}
+        ${(p.seasonYellows || p.yellow) ? '<br/>Жёлтые в сезоне: ' + (p.seasonYellows || p.yellow) : ''}
       </div>
       ${found.club?.isPlayer ? `<button class="btn btn-primary" id="btn-renew" data-renew="${p.id}" style="margin-top:12px">Продлить контракт (+2 г)</button>` : ''}
     `;
@@ -268,8 +272,10 @@ window.EYE_UI = (() => {
           <div class="meta">
             <span class="badge-pos">${D().POS_LABEL[p.pos] || p.pos}</span>
             · ${p.age}л · форма ${p.form}
-            ${p.injured ? ' · травма' : ''}
+            ${p.injured ? ' · травма ' + p.injured : ''}
+            ${p.suspended ? ' · бан ' + p.suspended : ''}
             · ${p.seasonGoals || 0}Г/${p.seasonAssists || 0}А
+            ${(p.seasonYellows || 0) ? ' · ЖК ' + p.seasonYellows : ''}
           </div>
         </div>
         <div class="meta">${S().money(p.value)}</div>
@@ -608,6 +614,38 @@ window.EYE_UI = (() => {
         </button>
       `;
     }).join('');
+    const staff = me.staff || { coach: 1, physio: 1, scoutDir: 1 };
+    $('#staff-list').innerHTML = D().STAFF_ROLES.map(r => {
+      const lvl = staff[r.id] || 1;
+      const cost = Math.round(r.base * Math.pow(1.55, lvl - 1));
+      return `
+        <button class="fac-card" data-staff="${r.id}" ${lvl >= r.max ? 'disabled' : ''}>
+          <div><strong>${r.name}</strong><span>Уровень ${lvl}/${r.max}</span></div>
+          <span class="btn-tiny">${lvl >= r.max ? 'макс.' : S().money(cost)}</span>
+        </button>
+      `;
+    }).join('');
+  }
+
+  function renderYouth() {
+    const me = S().club();
+    const list = me.youth || [];
+    $('#youth-status').innerHTML = `
+      <strong>Академия ур. ${me.facilities?.youth || 1}</strong>
+      <div class="meta" style="color:var(--muted);margin-top:4px;font-size:13px">
+        Воспитанников: ${list.length}. Рост каждую неделю. Выпуск переводит в основу.
+      </div>
+    `;
+    $('#youth-list').innerHTML = list.slice().sort((a, b) => b.pot - a.pot).map(p => `
+      <div class="row">
+        <div class="ovr">${p.ovr}</div>
+        <div>
+          <strong>${p.name}</strong>
+          <div class="meta">${D().POS_LABEL[p.pos]} · ${p.age}л · пот. ${p.pot} · форма ${p.form}</div>
+        </div>
+        <button class="btn btn-tiny" data-promote="${p.id}">В основу</button>
+      </div>
+    `).join('') || `<div class="news-item">Академия пуста — набор в конце сезона</div>`;
   }
 
   function renderInbox() {
@@ -849,12 +887,12 @@ window.EYE_UI = (() => {
     else S().recordPlayerMatch(next.match, result);
     matchPlaying = false;
     matchCtx = null;
-    renderResult(result);
     show('result');
   }
 
-  function renderResult(result) {
-    const last = S().get().lastResult || result;
+  function renderResult() {
+    const last = S().get()?.lastResult;
+    if (!last) return;
     const [hg, ag] = last.score;
     $('#result-card').innerHTML = `
       <div class="next-label">Итог матча</div>
@@ -867,6 +905,19 @@ window.EYE_UI = (() => {
         ${last.prize != null ? `Призовые ${S().money(last.prize)}${last.income ? ' · касса ' + S().money(last.income) : ''}${last.competition ? ' · ' + last.competition : ''}` : ''}
       </div>
     `;
+    const press = S().pendingPress();
+    const card = $('#press-card');
+    if (press && press.options?.length) {
+      card.hidden = false;
+      card.innerHTML = `
+        <strong>${press.title}</strong>
+        <div class="hint">${press.context}</div>
+        ${press.options.map(o => `<button class="btn btn-glass" data-press="${o.id}">${o.label}</button>`).join('')}
+      `;
+    } else {
+      card.hidden = true;
+      card.innerHTML = '';
+    }
   }
 
   function bind() {
@@ -955,6 +1006,26 @@ window.EYE_UI = (() => {
         const r = S().upgradeFacility(fac.dataset.fac);
         toast(r.msg); renderClub(); return;
       }
+      const staff = e.target.closest('[data-staff]');
+      if (staff) {
+        const r = S().hireStaff(staff.dataset.staff);
+        toast(r.msg); renderClub(); return;
+      }
+      const promote = e.target.closest('[data-promote]');
+      if (promote) {
+        const r = S().promoteYouth(promote.dataset.promote);
+        toast(r.msg);
+        $('#youth-msg').textContent = r.msg;
+        renderYouth();
+        return;
+      }
+      const press = e.target.closest('[data-press]');
+      if (press) {
+        const r = S().answerPress(press.dataset.press);
+        toast(r.msg);
+        renderResult();
+        return;
+      }
     });
 
     $('#btn-new')?.addEventListener('click', () => show('create'));
@@ -1039,9 +1110,10 @@ window.EYE_UI = (() => {
       $(`#${id}`)?.addEventListener('input', () => renderTransfers('market'));
       $(`#${id}`)?.addEventListener('change', () => renderTransfers('market'));
     });
-    $('#btn-youth')?.addEventListener('click', () => {
+    $('#btn-youth-best')?.addEventListener('click', () => {
       const r = S().promoteYouth();
-      $('#club-msg').textContent = r.msg; toast(r.msg);
+      $('#youth-msg').textContent = r.msg; toast(r.msg);
+      if (r.ok) renderYouth();
     });
     $('#btn-reset')?.addEventListener('click', () => {
       if (confirm('Сбросить карьеру EYE?')) { S().clear(); show('home'); }
