@@ -299,6 +299,39 @@ input:focus, select:focus { border-color: rgba(94,234,212,.45); box-shadow: 0 0 
   border-radius: 999px; border: 1px solid rgba(94,234,212,.25);
 }
 
+.lobby-hero {
+  text-align: center;
+  display: grid;
+  gap: 8px;
+  padding: 12px 0 4px;
+}
+.lobby-title {
+  font-family: var(--display);
+  font-size: clamp(28px, 8vw, 40px);
+  font-weight: 800;
+  letter-spacing: -.04em;
+}
+.lobby-user {
+  padding: 14px 16px;
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+}
+.lobby-user strong { font-family: var(--display); display: block; }
+.lobby-user small { color: var(--muted); font-size: 12px; }
+.lobby-actions {
+  display: grid;
+  gap: 12px;
+  width: min(360px, 100%);
+  margin: 8px auto 0;
+}
+#screen-lobby.entry-backdrop {
+  filter: saturate(.85) brightness(.72);
+  pointer-events: none;
+}
+#app.entry-open #screen-lobby.entry-backdrop .lobby-actions,
+#app.entry-open #screen-lobby.entry-backdrop .lobby-user {
+  opacity: .35;
+}
+
 .home-actions { display: grid; gap: 12px; width: min(320px, 100%); margin: 0 auto; }
 .home-foot { text-align: center; font-size: 12px; letter-spacing: .04em; text-transform: uppercase; }
 
@@ -1258,7 +1291,8 @@ input:focus, select:focus { border-color: rgba(94,234,212,.45); box-shadow: 0 0 
   }
 
   /* Home / boot: home goes full-bleed in stage */
-  #screen-boot.active {
+  #screen-boot.active,
+  #screen-lobby.active {
     max-width: 520px;
     margin: 0 auto;
     width: 100%;

@@ -90,15 +90,29 @@
           <h1 class="brand">EYE</h1>
           <p class="lede">Симулятор футбольного менеджера. Глаз видит поле целиком.</p>
         </header>
-        <div class="home-user glass-panel" id="home-user" hidden></div>
         <div class="home-actions">
           <button class="btn btn-primary btn-glow" id="btn-auth" type="button" hidden>Войти</button>
           <button class="btn btn-glass" id="btn-register" type="button" hidden>Создать аккаунт</button>
-          <button class="btn btn-primary btn-glow" id="btn-new" type="button" hidden>Новая карьера</button>
-          <button class="btn btn-glass" id="btn-continue" type="button" hidden>Продолжить</button>
-          <button class="btn btn-glass" id="btn-logout" type="button" hidden>Выйти</button>
         </div>
       </div>
+    </section>
+
+    <!-- LOBBY (after auth — career gate inside the game) -->
+    <section id="screen-lobby" class="screen">
+      <header class="lobby-hero">
+        <div class="eye-logo hero-eye" style="width:64px;height:64px;margin:0 auto 8px">
+          <img src="assets/eye.svg" alt="" width="56" height="56" />
+        </div>
+        <h1 class="lobby-title">Карьера</h1>
+        <p class="hint" id="lobby-lede">Выберите сохранение или начните новый путь.</p>
+      </header>
+      <div class="lobby-user glass-panel" id="lobby-user"></div>
+      <div class="lobby-actions">
+        <button class="btn btn-primary btn-glow" id="btn-continue" type="button" hidden>Продолжить</button>
+        <button class="btn btn-glass" id="btn-new" type="button">Новая карьера</button>
+        <button class="btn btn-glass" id="btn-logout" type="button">Выйти из аккаунта</button>
+      </div>
+      <p class="hint" id="lobby-hint"></p>
     </section>
 
     <!-- LOGIN (window over home) -->
@@ -138,13 +152,13 @@
       </div>
     </section>
 
-    <!-- CREATE (window over home, stepped) -->
+    <!-- CREATE (window over lobby, stepped) -->
     <section id="screen-create" class="screen entry-screen" aria-hidden="true">
-      <button type="button" class="entry-scrim" data-nav="home" aria-label="Закрыть"></button>
+      <button type="button" class="entry-scrim" data-nav="lobby" aria-label="Закрыть"></button>
       <div class="entry-panel entry-panel-wide glass-panel" role="dialog" aria-modal="true" aria-labelledby="create-title">
         <header class="entry-head">
           <h2 id="create-title">Новая карьера</h2>
-          <button type="button" class="entry-close" data-nav="home" aria-label="Закрыть">×</button>
+          <button type="button" class="entry-close" data-nav="lobby" aria-label="Закрыть">×</button>
         </header>
         <div class="create-stepper" id="create-stepper" role="tablist" aria-label="Шаги">
           <button type="button" class="create-step active" data-goto-step="1" role="tab" aria-selected="true">1 · Лига</button>

@@ -32,6 +32,9 @@ window.EYE_UI = (() => {
   const ENTRY_WINDOWS = new Set(['auth', 'register', 'create']);
 
   function show(id) {
+    if (id === 'home' && A().isLoggedIn()) id = 'lobby';
+    if (id === 'lobby' && !A().isLoggedIn()) id = 'home';
+
     const isWindow = ENTRY_WINDOWS.has(id);
 
     $all('.screen').forEach(s => {
@@ -40,10 +43,11 @@ window.EYE_UI = (() => {
     });
 
     if (isWindow) {
-      const home = document.getElementById('screen-home');
+      const backdropId = (id === 'create') ? 'lobby' : 'home';
+      const backdrop = document.getElementById('screen-' + backdropId);
       const win = document.getElementById('screen-' + id);
-      if (home) {
-        home.classList.add('active', 'entry-backdrop');
+      if (backdrop) {
+        backdrop.classList.add('active', 'entry-backdrop');
       }
       if (win) {
         win.classList.add('active', 'entry-open');
@@ -71,14 +75,17 @@ window.EYE_UI = (() => {
 
     const app = document.getElementById('app');
     if (app) {
-      app.classList.toggle('menu-mode', ['boot', 'home', 'auth', 'register', 'create'].includes(id));
+      app.classList.toggle('menu-mode', ['boot', 'home', 'auth', 'register', 'create', 'lobby'].includes(id));
       app.classList.toggle('match-mode', id === 'match');
       app.classList.toggle('entry-open', isWindow);
     }
 
     window.scrollTo(0, 0);
     if (id === 'create') createStep = 1;
-    if (isWindow) renderHome();
+    if (isWindow) {
+      if (id === 'create') renderLobby();
+      else renderHome();
+    }
     refresh(id);
   }
 
@@ -153,7 +160,7 @@ window.EYE_UI = (() => {
 
   function refresh(id) {
     const st = S().get();
-    if (!st && !['boot','home','create','auth','register'].includes(id)) return;
+    if (!st && !['boot','home','create','auth','register','lobby'].includes(id)) return;
     if (id === 'hub') renderHub();
     if (id === 'squad') renderSquad();
     if (id === 'tactics') renderTactics();
@@ -181,6 +188,7 @@ window.EYE_UI = (() => {
     if (id === 'auth') renderAuth();
     if (id === 'register') renderRegister();
     if (id === 'home') renderHome();
+    if (id === 'lobby') renderLobby();
   }
 
   function renderAuth() {
@@ -192,32 +200,34 @@ window.EYE_UI = (() => {
   }
 
   async function renderHome() {
-    const logged = A().isLoggedIn();
-    const user = A().getUser();
-    const box = $('#home-user');
     const btnAuth = $('#btn-auth');
     const btnReg = $('#btn-register');
-    const btnNew = $('#btn-new');
-    const btnCont = $('#btn-continue');
-    const btnOut = $('#btn-logout');
+    if (btnAuth) btnAuth.hidden = false;
+    if (btnReg) btnReg.hidden = false;
+    syncDesktopUser();
+  }
 
-    if (logged && user) {
-      box.hidden = false;
+  async function renderLobby() {
+    const user = A().getUser();
+    const box = $('#lobby-user');
+    if (box && user) {
       box.innerHTML = `<div><strong>${user.name || user.login}</strong><small>@${user.login}</small></div>`;
-      btnAuth.hidden = true;
-      if (btnReg) btnReg.hidden = true;
-      btnNew.hidden = false;
-      btnOut.hidden = false;
-      const local = !!S().load();
-      btnCont.hidden = !(local || cloudHasCareer);
-      btnCont.textContent = local ? 'Продолжить' : 'Загрузить из облака';
-    } else {
-      box.hidden = true;
-      btnAuth.hidden = false;
-      if (btnReg) btnReg.hidden = false;
-      btnNew.hidden = true;
-      btnCont.hidden = true;
-      btnOut.hidden = true;
+    }
+    let local = !!S().get();
+    if (!local) {
+      try { local = !!localStorage.getItem(S().KEY); } catch { local = false; }
+    }
+    const btnCont = $('#btn-continue');
+    const hint = $('#lobby-hint');
+    if (btnCont) {
+      const canContinue = local || cloudHasCareer;
+      btnCont.hidden = !canContinue;
+      btnCont.textContent = local ? 'Продолжить карьеру' : 'Загрузить из облака';
+    }
+    if (hint) {
+      hint.textContent = (local || cloudHasCareer)
+        ? 'Можно продолжить сохранение или начать заново.'
+        : 'Сохранений нет — начните новую карьеру.';
     }
     syncDesktopUser();
   }
@@ -1704,21 +1714,19 @@ window.EYE_UI = (() => {
       }
     });
 
-    $('#btn-auth')?.addEventListener('click', () => show('auth'));
-    $('#btn-register')?.addEventListener('click', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      show('register');
-    });
-    // Delegated fallback — home buttons must always open windows
+    // Home entry actions — capture so nothing can swallow the tap
     document.body.addEventListener('click', (e) => {
-      if (e.target.closest('#btn-register')) {
+      const reg = e.target.closest('#btn-register');
+      if (reg) {
         e.preventDefault();
+        e.stopPropagation();
         show('register');
         return;
       }
-      if (e.target.closest('#btn-auth')) {
+      const auth = e.target.closest('#btn-auth');
+      if (auth) {
         e.preventDefault();
+        e.stopPropagation();
         show('auth');
       }
     }, true);
@@ -1794,7 +1802,7 @@ window.EYE_UI = (() => {
         cloudHasCareer = !!data.hasCareer;
         $('#login-msg').textContent = '';
         toast('Добро пожаловать, ' + (data.user.name || data.user.login));
-        show('home');
+        show('lobby');
       } catch (err) {
         $('#login-msg').textContent = err.message;
       }
@@ -1819,7 +1827,8 @@ window.EYE_UI = (() => {
     });
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape' && document.getElementById('app')?.classList.contains('entry-open')) {
-        show('home');
+        const createOpen = $('#screen-create')?.classList.contains('entry-open');
+        show(createOpen && A().isLoggedIn() ? 'lobby' : 'home');
       }
     });
     $('#form-create')?.addEventListener('submit', async (e) => {
@@ -1953,7 +1962,10 @@ window.EYE_UI = (() => {
       if (r.ok) renderYouth();
     });
     $('#btn-reset')?.addEventListener('click', () => {
-      if (confirm('Сбросить карьеру EYE?')) { S().clear(); show('home'); }
+      if (confirm('Сбросить карьеру EYE?')) {
+        S().clear();
+        show(A().isLoggedIn() ? 'lobby' : 'home');
+      }
     });
     $('#btn-save-cloud')?.addEventListener('click', () => cloudSave());
 
@@ -2004,7 +2016,8 @@ window.EYE_UI = (() => {
     }
     const me = await A().refreshMe();
     cloudHasCareer = !!me?.hasCareer;
-    show('home');
+    if (A().isLoggedIn()) show('lobby');
+    else show('home');
   }
 
   return { show, toast, boot, refresh };
