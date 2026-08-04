@@ -6,18 +6,31 @@ APP_DIR="${EYE_APP_DIR:-/opt/eye-manager}"
 PORT="${EYE_PORT:-9140}"
 SERVICE_USER="${EYE_USER:-eyemanager}"
 
-echo "[EYE] installing into $APP_DIR (port $PORT)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SRC_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+echo "[EYE] installing into $APP_DIR (port $PORT) from $SRC_DIR"
+
+if [[ ! -f "$SRC_DIR/server/server.js" ]]; then
+  echo "[EYE] ERROR: source tree missing server/server.js under $SRC_DIR" >&2
+  exit 1
+fi
 
 if ! id "$SERVICE_USER" &>/dev/null; then
   useradd --system --home "$APP_DIR" --shell /usr/sbin/nologin "$SERVICE_USER" || true
 fi
 
 mkdir -p "$APP_DIR" "$APP_DIR/server/data/saves"
-rsync -a --delete \
-  --exclude 'server/data' \
-  --exclude 'server/data-test' \
-  --exclude '.git' \
-  ./ "$APP_DIR/"
+# When already installing from inside APP_DIR, skip destructive rsync.
+if [[ "$SRC_DIR" != "$APP_DIR" ]]; then
+  rsync -a --delete \
+    --exclude 'server/data' \
+    --exclude 'server/data-test' \
+    --exclude '.git' \
+    "$SRC_DIR/" "$APP_DIR/"
+else
+  echo "[EYE] source is APP_DIR — skip rsync"
+fi
 
 chown -R "$SERVICE_USER":"$SERVICE_USER" "$APP_DIR"
 
