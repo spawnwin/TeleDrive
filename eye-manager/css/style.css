@@ -211,6 +211,9 @@ input:focus, select:focus { border-color: rgba(94,234,212,.45); box-shadow: 0 0 
   filter: saturate(.7) brightness(.55);
   animation-play-state: paused;
 }
+@media (prefers-reduced-motion: reduce) {
+  .home-hero-bg img { animation: none; transform: scale(1.04); }
+}
 .boot-track {
   width: min(220px, 60vw); height: 4px; margin-top: 20px;
   border-radius: 99px; background: rgba(255,255,255,.08); overflow: hidden;
@@ -345,6 +348,23 @@ input:focus, select:focus { border-color: rgba(94,234,212,.45); box-shadow: 0 0 
 .entry-close:hover { color: var(--ink); background: rgba(255,255,255,.1); }
 .entry-form { padding: 0; }
 .entry-form .btn { width: 100%; }
+.entry-switch {
+  text-align: center;
+  font-size: 13px;
+  color: var(--muted);
+  margin: 0;
+}
+.link-btn {
+  display: inline;
+  padding: 0;
+  min-height: 0;
+  color: var(--accent-2);
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  background: none;
+  border: 0;
+}
 
 .create-stepper {
   display: grid;

@@ -93,6 +93,7 @@
         <div class="home-user glass-panel" id="home-user" hidden></div>
         <div class="home-actions">
           <button class="btn btn-primary btn-glow" id="btn-auth" type="button" hidden>Войти</button>
+          <button class="btn btn-glass" id="btn-register" type="button" hidden>Создать аккаунт</button>
           <button class="btn btn-primary btn-glow" id="btn-new" type="button" hidden>Новая карьера</button>
           <button class="btn btn-glass" id="btn-continue" type="button" hidden>Продолжить</button>
           <button class="btn btn-glass" id="btn-logout" type="button" hidden>Выйти</button>
@@ -100,31 +101,40 @@
       </div>
     </section>
 
-    <!-- AUTH (window over home) -->
+    <!-- LOGIN (window over home) -->
     <section id="screen-auth" class="screen entry-screen" aria-hidden="true">
       <button type="button" class="entry-scrim" data-nav="home" aria-label="Закрыть"></button>
       <div class="entry-panel glass-panel" role="dialog" aria-modal="true" aria-labelledby="auth-title">
         <header class="entry-head">
-          <h2 id="auth-title">Аккаунт</h2>
+          <h2 id="auth-title">Вход</h2>
           <button type="button" class="entry-close" data-nav="home" aria-label="Закрыть">×</button>
         </header>
-        <div class="tabs" id="auth-tabs">
-          <button type="button" class="tab active" data-auth-tab="login">Вход</button>
-          <button type="button" class="tab" data-auth-tab="register">Регистрация</button>
-        </div>
         <form id="form-login" class="create-form entry-form">
           <label>Логин<input name="login" required minlength="3" maxlength="24" autocomplete="username" placeholder="login" /></label>
           <label>Пароль<input name="password" type="password" required minlength="4" autocomplete="current-password" placeholder="••••" /></label>
           <button class="btn btn-primary" type="submit">Войти</button>
           <p class="hint" id="login-msg"></p>
         </form>
-        <form id="form-register" class="create-form entry-form" hidden>
+        <p class="entry-switch">Нет аккаунта? <button type="button" class="link-btn" data-nav="register">Создать</button></p>
+      </div>
+    </section>
+
+    <!-- REGISTER (window over home) -->
+    <section id="screen-register" class="screen entry-screen" aria-hidden="true">
+      <button type="button" class="entry-scrim" data-nav="home" aria-label="Закрыть"></button>
+      <div class="entry-panel glass-panel" role="dialog" aria-modal="true" aria-labelledby="register-title">
+        <header class="entry-head">
+          <h2 id="register-title">Создать аккаунт</h2>
+          <button type="button" class="entry-close" data-nav="home" aria-label="Закрыть">×</button>
+        </header>
+        <form id="form-register" class="create-form entry-form">
           <label>Логин<input name="login" required minlength="3" maxlength="24" autocomplete="username" placeholder="login" /></label>
           <label>Имя менеджера<input name="name" maxlength="32" autocomplete="nickname" placeholder="Как вас зовут" /></label>
           <label>Пароль<input name="password" type="password" required minlength="4" autocomplete="new-password" placeholder="минимум 4 символа" /></label>
-          <button class="btn btn-primary" type="submit">Создать аккаунт</button>
+          <button class="btn btn-primary" type="submit">Зарегистрироваться</button>
           <p class="hint" id="register-msg"></p>
         </form>
+        <p class="entry-switch">Уже есть аккаунт? <button type="button" class="link-btn" data-nav="auth">Войти</button></p>
       </div>
     </section>
 
