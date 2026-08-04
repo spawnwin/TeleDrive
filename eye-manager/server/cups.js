@@ -54,6 +54,8 @@ function createCupsModule({ dataDir, usersDb, saveUsers, publicUser }) {
   const ARCHIVE_FILE = path.join(dataDir, 'cups_archive.json');
   const TICK_MS = Number(process.env.EYE_CUP_TICK_MS || 5 * 60 * 1000);
   const OPEN_WINDOW_MS = Number(process.env.EYE_CUP_OPEN_MS || 5 * 60 * 1000);
+  const LIVE_ROUND_MS = Number(process.env.EYE_CUP_LIVE_MS || 20 * 1000);
+  const LIVE_POLL_MS = Math.min(5000, Math.max(1000, Math.floor(LIVE_ROUND_MS / 4)));
 
   function loadCups() {
     const db = load(CUPS_FILE, { cups: {}, meta: { lastTick: 0 } });
@@ -101,16 +103,20 @@ function createCupsModule({ dataDir, usersDb, saveUsers, publicUser }) {
 
   function enrichPublic(u) {
     ensureUserProgress(u);
-    return {
+    const out = {
       ...publicUser(u),
       level: u.level,
       xp: u.xp,
       xpNext: xpToNext(u.level, u.xp),
+      xpThresholds: XP_THRESHOLDS,
       cupsPlayed: u.cupsPlayed,
       cupsWon: u.cupsWon,
       role: u.role || 'user',
       isBot: !!u.isBot
     };
+    if (u.isBot && u.strength != null) out.strength = u.strength;
+    if (u.clubName) out.clubName = u.clubName;
+    return out;
   }
 
   function awardXp(userId, amount, reason) {
@@ -193,6 +199,9 @@ function createCupsModule({ dataDir, usersDb, saveUsers, publicUser }) {
       })),
       champion: c.champion || null,
       round: c.round || null,
+      nextRoundAt: c.nextRoundAt || null,
+      aliveCount: Array.isArray(c.alive) ? c.alive.length : null,
+      xpAwards: c.xpAwards || null,
       bracket: c.bracket || [],
       history: c.history || []
     };
@@ -292,46 +301,44 @@ function createCupsModule({ dataDir, usersDb, saveUsers, publicUser }) {
     return `R${playersLeft}`;
   }
 
-  function runTournament(cup) {
-    let entrants = [...cup.entrants];
-    cup.history = [];
-    cup.status = 'live';
-    cup.startedAt = Date.now();
-    while (entrants.length >= 2) {
-      const ties = buildKnockout(entrants);
-      const label = roundLabel(cup.size, ties.length);
-      cup.round = label;
-      const winners = [];
-      ties.forEach((m) => {
-        const score = simScore(m.home.strength || 60, m.away.strength || 60);
-        m.score = score;
-        m.played = true;
-        m.winnerId = score[0] > score[1] ? m.home.userId : m.away.userId;
-        const winner = m.winnerId === m.home.userId ? m.home : m.away;
-        winners.push(winner);
-      });
-      cup.history.push({
-        round: label,
-        ties: ties.map((m) => ({
-          id: m.id,
-          home: { userId: m.home.userId, name: m.home.name, clubName: m.home.clubName, isBot: m.home.isBot },
-          away: { userId: m.away.userId, name: m.away.name, clubName: m.away.clubName, isBot: m.away.isBot },
-          score: m.score,
-          winnerId: m.winnerId
-        }))
-      });
-      cup.bracket = cup.history[cup.history.length - 1].ties;
-      entrants = winners;
-    }
-    const champ = entrants[0];
+  function playRound(cup, entrants) {
+    const ties = buildKnockout(entrants);
+    const label = roundLabel(cup.size || entrants.length, ties.length);
+    cup.round = label;
+    const winners = [];
+    ties.forEach((m) => {
+      const score = simScore(m.home.strength || 60, m.away.strength || 60);
+      m.score = score;
+      m.played = true;
+      m.winnerId = score[0] > score[1] ? m.home.userId : m.away.userId;
+      winners.push(m.winnerId === m.home.userId ? m.home : m.away);
+    });
+    cup.history.push({
+      round: label,
+      ties: ties.map((m) => ({
+        id: m.id,
+        home: { userId: m.home.userId, name: m.home.name, clubName: m.home.clubName, isBot: m.home.isBot },
+        away: { userId: m.away.userId, name: m.away.name, clubName: m.away.clubName, isBot: m.away.isBot },
+        score: m.score,
+        winnerId: m.winnerId
+      }))
+    });
+    cup.bracket = cup.history[cup.history.length - 1].ties;
+    return winners;
+  }
+
+  function finalizeCup(cup) {
+    const champ = (cup.alive && cup.alive[0]) || null;
     cup.champion = champ
       ? { userId: champ.userId, name: champ.name, clubName: champ.clubName, isBot: !!champ.isBot, level: champ.level }
       : null;
     cup.status = 'finished';
     cup.finishedAt = Date.now();
     cup.round = 'Чемпион';
+    cup.nextRoundAt = null;
+    cup.alive = champ ? [champ] : [];
+    cup.xpAwards = {};
 
-    // XP + stats for humans
     const udb = usersDb();
     let dirty = false;
     (cup.entrants || []).forEach((e) => {
@@ -357,9 +364,56 @@ function createCupsModule({ dataDir, usersDb, saveUsers, publicUser }) {
       }
       u.xp = (u.xp || 0) + xpGain;
       u.level = levelFromXp(u.xp);
+      cup.xpAwards[e.userId] = xpGain;
       dirty = true;
     });
     if (dirty) saveUsers(udb);
+  }
+
+  function beginTournament(cup) {
+    cup.history = [];
+    cup.status = 'live';
+    cup.startedAt = Date.now();
+    cup.champion = null;
+    cup.xpAwards = {};
+    cup.alive = [...cup.entrants];
+    const winners = playRound(cup, cup.alive);
+    cup.alive = winners;
+    if (cup.alive.length <= 1) {
+      finalizeCup(cup);
+    } else {
+      cup.nextRoundAt = Date.now() + LIVE_ROUND_MS;
+    }
+  }
+
+  function advanceLiveCup(cup, now = Date.now(), { force = false } = {}) {
+    if (cup.status !== 'live') return null;
+    if (!force && cup.nextRoundAt && now < cup.nextRoundAt) return null;
+    if (!cup.alive || cup.alive.length < 2) {
+      finalizeCup(cup);
+      return { action: 'finished', id: cup.id, champion: cup.champion };
+    }
+    const winners = playRound(cup, cup.alive);
+    cup.alive = winners;
+    if (cup.alive.length <= 1) {
+      finalizeCup(cup);
+      return { action: 'finished', id: cup.id, champion: cup.champion };
+    }
+    cup.nextRoundAt = now + LIVE_ROUND_MS;
+    return { action: 'round', id: cup.id, round: cup.round, nextRoundAt: cup.nextRoundAt };
+  }
+
+  function advanceLiveCups({ force = false } = {}) {
+    const db = loadCups();
+    const now = Date.now();
+    const results = [];
+    Object.values(db.cups).forEach((cup) => {
+      if (cup.status !== 'live') return;
+      const r = advanceLiveCup(cup, now, { force });
+      if (r) results.push(r);
+    });
+    if (results.length) saveCups(db);
+    return { ok: true, at: now, results };
   }
 
   function archiveAndDelete(db, cup, reason) {
@@ -395,7 +449,6 @@ function createCupsModule({ dataDir, usersDb, saveUsers, publicUser }) {
       const bots = pickBots(br, need, exclude);
       cup.entrants.push(...bots);
     }
-    // If still short (not enough bots), shrink to nearest power of 2 ≥ humans+bots, min 2
     let n = cup.entrants.length;
     if (n < 2) {
       archiveAndDelete(db, cup, 'not_enough_players');
@@ -405,8 +458,14 @@ function createCupsModule({ dataDir, usersDb, saveUsers, publicUser }) {
     while (pow * 2 <= n) pow *= 2;
     if (pow < n) cup.entrants = cup.entrants.slice(0, pow);
     cup.size = cup.entrants.length;
-    runTournament(cup);
-    return { action: 'started', id: cup.id, champion: cup.champion };
+    beginTournament(cup);
+    return {
+      action: 'started',
+      id: cup.id,
+      status: cup.status,
+      round: cup.round,
+      champion: cup.champion || null
+    };
   }
 
   function tick() {
@@ -419,7 +478,12 @@ function createCupsModule({ dataDir, usersDb, saveUsers, publicUser }) {
       if (now < cup.startAt) return;
       results.push(tryStartCup(db, cup));
     });
-    // Drop finished cups older than 2 hours from active list into soft archive keep
+    Object.values(db.cups).forEach((cup) => {
+      if (cup.status === 'live') {
+        const r = advanceLiveCup(cup, now);
+        if (r) results.push(r);
+      }
+    });
     Object.values(db.cups).forEach((cup) => {
       if (cup.status === 'finished' && cup.finishedAt && now - cup.finishedAt > 2 * 3600e3) {
         archiveAndDelete(db, cup, 'finished_expired');
@@ -429,6 +493,7 @@ function createCupsModule({ dataDir, usersDb, saveUsers, publicUser }) {
     ensureOpenCups(db);
     db.meta.lastTick = now;
     db.meta.nextTick = now + TICK_MS;
+    db.meta.liveRoundMs = LIVE_ROUND_MS;
     saveCups(db);
     return { ok: true, at: now, results, open: Object.values(db.cups).filter((c) => c.status === 'open').length };
   }
@@ -447,26 +512,27 @@ function createCupsModule({ dataDir, usersDb, saveUsers, publicUser }) {
     return c ? publicCup(c) : null;
   }
 
-  function joinCup(cupId, user, clubName) {
+  function joinCup(cupId, user, clubName, opts = {}) {
     ensureUserProgress(user);
     const db = loadCups();
     const cup = db.cups[cupId];
     if (!cup) return { ok: false, error: 'Кубок не найден' };
     if (cup.status !== 'open') return { ok: false, error: 'Кубок уже закрыт' };
-    if (user.level < cup.minLevel || user.level > cup.maxLevel) {
+    const isAdmin = user.role === 'admin' || user.login === 'admin';
+    if (!isAdmin && (user.level < cup.minLevel || user.level > cup.maxLevel)) {
       return { ok: false, error: `Нужен уровень ${cup.minLevel}–${cup.maxLevel} (у вас ${user.level})` };
     }
     if (cup.entrants.some((e) => e.userId === user.id)) {
       return { ok: false, error: 'Вы уже в этом кубке' };
     }
-    // one open cup at a time per human
     const already = Object.values(db.cups).some(
       (c) => c.status === 'open' && c.entrants.some((e) => e.userId === user.id && !e.isBot)
     );
     if (already) return { ok: false, error: 'Сначала выйдите из другого открытого кубка' };
     if (cup.entrants.length >= cup.size) return { ok: false, error: 'Мест нет' };
 
-    let strength = 58 + (user.level || 1) * 2;
+    let strength = Number(opts.strength) || 0;
+    let resolvedClub = clubName;
     try {
       const saveFile = path.join(dataDir, 'saves', `user_${user.id}.json`);
       if (fs.existsSync(saveFile)) {
@@ -474,23 +540,26 @@ function createCupsModule({ dataDir, usersDb, saveUsers, publicUser }) {
         const st = payload.state;
         const me = (st?.clubs || []).find((c) => c.id === st.clubId);
         if (me?.squad?.length) {
-          const avg = me.squad.reduce((s, p) => s + (p.ovr || 60), 0) / me.squad.length;
-          strength = Math.round(avg);
-          clubName = clubName || me.name;
+          resolvedClub = resolvedClub || me.name;
+          const xi = (me.lineup || []).filter(Boolean);
+          const pool = xi.length >= 11 ? xi.slice(0, 11) : [...me.squad].sort((a, b) => (b.ovr || 0) - (a.ovr || 0)).slice(0, 11);
+          if (!strength && pool.length) {
+            strength = Math.round(pool.reduce((s, p) => s + (p.ovr || 60), 0) / pool.length);
+          }
         }
       }
     } catch {}
+    if (!strength) strength = 58 + (user.level || 1) * 2;
 
     cup.entrants.push({
       userId: user.id,
       name: user.name,
-      clubName: clubName || `${user.name} FC`,
+      clubName: resolvedClub || `${user.name} FC`,
       level: user.level || 1,
       isBot: false,
       strength,
       joinedAt: Date.now()
     });
-    // Early start if full
     if (cup.entrants.length >= cup.size) {
       const r = tryStartCup(db, cup);
       saveCups(db);
@@ -533,6 +602,35 @@ function createCupsModule({ dataDir, usersDb, saveUsers, publicUser }) {
     return { ok: true, ...r, cup: publicCup(db.cups[cupId] || cup) };
   }
 
+  function adminAdvanceCup(cupId) {
+    const db = loadCups();
+    const cup = db.cups[cupId];
+    if (!cup) return { ok: false, error: 'Нет кубка' };
+    if (cup.status !== 'live') return { ok: false, error: 'Кубок не live' };
+    const r = advanceLiveCup(cup, Date.now(), { force: true });
+    saveCups(db);
+    return { ok: true, ...(r || { action: 'noop' }), cup: publicCup(db.cups[cupId] || cup) };
+  }
+
+  function adminFinishCup(cupId) {
+    const db = loadCups();
+    const cup = db.cups[cupId];
+    if (!cup) return { ok: false, error: 'Нет кубка' };
+    if (cup.status === 'open') {
+      const r = tryStartCup(db, cup);
+      if (r.action === 'archived') {
+        saveCups(db);
+        return { ok: true, ...r, cup: null };
+      }
+    }
+    let guard = 0;
+    while (db.cups[cupId] && db.cups[cupId].status === 'live' && guard++ < 12) {
+      advanceLiveCup(db.cups[cupId], Date.now(), { force: true });
+    }
+    saveCups(db);
+    return { ok: true, action: 'finished', cup: publicCup(db.cups[cupId]) };
+  }
+
   function adminDeleteCup(cupId) {
     const db = loadCups();
     const cup = db.cups[cupId];
@@ -557,6 +655,8 @@ function createCupsModule({ dataDir, usersDb, saveUsers, publicUser }) {
       lastTick: db.meta?.lastTick || 0,
       nextTick: db.meta?.nextTick || 0,
       tickMs: TICK_MS,
+      liveRoundMs: LIVE_ROUND_MS,
+      xpThresholds: XP_THRESHOLDS,
       brackets: LEVEL_BRACKETS,
       sizes: CUP_SIZES
     };
@@ -567,14 +667,16 @@ function createCupsModule({ dataDir, usersDb, saveUsers, publicUser }) {
     const db = loadCups();
     ensureOpenCups(db);
     saveCups(db);
-    // Initial tick after short delay, then every TICK_MS
     setTimeout(() => {
       try { tick(); } catch (e) { console.error('[EYE cups] tick', e); }
       setInterval(() => {
         try { tick(); } catch (e) { console.error('[EYE cups] tick', e); }
       }, TICK_MS);
+      setInterval(() => {
+        try { advanceLiveCups(); } catch (e) { console.error('[EYE cups] live', e); }
+      }, LIVE_POLL_MS);
     }, 3000);
-    console.log(`[EYE cups] scheduler every ${TICK_MS / 1000}s · sizes ${CUP_SIZES.join('/')} · brackets ${LEVEL_BRACKETS.length}`);
+    console.log(`[EYE cups] scheduler every ${TICK_MS / 1000}s · live round ${LIVE_ROUND_MS / 1000}s · sizes ${CUP_SIZES.join('/')} · brackets ${LEVEL_BRACKETS.length}`);
   }
 
   return {
@@ -589,12 +691,15 @@ function createCupsModule({ dataDir, usersDb, saveUsers, publicUser }) {
     awardXp,
     ensureBotPool,
     tick,
+    advanceLiveCups,
     listCups,
     getCup,
     joinCup,
     leaveCup,
     adminCreateCup,
     adminForceStart,
+    adminAdvanceCup,
+    adminFinishCup,
     adminDeleteCup,
     stats,
     startScheduler,

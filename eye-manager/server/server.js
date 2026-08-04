@@ -412,7 +412,7 @@ const server = http.createServer(async (req, res) => {
     const id = pathname.split('/')[3];
     try {
       const body = JSON.parse((await readBody(req)).toString('utf8') || '{}');
-      const r = cups.joinCup(id, auth.user, body.clubName);
+      const r = cups.joinCup(id, auth.user, body.clubName, { strength: body.strength });
       if (!r.ok) return json(res, 400, r);
       return json(res, 200, r);
     } catch (e) {
@@ -499,6 +499,22 @@ const server = http.createServer(async (req, res) => {
     if (!requireAdmin(req, res)) return;
     const id = pathname.split('/')[4];
     const r = cups.adminForceStart(id);
+    if (!r.ok) return json(res, 400, r);
+    return json(res, 200, r);
+  }
+
+  if (pathname.match(/^\/api\/admin\/cups\/[^/]+\/advance$/) && req.method === 'POST') {
+    if (!requireAdmin(req, res)) return;
+    const id = pathname.split('/')[4];
+    const r = cups.adminAdvanceCup(id);
+    if (!r.ok) return json(res, 400, r);
+    return json(res, 200, r);
+  }
+
+  if (pathname.match(/^\/api\/admin\/cups\/[^/]+\/finish$/) && req.method === 'POST') {
+    if (!requireAdmin(req, res)) return;
+    const id = pathname.split('/')[4];
+    const r = cups.adminFinishCup(id);
     if (!r.ok) return json(res, 400, r);
     return json(res, 200, r);
   }

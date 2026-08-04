@@ -33,10 +33,13 @@ window.EYE_ONLINE = (() => {
     return request('api/cups/' + encodeURIComponent(id));
   }
 
-  function joinCup(id, clubName) {
+  function joinCup(id, clubName, strength) {
     return request('api/cups/' + encodeURIComponent(id) + '/join', {
       method: 'POST',
-      body: { clubName: clubName || undefined }
+      body: {
+        clubName: clubName || undefined,
+        strength: strength != null ? Number(strength) : undefined
+      }
     });
   }
 
@@ -76,6 +79,14 @@ window.EYE_ONLINE = (() => {
     return request('api/admin/cups/' + encodeURIComponent(id) + '/start', { method: 'POST', body: {} });
   }
 
+  function adminAdvanceCup(id) {
+    return request('api/admin/cups/' + encodeURIComponent(id) + '/advance', { method: 'POST', body: {} });
+  }
+
+  function adminFinishCup(id) {
+    return request('api/admin/cups/' + encodeURIComponent(id) + '/finish', { method: 'POST', body: {} });
+  }
+
   function adminDeleteCup(id) {
     return request('api/admin/cups/' + encodeURIComponent(id), { method: 'DELETE' });
   }
@@ -95,6 +106,16 @@ window.EYE_ONLINE = (() => {
     return s || '—';
   }
 
+  function archiveReasonRu(reason) {
+    const map = {
+      no_humans: 'Нет реальных игроков',
+      not_enough_players: 'Мало участников',
+      finished_expired: 'Истёк срок итогов',
+      admin_delete: 'Удалён админом'
+    };
+    return map[reason] || reason || '—';
+  }
+
   function formatEta(ms) {
     if (ms == null || Number.isNaN(ms)) return '—';
     const sec = Math.max(0, Math.floor(ms / 1000));
@@ -110,7 +131,7 @@ window.EYE_ONLINE = (() => {
   return {
     listCups, getCup, joinCup, leaveCup, meta,
     adminStats, adminUsers, adminBots, adminEnsureBots,
-    adminCups, adminCreateCup, adminStartCup, adminDeleteCup,
-    adminTick, adminSetLevel, statusLabel, formatEta
+    adminCups, adminCreateCup, adminStartCup, adminAdvanceCup, adminFinishCup, adminDeleteCup,
+    adminTick, adminSetLevel, statusLabel, archiveReasonRu, formatEta
   };
 })();

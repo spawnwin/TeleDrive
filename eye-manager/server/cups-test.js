@@ -35,14 +35,12 @@ describe('cups system', () => {
     const r = cups.tick();
     assert.equal(r.ok, true);
     const open = cups.listCups({ status: 'open' });
-    // 3 sizes × 5 brackets
     assert.equal(open.length, 15);
   });
 
   it('archives cups with no humans at start', () => {
     const open = cups.listCups({ status: 'open' })[0];
     assert.ok(open);
-    // Force start time in the past via admin recreate
     const made = cups.adminCreateCup({ size: 4, bracketId: open.bracketId, startInMs: -1000 });
     const beforeArch = cups.loadArchive().entries.length;
     const r = cups.tick();
@@ -51,7 +49,7 @@ describe('cups system', () => {
     assert.ok(cups.loadArchive().entries.length > beforeArch);
   });
 
-  it('starts cup when human joined and fills with bots', () => {
+  it('starts live then finishes across rounds with bots', () => {
     users.users.u1 = {
       id: 'u1', login: 'player1', name: 'Игрок', role: 'user', isBot: false,
       level: 1, xp: 0, cupsPlayed: 0, cupsWon: 0
@@ -61,20 +59,26 @@ describe('cups system', () => {
     assert.equal(join.ok, true);
     assert.equal(join.cup.humans, 1);
 
-    // Force start
     const started = cups.adminForceStart(cup.id);
     assert.equal(started.ok, true);
     assert.equal(started.action, 'started');
-    const liveOrDone = cups.getCup(cup.id);
-    assert.ok(liveOrDone);
-    assert.equal(liveOrDone.status, 'finished');
-    assert.ok(liveOrDone.champion);
-    assert.ok(liveOrDone.history.length >= 1);
+    let cur = cups.getCup(cup.id);
+    assert.ok(cur);
+    assert.equal(cur.status, 'live');
+    assert.ok(cur.history.length >= 1);
+    assert.equal(cur.bots, 3);
+
+    const done = cups.adminFinishCup(cup.id);
+    assert.equal(done.ok, true);
+    cur = cups.getCup(cup.id);
+    assert.equal(cur.status, 'finished');
+    assert.ok(cur.champion);
     assert.equal(users.users.u1.cupsPlayed, 1);
     assert.ok(users.users.u1.xp > 0);
+    assert.ok(cur.xpAwards && cur.xpAwards.u1 > 0);
   });
 
-  it('blocks join outside level bracket', () => {
+  it('blocks join outside level bracket for normal users', () => {
     users.users.u2 = {
       id: 'u2', login: 'high', name: 'Хай', role: 'user', isBot: false,
       level: 9, xp: 5200, cupsPlayed: 0, cupsWon: 0
@@ -83,5 +87,16 @@ describe('cups system', () => {
     const r = cups.joinCup(cup.id, users.users.u2, 'High FC');
     assert.equal(r.ok, false);
     assert.match(r.error, /уровень/i);
+  });
+
+  it('allows admin to join any bracket', () => {
+    users.users.admin = {
+      id: 'admin', login: 'admin', name: 'Админ', role: 'admin', isBot: false,
+      level: 10, xp: 7500, cupsPlayed: 0, cupsWon: 0
+    };
+    const cup = cups.adminCreateCup({ size: 4, bracketId: 'l1_2', startInMs: 120_000 });
+    const r = cups.joinCup(cup.id, users.users.admin, 'Admin FC');
+    assert.equal(r.ok, true);
+    assert.equal(r.cup.humans, 1);
   });
 });
