@@ -728,14 +728,14 @@ export function Messenger() {
         : 'chats'
 
   return (
-    <div className="relative flex h-[100dvh] w-full overflow-hidden bg-background">
+    <div className="aurora-chats relative flex h-[100dvh] w-full overflow-hidden">
       {swipeHintVisible && (
         <div
-          className="pointer-events-none absolute inset-y-0 left-0 z-[12000] flex w-14 items-center justify-center bg-gradient-to-r from-primary/25 to-transparent xl:hidden"
+          className="pointer-events-none absolute inset-y-0 left-0 z-[12000] flex w-14 items-center justify-center bg-gradient-to-r from-[#3aa0ff]/25 to-transparent xl:hidden"
           style={{ opacity: swipeHintOpacity }}
           aria-hidden
         >
-          <ArrowLeft className="h-5 w-5 text-primary" />
+          <ArrowLeft className="h-5 w-5 text-[#3aa0ff]" />
         </div>
       )}
         {/* Sidebar */}
@@ -746,7 +746,7 @@ export function Messenger() {
               : activeChatId
                 ? 'hidden xl:flex'
                 : 'flex'
-          } w-full shrink-0 flex-col border-r border-border xl:w-[360px] 2xl:w-[400px]`}
+          } w-full shrink-0 flex-col border-r border-white/[0.08] xl:w-[360px] 2xl:w-[400px]`}
         >
           <ChatSidebar
             onOpenSettings={() => {

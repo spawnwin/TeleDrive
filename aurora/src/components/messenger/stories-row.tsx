@@ -155,7 +155,7 @@ export function StoriesRow({ feed, currentUser, onAddStory, onOpenViewer }: Stor
         <span
           className={cn(
             'max-w-[64px] truncate text-[10px]',
-            user.hasUnviewed ? 'font-semibold text-foreground' : 'text-muted-foreground',
+            user.hasUnviewed ? 'font-semibold text-white' : 'text-[#8fa0b5]',
           )}
         >
           {user.name.split(' ')[0]}
