@@ -613,9 +613,9 @@ export function ChatSidebar({
   }, [totalUnread])
 
   return (
-    <div className="flex h-full flex-col bg-sidebar text-sidebar-foreground">
+    <div className="aurora-chats flex h-full flex-col text-sidebar-foreground">
       {/* Header */}
-      <div className="aurora-sidebar-safe-top flex items-center justify-between gap-2 border-b border-sidebar-border/80 bg-sidebar/95 px-4 pb-2.5 backdrop-blur-md">
+      <div className="aurora-sidebar-safe-top aurora-chats-header flex items-center justify-between gap-2 px-4 pb-2.5">
         {selectionMode ? (
           <>
             <button
@@ -646,13 +646,13 @@ export function ChatSidebar({
               onClick={() => setShowArchived(false)}
               className="flex min-w-0 items-center gap-2 text-left"
             >
-              <ArrowLeft className="h-5 w-5 shrink-0 text-primary" />
-              <h1 className="truncate text-[26px] font-bold leading-none tracking-tight xl:text-lg">
+              <ArrowLeft className="h-5 w-5 shrink-0 text-[#3aa0ff]" />
+              <h1 className="aurora-chats-title truncate text-[26px] xl:text-lg">
                 {t('sidebar.archived')}
               </h1>
             </button>
           ) : (
-            <h1 className="truncate text-[26px] font-bold leading-none tracking-tight xl:text-lg">
+            <h1 className="aurora-chats-title truncate text-[26px] xl:text-lg">
               {t('nav.chats')}
             </h1>
           )}
@@ -661,7 +661,7 @@ export function ChatSidebar({
           <Button
             variant="ghost"
             size="icon"
-            className="h-9 w-9 rounded-full text-primary"
+            className="h-9 w-9 rounded-full text-[#3aa0ff] hover:bg-white/5 hover:text-[#7cc4ff]"
             onClick={() => openNewChat('search')}
             title={t('sidebar.newChat')}
             aria-label={t('sidebar.newChat')}
@@ -673,7 +673,7 @@ export function ChatSidebar({
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-9 w-9 rounded-full"
+                className="h-9 w-9 rounded-full text-[#8fa0b5] hover:bg-white/5 hover:text-white"
                 title={t('chat.more')}
               >
                 <MoreVertical className="h-5 w-5" />
@@ -717,14 +717,12 @@ export function ChatSidebar({
 
       {/* Mode toggle: Чаты / Лента / Шорты — desktop */}
       <div className="hidden px-3 pt-3 xl:block">
-        <div className="flex rounded-2xl bg-muted/70 p-1">
+        <div className="aurora-chats-seg flex rounded-2xl p-1">
           <button
             onClick={() => setView('chats')}
             className={cn(
-              'flex flex-1 items-center justify-center gap-1.5 rounded-xl py-2 text-sm font-medium transition',
-              view === 'chats'
-                ? 'bg-background text-foreground shadow-sm'
-                : 'text-muted-foreground hover:text-foreground',
+              'aurora-chats-seg-btn flex flex-1 items-center justify-center gap-1.5 rounded-xl py-2 text-sm font-medium',
+              view === 'chats' && 'is-active',
             )}
           >
             <MessageSquare className="h-3.5 w-3.5" />
@@ -733,10 +731,8 @@ export function ChatSidebar({
           <button
             onClick={() => setView('feed')}
             className={cn(
-              'flex flex-1 items-center justify-center gap-1.5 rounded-xl py-2 text-sm font-medium transition',
-              view === 'feed'
-                ? 'bg-background text-foreground shadow-sm'
-                : 'text-muted-foreground hover:text-foreground',
+              'aurora-chats-seg-btn flex flex-1 items-center justify-center gap-1.5 rounded-xl py-2 text-sm font-medium',
+              view === 'feed' && 'is-active',
             )}
           >
             <Newspaper className="h-3.5 w-3.5" />
@@ -745,10 +741,8 @@ export function ChatSidebar({
           <button
             onClick={() => setView('shorts')}
             className={cn(
-              'flex flex-1 items-center justify-center gap-1.5 rounded-xl py-2 text-sm font-medium transition',
-              view === 'shorts'
-                ? 'bg-primary text-primary-foreground shadow-sm'
-                : 'text-muted-foreground hover:text-foreground',
+              'aurora-chats-seg-btn flex flex-1 items-center justify-center gap-1.5 rounded-xl py-2 text-sm font-medium',
+              view === 'shorts' && 'is-active',
             )}
           >
             <Clapperboard className="h-3.5 w-3.5" />
@@ -760,15 +754,15 @@ export function ChatSidebar({
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
           {/* Search — desktop only; on mobile it slides up from the bottom nav */}
           <div className="hidden px-4 pt-2 xl:block">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <div className="aurora-chats-search relative rounded-xl">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#8fa0b5]" />
               <Input
                 id="aurora-sidebar-search"
                 ref={searchInputRef}
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder={t('sidebar.searchChats')}
-                className="h-10 rounded-xl border-none bg-muted/80 pl-10 text-sm shadow-none focus-visible:ring-1 focus-visible:ring-primary/30"
+                className="h-10 rounded-xl border-none bg-transparent pl-10 text-sm text-[#e8eef6] shadow-none placeholder:text-[#6f8196] focus-visible:ring-0"
               />
             </div>
           </div>
@@ -796,7 +790,7 @@ export function ChatSidebar({
             {/* Pull-to-open archive (Telegram-style) */}
             {!showArchived && archivedCount > 0 && archivePull > 0 && (
               <div
-                className="pointer-events-none sticky top-0 z-20 flex items-center justify-center gap-2 overflow-hidden bg-sidebar/95 text-primary backdrop-blur-sm xl:hidden"
+                className="pointer-events-none sticky top-0 z-20 flex items-center justify-center gap-2 overflow-hidden bg-[#0b131c]/95 text-[#3aa0ff] backdrop-blur-sm xl:hidden"
                 style={{ height: Math.max(0, archivePull) }}
                 aria-hidden
               >
@@ -1097,12 +1091,12 @@ export function ChatSidebar({
       </div>
 
       {/* Current user footer */}
-      <div className="hidden shrink-0 items-center justify-between gap-2 border-t border-sidebar-border/80 bg-sidebar/80 px-4 py-3 backdrop-blur-md safe-bottom-min xl:flex">
+      <div className="aurora-chats-composer hidden shrink-0 items-center justify-between gap-2 px-4 py-3 safe-bottom-min xl:flex">
         {currentUser && (
           <button
             type="button"
             onClick={() => setProfileUserId(currentUser.id)}
-            className="flex min-w-0 flex-1 items-center gap-2.5 rounded-xl px-1.5 py-1 text-left transition hover:bg-sidebar-accent/80"
+            className="flex min-w-0 flex-1 items-center gap-2.5 rounded-xl px-1.5 py-1 text-left transition hover:bg-white/5"
           >
             <Avatar
               name={currentUser.name}
@@ -1275,9 +1269,9 @@ function ArchiveFolderRow({ count, onOpen }: { count: number; onOpen: () => void
     <button
       type="button"
       onClick={onOpen}
-      className="group flex w-full items-center gap-3 border-b border-sidebar-border/40 px-3 py-2.5 text-left transition-colors hover:bg-sidebar-accent/70 sm:px-4"
+      className="aurora-chats-row group flex w-full items-center gap-3 px-3 py-2.5 text-left sm:px-4"
     >
-      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-primary/15 text-primary">
+      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-white/[0.08] bg-white/[0.06] text-[#3aa0ff]">
         <Archive className="h-5 w-5" strokeWidth={2} />
       </div>
       <div className="min-w-0 flex-1">
@@ -1345,7 +1339,7 @@ function FolderTabs({
     <div
       role="tablist"
       aria-label={t('folders.all')}
-      className="shrink-0 touch-pan-x overflow-x-auto overscroll-y-none border-b border-sidebar-border px-0 pt-1 [-webkit-overflow-scrolling:touch] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      className="shrink-0 touch-pan-x overflow-x-auto overscroll-y-none border-b border-white/[0.08] px-0 pt-1 [-webkit-overflow-scrolling:touch] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
     >
       <div className="flex items-center gap-0 whitespace-nowrap px-2">
         <FolderTab
@@ -1408,8 +1402,8 @@ function FolderTab({
       className={cn(
         'flex h-9 shrink-0 items-center gap-1.5 border-b-2 border-transparent px-3 text-sm whitespace-nowrap transition',
         active
-          ? 'border-primary font-semibold text-primary'
-          : 'font-medium text-muted-foreground hover:text-foreground',
+          ? 'border-[#3aa0ff] font-semibold text-white'
+          : 'font-medium text-[#8fa0b5] hover:text-[#e8eef6]',
       )}
       title={label}
     >
@@ -1468,15 +1462,13 @@ function SavedChatRow({ chat, selectionMode = false }: { chat: ChatListItem; sel
         }
       }}
       className={cn(
-        'group relative flex w-full items-center gap-3 rounded-none border-b border-sidebar-border/40 px-3 py-2.5 text-left transition-colors sm:px-4',
+        'aurora-chats-row group relative flex w-full items-center gap-3 rounded-none px-3 py-2.5 text-left sm:px-4',
         selectionMode && 'opacity-60',
-        isActive
-          ? 'bg-sidebar-accent'
-          : 'hover:bg-sidebar-accent/70',
+        isActive && 'is-active',
       )}
     >
-      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-primary shadow-sm">
-        <Bookmark className="h-5 w-5 text-primary-foreground" fill="currentColor" />
+      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[linear-gradient(145deg,#3aa0ff,#2dd4bf)] shadow-[0_8px_20px_rgb(58_160_255_/_22%)]">
+        <Bookmark className="h-5 w-5 text-white" fill="currentColor" />
       </div>
       <div className="min-w-0 flex-1">
         <div className="flex items-center justify-between gap-2">
@@ -1742,12 +1734,9 @@ function ChatListItemRow({
         }
       }}
       className={cn(
-        'group relative flex w-full min-w-0 items-center gap-3 rounded-none border-b border-sidebar-border/40 px-3 py-2.5 text-left transition-colors sm:px-4',
-        selectionMode && selected
-          ? 'bg-primary/10'
-          : isActive
-            ? 'bg-sidebar-accent'
-            : 'hover:bg-sidebar-accent/70',
+        'aurora-chats-row group relative flex w-full min-w-0 items-center gap-3 rounded-none px-3 py-2.5 text-left sm:px-4',
+        selectionMode && selected && 'is-selected',
+        !selectionMode && isActive && 'is-active',
       )}
     >
       {selectionMode && chat.type !== 'saved' && (

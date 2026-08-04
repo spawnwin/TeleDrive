@@ -2288,7 +2288,7 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
 
   return (
     <div
-      className="relative flex h-full min-w-0 touch-pan-y flex-col overflow-hidden bg-background xl:!translate-x-0"
+      className="aurora-chats relative flex h-full min-w-0 touch-pan-y flex-col overflow-hidden xl:!translate-x-0"
       style={{
         transform: swipeBackOffset ? `translateX(${Math.min(56, swipeBackOffset * 0.35)}px)` : undefined,
         transition: swipeBackAnimating ? 'transform 0.22s ease-out' : undefined,
@@ -2300,20 +2300,20 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
     >
       {swipeBackOffset > 0 && (
         <div
-          className="pointer-events-none absolute inset-y-0 left-0 z-30 flex w-14 items-center justify-center bg-gradient-to-r from-primary/25 to-transparent xl:hidden"
+          className="pointer-events-none absolute inset-y-0 left-0 z-30 flex w-14 items-center justify-center bg-gradient-to-r from-[#3aa0ff]/25 to-transparent xl:hidden"
           style={{ opacity: Math.min(1, swipeBackOffset / SWIPE_BACK_THRESHOLD) }}
           aria-hidden
         >
-          <ArrowLeft className="h-5 w-5 text-primary" />
+          <ArrowLeft className="h-5 w-5 text-[#3aa0ff]" />
         </div>
       )}
       {/* Header — thin; secondary actions live in overflow to avoid clipping */}
-      <div className="aurora-chat-safe-top flex min-w-0 shrink-0 items-center gap-1 border-b border-border/40 bg-background/90 px-1.5 pb-1.5 pt-1 backdrop-blur-md sm:gap-2 sm:px-3">
+      <div className="aurora-chat-safe-top aurora-chats-header flex min-w-0 shrink-0 items-center gap-1 px-1.5 pb-1.5 pt-1 sm:gap-2 sm:px-3">
         <div className="flex min-w-0 flex-1 items-center gap-1.5 sm:gap-2">
           <Button
             variant="ghost"
             size="icon"
-            className="h-9 w-9 shrink-0 rounded-full xl:hidden"
+            className="h-9 w-9 shrink-0 rounded-full text-[#e8eef6] hover:bg-white/5 xl:hidden"
             onClick={onBack}
           >
             <ArrowLeft className="h-5 w-5" />
@@ -2331,7 +2331,7 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
             }}
           >
             {isSavedChat ? (
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary shadow-sm sm:h-10 sm:w-10">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[linear-gradient(145deg,#3aa0ff,#2dd4bf)] shadow-[0_8px_20px_rgb(58_160_255_/_22%)] sm:h-10 sm:w-10">
                 <Bookmark className="h-4 w-4 text-white" fill="currentColor" />
               </div>
             ) : (
@@ -2346,7 +2346,7 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
             )}
             <div className="min-w-0 flex-1 overflow-hidden">
               <div className="flex min-w-0 items-center gap-1">
-                <p className="min-w-0 truncate text-[15px] font-semibold leading-tight">
+                <p className="aurora-chats-title min-w-0 truncate text-[15px] !font-semibold leading-tight">
                   {chatTitle}
                 </p>
                 {otherUser?.emojiStatus && (
@@ -2610,7 +2610,7 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
       )}
 
       {/* Messages */}
-      <div className="relative min-h-0 flex-1 overflow-hidden bg-background">
+      <div className="relative min-h-0 flex-1 overflow-hidden bg-transparent">
         <ChatWallpaperBackground perChatWallpaper={activeChat.wallpaper} className="z-0" />
         <div
           ref={scrollRef}
@@ -2632,9 +2632,9 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
           </div>
         ) : messages.length === 0 ? (
           <div className="flex flex-1 min-h-[14rem] flex-col items-center justify-center gap-3 overflow-hidden px-6 text-center">
-            <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-full bg-primary/10 ring-4 ring-primary/5">
+            <div className="aurora-chats-empty flex h-20 w-20 shrink-0 items-center justify-center rounded-[1.35rem]">
               {isSavedChat ? (
-                <div className="flex h-16 w-16 items-center justify-center rounded-full bg-primary">
+                <div className="flex h-16 w-16 items-center justify-center rounded-full bg-[linear-gradient(145deg,#3aa0ff,#2dd4bf)] shadow-[0_8px_24px_rgb(58_160_255_/_28%)]">
                   <Bookmark className="h-7 w-7 text-white" fill="currentColor" />
                 </div>
               ) : (
@@ -2646,9 +2646,9 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
                 />
               )}
             </div>
-            <div className="min-w-0 max-w-sm">
-              <p className="truncate text-[15px] font-semibold">{activeChat.title}</p>
-              <p className="mt-1 text-[13px] leading-relaxed text-muted-foreground">
+            <div className="aurora-chats-empty min-w-0 max-w-sm rounded-[1.35rem] px-5 py-4">
+              <p className="aurora-chats-title truncate text-[15px] !font-semibold">{activeChat.title}</p>
+              <p className="mt-1 text-[13px] leading-relaxed text-[#8fa0b5]">
                 {searchQuery
                   ? t('chat.emptySearchResult')
                   : showFavorites
@@ -2946,12 +2946,12 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
 
       {/* Composer */}
       {!canPost ? (
-        <div className="shrink-0 border-t border-border bg-muted/30 px-4 py-4 pb-[max(1rem,env(safe-area-inset-bottom))] text-center text-sm text-muted-foreground">
+        <div className="aurora-chats-composer shrink-0 px-4 py-4 pb-[max(1rem,env(safe-area-inset-bottom))] text-center text-sm text-[#8fa0b5]">
           {t('channel.readOnly')}
         </div>
       ) : (
       <div
-        className="shrink-0 overflow-hidden bg-background/90 px-2 pt-1.5 sm:px-3"
+        className="aurora-chats-composer shrink-0 overflow-hidden px-2 pt-1.5 sm:px-3"
         style={{
           // When the soft keyboard is open, visualViewport already accounts for
           // the bottom inset — don't double-add safe-area.
@@ -3045,11 +3045,11 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
               </span>
             </div>
           ) : (
-            <div className="flex min-w-0 flex-1 items-end gap-0.5 overflow-hidden rounded-[22px] bg-muted/50 px-1 py-1 transition focus-within:bg-muted/70">
+            <div className="aurora-chats-input-shell flex min-w-0 flex-1 items-end gap-0.5 overflow-hidden rounded-[22px] px-1 py-1">
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-9 w-9 shrink-0 rounded-full text-muted-foreground"
+                className="h-9 w-9 shrink-0 rounded-full text-[#8fa0b5] hover:bg-white/5 hover:text-[#e8eef6]"
                 onClick={() => setShowAttachMenu(true)}
                 disabled={uploading || isRecording}
                 title={t('composer.attach')}
@@ -3090,13 +3090,13 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
                       : t('composer.placeholder')
                 }
                 rows={1}
-                className="max-h-32 w-full min-w-0 flex-1 resize-none overflow-x-hidden overflow-y-auto break-words bg-transparent py-2 text-[15px] outline-none placeholder:text-muted-foreground"
+                className="max-h-32 w-full min-w-0 flex-1 resize-none overflow-x-hidden overflow-y-auto break-words bg-transparent py-2 text-[15px] text-[#e8eef6] outline-none placeholder:text-[#6f8196]"
                 style={{ height: 'auto', minHeight: '24px' }}
               />
 
               <Popover open={emojiOpen} onOpenChange={setEmojiOpen}>
                 <PopoverTrigger asChild>
-                  <Button variant="ghost" size="icon" className="h-9 w-9 shrink-0 rounded-full text-muted-foreground">
+                  <Button variant="ghost" size="icon" className="h-9 w-9 shrink-0 rounded-full text-[#8fa0b5] hover:bg-white/5 hover:text-[#e8eef6]">
                     <Smile className="h-5 w-5" />
                   </Button>
                 </PopoverTrigger>
@@ -4587,40 +4587,36 @@ function AlbumBubble({
 function EmptyChatState() {
   const { t } = useI18n()
   return (
-    <div className="relative flex h-full flex-col items-center justify-center overflow-hidden bg-background p-8 text-center">
-      <div className="pointer-events-none absolute inset-0 -z-10">
-        <div className="absolute -left-16 top-10 h-72 w-72 rounded-full bg-primary/15 blur-3xl" />
-        <div className="absolute -right-10 bottom-16 h-64 w-64 rounded-full bg-primary/10 blur-3xl" />
-      </div>
+    <div className="aurora-chats relative flex h-full flex-col items-center justify-center overflow-hidden p-8 text-center">
       <motion.div
-        initial={{ opacity: 0, y: 12, scale: 0.92 }}
+        initial={{ opacity: 0, y: 14, scale: 0.94 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
-        transition={{ duration: 0.45, ease: 'easeOut' }}
-        className="flex max-w-md flex-col items-center"
+        transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
+        className="aurora-chats-empty relative z-[1] flex max-w-md flex-col items-center rounded-[1.75rem] px-8 py-10"
       >
         <motion.div
           animate={{ y: [0, -6, 0] }}
           transition={{ duration: 4.5, repeat: Infinity, ease: 'easeInOut' }}
-          className="flex h-24 w-24 items-center justify-center rounded-[1.75rem] bg-primary shadow-2xl shadow-primary/30"
+          className="aurora-feed-orb flex h-24 w-24 items-center justify-center rounded-[1.75rem] bg-[linear-gradient(145deg,#3aa0ff,#2dd4bf)] shadow-[0_16px_48px_rgb(58_160_255_/_32%)]"
         >
           <Sparkle />
         </motion.div>
-        <h2 className="mt-7 text-[28px] font-bold tracking-tight text-foreground">
+        <h2 className="aurora-chats-title mt-7 text-[28px]">
           Aurora
         </h2>
-        <p className="mt-2 max-w-sm text-[15px] leading-relaxed text-muted-foreground">
+        <p className="mt-2 max-w-sm text-[15px] leading-relaxed text-[#8fa0b5]">
           {t('app.welcomeHint')}
         </p>
         <div className="mt-7 flex flex-wrap items-center justify-center gap-2">
           {[
-            { color: 'bg-emerald-500', label: t('app.featureRealtime') },
-            { color: 'bg-primary', label: t('msg.reaction') },
-            { color: 'bg-sky-500', label: t('chat.image') },
-            { color: 'bg-rose-500', label: t('chat.voice') },
+            { color: 'bg-emerald-400', label: t('app.featureRealtime') },
+            { color: 'bg-[#3aa0ff]', label: t('msg.reaction') },
+            { color: 'bg-teal-400', label: t('chat.image') },
+            { color: 'bg-sky-400', label: t('chat.voice') },
           ].map((item) => (
             <span
               key={item.label}
-              className="inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-muted/50 px-3 py-1.5 text-[11px] font-medium text-muted-foreground backdrop-blur-sm"
+              className="inline-flex items-center gap-1.5 rounded-full border border-white/[0.08] bg-white/[0.04] px-3 py-1.5 text-[11px] font-medium text-[#8fa0b5] backdrop-blur-sm"
             >
               <span className={cn('h-1.5 w-1.5 rounded-full', item.color)} />
               {item.label}
