@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Aurora">
+  <defs>
+    <linearGradient id="bg" x1="12%" y1="8%" x2="88%" y2="100%">
+      <stop offset="0%" stop-color="#3BB2FF"/>
+      <stop offset="42%" stop-color="#0B79F7"/>
+      <stop offset="100%" stop-color="#0056D6"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="50%" cy="44%" r="46%">
+      <stop offset="0%" stop-color="#9FE0FF" stop-opacity="0.65"/>
+      <stop offset="55%" stop-color="#2A9BFF" stop-opacity="0.22"/>
+      <stop offset="100%" stop-color="#0056D6" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="glass" x1="20%" y1="10%" x2="80%" y2="95%">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.96"/>
+      <stop offset="40%" stop-color="#B7E4FF" stop-opacity="0.88"/>
+      <stop offset="100%" stop-color="#4AA3FF" stop-opacity="0.78"/>
+    </linearGradient>
+    <linearGradient id="gold" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFF6B8"/>
+      <stop offset="50%" stop-color="#FFD24A"/>
+      <stop offset="100%" stop-color="#F0A020"/>
+    </linearGradient>
+    <linearGradient id="wisp" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#6FD8FF" stop-opacity="0.2"/>
+      <stop offset="55%" stop-color="#D7F6FF" stop-opacity="0.85"/>
+      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0.95"/>
+    </linearGradient>
+    <filter id="softGlow" x="-35%" y="-35%" width="170%" height="170%">
+      <feGaussianBlur stdDeviation="7" result="b"/>
+      <feMerge>
+        <feMergeNode in="b"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <filter id="goldGlow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="4.5" result="b"/>
+      <feMerge>
+        <feMergeNode in="b"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <clipPath id="squircle">
+      <rect x="0" y="0" width="512" height="512" rx="112" ry="112"/>
+    </clipPath>
+  </defs>
+
+  <g clip-path="url(#squircle)">
+    <rect width="512" height="512" fill="url(#bg)"/>
+    <rect width="512" height="512" fill="url(#glow)"/>
+    <rect x="12" y="12" width="488" height="488" rx="102" ry="102" fill="none" stroke="#C8EEFF" stroke-opacity="0.4" stroke-width="3"/>
+
+    <path filter="url(#softGlow)" fill="url(#wisp)" d="M150 392C112 318 102 248 134 186C156 144 188 126 220 148C196 188 184 242 194 302C202 344 218 372 240 392C204 404 172 410 150 392Z"/>
+    <path filter="url(#softGlow)" fill="url(#wisp)" d="M362 392C400 318 410 248 378 186C356 144 324 126 292 148C316 188 328 242 318 302C310 344 294 372 272 392C308 404 340 410 362 392Z"/>
+
+    <path
+      filter="url(#softGlow)"
+      fill="url(#glass)"
+      fill-rule="evenodd"
+      d="M256 108L372 400H314L286 320H226L198 400H140L256 108ZM256 196L234 264H278L256 196Z"/>
+
+    <path filter="url(#goldGlow)" fill="none" stroke="url(#gold)" stroke-width="15" stroke-linejoin="round" stroke-linecap="round" d="M172 372L256 128L340 372"/>
+    <path filter="url(#goldGlow)" fill="none" stroke="url(#gold)" stroke-width="13" stroke-linecap="round" d="M210 276H302"/>
+    <path fill="none" stroke="#FFFFFF" stroke-opacity="0.55" stroke-width="4" stroke-linejoin="round" d="M166 378L256 116L346 378"/>
+  </g>
+</svg>

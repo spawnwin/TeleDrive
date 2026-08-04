@@ -1,0 +1,1264 @@
+// Prisma schema for the messenger application
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  token        String   @unique
+  userId       String
+  createdAt    DateTime @default(now())
+  expiresAt    DateTime
+  userAgent    String?
+  ip           String?
+  lastActiveAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model User {
+  id          String   @id @default(cuid())
+  username    String   @unique
+  name        String
+  avatarColor String   @default("#7c3aed")
+  avatarUrl   String?
+  bio         String?
+  online      Boolean  @default(false)
+  lastSeen    DateTime @default(now())
+  password    String
+  language    String   @default("ru") // ru | en
+  balance     Float    @default(0) // creator earnings balance
+  coins       Int      @default(50) // Aurora Coins — in-app currency
+  isPremium   Boolean  @default(false)
+  isAdmin     Boolean  @default(false)
+  isBanned    Boolean  @default(false)
+  premiumUntil DateTime?
+  lastDailyBonus DateTime?
+  premiumTheme String? // aurora | galaxy | sunset (exclusive premium themes)
+  chatWallpaper String? // JSON: global default chat wallpaper
+  emojiStatus  String? // premium emoji status id (see premium-emojis catalog)
+  // E2EE public key (RSA-OAEP, base64 SPKI). Null until user generates keys.
+  publicKey   String?
+  // Bot account fields
+  isBot       Boolean  @default(false)
+  botOwnerId  String?
+  botToken    String?  @unique
+  botDescription String?
+  botPublic   Boolean  @default(false)
+  botDisabled Boolean  @default(false)
+  // Two-factor authentication
+  twoFactorEnabled Boolean @default(false)
+  twoFactorSecret  String?
+  twoFactorBackupCodes String? // JSON array of backup codes
+  twoFactorLastStep Int? // last consumed TOTP time-step, blocks replaying the same code twice
+  // Cloud storage
+  storageUsed  Int      @default(0) // bytes
+  storageQuota Int      @default(1073741824) // 1GB default, premium 10GB
+  // Linked Yandex Music account (token never sent to the client; stored sealed when TOKEN_ENCRYPTION_KEY is set)
+  yandexMusicToken String?
+  yandexMusicUid   String?
+  // Privacy (Telegram-style)
+  lastSeenVisibility String @default("everyone") // everyone | contacts | nobody
+  whoCanMessage      String @default("everyone") // everyone | contacts | nobody
+  whoCanCall         String @default("everyone") // everyone | contacts | nobody
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  members      ChatMember[]
+  sessions     Session[]
+  sentMessages Message[]   @relation("MessageSender")
+  reactions    Reaction[]
+  favorites    Favorite[]
+  hiddenMessages MessageHide[]
+
+  shorts          Short[]         @relation("ShortCreator")
+  shortViews      ShortView[]
+  shortLikes      ShortLike[]
+  shortComments   ShortComment[]
+  shortSubscriptionsGiven     ShortSubscription[] @relation("ShortSubscriber")
+  shortSubscriptionsReceived  ShortSubscription[] @relation("ShortCreatorSub")
+  creatorEarnings CreatorEarning[]
+  coinTransactions CoinTransaction[]
+  coinsPurchases  CoinsPurchase[]
+  payoutMethod    CreatorPayoutMethod?
+  payouts         Payout[]
+  pushSubscriptions PushSubscription[]
+  storedFiles     StoredFile[]
+  ownedBots       User[]          @relation("BotOwner")
+  botOwner        User?           @relation("BotOwner", fields: [botOwnerId], references: [id], onDelete: SetNull)
+  bansIssued      ChatBan[]       @relation("BanIssuer")
+  messageReports  MessageReport[]
+  blocksGiven     UserBlock[]     @relation("BlocksGiven")
+  blocksReceived  UserBlock[]     @relation("BlocksReceived")
+  userReports     UserReport[]    @relation("UserReportsFiled")
+  stories         Story[]
+  storyViews      StoryView[]
+  storyLikes      StoryLike[]
+  nearbyPresence  NearbyPresence?
+  friendshipsSent     Friendship[] @relation("FriendshipRequester")
+  friendshipsReceived Friendship[] @relation("FriendshipAddressee")
+  contactsOwned       Contact[]    @relation("ContactsOwned")
+  contactsAppearsIn   Contact[]    @relation("ContactsAppearsIn")
+  profileGallery      ProfileGalleryItem[]
+  giftsSent           GiftSent[] @relation("GiftSender")
+  giftsReceived       GiftSent[] @relation("GiftRecipient")
+  profilePhotoViewsReceived ProfilePhotoView[] @relation("ProfilePhotoViewsReceived")
+  profilePhotoViewsMade     ProfilePhotoView[] @relation("ProfilePhotoViewsMade")
+  profilePhotoLikesReceived ProfilePhotoLike[] @relation("ProfilePhotoLikesReceived")
+  profilePhotoLikesMade     ProfilePhotoLike[] @relation("ProfilePhotoLikesMade")
+
+  // Creator Premium — fan-funded subscriptions
+  premiumTiersOwned      CreatorPremiumTier[]  @relation("PremiumTierCreator")
+  premiumSubsGiven       CreatorPremium[]      @relation("PremiumSubscriber")
+  premiumSubsReceived    CreatorPremium[]      @relation("PremiumCreator")
+
+  // Personal Telegram-style chat folders
+  chatFolders            ChatFolder[]
+
+  // P2P marketplace
+  marketplaceListings    MarketplaceListing[] @relation("MarketplaceSeller")
+  marketplacePurchases   MarketplaceOrder[]   @relation("MarketplaceBuyer")
+  marketplaceSales       MarketplaceOrder[]   @relation("MarketplaceOrderSeller")
+
+  // Live streaming
+  liveStreams            LiveStream[]
+  streamDonationsGiven   LiveStreamDonation[]
+
+  // Profile wall (VK-style): posts received on this user's wall + posts authored elsewhere
+  wallPostsReceived      WallPost[] @relation("WallPostsReceived")
+  wallPostsAuthored      WallPost[] @relation("WallPostsAuthored")
+  wallPostLikes          WallPostLike[]
+  wallPostComments       WallPostComment[]
+
+  // P2P coin transfers between users
+  transfersSent          CoinTransfer[] @relation("TransferSender")
+  transfersReceived      CoinTransfer[] @relation("TransferRecipient")
+
+  // Sticker packs owned by this user (created via the Sticker Bot)
+  stickerPacks           StickerPack[]
+
+  // Forum topics created by this user
+  topicsCreated          Topic[]
+
+  // Profile visitor tracking — a Premium-exclusive "who viewed your profile"
+  // feature most messengers deliberately don't offer.
+  profileVisitsReceived  ProfileVisit[] @relation("ProfileVisitsReceived")
+  profileVisitsMade      ProfileVisit[] @relation("ProfileVisitsMade")
+}
+
+model Friendship {
+  id          String   @id @default(cuid())
+  requesterId String
+  addresseeId String
+  status      String   @default("pending") // pending | accepted | declined | blocked
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  requester User @relation("FriendshipRequester", fields: [requesterId], references: [id], onDelete: Cascade)
+  addressee User @relation("FriendshipAddressee", fields: [addresseeId], references: [id], onDelete: Cascade)
+
+  @@unique([requesterId, addresseeId])
+  @@index([requesterId])
+  @@index([addresseeId])
+  @@index([status])
+}
+
+// One-sided contact book entry (Telegram-style custom name for a peer).
+model Contact {
+  id        String   @id @default(cuid())
+  ownerId   String
+  peerId    String
+  firstName String
+  lastName  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  owner User @relation("ContactsOwned", fields: [ownerId], references: [id], onDelete: Cascade)
+  peer  User @relation("ContactsAppearsIn", fields: [peerId], references: [id], onDelete: Cascade)
+
+  @@unique([ownerId, peerId])
+  @@index([ownerId])
+  @@index([peerId])
+}
+
+model UserBlock {
+  id        String   @id @default(cuid())
+  blockerId String
+  blockedId String
+  createdAt DateTime @default(now())
+
+  blocker User @relation("BlocksGiven", fields: [blockerId], references: [id], onDelete: Cascade)
+  blocked User @relation("BlocksReceived", fields: [blockedId], references: [id], onDelete: Cascade)
+
+  @@unique([blockerId, blockedId])
+  @@index([blockerId])
+  @@index([blockedId])
+}
+
+model UserReport {
+  id           String   @id @default(cuid())
+  reporterId   String
+  targetUserId String
+  reason       String
+  status       String   @default("pending") // pending | reviewed | dismissed
+  createdAt    DateTime @default(now())
+
+  reporter User @relation("UserReportsFiled", fields: [reporterId], references: [id], onDelete: Cascade)
+
+  @@index([targetUserId])
+  @@index([reporterId])
+}
+
+model CoinTransaction {
+  id        String   @id @default(cuid())
+  userId    String
+  amount    Int      // positive = earn, negative = spend
+  reason    String   // daily_bonus | short_view | premium_purchase | welcome
+  metadata  String?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+}
+
+// P2P transfer between two users' spendable `coins` balance — instant, no
+// withdrawal pipeline involved (unlike CreatorEarning/Payout, which is for
+// creator monetization). Each transfer also writes a paired CoinTransaction
+// row for both parties so it shows up in the regular coins history.
+model CoinTransfer {
+  id         String   @id @default(cuid())
+  fromUserId String
+  toUserId   String
+  amount     Int
+  message    String?
+  createdAt  DateTime @default(now())
+
+  fromUser User @relation("TransferSender", fields: [fromUserId], references: [id], onDelete: Cascade)
+  toUser   User @relation("TransferRecipient", fields: [toUserId], references: [id], onDelete: Cascade)
+
+  @@index([fromUserId, createdAt])
+  @@index([toUserId, createdAt])
+}
+
+model Chat {
+  id          String   @id @default(cuid())
+  type        String   @default("private") // private | group | channel | saved
+  title       String?
+  description String?
+  slug        String?  @unique // @channelname for public channels
+  avatarColor String   @default("#06b6d4")
+  avatarUrl   String?
+  slowModeSeconds Int  @default(0) // moderation: seconds between messages
+  commentsEnabled  Boolean @default(false) // channel: linked discussion for post comments
+  discussionChatId String? // group chat for channel post comments
+  pinnedMessageId  String? // pinned post in group/channel
+  isForum     Boolean  @default(false) // Telegram-style forum mode: topics inside group
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  members  ChatMember[]
+  messages Message[]
+  bans     ChatBan[]
+  inviteLinks ChatInviteLink[]
+  topics   Topic[]
+}
+
+model Topic {
+  id          String   @id @default(cuid())
+  chatId      String
+  title       String
+  icon        String?  @default("💬") // emoji icon for the topic
+  creatorId   String
+  messageCount Int     @default(0)
+  lastMessageAt DateTime?
+  isPinned    Boolean  @default(false)
+  isClosed    Boolean  @default(false) // read-only topic (announcements-style)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  chat     Chat      @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  creator  User      @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  messages Message[]
+
+  @@index([chatId])
+  @@index([chatId, isPinned])
+}
+
+model ChatMember {
+  id         String   @id @default(cuid())
+  userId     String
+  chatId     String
+  role       String   @default("member") // owner | admin | member | subscriber
+  joinedAt   DateTime @default(now())
+  lastReadAt DateTime @default(now())
+  markedUnread Boolean @default(false)
+  isPinned   Boolean  @default(false)
+  pinnedAt   DateTime?
+  isMuted    Boolean  @default(false)
+  isArchived Boolean  @default(false)
+  isHidden   Boolean  @default(false) // soft-delete: hidden from chat list for this user
+  wallpaper  String?  // JSON: per-chat wallpaper override for this user
+  // Granular admin permissions
+  canDeleteMessages Boolean @default(false)
+  canBanUsers       Boolean @default(false)
+  canPinMessages    Boolean @default(false)
+  canEditInfo       Boolean @default(false)
+  canEditMessages   Boolean @default(false)
+  lastMessageAt     DateTime? // for slow mode tracking
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  chat Chat @relation(fields: [chatId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, chatId])
+  @@index([chatId])
+}
+
+model Message {
+  id             String    @id @default(cuid())
+  chatId         String
+  senderId       String
+  content        String
+  type           String    @default("text") // text | system | image | voice | file | video | share | music | call | gift | sticker
+  replyToId      String?
+  threadRootId   String?   // channel post id for discussion comments
+  topicId        String?   // forum topic id (only for isForum groups)
+  forwardedFromId String?
+  metadata       String?   // JSON for share cards and rich attachments
+  attachmentUrl  String?
+  attachmentName String?
+  attachmentMime String?
+  attachmentSize Int?
+  durationSec    Int?
+  editedAt       DateTime?
+  createdAt      DateTime  @default(now())
+  albumId        String?   // grouping key for media albums (cuid)
+
+  chat            Chat        @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  sender          User        @relation("MessageSender", fields: [senderId], references: [id], onDelete: Cascade)
+  replyTo         Message?    @relation("MessageReply", fields: [replyToId], references: [id], onDelete: SetNull)
+  replies         Message[]   @relation("MessageReply")
+  forwardedFrom   Message?    @relation("MessageForward", fields: [forwardedFromId], references: [id], onDelete: SetNull)
+  forwardedBy     Message[]   @relation("MessageForward")
+  topic           Topic?      @relation(fields: [topicId], references: [id], onDelete: SetNull)
+  reactions       Reaction[]
+  favorites       Favorite[]
+  hiddenFor       MessageHide[]
+
+  @@index([chatId, createdAt])
+  @@index([senderId])
+  @@index([threadRootId])
+  @@index([topicId])
+  @@index([albumId])
+}
+
+/** Soft-hide a message for one user ("delete for me"). */
+model MessageHide {
+  id        String   @id @default(cuid())
+  messageId String
+  userId    String
+  createdAt DateTime @default(now())
+
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, userId])
+  @@index([userId])
+  @@index([messageId])
+}
+
+model Reaction {
+  id        String   @id @default(cuid())
+  messageId String
+  userId    String
+  emoji     String
+  createdAt DateTime @default(now())
+
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, userId, emoji])
+  @@index([messageId])
+  @@index([userId])
+}
+
+model Favorite {
+  id        String   @id @default(cuid())
+  messageId String
+  userId    String
+  createdAt DateTime @default(now())
+
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, userId])
+  @@index([userId])
+}
+
+// ===== Shorts (TikTok-style feed) =====
+
+model Short {
+  id           String   @id @default(cuid())
+  creatorId    String
+  title        String
+  description  String?
+  videoUrl     String?
+  thumbnailUrl String?
+  source       String   @default("upload") // upload | youtube | tiktok
+  externalId   String?
+  duration     Int?
+  views        Int      @default(0)
+  likes        Int      @default(0)
+  comments     Int      @default(0)
+  earnings     Float    @default(0)
+  tags         String?  // comma-separated
+  reviewStatus String   @default("approved") // pending | approved | rejected
+  isHidden     Boolean  @default(false)
+  isFeatured   Boolean  @default(false)
+  parentShortId String?
+  duetMode      String?  // reply | duet | challenge
+  challengeTitle String?
+  createdAt    DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  creator       User           @relation("ShortCreator", fields: [creatorId], references: [id], onDelete: Cascade)
+  parentShort   Short?         @relation("ShortDuet", fields: [parentShortId], references: [id], onDelete: SetNull)
+  childShorts   Short[]        @relation("ShortDuet")
+  shortViews    ShortView[]
+  shortLikes    ShortLike[]
+  shortComments ShortComment[]
+
+  @@index([createdAt])
+  @@index([creatorId])
+  @@index([parentShortId])
+}
+
+model ShortView {
+  id        String   @id @default(cuid())
+  shortId   String
+  userId    String
+  createdAt DateTime @default(now()) // first qualified view timestamp
+
+  short Short @relation(fields: [shortId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([shortId, userId])
+  @@index([shortId])
+  @@index([userId])
+}
+
+model ShortLike {
+  id        String   @id @default(cuid())
+  shortId   String
+  userId    String
+  createdAt DateTime @default(now())
+
+  short Short @relation(fields: [shortId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([shortId, userId])
+  @@index([userId])
+}
+
+model ShortComment {
+  id        String   @id @default(cuid())
+  shortId   String
+  userId    String
+  content   String
+  createdAt DateTime @default(now())
+
+  short Short @relation(fields: [shortId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([shortId])
+}
+
+// ===== Shorts subscriptions (feed-level follow) =====
+
+model ShortSubscription {
+  id           String   @id @default(cuid())
+  subscriberId String
+  creatorId    String
+  createdAt    DateTime @default(now())
+
+  subscriber User @relation("ShortSubscriber", fields: [subscriberId], references: [id], onDelete: Cascade)
+  creator    User @relation("ShortCreatorSub", fields: [creatorId], references: [id], onDelete: Cascade)
+
+  @@unique([subscriberId, creatorId])
+  @@index([creatorId])
+  @@index([subscriberId])
+}
+
+// ===== Advertising =====
+
+model AdCampaign {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  imageUrl    String?
+  targetUrl   String
+  cpm         Float    @default(50) // cost per 1000 impressions in rubles
+  budget      Float    @default(0)
+  spent       Float    @default(0)
+  impressions Int      @default(0)
+  clicks      Int      @default(0)
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  adViews AdView[]
+}
+
+model AdView {
+  id        String   @id @default(cuid())
+  adId      String
+  userId    String?
+  createdAt DateTime @default(now())
+
+  ad AdCampaign @relation(fields: [adId], references: [id], onDelete: Cascade)
+
+  @@unique([adId, userId])
+  @@index([adId])
+}
+
+// ===== Creator monetization =====
+
+model CreatorEarning {
+  id        String   @id @default(cuid())
+  userId    String
+  amount    Float
+  reason    String   // view | ad_share | withdrawal | withdrawal_revert
+  shortId   String?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// Real-money payment gateway (ЮKassa) credentials, entered by an admin.
+// Single row, upserted. secretKey is never returned to clients in full —
+// only a masked preview. If no row exists (or shopId/secretKey are empty),
+// coin purchases and payouts are disabled with an honest error until configured.
+model PaymentGatewaySettings {
+  id             String   @id @default(cuid())
+  provider       String   @default("yookassa")
+  shopId         String
+  secretKey      String
+  payoutsEnabled Boolean  @default(false)
+  updatedBy      String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+// Instagram now serves an empty client-rendered shell (no og:video/og:title
+// meta tags) to anonymous/bot requests, so the Reel importer's plain fetch
+// can no longer read post data. Pasting a real logged-in session cookie here
+// makes those requests look like a normal browser session, which Instagram
+// still server-renders normally. Admin-configurable since IG session cookies
+// expire periodically and need occasional replacing without a redeploy.
+model ScraperSettings {
+  id                     String   @id @default(cuid())
+  instagramSessionCookie String?
+  updatedBy              String?
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+}
+
+// Admin-configurable platform economy: withdrawal limits, creator earning
+// rates, and Premium pricing. Single row, upserted. Falls back to hardcoded
+// defaults in src/lib/economy-settings.ts if no row exists yet.
+model PlatformEconomySettings {
+  id                  String   @id @default(cuid())
+  minWithdrawalRub    Float    @default(100)
+  maxWithdrawalRub    Float?   // null = no cap
+  viewRateRub         Float    @default(0.05) // paid to creator per unique Shorts view
+  adShareRub          Float    @default(0.02) // paid to creator per ad impression near their content
+  coinsPerView        Int      @default(2)    // Aurora Coins rewarded to the viewer per unique view
+  premiumPriceCoins   Int      @default(100)
+  premiumDurationDays Int      @default(30)
+  marketplaceFeePercent Float  @default(5)   // platform cut of each P2P marketplace sale, 0-100
+  donationFeePercent    Float  @default(10)  // platform cut of each stream donation, 0-100
+  updatedBy           String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+}
+
+// Where a Shorts creator wants their earnings withdrawn to, connected by the
+// creator themselves in their earnings dashboard. taxId (ИНН) is optional but
+// may be required for real payouts to individuals under Russian law (422-ФЗ
+// for self-employed creators) depending on payout volume/provider rules.
+model CreatorPayoutMethod {
+  id            String   @id @default(cuid())
+  userId        String   @unique
+  provider      String   // card | phone | wallet
+  holderName    String
+  accountNumber String
+  taxId         String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// A single withdrawal attempt. Tracked separately from CreatorEarning so a
+// failed real-money payout can be safely rolled back (balance refunded)
+// without ambiguity about whether the money actually left the platform.
+model Payout {
+  id              String   @id @default(cuid())
+  userId          String
+  amountRub       Float
+  status          String   @default("pending") // pending | succeeded | failed
+  gatewayPayoutId String?  @unique
+  failureReason   String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// Aurora Coins purchases. In demo mode (no gateway configured) these are
+// created as "succeeded" immediately. With a real gateway, a purchase starts
+// "pending" with a gatewayPaymentId and is only credited once confirmed.
+model CoinsPurchase {
+  id               String   @id @default(cuid())
+  userId           String
+  packageId        String
+  coins            Int
+  amountRub        Float
+  status           String   @default("succeeded") // pending | succeeded | canceled
+  gatewayPaymentId String?  @unique
+  createdAt        DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([createdAt])
+}
+
+// ===== Push notifications =====
+
+model PushSubscription {
+  id        String   @id @default(cuid())
+  userId    String
+  endpoint  String
+  p256dh    String
+  auth      String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, endpoint])
+  @@index([userId])
+}
+
+// ===== Cloud storage =====
+
+model StoredFile {
+  id        String   @id @default(cuid())
+  userId    String
+  filename  String
+  url       String
+  mimeType  String?
+  size      Int
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// ===== Moderation =====
+
+model ChatBan {
+  id        String   @id @default(cuid())
+  chatId    String
+  userId    String
+  bannedBy  String
+  reason    String?
+  createdAt DateTime @default(now())
+
+  chat   Chat @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  issuer User @relation("BanIssuer", fields: [bannedBy], references: [id], onDelete: Cascade)
+
+  @@unique([chatId, userId])
+  @@index([chatId])
+}
+
+model ChatInviteLink {
+  id         String    @id @default(cuid())
+  chatId     String
+  token      String    @unique @default(cuid())
+  createdBy  String
+  label      String?
+  expiresAt  DateTime?
+  usageLimit Int?
+  usageCount Int       @default(0)
+  revoked    Boolean   @default(false)
+  createdAt  DateTime  @default(now())
+
+  chat Chat @relation(fields: [chatId], references: [id], onDelete: Cascade)
+
+  @@index([chatId])
+}
+
+model MessageReport {
+  id        String   @id @default(cuid())
+  messageId String
+  reporterId String
+  reason    String
+  status    String   @default("pending") // pending | reviewed | dismissed
+  createdAt DateTime @default(now())
+
+  reporter User @relation(fields: [reporterId], references: [id], onDelete: Cascade)
+
+  @@index([messageId])
+  @@index([reporterId])
+}
+
+// ===== Stories (24h ephemeral statuses) =====
+
+model Story {
+  id              String   @id @default(cuid())
+  userId          String
+  type            String   // photo | video | text
+  content         String?  // text content or caption
+  mediaUrl        String?
+  backgroundColor String?
+  views           Int      @default(0)
+  likes           Int      @default(0)
+  visibility      String   @default("contacts") // everyone | contacts | friends | selected | exclude
+  audienceIds     String?  // JSON array of user ids for selected/exclude
+  addToProfile    Boolean  @default(true) // add media to profile gallery
+  expiresAt       DateTime
+  createdAt       DateTime @default(now())
+
+  user          User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  storyViews    StoryView[]
+  storyLikes    StoryLike[]
+  galleryItem   ProfileGalleryItem?
+
+  @@index([userId, expiresAt])
+  @@index([expiresAt])
+}
+
+// User-uploaded profile gallery (Telegram-style profile media)
+model ProfileGalleryItem {
+  id        String   @id @default(cuid())
+  userId    String
+  type      String   // photo | video
+  mediaUrl  String
+  caption   String?
+  isPinned  Boolean  @default(false)
+  storyId   String?  @unique
+  createdAt DateTime @default(now())
+
+  user  User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  story Story? @relation(fields: [storyId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@index([userId, isPinned])
+}
+
+model StoryView {
+  id       String   @id @default(cuid())
+  storyId  String
+  userId   String
+  viewedAt DateTime @default(now())
+
+  story Story @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([storyId, userId])
+  @@index([storyId])
+  @@index([userId])
+}
+
+model StoryLike {
+  id        String   @id @default(cuid())
+  storyId   String
+  userId    String
+  createdAt DateTime @default(now())
+
+  story Story @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([storyId, userId])
+  @@index([storyId])
+  @@index([userId])
+}
+
+// ===== Telegram-style gifts (Aurora Stars) =====
+
+model GiftCatalogItem {
+  id           String   @id @default(cuid())
+  slug         String   @unique
+  title        String
+  titleEn      String?
+  starPrice    Int      // cost in Aurora Stars (coins)
+  convertStars Int      @default(0) // stars recipient can convert
+  thumbnailUrl String   // 128×128 catalog preview
+  stickerUrl   String   // 512×512 static/animated sticker
+  animationUrl String?  // optional WebM/GIF animation
+  isLimited    Boolean  @default(false)
+  totalSupply  Int?     // e.g. 999 for #001–#999 collectibles
+  issuedCount  Int      @default(0)
+  isPremium    Boolean  @default(false) // sender must have Premium
+  sortOrder    Int      @default(0)
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  sentGifts GiftSent[]
+
+  @@index([active, sortOrder])
+}
+
+model GiftSent {
+  id          String   @id @default(cuid())
+  giftId      String
+  senderId    String
+  recipientId String
+  messageId   String?
+  chatId      String?
+  starsSpent  Int
+  serialNumber Int?
+  isPrivate   Boolean  @default(false)
+  note        String?
+  createdAt   DateTime @default(now())
+
+  gift      GiftCatalogItem @relation(fields: [giftId], references: [id], onDelete: Cascade)
+  sender    User            @relation("GiftSender", fields: [senderId], references: [id], onDelete: Cascade)
+  recipient User            @relation("GiftRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+
+  @@unique([giftId, serialNumber])
+  @@index([recipientId, createdAt])
+  @@index([senderId])
+  @@index([chatId])
+  @@index([giftId, createdAt])
+}
+
+// ===== Nearby / Who's around (anonymous geo presence) =====
+
+model NearbyPresence {
+  id         String   @id @default(cuid())
+  userId     String   @unique
+  lat        Float
+  lng        Float
+  anonymous  Boolean  @default(true)
+  label      String?  // optional city/campus hint shown publicly
+  expiresAt  DateTime
+  updatedAt  DateTime @updatedAt
+  createdAt  DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([expiresAt])
+  @@index([lat, lng])
+}
+
+// ===== Bot API (long-polling queue) =====
+
+model BotUpdate {
+  id        String   @id @default(cuid())
+  botUserId String
+  updateType String  // message | command
+  payload   String   // JSON
+  createdAt DateTime @default(now())
+  delivered Boolean  @default(false)
+
+  @@index([botUserId, delivered, createdAt])
+}
+
+// ===== Creator Premium (fan-funded subscription tiers) =====
+
+model CreatorPremiumTier {
+  id          String   @id @default(cuid())
+  creatorId   String
+  name        String
+  priceCoins  Int
+  perks       String?  // JSON description of perks
+  createdAt   DateTime @default(now())
+
+  creator User @relation("PremiumTierCreator", fields: [creatorId], references: [id], onDelete: Cascade)
+
+  @@index([creatorId])
+}
+
+model CreatorPremium {
+  id           String   @id @default(cuid())
+  creatorId    String
+  subscriberId String
+  tier         String   @default("basic") // basic | pro
+  priceCoins   Int      @default(100)
+  createdAt    DateTime @default(now())
+  expiresAt    DateTime
+
+  creator    User @relation("PremiumCreator", fields: [creatorId], references: [id], onDelete: Cascade)
+  subscriber User @relation("PremiumSubscriber", fields: [subscriberId], references: [id], onDelete: Cascade)
+
+  @@unique([creatorId, subscriberId])
+  @@index([creatorId])
+}
+
+// ===== Shorts auto-parser (YouTube Shorts importer) =====
+
+model ShortParserSource {
+  id           String    @id @default(cuid())
+  name         String
+  kind         String    // youtube_channel | youtube_search | youtube_playlist | tiktok_user | tiktok_hashtag
+  query        String    // channel URL/handle, search query, playlist ID, @username, or #hashtag
+  defaultTags  String?   // comma-separated hashtags appended to every imported short
+  enabled      Boolean   @default(true)
+  intervalMin  Int       @default(60)
+  lastRunAt    DateTime?
+  lastError    String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  runs ShortParserRun[]
+
+  @@index([enabled])
+}
+
+model ShortParserRun {
+  id         String    @id @default(cuid())
+  sourceId   String
+  startedAt  DateTime  @default(now())
+  finishedAt DateTime?
+  found      Int       @default(0)
+  imported   Int       @default(0)
+  skipped    Int       @default(0)
+  error      String?
+
+  source ShortParserSource @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+
+  @@index([sourceId, startedAt])
+  @@index([startedAt])
+}
+
+// ===== Telegram-style personal chat folders =====
+model ChatFolder {
+  id              String   @id @default(cuid())
+  userId          String   // owner of the folder
+  name            String
+  emoji           String?  // optional emoji icon
+  position        Int      @default(0) // for ordering
+  includedChatIds String?  // JSON array of chat ids
+  excludedChatIds String?  // JSON array of chat ids (optional, for "All except")
+  filterType      String?  // optional: "channels" | "groups" | "private" | "bots" | "custom"
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// ===== Admin-uploadable emoji statuses (Telegram-style) =====
+model EmojiStatus {
+  id        String   @id @default(cuid())
+  code      String   @unique // short stable id stored in User.emojiStatus (e.g. "fire", "admin-crown-2")
+  emoji     String?  // optional unicode char for seeded/built-in entries (null when image-only)
+  imageUrl  String?  // /uploads/emoji/<file>.png — null when char-only
+  labelRu   String
+  labelEn   String
+  isPremium Boolean  @default(true)
+  isBuiltIn Boolean  @default(false) // true for the seeded unicode ones (so admin can't delete them)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+}
+
+// ===== VKontakte-style profile wall / friends feed =====
+// Posts left on a user's profile wall by themselves or other users.
+// Own-wall posts (profileId === authorId) also appear in friends' news feed.
+// Supports text, images, voice messages, drawings, and music.
+model WallPost {
+  id            String   @id @default(cuid())
+  profileId     String   // user whose wall this post is on
+  authorId      String   // user who wrote the post
+  content       String?  // text body (optional when an attachment is present)
+  type          String   @default("text") // text | image | voice | drawing | music | share
+  attachmentUrl String?  // /uploads/... path for media posts
+  attachmentName String? // original filename / label
+  attachmentMime String? // mime type for playback decisions
+  attachmentDuration Int? // seconds, for voice
+  attachmentCoverUrl String? // cover art for music tracks
+  likes         Int      @default(0)
+  comments      Int      @default(0)
+  commentsClosed Boolean @default(false)
+  editedAt      DateTime?
+  createdAt     DateTime @default(now())
+
+  profile User @relation("WallPostsReceived", fields: [profileId], references: [id], onDelete: Cascade)
+  author  User @relation("WallPostsAuthored", fields: [authorId], references: [id], onDelete: Cascade)
+  likeRows WallPostLike[]
+  commentRows WallPostComment[]
+
+  @@index([profileId, createdAt])
+  @@index([authorId, createdAt])
+  @@index([createdAt])
+}
+
+model WallPostLike {
+  id        String   @id @default(cuid())
+  postId    String
+  userId    String
+  createdAt DateTime @default(now())
+
+  post WallPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, userId])
+  @@index([userId])
+}
+
+model WallPostComment {
+  id        String   @id @default(cuid())
+  postId    String
+  userId    String
+  content   String
+  createdAt DateTime @default(now())
+
+  post WallPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([postId, createdAt])
+  @@index([userId])
+}
+
+// ===== P2P Marketplace (Avito-style, inside the messenger) =====
+
+model MarketplaceListing {
+  id          String   @id @default(cuid())
+  sellerId    String
+  title       String
+  description String?
+  priceCoins  Int
+  category    String   // electronics | services | digital | clothing | other
+  images      String?  // comma-joined /uploads URLs
+  isDigital   Boolean  @default(false)
+  status      String   @default("active") // active | sold | removed
+  views       Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  seller  User                       @relation("MarketplaceSeller", fields: [sellerId], references: [id], onDelete: Cascade)
+  orders  MarketplaceOrder[]
+  reports MarketplaceListingReport[]
+
+  @@index([sellerId])
+  @@index([status, createdAt])
+  @@index([category])
+}
+
+model MarketplaceOrder {
+  id         String   @id @default(cuid())
+  listingId  String
+  buyerId    String
+  sellerId   String
+  priceCoins Int
+  createdAt  DateTime @default(now())
+
+  listing MarketplaceListing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  buyer   User               @relation("MarketplaceBuyer", fields: [buyerId], references: [id], onDelete: Cascade)
+  seller  User               @relation("MarketplaceOrderSeller", fields: [sellerId], references: [id], onDelete: Cascade)
+
+  @@index([buyerId])
+  @@index([sellerId])
+  @@index([listingId])
+}
+
+model MarketplaceListingReport {
+  id         String   @id @default(cuid())
+  listingId  String
+  reporterId String
+  reason     String
+  status     String   @default("pending") // pending | reviewed | dismissed
+  createdAt  DateTime @default(now())
+
+  listing MarketplaceListing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@index([listingId])
+  @@index([status])
+}
+
+// ===== Live streaming (MVP) =====
+//
+// WebRTC signaling reuses the existing `group:*` Socket.IO events in
+// mini-services/call-service (mesh topology: the host opens one peer
+// connection per viewer). This does not scale past a few dozen concurrent
+// viewers — a real broadcast-scale product needs an SFU or RTMP+HLS ingest
+// later. `roomId` here is exactly the room joined via those group-call events.
+
+model LiveStream {
+  id                  String    @id @default(cuid())
+  hostId              String
+  title               String
+  roomId              String    @unique
+  status              String    @default("live") // live | ended
+  viewerCount         Int       @default(0)
+  totalDonationsCoins Int       @default(0)
+  showTopDonors       Boolean   @default(true) // host-controlled: display the top-donors panel
+  hidden              Boolean   @default(false) // host soft-deleted; still visible in own history + admin
+  gameId              String?   // Twitch-style category — nullable so existing/uncategorized streams stay valid
+  startedAt           DateTime  @default(now())
+  endedAt             DateTime?
+
+  host      User                 @relation(fields: [hostId], references: [id], onDelete: Cascade)
+  game      StreamGame?          @relation(fields: [gameId], references: [id], onDelete: SetNull)
+  donations LiveStreamDonation[]
+
+  @@index([status, startedAt])
+  @@index([status, gameId])
+  @@index([hostId])
+}
+
+// Twitch-style game/category catalog for live streams. `color` drives a
+// generated gradient tile (no scraped box-art — real cover images can be
+// added later per-game via `coverImageUrl` if the admin uploads their own).
+model StreamGame {
+  id            String   @id @default(cuid())
+  slug          String   @unique
+  title         String
+  titleEn       String?
+  color         String   @default("#7c3aed")
+  coverImageUrl String?
+  sortOrder     Int      @default(0)
+  active        Boolean  @default(true)
+  createdAt     DateTime @default(now())
+
+  streams LiveStream[]
+}
+
+model LiveStreamDonation {
+  id          String   @id @default(cuid())
+  streamId    String
+  donorId     String
+  amountCoins Int
+  message     String?
+  createdAt   DateTime @default(now())
+
+  stream LiveStream @relation(fields: [streamId], references: [id], onDelete: Cascade)
+  donor  User       @relation(fields: [donorId], references: [id], onDelete: Cascade)
+
+  @@index([streamId])
+  @@index([donorId])
+}
+
+// Singleton row (id always "singleton") — global feature kill-switches and
+// site-wide maintenance mode, admin-controlled from /admin/system.
+model PlatformSettings {
+  id                 String   @id
+  maintenanceMode    Boolean  @default(false)
+  maintenanceMessage String?
+  callsEnabled       Boolean  @default(true)
+  wallEnabled        Boolean  @default(true)
+  marketplaceEnabled Boolean  @default(true)
+  streamsEnabled     Boolean  @default(true)
+  updatedAt          DateTime @updatedAt
+}
+
+// ===== Sticker packs — created conversationally through the built-in
+// "Sticker Bot" (see src/lib/sticker-bot.ts), the same way Telegram's
+// @Stickers bot works: DM the bot, send it images, it crops/resizes each one
+// and adds it to a draft pack, then /publish makes the pack usable by anyone.
+
+model StickerPack {
+  id          String   @id @default(cuid())
+  ownerId     String
+  name        String
+  slug        String   @unique
+  status      String   @default("draft") // draft | published | removed
+  createdAt   DateTime @default(now())
+  publishedAt DateTime?
+
+  owner    User      @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  stickers Sticker[]
+
+  @@index([ownerId, status])
+  @@index([status])
+}
+
+model Sticker {
+  id        String   @id @default(cuid())
+  packId    String
+  imageUrl  String
+  emoji     String   @default("🙂")
+  position  Int      @default(0)
+  createdAt DateTime @default(now())
+
+  pack StickerPack @relation(fields: [packId], references: [id], onDelete: Cascade)
+
+  @@index([packId, position])
+}
+
+// Per-(bot,user) conversation state for the built-in Sticker Bot's
+// multi-step flow (send /newpack, then images, then /publish). Generic
+// enough to reuse for any future first-party bot with a stateful dialog.
+model BotSession {
+  id        String   @id @default(cuid())
+  botUserId String
+  userId    String
+  state     String // JSON blob: { step, draftPackId, ... }
+  updatedAt DateTime @updatedAt
+
+  @@unique([botUserId, userId])
+}
+
+// Who viewed a user's current (or historical) profile photo — Telegram-style.
+// Scoped by avatarUrl so changing the photo starts a fresh viewer list.
+model ProfilePhotoView {
+  id        String   @id @default(cuid())
+  ownerId   String
+  viewerId  String
+  avatarUrl String
+  viewedAt  DateTime @default(now())
+
+  owner  User @relation("ProfilePhotoViewsReceived", fields: [ownerId], references: [id], onDelete: Cascade)
+  viewer User @relation("ProfilePhotoViewsMade", fields: [viewerId], references: [id], onDelete: Cascade)
+
+  @@unique([ownerId, viewerId, avatarUrl])
+  @@index([ownerId, avatarUrl, viewedAt])
+  @@index([viewerId])
+}
+
+// Who liked a profile photo (avatar or gallery) — Telegram-style.
+model ProfilePhotoLike {
+  id        String   @id @default(cuid())
+  ownerId   String
+  likerId   String
+  avatarUrl String
+  createdAt DateTime @default(now())
+
+  owner User @relation("ProfilePhotoLikesReceived", fields: [ownerId], references: [id], onDelete: Cascade)
+  liker User @relation("ProfilePhotoLikesMade", fields: [likerId], references: [id], onDelete: Cascade)
+
+  @@unique([ownerId, likerId, avatarUrl])
+  @@index([ownerId, avatarUrl, createdAt])
+  @@index([likerId])
+}
+
+// One row per (profile, visitor) pair, upserted on each view — naturally
+// dedupes to "most recent visit per visitor" without unbounded growth.
+// Only the profile owner can see this list, and only while Premium is active.
+model ProfileVisit {
+  id        String   @id @default(cuid())
+  profileId String
+  visitorId String
+  visitedAt DateTime @default(now())
+
+  profile User @relation("ProfileVisitsReceived", fields: [profileId], references: [id], onDelete: Cascade)
+  visitor User @relation("ProfileVisitsMade", fields: [visitorId], references: [id], onDelete: Cascade)
+
+  @@unique([profileId, visitorId])
+  @@index([profileId, visitedAt])
+}
