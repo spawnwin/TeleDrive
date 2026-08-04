@@ -168,13 +168,30 @@ window.EYE_STATE = (() => {
       sacked: false,
       pendingPress: null
     };
-    // KO comps after state.clubId exists so the player is always seeded
+    // Кубок — домашнее участие; ЛЧ/ЧМ — только через зону/рейтинг (свой клуб не в ЛЧ с нуля)
     state.cup = createCup(leagueClubs, me.id);
-    state.ucl = createUcl(allClubs, me.id, { forcePlayer: true });
+    state.ucl = createUcl(allClubs, me.id, { forcePlayer: false });
     state.cwc = createCwc(allClubs, me.id);
     state.nextUclSeeds = null;
     state.lastUclChampion = null;
     state.cwcBest = '';
+    const inUcl = (state.ucl.bracket || []).some(m => m.home === me.id || m.away === me.id);
+    if (inUcl) {
+      const seed = (state.ucl.seeds || []).find(s => s.id === me.id);
+      state.inbox.unshift({
+        id: D().uid('m'), type: 'ucl', title: 'Лига чемпионов',
+        body: `Вы в сетке ЛЧ (${seed?.reason || 'путёвка'}). Иначе путёвку дают только по итогам сезона.`,
+        read: false, at: Date.now()
+      });
+    } else {
+      state.inbox.unshift({
+        id: D().uid('m'), type: 'ucl', title: 'Путь в Лигу чемпионов',
+        body: me.customClub
+          ? `Свой клуб стартует вне ЛЧ. Займите зону квалификации по итогам сезона (топ лиги) — и попадёте в сетку следующего сезона.`
+          : `Сейчас вы вне сетки ЛЧ. Путёвка — через зону по итогам сезона или высокий рейтинг клуба.`,
+        read: false, at: Date.now()
+      });
+    }
     if (isClubInCwc(me.id)) {
       const seed = (state.cwc.seeds || []).find(s => s.id === me.id);
       state.inbox.unshift({
@@ -186,7 +203,7 @@ window.EYE_STATE = (() => {
     if (me.customClub) {
       state.inbox.unshift({
         id: D().uid('m'), type: 'dev', title: 'План развития клуба',
-        body: '1) Тренируйте состав каждую неделю. 2) Вкладывайте в базу и академию. 3) Поднимайте молодёжь. 4) Копите на трансферы. Победы растят болельщиков и уровень клуба.',
+        body: '1) Тренируйте состав каждую неделю. 2) Вкладывайте в базу и академию. 3) Поднимайте молодёжь. 4) Копите на трансферы. Победы растят болельщиков и уровень клуба. ЛЧ — только после квалификации сезоном.',
         read: false, at: Date.now()
       });
     }
@@ -458,7 +475,8 @@ window.EYE_STATE = (() => {
   }
 
   function createUcl(allClubs, ensureId, opts = {}) {
-    const forcePlayer = opts.forcePlayer !== false;
+    // Wildcard только если явно запрошен — иначе путёвка по таблице/рейтингу
+    const forcePlayer = opts.forcePlayer === true;
     let seedMeta = (opts.seeds && opts.seeds.length)
       ? opts.seeds
       : (state?.nextUclSeeds?.length ? state.nextUclSeeds : reputationUclSeeds(allClubs));
@@ -711,21 +729,39 @@ window.EYE_STATE = (() => {
       if (!state.displayCurrency) state.displayCurrency = getCurrency();
       if (!state.board && club()) state.board = B().createBoard(club());
       if (!state.scoutReports) state.scoutReports = {};
-      if (!state.ucl) state.ucl = createUcl(state.clubs || [], state.clubId);
+      if (!state.ucl) state.ucl = createUcl(state.clubs || [], state.clubId, { forcePlayer: false });
       if (!state.cup) state.cup = createCup(leagueClubs(), state.clubId);
       if (!state.cwc) state.cwc = createCwc(state.clubs || [], state.clubId);
       if (state.sacked == null) state.sacked = false;
       if (state.cwcBest == null) state.cwcBest = '';
-      // Retrofit: if KO not started yet and player missing, reseat them
-      if (state.ucl && !state.ucl.champion && state.clubId) {
-        const inU = (state.ucl.bracket || []).some(m => m.home === state.clubId || m.away === state.clubId);
-        const started = (state.ucl.bracket || []).some(m => m.played) || (state.ucl.history || []).length;
-        if (!inU && !started) state.ucl = createUcl(state.clubs || [], state.clubId, { forcePlayer: true });
-      }
+      // Кубок: если игрок выпал из неначатой сетки — вернуть
       if (state.cup && !state.cup.champion && state.clubId) {
         const inC = (state.cup.bracket || []).some(m => m.home === state.clubId || m.away === state.clubId);
         const started = (state.cup.bracket || []).some(m => m.played) || (state.cup.history || []).length;
         if (!inC && !started) state.cup = createCup(leagueClubs(), state.clubId);
+      }
+      // Убрать незаслуженный wildcard ЛЧ у своего клуба (если турнир ещё не начат)
+      if (state.ucl && !state.ucl.champion && state.clubId && club()?.customClub) {
+        const started = (state.ucl.bracket || []).some(m => m.played) || (state.ucl.history || []).length;
+        const mySeed = (state.ucl.seeds || []).find(s => s.id === state.clubId);
+        const undeserved = !!state.ucl.wildcard
+          || (mySeed && String(mySeed.reason || '').includes('wildcard'));
+        if (!started && undeserved) {
+          state.ucl = createUcl(state.clubs || [], state.clubId, { forcePlayer: false });
+          const cwcStarted = state.cwc && (
+            (state.cwc.groupMatchday || 0) > 0
+            || state.cwc.phase === 'ko'
+            || state.cwc.champion
+            || Object.values(state.cwc.groups || {}).some(g =>
+              (g.matchdays || []).some(day => (day || []).some(m => m.played))
+            )
+          );
+          if (state.cwc && !cwcStarted) {
+            state.cwc = createCwc(state.clubs || [], state.clubId);
+          }
+          state.uclBest = '';
+          state.cwcBest = '';
+        }
       }
       if (state.cupBest == null) state.cupBest = '';
       if (state.uclBest == null) state.uclBest = '';
@@ -2529,7 +2565,7 @@ window.EYE_STATE = (() => {
     state.day = 1;
     state.phase = 'season';
     state.cup = createCup(lc, next.id);
-    state.ucl = createUcl(state.clubs, next.id, { forcePlayer: true });
+    state.ucl = createUcl(state.clubs, next.id, { forcePlayer: false });
     state.cwc = createCwc(state.clubs, next.id);
     state.cupBest = '';
     state.uclBest = '';
