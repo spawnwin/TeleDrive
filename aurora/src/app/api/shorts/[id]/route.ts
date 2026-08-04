@@ -4,26 +4,24 @@ import { getCurrentUser } from '@/lib/auth'
 import { withJsonApi } from '@/lib/with-json-api'
 import { areUsersBlocked } from '@/lib/user-blocks'
 
-function serializeShort(
-  short: {
-    id: string
-    title: string
-    description: string | null
-    videoUrl: string
-    thumbnailUrl: string | null
-    source: string
-    externalId: string | null
-    duration: number | null
-    views: number
-    likes: number
-    comments: number
-    earnings: number
-    tags: string | null
-    createdAt: Date
-    creator: { id: string; name: string; username: string; avatarColor: string }
-    shortLikes: { id: string }[]
-  },
-) {
+function serializeShort(short: {
+  id: string
+  title: string
+  description: string | null
+  videoUrl: string | null
+  thumbnailUrl: string | null
+  source: string
+  externalId: string | null
+  duration: number | null
+  views: number
+  likes: number
+  comments: number
+  earnings: number
+  tags: string | null
+  createdAt: Date
+  creator: { id: string; name: string; username: string; avatarColor: string }
+  shortLikes: { id: string }[]
+}) {
   return {
     id: short.id,
     title: short.title,
