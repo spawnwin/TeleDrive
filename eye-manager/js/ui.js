@@ -4,8 +4,12 @@ window.EYE_UI = (() => {
   const D = () => window.EYE_DATA;
   const E = () => window.EYE_ENGINE;
   const W = () => window.EYE_WORLD;
+  const A = () => window.EYE_AUTH;
 
   let matchAbort = false;
+  let matchSkipHalf = false;
+  let matchPaused = false;
+  let matchSpeed = 1;
   let matchPlaying = false;
   let transferTab = 'market';
   let statsTab = 'goals';
@@ -13,7 +17,8 @@ window.EYE_UI = (() => {
   let playerBack = 'squad';
   let selectedSlot = null;
   let bidEntryId = null;
-  let matchCtx = null; // { type, match, half1, subsUsed }
+  let matchCtx = null;
+  let cloudHasCareer = false;
 
   function $(sel, root = document) { return root.querySelector(sel); }
   function $all(sel, root = document) { return [...root.querySelectorAll(sel)]; }
@@ -80,9 +85,38 @@ window.EYE_UI = (() => {
     if (id === 'result') renderResult();
     if (id === 'create') fillCreateForm();
     if (id === 'more') syncCurrencyButtons();
-    if (id === 'home') {
-      const cont = $('#btn-continue');
-      cont.hidden = !S().load();
+    if (id === 'auth') renderAuth();
+    if (id === 'home') renderHome();
+  }
+
+  function renderAuth() {
+    // no-op; tabs handled in bind
+  }
+
+  async function renderHome() {
+    const logged = A().isLoggedIn();
+    const user = A().getUser();
+    const box = $('#home-user');
+    const btnAuth = $('#btn-auth');
+    const btnNew = $('#btn-new');
+    const btnCont = $('#btn-continue');
+    const btnOut = $('#btn-logout');
+
+    if (logged && user) {
+      box.hidden = false;
+      box.innerHTML = `<div><strong>${user.name || user.login}</strong><small>@${user.login}</small></div>`;
+      btnAuth.hidden = true;
+      btnNew.hidden = false;
+      btnOut.hidden = false;
+      const local = !!S().load();
+      btnCont.hidden = !(local || cloudHasCareer);
+      btnCont.textContent = local ? 'Продолжить' : 'Загрузить из облака';
+    } else {
+      box.hidden = true;
+      btnAuth.hidden = false;
+      btnNew.hidden = true;
+      btnCont.hidden = true;
+      btnOut.hidden = true;
     }
   }
 
@@ -92,6 +126,8 @@ window.EYE_UI = (() => {
     const hidL = $('#sel-league');
     const hidC = $('#sel-club');
     if (!pills || !picker) return;
+    const mgr = document.querySelector('#form-create input[name="manager"]');
+    if (mgr && !mgr.value && A().getUser()?.name) mgr.value = A().getUser().name;
 
     if (!pills.dataset.ready) {
       pills.innerHTML = W().LEAGUES.map((l, i) => {
@@ -736,28 +772,90 @@ window.EYE_UI = (() => {
     ctx.clearRect(0, 0, w, h);
     const g = ctx.createLinearGradient(0, 0, 0, h);
     g.addColorStop(0, '#0F766E');
+    g.addColorStop(0.5, '#0B5C54');
     g.addColorStop(1, '#064E3B');
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, w, h);
-    ctx.strokeStyle = 'rgba(255,255,255,0.25)';
+    // stripes
+    ctx.fillStyle = 'rgba(255,255,255,0.03)';
+    for (let i = 0; i < 6; i++) ctx.fillRect(0, (h / 6) * i, w, h / 12);
+
+    const pad = 18;
+    ctx.strokeStyle = 'rgba(255,255,255,0.28)';
     ctx.lineWidth = 2;
-    ctx.strokeRect(16, 16, w - 32, h - 32);
-    ctx.beginPath(); ctx.arc(w / 2, h / 2, 36, 0, Math.PI * 2); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(16, h / 2); ctx.lineTo(w - 16, h / 2); ctx.stroke();
+    ctx.strokeRect(pad, pad, w - pad * 2, h - pad * 2);
+    // halfway
+    ctx.beginPath(); ctx.moveTo(pad, h / 2); ctx.lineTo(w - pad, h / 2); ctx.stroke();
+    ctx.beginPath(); ctx.arc(w / 2, h / 2, 42, 0, Math.PI * 2); ctx.stroke();
+    ctx.beginPath(); ctx.arc(w / 2, h / 2, 3, 0, Math.PI * 2); ctx.fillStyle = 'rgba(255,255,255,0.4)'; ctx.fill();
+    // boxes
+    const boxW = w * 0.46, boxH = 70, sixH = 28;
+    ctx.strokeRect((w - boxW) / 2, pad, boxW, boxH);
+    ctx.strokeRect((w - boxW * 0.55) / 2, pad, boxW * 0.55, sixH);
+    ctx.strokeRect((w - boxW) / 2, h - pad - boxH, boxW, boxH);
+    ctx.strokeRect((w - boxW * 0.55) / 2, h - pad - sixH, boxW * 0.55, sixH);
+
     const t = minute / 90;
-    for (let i = 0; i < 11; i++) {
-      const x = 40 + (i % 5) * ((w - 80) / 4) + Math.sin(minute * 0.2 + i) * 4;
-      const y = 40 + Math.floor(i / 5) * 70 + Math.cos(minute * 0.15 + i) * 3 + t * 20;
-      ctx.beginPath(); ctx.fillStyle = colors.home; ctx.arc(x, y, 7, 0, Math.PI * 2); ctx.fill();
-    }
-    for (let i = 0; i < 11; i++) {
-      const x = 40 + (i % 5) * ((w - 80) / 4) + Math.cos(minute * 0.18 + i) * 4;
-      const y = h - 100 - Math.floor(i / 5) * 70 + Math.sin(minute * 0.12 + i) * 3 - t * 15;
-      ctx.beginPath(); ctx.fillStyle = colors.away; ctx.arc(x, y, 7, 0, Math.PI * 2); ctx.fill();
-    }
+    const drawTeam = (color, top) => {
+      for (let i = 0; i < 11; i++) {
+        const col = i % 4;
+        const row = Math.floor(i / 4);
+        const baseX = pad + 28 + col * ((w - pad * 2 - 56) / 3);
+        const baseY = top
+          ? pad + 36 + row * 48 + t * 18
+          : h - pad - 36 - row * 48 - t * 18;
+        const x = baseX + Math.sin(minute * 0.18 + i) * 5;
+        const y = baseY + Math.cos(minute * 0.14 + i * 1.3) * 4;
+        ctx.beginPath();
+        ctx.fillStyle = color;
+        ctx.arc(x, y, 8, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(0,0,0,0.25)';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      }
+    };
+    drawTeam(colors.home, true);
+    drawTeam(colors.away, false);
+
     if (ball) {
-      ctx.beginPath(); ctx.fillStyle = '#F8FAFC'; ctx.arc(ball.x, ball.y, 5, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath();
+      ctx.fillStyle = '#F8FAFC';
+      ctx.shadowColor = 'rgba(0,0,0,0.35)';
+      ctx.shadowBlur = 6;
+      ctx.arc(ball.x, ball.y, 5.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.shadowBlur = 0;
     }
+  }
+
+  function syncSpeedButtons() {
+    $all('#speed-row .speed-btn').forEach(b => {
+      b.classList.toggle('active', Number(b.dataset.speed) === matchSpeed);
+    });
+  }
+
+  function syncPauseButton() {
+    const b = $('#btn-pause-match');
+    if (b) b.textContent = matchPaused ? 'Продолжить' : 'Пауза';
+  }
+
+  function showGoalFlash() {
+    const el = $('#goal-flash');
+    if (!el) return;
+    el.hidden = false;
+    clearTimeout(showGoalFlash._t);
+    showGoalFlash._t = setTimeout(() => { el.hidden = true; }, 900);
+  }
+
+  function liveOpts(from, to) {
+    return {
+      fromMinute: from,
+      toMinute: to,
+      getMsPerMinute: () => Math.max(8, Math.round(110 / matchSpeed)),
+      paused: () => matchPaused,
+      aborted: () => matchAbort || matchSkipHalf
+    };
   }
 
   async function runMatch() {
@@ -766,9 +864,14 @@ window.EYE_UI = (() => {
     if (!next) return;
     matchPlaying = true;
     matchAbort = false;
+    matchSkipHalf = false;
+    matchPaused = false;
     matchCtx = { ...next, subsUsed: next.subsUsed || 0 };
     show('match');
     $('#ht-panel').hidden = true;
+    syncSpeedButtons();
+    syncPauseButton();
+    $('#goal-flash').hidden = true;
 
     const home = S().clubById(next.match.home);
     const away = S().clubById(next.match.away);
@@ -780,7 +883,10 @@ window.EYE_UI = (() => {
     feed.innerHTML = '';
     $('#m-home').textContent = home.short || home.name.slice(0, 12);
     $('#m-away').textContent = away.short || away.name.slice(0, 12);
+    $('#m-home-dot').style.background = home.color;
+    $('#m-away-dot').style.background = away.color;
     $('#m-score').textContent = '0:0';
+    $('#m-progress').style.width = '0%';
     let score = [0, 0];
     let ball = { x: canvas.width / 2, y: canvas.height / 2 };
 
@@ -796,24 +902,26 @@ window.EYE_UI = (() => {
       if (ev.type === 'goal') {
         score = ev.score || score;
         $('#m-score').textContent = score.join(':');
-        ball = { x: canvas.width / 2, y: ev.side === 'home' ? 40 : canvas.height - 40 };
+        ball = { x: canvas.width / 2, y: ev.side === 'home' ? 48 : canvas.height - 48 };
+        showGoalFlash();
       } else {
-        ball = { x: canvas.width * (0.3 + Math.random() * 0.4), y: canvas.height * (0.25 + Math.random() * 0.5) };
+        ball = { x: canvas.width * (0.28 + Math.random() * 0.44), y: canvas.height * (0.22 + Math.random() * 0.56) };
       }
       const div = document.createElement('div');
-      div.className = 'feed-item' + (ev.type === 'goal' ? ' goal' : '');
+      div.className = 'feed-item' + (ev.type === 'goal' ? ' goal' : ev.type === 'red' ? ' red' : ev.type === 'card' ? ' card' : ev.type === 'injury' ? ' injury' : '');
       div.textContent = `${ev.minute}′  ${ev.text}`;
       feed.prepend(div);
+      while (feed.children.length > 40) feed.lastChild.remove();
     };
     const onTick = (minute, result) => {
       $('#m-min').textContent = minute + '′';
+      $('#m-progress').style.width = Math.min(100, (minute / 90) * 100) + '%';
       drawMatchFrame(ctx, canvas.width, canvas.height, minute, { home: home.color, away: away.color }, ball);
       updateStats(result);
     };
 
-    // First half
     const half1 = E().simulateMatch(home, away, { startMinute: 1, endMinute: 45, applyFatigue: false });
-    await E().playLive(half1, onEvent, onTick, { msPerMinute: 90, fromMinute: 1, toMinute: 45, aborted: () => matchAbort });
+    await E().playLive(half1, onEvent, onTick, liveOpts(1, 45));
 
     if (matchAbort) {
       const full = E().simulateMatch(home, away, {
@@ -824,21 +932,25 @@ window.EYE_UI = (() => {
       score = result.score;
       $('#m-score').textContent = score.join(':');
       $('#m-min').textContent = '90′';
+      $('#m-progress').style.width = '100%';
       finishMatch(next, result);
       return;
     }
 
-    // HT panel
+    matchSkipHalf = false;
     matchCtx.half1 = half1;
     score = half1.score;
     $('#m-score').textContent = score.join(':');
     $('#m-min').textContent = '45′ П';
+    $('#m-progress').style.width = '50%';
     showHtPanel();
   }
 
   function showHtPanel() {
     const panel = $('#ht-panel');
     panel.hidden = false;
+    matchPaused = false;
+    syncPauseButton();
     const used = matchCtx?.subsUsed || 0;
     const left = Math.max(0, 3 - used);
     $('#ht-hint').textContent = `Стиль, схема и замены (осталось ${left}/3) · затем второй тайм`;
@@ -852,7 +964,7 @@ window.EYE_UI = (() => {
     S().ensureLineup();
     const xiIds = new Set(me.lineup.map(p => p.id));
     const slots = D().FORMATIONS[me.formation]?.slots || [];
-    const bench = me.squad.filter(p => !xiIds.has(p.id) && !p.injured).slice(0, 8);
+    const bench = me.squad.filter(p => !xiIds.has(p.id) && !p.injured && !p.suspended).slice(0, 8);
     $('#ht-bench').innerHTML = left <= 0
       ? `<div class="news-item">Лимит замен исчерпан</div>`
       : (bench.map(p => {
@@ -875,6 +987,10 @@ window.EYE_UI = (() => {
 
   async function continueSecondHalf() {
     $('#ht-panel').hidden = true;
+    matchAbort = false;
+    matchSkipHalf = false;
+    matchPaused = false;
+    syncPauseButton();
     const next = matchCtx;
     const half1 = next.half1;
     const home = S().clubById(next.match.home);
@@ -889,14 +1005,16 @@ window.EYE_UI = (() => {
       if (ev.type === 'goal') {
         score = ev.score || score;
         $('#m-score').textContent = score.join(':');
+        showGoalFlash();
       }
       const div = document.createElement('div');
-      div.className = 'feed-item' + (ev.type === 'goal' ? ' goal' : '');
+      div.className = 'feed-item' + (ev.type === 'goal' ? ' goal' : ev.type === 'red' ? ' red' : ev.type === 'card' ? ' card' : '');
       div.textContent = `${ev.minute}′  ${ev.text}`;
       feed.prepend(div);
     };
     const onTick = (minute, result) => {
       $('#m-min').textContent = minute + '′';
+      $('#m-progress').style.width = Math.min(100, (minute / 90) * 100) + '%';
       drawMatchFrame(ctx, canvas.width, canvas.height, minute, { home: home.color, away: away.color }, ball);
       $('#match-stats').innerHTML = `
         <div><strong>${result.stats.possession[0]}%</strong>владение</div>
@@ -910,10 +1028,9 @@ window.EYE_UI = (() => {
       scorersH: half1.scorersH, scorersA: half1.scorersA,
       applyFatigue: true, finalizeStats: true
     });
-    await E().playLive(half2, onEvent, onTick, {
-      msPerMinute: matchAbort ? 0 : 90, fromMinute: 46, toMinute: 90, aborted: () => matchAbort
-    });
+    await E().playLive(half2, onEvent, onTick, liveOpts(46, 90));
     const result = E().mergeResults(half1, half2);
+    $('#m-progress').style.width = '100%';
     finishMatch(next, result);
   }
 
@@ -922,8 +1039,10 @@ window.EYE_UI = (() => {
     else if (next.type === 'cup') S().recordCupMatch(next.match, result);
     else S().recordPlayerMatch(next.match, result);
     matchPlaying = false;
+    matchPaused = false;
     matchCtx = null;
     show('result');
+    cloudSave(true);
   }
 
   function renderResult() {
@@ -1064,19 +1183,89 @@ window.EYE_UI = (() => {
       }
     });
 
-    $('#btn-new')?.addEventListener('click', () => show('create'));
-    $('#btn-continue')?.addEventListener('click', () => { if (S().load()) show('hub'); });
-    $('#form-create')?.addEventListener('submit', (e) => {
+    $('#btn-auth')?.addEventListener('click', () => show('auth'));
+    $('#btn-new')?.addEventListener('click', () => {
+      if (!A().isLoggedIn()) { show('auth'); toast('Сначала войдите'); return; }
+      show('create');
+    });
+    $('#btn-continue')?.addEventListener('click', async () => {
+      if (!A().isLoggedIn()) { show('auth'); return; }
+      if (S().load()) { show('hub'); return; }
+      toast('Загрузка из облака…');
+      const remote = await A().loadCareer();
+      if (!remote) { toast('Сохранение не найдено'); return; }
+      try { localStorage.setItem(S().KEY, JSON.stringify(remote)); } catch {}
+      if (S().load()) { toast('Карьера загружена'); show('hub'); }
+      else toast('Не удалось загрузить');
+    });
+    $('#btn-logout')?.addEventListener('click', async () => {
+      await A().logout();
+      cloudHasCareer = false;
+      toast('Вы вышли');
+      show('home');
+    });
+    $('#btn-logout-more')?.addEventListener('click', async () => {
+      await A().logout();
+      cloudHasCareer = false;
+      toast('Вы вышли');
+      show('home');
+    });
+    $('#auth-tabs')?.addEventListener('click', (e) => {
+      const tab = e.target.closest('[data-auth-tab]');
+      if (!tab) return;
+      const mode = tab.dataset.authTab;
+      $all('#auth-tabs .tab').forEach(t => t.classList.toggle('active', t === tab));
+      $('#form-login').hidden = mode !== 'login';
+      $('#form-register').hidden = mode !== 'register';
+    });
+    $('#form-login')?.addEventListener('submit', async (e) => {
       e.preventDefault();
+      const fd = new FormData(e.target);
+      $('#login-msg').textContent = 'Вход…';
+      try {
+        const data = await A().login({
+          login: String(fd.get('login')),
+          password: String(fd.get('password'))
+        });
+        cloudHasCareer = !!data.hasCareer;
+        $('#login-msg').textContent = '';
+        toast('Добро пожаловать, ' + (data.user.name || data.user.login));
+        show('home');
+      } catch (err) {
+        $('#login-msg').textContent = err.message;
+      }
+    });
+    $('#form-register')?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const fd = new FormData(e.target);
+      $('#register-msg').textContent = 'Создание…';
+      try {
+        await A().register({
+          login: String(fd.get('login')),
+          password: String(fd.get('password')),
+          name: String(fd.get('name') || fd.get('login'))
+        });
+        cloudHasCareer = false;
+        $('#register-msg').textContent = '';
+        toast('Аккаунт создан');
+        show('create');
+      } catch (err) {
+        $('#register-msg').textContent = err.message;
+      }
+    });
+    $('#form-create')?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (!A().isLoggedIn()) { show('auth'); return; }
       const fd = new FormData(e.target);
       try {
         S().createCareer({
-          managerName: String(fd.get('manager')).trim(),
+          managerName: String(fd.get('manager')).trim() || A().getUser()?.name || 'Менеджер',
           clubId: String(fd.get('clubId')),
           formation: String(fd.get('formation')),
           style: String(fd.get('style'))
         });
         S().autoLineup();
+        await cloudSave(true);
         toast('Карьера начата');
         show('hub');
       } catch (err) {
@@ -1089,7 +1278,28 @@ window.EYE_UI = (() => {
       else show('prematch');
     });
     $('#btn-kickoff')?.addEventListener('click', () => runMatch());
-    $('#btn-skip-match')?.addEventListener('click', () => { matchAbort = true; });
+    $('#btn-skip-match')?.addEventListener('click', () => {
+      matchPaused = false;
+      matchAbort = true;
+      syncPauseButton();
+    });
+    $('#btn-skip-half')?.addEventListener('click', () => {
+      matchPaused = false;
+      matchSkipHalf = true;
+      if (matchCtx?.half1) matchAbort = true;
+      syncPauseButton();
+    });
+    $('#btn-pause-match')?.addEventListener('click', () => {
+      if (!matchPlaying || !$('#ht-panel').hidden) return;
+      matchPaused = !matchPaused;
+      syncPauseButton();
+    });
+    $('#speed-row')?.addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-speed]');
+      if (!btn) return;
+      matchSpeed = Number(btn.dataset.speed) || 1;
+      syncSpeedButtons();
+    });
     $('#btn-auto-xi')?.addEventListener('click', () => { S().autoLineup(); toast('Состав собран'); renderSquad(); });
     $('#btn-auto-xi-tac')?.addEventListener('click', () => { S().autoLineup(); toast('Состав собран'); drawPitch(); renderBench(); });
     $('#sel-formation')?.addEventListener('change', (e) => { S().setTactics(e.target.value, null); S().autoLineup(); drawPitch(); renderBench(); });
@@ -1165,20 +1375,18 @@ window.EYE_UI = (() => {
     });
   }
 
-  async function cloudSave() {
+  async function cloudSave(silent = false) {
     const st = S().get();
     if (!st) return toast('Нет сохранения');
+    if (!A().isLoggedIn()) return toast('Войдите в аккаунт');
     try {
-      const res = await fetch(new URL('api/save', location.href).toString(), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ manager: st.managerName, state: st })
-      });
-      if (!res.ok) throw new Error('fail');
-      const data = await res.json();
-      toast('Облако: ' + (data.id || 'ok'));
-    } catch {
-      toast('Сервер недоступен — локальное сохранение активно');
+      await A().saveCareer(st);
+      cloudHasCareer = true;
+      if (!silent) toast('Облако: сохранено');
+      return true;
+    } catch (err) {
+      if (!silent) toast(err.message || 'Сервер недоступен');
+      return null;
     }
   }
 
@@ -1189,8 +1397,9 @@ window.EYE_UI = (() => {
       fill.style.width = i + '%';
       await E().sleep(16);
     }
+    const me = await A().refreshMe();
+    cloudHasCareer = !!me?.hasCareer;
     show('home');
-    refresh('home');
   }
 
   return { show, toast, boot, refresh };

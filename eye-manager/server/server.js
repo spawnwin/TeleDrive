@@ -10,9 +10,85 @@ const { URL } = require('url');
 const PORT = Number(process.env.EYE_PORT || 9140);
 const ROOT = path.resolve(__dirname, '..');
 const DATA_DIR = process.env.EYE_DATA || path.join(__dirname, 'data');
+const USERS_FILE = path.join(DATA_DIR, 'users.json');
+const SESSIONS_FILE = path.join(DATA_DIR, 'sessions.json');
 const SAVES = path.join(DATA_DIR, 'saves');
 
 fs.mkdirSync(SAVES, { recursive: true });
+fs.mkdirSync(DATA_DIR, { recursive: true });
+
+function loadJson(file, fallback) {
+  try {
+    if (!fs.existsSync(file)) return fallback;
+    return JSON.parse(fs.readFileSync(file, 'utf8'));
+  } catch {
+    return fallback;
+  }
+}
+
+function saveJson(file, data) {
+  fs.writeFileSync(file, JSON.stringify(data, null, 2));
+}
+
+function hashPassword(password, salt) {
+  const s = salt || crypto.randomBytes(16).toString('hex');
+  const hash = crypto.scryptSync(String(password), s, 64).toString('hex');
+  return { salt: s, hash };
+}
+
+function verifyPassword(password, salt, hash) {
+  const check = crypto.scryptSync(String(password), salt, 64).toString('hex');
+  return crypto.timingSafeEqual(Buffer.from(check, 'hex'), Buffer.from(hash, 'hex'));
+}
+
+function usersDb() {
+  const db = loadJson(USERS_FILE, { users: {} });
+  if (!db.users) db.users = {};
+  return db;
+}
+
+function sessionsDb() {
+  const db = loadJson(SESSIONS_FILE, { sessions: {} });
+  if (!db.sessions) db.sessions = {};
+  return db;
+}
+
+function publicUser(u) {
+  return { id: u.id, login: u.login, name: u.name, createdAt: u.createdAt };
+}
+
+function createSession(userId) {
+  const db = sessionsDb();
+  const token = crypto.randomBytes(24).toString('hex');
+  db.sessions[token] = { userId, createdAt: Date.now(), lastAt: Date.now() };
+  // prune old (>30d)
+  const cut = Date.now() - 30 * 864e5;
+  Object.keys(db.sessions).forEach((t) => {
+    if ((db.sessions[t].lastAt || 0) < cut) delete db.sessions[t];
+  });
+  saveJson(SESSIONS_FILE, db);
+  return token;
+}
+
+function authUser(req) {
+  const h = req.headers.authorization || '';
+  const m = h.match(/^Bearer\s+(.+)$/i);
+  const token = m ? m[1].trim() : (req.headers['x-eye-token'] || '').trim();
+  if (!token) return null;
+  const db = sessionsDb();
+  const s = db.sessions[token];
+  if (!s) return null;
+  s.lastAt = Date.now();
+  saveJson(SESSIONS_FILE, db);
+  const users = usersDb().users;
+  const u = users[s.userId];
+  if (!u) return null;
+  return { user: u, token };
+}
+
+function savePathFor(userId) {
+  return path.join(SAVES, `user_${userId}.json`);
+}
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -40,7 +116,7 @@ function json(res, code, obj) {
     'Content-Type': 'application/json; charset=utf-8',
     'Cache-Control': 'no-store',
     'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Headers': 'Content-Type',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Eye-Token',
     'Access-Control-Allow-Methods': 'GET,POST,OPTIONS'
   });
 }
@@ -59,7 +135,7 @@ function readBody(req) {
     let size = 0;
     req.on('data', (c) => {
       size += c.length;
-      if (size > 2e6) { reject(new Error('too large')); req.destroy(); return; }
+      if (size > 4e6) { reject(new Error('too large')); req.destroy(); return; }
       chunks.push(c);
     });
     req.on('end', () => resolve(Buffer.concat(chunks)));
@@ -67,17 +143,8 @@ function readBody(req) {
   });
 }
 
-function listSaves() {
-  return fs.readdirSync(SAVES)
-    .filter((f) => f.endsWith('.json'))
-    .map((f) => {
-      try {
-        const j = JSON.parse(fs.readFileSync(path.join(SAVES, f), 'utf8'));
-        return { id: f.replace(/\.json$/, ''), manager: j.manager, updatedAt: j.updatedAt, season: j.state?.season };
-      } catch { return null; }
-    })
-    .filter(Boolean)
-    .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+function normalizeLogin(login) {
+  return String(login || '').trim().toLowerCase().replace(/[^a-z0-9_\-\.]/g, '').slice(0, 24);
 }
 
 const server = http.createServer(async (req, res) => {
@@ -92,15 +159,114 @@ const server = http.createServer(async (req, res) => {
     return json(res, 200, { ok: true, service: 'eye-manager', ts: Date.now() });
   }
 
-  if (pathname === '/api/saves' && req.method === 'GET') {
-    return json(res, 200, { saves: listSaves() });
+  // ——— AUTH ———
+  if (pathname === '/api/register' && req.method === 'POST') {
+    try {
+      const body = JSON.parse((await readBody(req)).toString('utf8'));
+      const login = normalizeLogin(body.login);
+      const password = String(body.password || '');
+      const name = String(body.name || login).trim().slice(0, 32);
+      if (login.length < 3) return json(res, 400, { error: 'Логин минимум 3 символа (a-z, 0-9)' });
+      if (password.length < 4) return json(res, 400, { error: 'Пароль минимум 4 символа' });
+      const db = usersDb();
+      if (Object.values(db.users).some((u) => u.login === login)) {
+        return json(res, 409, { error: 'Логин уже занят' });
+      }
+      const id = crypto.randomBytes(8).toString('hex');
+      const { salt, hash } = hashPassword(password);
+      const user = { id, login, name, salt, hash, createdAt: Date.now() };
+      db.users[id] = user;
+      saveJson(USERS_FILE, db);
+      const token = createSession(id);
+      return json(res, 200, { ok: true, token, user: publicUser(user) });
+    } catch (e) {
+      return json(res, 500, { error: String(e.message || e) });
+    }
   }
 
+  if (pathname === '/api/login' && req.method === 'POST') {
+    try {
+      const body = JSON.parse((await readBody(req)).toString('utf8'));
+      const login = normalizeLogin(body.login);
+      const password = String(body.password || '');
+      const db = usersDb();
+      const user = Object.values(db.users).find((u) => u.login === login);
+      if (!user || !verifyPassword(password, user.salt, user.hash)) {
+        return json(res, 401, { error: 'Неверный логин или пароль' });
+      }
+      const token = createSession(user.id);
+      const file = savePathFor(user.id);
+      const hasCareer = fs.existsSync(file);
+      return json(res, 200, { ok: true, token, user: publicUser(user), hasCareer });
+    } catch (e) {
+      return json(res, 500, { error: String(e.message || e) });
+    }
+  }
+
+  if (pathname === '/api/logout' && req.method === 'POST') {
+    const auth = authUser(req);
+    if (auth) {
+      const db = sessionsDb();
+      delete db.sessions[auth.token];
+      saveJson(SESSIONS_FILE, db);
+    }
+    return json(res, 200, { ok: true });
+  }
+
+  if (pathname === '/api/me' && req.method === 'GET') {
+    const auth = authUser(req);
+    if (!auth) return json(res, 401, { error: 'Не авторизован' });
+    const hasCareer = fs.existsSync(savePathFor(auth.user.id));
+    return json(res, 200, { ok: true, user: publicUser(auth.user), hasCareer });
+  }
+
+  if (pathname === '/api/career' && req.method === 'GET') {
+    const auth = authUser(req);
+    if (!auth) return json(res, 401, { error: 'Не авторизован' });
+    const file = savePathFor(auth.user.id);
+    if (!fs.existsSync(file)) return json(res, 404, { error: 'Нет сохранения' });
+    const payload = JSON.parse(fs.readFileSync(file, 'utf8'));
+    return json(res, 200, { ok: true, ...payload });
+  }
+
+  if (pathname === '/api/career' && req.method === 'POST') {
+    const auth = authUser(req);
+    if (!auth) return json(res, 401, { error: 'Не авторизован' });
+    try {
+      const body = JSON.parse((await readBody(req)).toString('utf8'));
+      if (!body || !body.state) return json(res, 400, { error: 'state required' });
+      const payload = {
+        id: auth.user.id,
+        manager: body.manager || body.state.managerName || auth.user.name,
+        userId: auth.user.id,
+        updatedAt: Date.now(),
+        state: body.state
+      };
+      fs.writeFileSync(savePathFor(auth.user.id), JSON.stringify(payload));
+      return json(res, 200, { ok: true, id: auth.user.id });
+    } catch (e) {
+      return json(res, 500, { error: String(e.message || e) });
+    }
+  }
+
+  // legacy anonymous save (kept for compatibility)
   if (pathname === '/api/save' && req.method === 'POST') {
+    const auth = authUser(req);
     try {
       const raw = await readBody(req);
       const body = JSON.parse(raw.toString('utf8'));
       if (!body || !body.state) return json(res, 400, { error: 'state required' });
+      if (auth) {
+        const payload = {
+          id: auth.user.id,
+          manager: body.manager || body.state.managerName || auth.user.name,
+          userId: auth.user.id,
+          updatedAt: Date.now(),
+          state: body.state
+        };
+        fs.writeFileSync(savePathFor(auth.user.id), JSON.stringify(payload));
+        return json(res, 200, { ok: true, id: auth.user.id });
+      }
       const id = crypto.createHash('sha1')
         .update(String(body.manager || body.state.managerName || 'coach') + '|' + (body.state.clubId || ''))
         .digest('hex')
@@ -118,11 +284,8 @@ const server = http.createServer(async (req, res) => {
     }
   }
 
-  if (pathname.startsWith('/api/save/') && req.method === 'GET') {
-    const id = pathname.split('/').pop().replace(/[^a-z0-9]/gi, '');
-    const file = path.join(SAVES, id + '.json');
-    if (!fs.existsSync(file)) return json(res, 404, { error: 'not found' });
-    return json(res, 200, JSON.parse(fs.readFileSync(file, 'utf8')));
+  if (pathname === '/api/saves' && req.method === 'GET') {
+    return json(res, 200, { saves: [] });
   }
 
   // static
@@ -133,10 +296,8 @@ const server = http.createServer(async (req, res) => {
     file = path.join(file, 'index.html');
   }
   if (!fs.existsSync(file) || !fs.statSync(file).isFile()) {
-    // SPA fallback
     file = path.join(ROOT, 'index.html');
   }
-  // never serve server/data
   if (file.startsWith(path.join(ROOT, 'server', 'data'))) {
     return send(res, 404, 'Not found');
   }
@@ -149,5 +310,5 @@ const server = http.createServer(async (req, res) => {
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`[EYE] listening on http://0.0.0.0:${PORT}`);
   console.log(`[EYE] root ${ROOT}`);
-  console.log(`[EYE] saves ${SAVES}`);
+  console.log(`[EYE] data ${DATA_DIR}`);
 });

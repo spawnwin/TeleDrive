@@ -274,21 +274,24 @@ window.EYE_ENGINE = (() => {
   }
 
   async function playLive(result, onEvent, onTick, opts = {}) {
-    const baseMs = opts.msPerMinute || 280;
     const from = opts.fromMinute || result.startMinute || 1;
     const to = opts.toMinute || result.endMinute || 90;
     let idx = 0;
     while (idx < result.events.length && result.events[idx].minute < from) idx++;
     for (let minute = from; minute <= to; minute++) {
+      while (opts.paused?.() && !opts.aborted?.()) await sleep(80);
       if (opts.aborted?.()) break;
-      const msPerMinute = opts.aborted?.() ? 0 : baseMs;
+      const baseMs = typeof opts.getMsPerMinute === 'function'
+        ? opts.getMsPerMinute()
+        : (opts.msPerMinute || 280);
+      const msPerMinute = Math.max(0, Number(baseMs) || 0);
       onTick?.(minute, result);
       while (idx < result.events.length && result.events[idx].minute === minute) {
         onEvent?.(result.events[idx], result);
         idx++;
-        if (!opts.aborted?.()) await sleep(Math.min(160, msPerMinute * 0.35));
+        if (!opts.aborted?.() && msPerMinute > 0) await sleep(Math.min(140, msPerMinute * 0.35));
       }
-      if (!opts.aborted?.()) await sleep(msPerMinute);
+      if (!opts.aborted?.() && msPerMinute > 0) await sleep(msPerMinute);
     }
     if (opts.aborted?.()) {
       while (idx < result.events.length && result.events[idx].minute <= to) {

@@ -42,11 +42,39 @@
         <h1 class="brand">EYE</h1>
         <p class="lede">Симулятор футбольного менеджера. Глаз видит поле целиком.</p>
       </header>
+      <div class="home-user glass-panel" id="home-user" hidden></div>
       <div class="home-actions">
-        <button class="btn btn-primary btn-glow" id="btn-new">Новая карьера</button>
+        <button class="btn btn-primary btn-glow" id="btn-auth" hidden>Войти</button>
+        <button class="btn btn-primary btn-glow" id="btn-new" hidden>Новая карьера</button>
         <button class="btn btn-glass" id="btn-continue" hidden>Продолжить</button>
+        <button class="btn btn-glass" id="btn-logout" hidden>Выйти</button>
       </div>
-      <p class="home-foot">Сезон · Тактика · Трансферы · Валюта</p>
+      <p class="home-foot">Аккаунт · Сезон · Матч · Трансферы</p>
+    </section>
+
+    <!-- AUTH -->
+    <section id="screen-auth" class="screen">
+      <header class="subhead">
+        <button class="icon-back" data-nav="home" aria-label="Назад">‹</button>
+        <h2>Аккаунт</h2>
+      </header>
+      <div class="tabs" id="auth-tabs">
+        <button type="button" class="tab active" data-auth-tab="login">Вход</button>
+        <button type="button" class="tab" data-auth-tab="register">Регистрация</button>
+      </div>
+      <form id="form-login" class="glass-panel create-form">
+        <label>Логин<input name="login" required minlength="3" maxlength="24" autocomplete="username" placeholder="login" /></label>
+        <label>Пароль<input name="password" type="password" required minlength="4" autocomplete="current-password" placeholder="••••" /></label>
+        <button class="btn btn-primary" type="submit">Войти</button>
+        <p class="hint" id="login-msg"></p>
+      </form>
+      <form id="form-register" class="glass-panel create-form" hidden>
+        <label>Логин<input name="login" required minlength="3" maxlength="24" autocomplete="username" placeholder="login" /></label>
+        <label>Имя менеджера<input name="name" maxlength="32" autocomplete="nickname" placeholder="Как вас зовут" /></label>
+        <label>Пароль<input name="password" type="password" required minlength="4" autocomplete="new-password" placeholder="минимум 4 символа" /></label>
+        <button class="btn btn-primary" type="submit">Создать аккаунт</button>
+        <p class="hint" id="register-msg"></p>
+      </form>
     </section>
 
     <!-- CREATE -->
@@ -379,7 +407,8 @@
         <button class="btn btn-glass" data-nav="train">Тренировки</button>
         <button class="btn btn-glass" data-nav="club">Инфраструктура</button>
         <button class="btn btn-glass" data-nav="inbox">Почта</button>
-        <button class="btn btn-glass" id="btn-save-cloud">Облачное сохранение</button>
+        <button class="btn btn-glass" id="btn-save-cloud">Сохранить в облако</button>
+        <button class="btn btn-glass" id="btn-logout-more">Выйти из аккаунта</button>
         <button class="btn btn-danger" id="btn-reset">Сбросить карьеру</button>
       </div>
     </section>
@@ -407,22 +436,42 @@
     </section>
 
     <!-- MATCH -->
-    <section id="screen-match" class="screen">
+    <section id="screen-match" class="screen screen-match">
       <div class="match-top glass-bar">
         <div class="scoreboard">
-          <span id="m-home">HOME</span>
-          <strong id="m-score">0:0</strong>
-          <span id="m-away">AWAY</span>
+          <div class="sb-side">
+            <span class="sb-dot" id="m-home-dot"></span>
+            <span id="m-home">HOME</span>
+          </div>
+          <div class="sb-center">
+            <strong id="m-score">0:0</strong>
+            <div class="match-min" id="m-min">0′</div>
+          </div>
+          <div class="sb-side right">
+            <span id="m-away">AWAY</span>
+            <span class="sb-dot" id="m-away-dot"></span>
+          </div>
         </div>
-        <div class="match-min" id="m-min">0′</div>
+        <div class="match-progress"><i id="m-progress"></i></div>
       </div>
       <div class="match-pitch-wrap">
         <canvas id="match-canvas" width="360" height="520"></canvas>
+        <div class="goal-flash" id="goal-flash" hidden>ГОЛ!</div>
       </div>
       <div class="match-stats glass-panel" id="match-stats"></div>
       <div class="match-feed" id="match-feed"></div>
-      <div class="match-controls">
-        <button class="btn btn-glass" id="btn-skip-match">Пропустить</button>
+      <div class="match-controls glass-panel">
+        <div class="speed-row" id="speed-row">
+          <button type="button" class="speed-btn" data-speed="0.5">0.5×</button>
+          <button type="button" class="speed-btn active" data-speed="1">1×</button>
+          <button type="button" class="speed-btn" data-speed="2">2×</button>
+          <button type="button" class="speed-btn" data-speed="4">4×</button>
+        </div>
+        <div class="match-ctrl-row">
+          <button class="btn btn-glass" id="btn-pause-match">Пауза</button>
+          <button class="btn btn-glass" id="btn-skip-half">До перерыва</button>
+          <button class="btn btn-glass" id="btn-skip-match">Пропустить</button>
+        </div>
       </div>
       <div id="ht-panel" class="ht-panel glass-panel" hidden>
         <strong>Перерыв</strong>
@@ -465,6 +514,7 @@
   <script src="js/data.js"></script>
   <script src="js/engine.js"></script>
   <script src="js/board.js"></script>
+  <script src="js/auth.js"></script>
   <script src="js/state.js"></script>
   <script src="js/ui.js"></script>
   <script src="js/app.js"></script>
