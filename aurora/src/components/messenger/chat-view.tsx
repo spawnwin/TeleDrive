@@ -2601,7 +2601,7 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
         >
           <Pin className="h-4 w-4 shrink-0 text-[#3aa0ff]" />
           <div className="min-w-0 flex-1 overflow-hidden">
-            <p className="truncate text-xs font-semibold text-[#5eb3f6]">{pinnedMessage.senderName}</p>
+            <p className="truncate text-xs font-semibold text-[#3aa0ff]">{pinnedMessage.senderName}</p>
             <p className="truncate text-xs text-[#8fa0b5]">
               {pinnedMessage.content || (pinnedMessage.type === 'image' ? t('chat.image') : t('chat.file'))}
             </p>
@@ -2849,7 +2849,7 @@ export function ChatView({ onBack, onShowInfo }: ChatViewProps) {
             <div className="flex min-w-0 items-center gap-3 px-3 py-2.5 sm:px-4">
               <Reply className="h-4 w-4 shrink-0 text-[#3aa0ff]" />
               <div className="min-w-0 flex-1 overflow-hidden border-l-2 border-[#3aa0ff] pl-2">
-                <p className="truncate text-xs font-medium text-[#5eb3f6]">
+                <p className="truncate text-xs font-medium text-[#3aa0ff]">
                   {t('msg.replyTo')} {replyTo.sender.name}
                 </p>
                 <p className="truncate text-xs text-[#8fa0b5]">

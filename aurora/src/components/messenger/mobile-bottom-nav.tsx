@@ -136,7 +136,7 @@ export function MobileBottomNav({
                 type="button"
                 onClick={onSearchClose}
                 className={cn(
-                  'h-[52px] shrink-0 touch-manipulation rounded-full px-4 text-[15px] font-medium text-[#5eb3f6] active:opacity-70',
+                  'h-[52px] shrink-0 touch-manipulation rounded-full px-4 text-[15px] font-medium text-[#3aa0ff] active:opacity-70',
                   glass,
                 )}
               >

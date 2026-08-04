@@ -28,7 +28,7 @@ export function UnreadBadge({
         'flex h-5 min-w-[20px] shrink-0 items-center justify-center rounded-full px-1.5 text-[10px] font-bold leading-none text-white shadow-sm',
         muted
           ? 'bg-[#6b7c90]'
-          : 'bg-[linear-gradient(145deg,#5cbcff,#2dd4bf)] text-[#041018]',
+          : 'bg-[linear-gradient(145deg,#3aa0ff,#2dd4bf)] text-[#041018]',
         className,
       )}
     >
@@ -42,7 +42,7 @@ export function UnreadLeftMarker({ show }: { show: boolean }) {
 
   return (
     <div
-      className="pointer-events-none absolute bottom-2 left-0 top-2 w-[3px] rounded-r-full bg-[linear-gradient(180deg,#5cbcff,#2dd4bf)]"
+      className="pointer-events-none absolute bottom-2 left-0 top-2 w-[3px] rounded-r-full bg-[linear-gradient(180deg,#3aa0ff,#2dd4bf)]"
       aria-hidden
     />
   )

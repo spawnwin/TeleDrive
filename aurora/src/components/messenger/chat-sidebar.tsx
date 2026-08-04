@@ -621,7 +621,7 @@ export function ChatSidebar({
             <button
               type="button"
               onClick={exitSelection}
-              className="text-sm font-medium text-[#5eb3f6]"
+              className="text-sm font-medium text-[#3aa0ff]"
             >
               {t('misc.cancel')}
             </button>
@@ -653,7 +653,7 @@ export function ChatSidebar({
                 <h1 className="aurora-chats-title truncate text-[1.35rem] xl:text-lg">
                   {t('sidebar.archived')}
                 </h1>
-                <p className="truncate text-[11px] tracking-wide text-[#9ec0e0]">
+                <p className="truncate text-[11px] tracking-wide text-[#8fa0b5]">
                   {t('sidebar.archivedCount').replace('{count}', String(archivedCount))}
                 </p>
               </span>
@@ -667,7 +667,7 @@ export function ChatSidebar({
                 <h1 className="aurora-chats-title truncate text-[1.35rem] xl:text-lg">
                   {t('nav.chats')}
                 </h1>
-                <p className="truncate text-[11px] tracking-wide text-[#9ec0e0]">
+                <p className="truncate text-[11px] tracking-wide text-[#8fa0b5]">
                   {t('sidebar.subtitle')}
                 </p>
               </div>
@@ -678,7 +678,7 @@ export function ChatSidebar({
           <Button
             variant="ghost"
             size="icon"
-            className="h-9 w-9 rounded-full text-[#6ec8ff] hover:bg-[rgb(58_180_255_/_12%)] hover:text-white"
+            className="h-9 w-9 rounded-full text-[#3aa0ff] hover:bg-[rgb(58_180_255_/_12%)] hover:text-white"
             onClick={() => openNewChat('search')}
             title={t('sidebar.newChat')}
             aria-label={t('sidebar.newChat')}
@@ -690,7 +690,7 @@ export function ChatSidebar({
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-9 w-9 rounded-full text-[#9ec0e0] hover:bg-[rgb(58_180_255_/_12%)] hover:text-white"
+                className="h-9 w-9 rounded-full text-[#8fa0b5] hover:bg-[rgb(58_180_255_/_12%)] hover:text-white"
                 title={t('chat.more')}
               >
                 <MoreVertical className="h-5 w-5" />
@@ -859,7 +859,7 @@ export function ChatSidebar({
                   <button
                     type="button"
                     onClick={() => setShowArchived(false)}
-                    className="flex w-full items-center gap-2 px-4 py-2 text-sm font-medium text-[#5eb3f6]"
+                    className="flex w-full items-center gap-2 px-4 py-2 text-sm font-medium text-[#3aa0ff]"
                   >
                     <ArrowLeft className="h-4 w-4" />
                     {t('sidebar.allChats')}
@@ -940,7 +940,7 @@ export function ChatSidebar({
                               {c.memberCount > 0 ? ` · ${c.memberCount} ${t('channel.subscribers')}` : ''}
                             </span>
                           </span>
-                          <span className="shrink-0 text-xs font-semibold text-[#5eb3f6]">
+                          <span className="shrink-0 text-xs font-semibold text-[#3aa0ff]">
                             {joiningSlug === c.slug ? '…' : t('sidebar.joinChannel')}
                           </span>
                         </button>
@@ -971,7 +971,7 @@ export function ChatSidebar({
                               {c.memberCount > 0 ? ` · ${c.memberCount} ${t('sidebar.membersCount')}` : ''}
                             </span>
                           </span>
-                          <span className="shrink-0 text-xs font-semibold text-[#5eb3f6]">
+                          <span className="shrink-0 text-xs font-semibold text-[#3aa0ff]">
                             {joiningSlug === c.slug ? '…' : t('sidebar.joinGroup')}
                           </span>
                         </button>
@@ -1228,7 +1228,7 @@ export function ChatSidebar({
               type="button"
               disabled={selectedIds.size === 0}
               onClick={() => void bulkArchive()}
-              className="flex min-w-0 flex-1 flex-col items-center gap-1 rounded-xl px-2 py-2 text-[#5eb3f6] transition hover:bg-white/5 disabled:opacity-40"
+              className="flex min-w-0 flex-1 flex-col items-center gap-1 rounded-xl px-2 py-2 text-[#3aa0ff] transition hover:bg-white/5 disabled:opacity-40"
             >
               <Archive className="h-5 w-5" />
               <span className="truncate text-[11px] font-medium">
@@ -1239,7 +1239,7 @@ export function ChatSidebar({
               type="button"
               disabled={selectedIds.size === 0}
               onClick={bulkMarkRead}
-              className="flex min-w-0 flex-1 flex-col items-center gap-1 rounded-xl px-2 py-2 text-[#5eb3f6] transition hover:bg-white/5 disabled:opacity-40"
+              className="flex min-w-0 flex-1 flex-col items-center gap-1 rounded-xl px-2 py-2 text-[#3aa0ff] transition hover:bg-white/5 disabled:opacity-40"
             >
               <CheckCheck className="h-5 w-5" />
               <span className="truncate text-[11px] font-medium">{t('chat.readShort')}</span>
@@ -1501,7 +1501,7 @@ function SavedChatRow({ chat, selectionMode = false }: { chat: ChatListItem; sel
             <span
               className={cn(
                 'shrink-0 text-[12px] tabular-nums',
-                chat.unread > 0 ? 'font-semibold text-[#6ec8ff]' : 'text-[#9ec0e0]',
+                chat.unread > 0 ? 'font-semibold text-[#3aa0ff]' : 'text-[#8fa0b5]',
               )}
             >
               {formatChatTime(chat.lastMessage.createdAt, lang)}
@@ -1837,18 +1837,18 @@ function ChatListItemRow({
               </span>
             </p>
             {chat.isMuted && (
-              <BellOff className="h-3 w-3 shrink-0 text-[#7eb8e8]" />
+              <BellOff className="h-3 w-3 shrink-0 text-[#8fa0b5]" />
             )}
           </div>
           <div className="flex shrink-0 items-center gap-1">
             {chat.isArchived && (
-              <Archive className="h-3 w-3 text-[#7eb8e8]" />
+              <Archive className="h-3 w-3 text-[#8fa0b5]" />
             )}
             {chat.lastMessage && (
               <span
                 className={cn(
                   'text-[12px] tabular-nums',
-                  chat.unread > 0 ? 'font-semibold text-[#6ec8ff]' : 'text-[#9ec0e0]',
+                  chat.unread > 0 ? 'font-semibold text-[#3aa0ff]' : 'text-[#8fa0b5]',
                 )}
               >
                 {formatChatTime(chat.lastMessage.createdAt, lang)}
@@ -1861,16 +1861,16 @@ function ChatListItemRow({
             className={cn(
               'flex min-w-0 items-center gap-1 truncate text-[13px] leading-snug',
               showTyping
-                ? 'text-[#6ec8ff]'
+                ? 'text-[#3aa0ff]'
                 : showDraft
                   ? 'text-rose-400'
                   : 'aurora-chats-preview',
             )}
           >
             {showTyping ? (
-              <span className="inline-flex items-center gap-1 truncate text-[#6ec8ff]" title={t('chat.typing')} aria-label={t('chat.typing')}>
+              <span className="inline-flex items-center gap-1 truncate text-[#3aa0ff]" title={t('chat.typing')} aria-label={t('chat.typing')}>
                 <span className="truncate">{typingNames.join(', ')}</span>
-                <TypingDots className="text-[#6ec8ff]" size={3} gap={1.5} />
+                <TypingDots className="text-[#3aa0ff]" size={3} gap={1.5} />
               </span>
             ) : showDraft ? (
               <>
@@ -1880,13 +1880,13 @@ function ChatListItemRow({
             ) : (
               <>
                 {lastMsgMine && chat.lastMessage && (
-                  <CheckCheck className="h-3.5 w-3.5 shrink-0 text-[#7eb8e8]" />
+                  <CheckCheck className="h-3.5 w-3.5 shrink-0 text-[#8fa0b5]" />
                 )}
                 {isImage && !lastMsgMine && (
-                  <ImageIcon className="h-3.5 w-3.5 shrink-0 text-[#7eb8e8]" />
+                  <ImageIcon className="h-3.5 w-3.5 shrink-0 text-[#8fa0b5]" />
                 )}
                 {isVoice && !lastMsgMine && (
-                  <Mic className="h-3.5 w-3.5 shrink-0 text-[#7eb8e8]" />
+                  <Mic className="h-3.5 w-3.5 shrink-0 text-[#8fa0b5]" />
                 )}
                 <span className="truncate">{previewText()}</span>
               </>
@@ -1904,7 +1904,7 @@ function ChatListItemRow({
             />
             <button
               onClick={toggleArchive}
-              className="hidden h-6 w-6 items-center justify-center rounded-md text-[#7eb8e8] opacity-0 transition hover:bg-white/5 hover:text-white group-hover:opacity-100 sm:flex"
+              className="hidden h-6 w-6 items-center justify-center rounded-md text-[#8fa0b5] opacity-0 transition hover:bg-white/5 hover:text-white group-hover:opacity-100 sm:flex"
               title={chat.isArchived ? t('chat.unarchive') : t('chat.archive')}
             >
               {chat.isArchived ? (
@@ -2464,7 +2464,7 @@ function NewChatDialog({
                       <p className="truncate text-sm font-medium">{u.name}</p>
                       <p className="truncate text-xs text-muted-foreground">@{u.username}</p>
                     </div>
-                    {checked && <Check className="h-4 w-4 text-[#5eb3f6]" />}
+                    {checked && <Check className="h-4 w-4 text-[#3aa0ff]" />}
                   </button>
                 )
               })}
