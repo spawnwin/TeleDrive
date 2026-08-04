@@ -7,6 +7,7 @@ window.EYE_STATE = (() => {
   const E = () => window.EYE_ENGINE;
   const W = () => window.EYE_WORLD;
   const I18N = () => window.EYE_I18N;
+  const B = () => window.EYE_BOARD;
 
   /** Все суммы внутри — в евро. Отображение: EUR / RUB / USD */
   function currencyInfo(code) {
@@ -90,9 +91,10 @@ window.EYE_STATE = (() => {
 
     const leagueClubs = allClubs.filter(c => c.leagueId === league.id);
     const fixtures = buildFixtures(leagueClubs.map(c => c.id));
+    const board = B().createBoard(me);
 
     state = {
-      version: 2,
+      version: 3,
       createdAt: Date.now(),
       managerName,
       season: 1,
@@ -106,9 +108,16 @@ window.EYE_STATE = (() => {
       displayCurrency: getCurrency(),
       table: emptySeasonTable(leagueClubs),
       fixtures,
+      board,
+      scoutReports: {},
+      ucl: createUcl(allClubs),
       inbox: [{
         id: D().uid('m'), type: 'welcome', title: 'Добро пожаловать в EYE',
-        body: `Вы возглавили «${me.name}» (${league.name}). В мире ${allClubs.length} клубов — трансферы открыты. Валюту можно сменить в настройках.`,
+        body: `Вы возглавили «${me.name}» (${league.name}). Задача совета: ${board.targetLabel}. Уверенность: ${board.confidence}%.`,
+        read: false, at: Date.now()
+      }, {
+        id: D().uid('m'), type: 'board', title: 'Цели сезона',
+        body: `Совет директоров ждёт: ${board.targetLabel} в лиге${board.cupTarget ? ' и кубковый путь' : ''}. Провал снизит доверие.`,
         read: false, at: Date.now()
       }],
       history: [],
@@ -118,11 +127,37 @@ window.EYE_STATE = (() => {
       settings: { sfx: true, speed: 1 },
       lastResult: null,
       cup: createCup(leagueClubs),
-      stats: { scorers: {}, assisters: {} }
+      stats: { scorers: {}, assisters: {} },
+      sacked: false
     };
     refreshTransferMarket();
     save();
     return state;
+  }
+
+  function createUcl(allClubs) {
+    // 16 clubs: top reputation from each league + fillers
+    const byLeague = {};
+    allClubs.forEach(c => {
+      byLeague[c.leagueId] = byLeague[c.leagueId] || [];
+      byLeague[c.leagueId].push(c);
+    });
+    let seeds = [];
+    Object.values(byLeague).forEach(list => {
+      seeds.push(...list.sort((a, b) => b.reputation - a.reputation).slice(0, 3));
+    });
+    seeds = seeds.sort((a, b) => b.reputation - a.reputation).slice(0, 16);
+    if (seeds.length < 16) {
+      const extra = allClubs.filter(c => !seeds.includes(c)).sort((a, b) => b.reputation - a.reputation);
+      seeds = seeds.concat(extra).slice(0, 16);
+    }
+    const ids = seeds.map(c => c.id).sort(() => Math.random() - 0.5);
+    return {
+      name: 'Лига чемпионов EYE',
+      round: '1/8',
+      bracket: ids.map((id, i) => i % 2 === 0 ? { home: id, away: ids[i + 1], played: false, score: null } : null).filter(Boolean),
+      champion: null
+    };
   }
 
   function createCup(clubs) {
@@ -214,6 +249,11 @@ window.EYE_STATE = (() => {
       }
       state = JSON.parse(raw);
       if (!state.displayCurrency) state.displayCurrency = getCurrency();
+      if (!state.board && club()) state.board = B().createBoard(club());
+      if (!state.scoutReports) state.scoutReports = {};
+      if (!state.ucl) state.ucl = createUcl(state.clubs || []);
+      if (state.sacked == null) state.sacked = false;
+      if (!state.cup && leagueClubs().length) state.cup = createCup(leagueClubs());
       if (!state.transferList?.length) refreshTransferMarket();
       return state;
     } catch { return null; }
@@ -303,12 +343,28 @@ window.EYE_STATE = (() => {
     const isHome = match.home === me.id;
     const myGoals = isHome ? hg : ag;
     const oppGoals = isHome ? ag : hg;
+    const won = myGoals > oppGoals;
+    const drew = myGoals === oppGoals;
     let prize = 0;
-    if (myGoals > oppGoals) { prize = 250000; me.morale = Math.min(100, me.morale + 4); }
-    else if (myGoals === oppGoals) { prize = 100000; me.morale = Math.min(100, me.morale + 1); }
+    if (won) { prize = 250000; me.morale = Math.min(100, me.morale + 4); }
+    else if (drew) { prize = 100000; me.morale = Math.min(100, me.morale + 1); }
     else { prize = 40000; me.morale = Math.max(20, me.morale - 3); }
     const income = Math.round(me.fans * (0.9 + me.facilities.stadium * 0.3) * (14 + Math.random() * 10));
     me.budget += prize + income;
+
+    if (state.board) {
+      B().applyMatchConfidence(state.board, won, drew, false);
+      if (state.board.confidence < 30 && !won) {
+        const recent = state.inbox.find(m => m.type === 'board' && m.title === 'Совет недоволен' && state.week - (m.week || 0) < 3);
+        if (!recent) {
+          state.inbox.unshift({
+            id: D().uid('m'), type: 'board', title: 'Совет недоволен',
+            body: `Уверенность совета: ${state.board.confidence}%. Нужны результаты.`,
+            read: false, at: Date.now(), week: state.week
+          });
+        }
+      }
+    }
 
     state.lastResult = {
       ...result, prize, income,
@@ -320,14 +376,14 @@ window.EYE_STATE = (() => {
     });
     state.news.unshift({
       id: D().uid('n'),
-      title: myGoals > oppGoals ? 'Победа!' : myGoals === oppGoals ? 'Ничья' : 'Поражение',
+      title: won ? 'Победа!' : drew ? 'Ничья' : 'Поражение',
       body: `${result.home} ${result.score[0]}:${result.score[1]} ${result.away}`,
       at: Date.now()
     });
 
     finishRoundExcept(match);
-    // lightly sim other leagues for form/news
     simOtherLeaguesWeek();
+    maybePlayUclAiWeek();
     advanceWeek();
     save();
   }
@@ -356,6 +412,7 @@ window.EYE_STATE = (() => {
     const me = club();
     const wages = me.squad.reduce((s, p) => s + (p.wage || 0), 0);
     me.budget -= wages;
+    const xiIds = new Set((me.lineup || me.squad.slice(0, 11)).map(p => p.id));
     me.squad.forEach(p => {
       if (p.injured > 0) p.injured = Math.max(0, p.injured - 1);
       else {
@@ -363,8 +420,12 @@ window.EYE_STATE = (() => {
         p.energy = Math.min(100, (p.energy || 70) + 10);
       }
       p.form = Math.max(30, Math.min(95, (p.form || 60) + D().rnd(-2, 2)));
+      // playing-time morale
+      if (xiIds.has(p.id)) p.morale = Math.min(100, (p.morale || 60) + 1);
+      else if ((p.seasonApps || 0) < state.week / 3 && p.ovr >= me.reputation - 5) {
+        p.morale = Math.max(25, (p.morale || 60) - 2);
+      }
     });
-    // AI clubs wage + recovery
     state.clubs.forEach(c => {
       if (c.id === me.id) return;
       c.squad.forEach(p => {
@@ -433,22 +494,77 @@ window.EYE_STATE = (() => {
 
     tickContracts();
 
+    // Board season review
+    if (!state.board) state.board = B().createBoard(me);
+    const cupReached = state.cup?.champion === me.id ? 'Чемпион' : state.cup?.round || '';
+    const review = B().seasonReview(state.board, pos, cupReached);
+    let boardMsg = review.ok
+      ? `Цели выполнены (${state.board.targetLabel}). Уверенность: ${state.board.confidence}%.`
+      : `Цели не достигнуты. Уверенность: ${state.board.confidence}%. Предупреждений: ${state.board.warnings}.`;
+    if (review.sacked) {
+      state.sacked = true;
+      boardMsg += ' Вас уволили.';
+    }
+
+    // Promotion / relegation
+    const ladderMsg = applyLadderMove(pos, table.length);
+
     state.inbox.unshift({
       id: D().uid('m'), type: 'season',
       title: `Сезон ${state.season} завершён — ${state.leagueName}`,
-      body: `Место: ${pos}. Призовые: ${money(prize)}. Новый сезон.`,
+      body: `Место: ${pos}. Призовые: ${money(prize)}. ${boardMsg} ${ladderMsg}`,
       read: false, at: Date.now()
     });
 
+    if (state.sacked) {
+      save();
+      return;
+    }
+
     state.season++;
     state.week = 1;
+    state.board = B().createBoard(me);
     const lc = leagueClubs();
     state.table = emptySeasonTable(lc);
     state.fixtures = buildFixtures(lc.map(c => c.id));
     state.stats = { scorers: {}, assisters: {} };
     state.cup = createCup(lc);
+    state.ucl = createUcl(state.clubs);
+    state.inbox.unshift({
+      id: D().uid('m'), type: 'board', title: 'Новые цели совета',
+      body: `${state.board.targetLabel}. Уверенность: ${state.board.confidence}%.`,
+      read: false, at: Date.now()
+    });
     refreshTransferMarket();
     save();
+  }
+
+  function applyLadderMove(pos, tableSize) {
+    const me = club();
+    let dir = 0;
+    if (pos <= 2) dir = -1; // up ladder (better league)
+    else if (pos >= tableSize - 1) dir = 1; // down
+    if (!dir) return '';
+    const targetId = B().neighborLeague(state.leagueId, dir);
+    if (!targetId) return dir < 0 ? 'Вы на вершине лестницы лиг.' : 'Ниже лиг нет.';
+    const targetLeague = W().leagueById(targetId);
+    const targetClubs = state.clubs.filter(c => c.leagueId === targetId && c.id !== me.id);
+    if (!targetClubs.length) return '';
+    // swap with weakest/strongest
+    const swap = dir < 0
+      ? targetClubs.sort((a, b) => a.reputation - b.reputation)[0]
+      : targetClubs.sort((a, b) => b.reputation - a.reputation)[0];
+    const oldLeague = state.leagueId;
+    me.leagueId = targetId;
+    me.leagueName = targetLeague.name;
+    swap.leagueId = oldLeague;
+    swap.leagueName = W().leagueById(oldLeague).name;
+    state.leagueId = targetId;
+    state.leagueName = targetLeague.name;
+    me.budget += dir < 0 ? 2e6 : -5e5;
+    return dir < 0
+      ? `Повышение в «${targetLeague.name}»! (обмен с ${swap.name})`
+      : `Вылет в «${targetLeague.name}». (обмен с ${swap.name})`;
   }
 
   function train(typeId) {
@@ -475,45 +591,51 @@ window.EYE_STATE = (() => {
     return { ok: true, msg: `Тренировка «${t.name}» (−${money(cost)})` };
   }
 
-  function makeOffer(entryId, bid, loan = false) {
+  function makeOffer(entryId, bid, loan = false, wageOffer = null) {
     const me = club();
     const item = state.transferList.find(e => e.id === entryId || e.player.id === entryId);
     if (!item) return { ok: false, msg: 'Игрок снят с рынка' };
     const ask = item.ask;
     const offer = bid || ask;
+    const wageAsk = item.wageAsk || item.player.wage || 10000;
+    const wage = wageOffer != null ? wageOffer : wageAsk;
     if (!loan && me.budget < offer) return { ok: false, msg: 'Недостаточно средств' };
     if (me.squad.length >= 30) return { ok: false, msg: 'Лимит состава 30' };
 
-    // acceptance logic
     let accept = false;
-    if (item.type === 'free') accept = offer >= ask * 0.85;
+    const wageOk = wage >= wageAsk * 0.9;
+    if (item.type === 'free') accept = offer >= ask * 0.85 && wageOk;
     else if (loan) accept = Math.random() < 0.55 + me.facilities.scout * 0.05;
     else {
       const ratio = offer / ask;
       const reluct = item.type === 'star' ? 0.25 : 0.1;
-      accept = ratio >= 1 + reluct ? true : ratio >= 0.95 && Math.random() < 0.45 + me.reputation / 200;
+      accept = wageOk && (ratio >= 1 + reluct ? true : ratio >= 0.95 && Math.random() < 0.45 + me.reputation / 200);
     }
 
     if (!accept) {
       const counter = Math.round(ask * (1.05 + Math.random() * 0.15));
       state.pendingCounters = state.pendingCounters || {};
       state.pendingCounters[item.id] = counter;
+      state.pendingWage = state.pendingWage || {};
+      state.pendingWage[item.id] = Math.round(wageAsk * 1.1);
+      const reason = !wageOk ? `Хотят зарплату ~${money(wageAsk)}/нед. ` : '';
       state.inbox.unshift({
         id: D().uid('m'), type: 'transfer',
         title: `Отказ: ${item.player.name}`,
-        body: `${item.clubName || 'Агент'} отклонил предложение ${money(offer)}. Контрпредложение: ${money(counter)}.`,
+        body: `${reason}${item.clubName || 'Агент'} отклонил ${money(offer)}. Контр: ${money(counter)}.`,
         read: false, at: Date.now()
       });
       save();
-      return { ok: false, msg: `Отклонено. Хотят ~${money(counter)}`, counter, entryId: item.id };
+      return { ok: false, msg: `Отклонено. Хотят ~${money(counter)}`, counter, wageAsk, entryId: item.id };
     }
 
-    return finalizeBuy(item, offer, loan);
+    return finalizeBuy(item, offer, loan, wage);
   }
 
-  function finalizeBuy(item, price, loan) {
+  function finalizeBuy(item, price, loan, wage) {
     const me = club();
     const p = { ...item.player, listed: false, ask: 0, clubId: me.id };
+    if (wage) p.wage = wage;
     if (loan) {
       p.loan = true;
       p.loanFrom = item.clubId;
@@ -534,10 +656,11 @@ window.EYE_STATE = (() => {
     }
     me.squad.push(p);
     state.transferList = state.transferList.filter(e => e.player.id !== item.player.id);
+    if (state.pendingCounters) delete state.pendingCounters[item.id];
     state.news.unshift({
       id: D().uid('n'),
       title: loan ? 'Аренда' : 'Трансфер',
-      body: `${p.name} → ${me.name}${loan ? ' (аренда)' : ' за ' + money(price)}`,
+      body: `${p.name} → ${me.name}${loan ? ' (аренда)' : ' за ' + money(price)} · ${money(p.wage)}/нед`,
       at: Date.now()
     });
     save();
@@ -789,23 +912,53 @@ window.EYE_STATE = (() => {
     ) || null;
   }
 
+  function playerUclMatch() {
+    if (!state?.ucl || state.ucl.champion) return null;
+    return (state.ucl.bracket || []).find(m =>
+      !m.played && (m.home === state.clubId || m.away === state.clubId)
+    ) || null;
+  }
+
   function nextMatch() {
-    // Cup priority every 3rd week when available
+    const ucl = playerUclMatch();
+    if (ucl && state.week % 5 === 1) return { type: 'ucl', match: ucl };
     const cup = playerCupMatch();
     if (cup && state.week % 3 === 0) return { type: 'cup', match: cup };
     const lg = playerMatch();
     if (lg) return { type: 'league', match: lg };
+    if (ucl) return { type: 'ucl', match: ucl };
     if (cup) return { type: 'cup', match: cup };
     return null;
   }
 
-  function resolveCupRoundAI(exceptMatch) {
-    const cup = state.cup;
-    if (!cup || cup.champion) return;
-    cup.bracket.forEach(m => {
+  function advanceKnockout(comp, title, winPrize) {
+    if (!comp || comp.champion) return;
+    if (!comp.bracket.every(m => m.played)) return;
+    const winners = comp.bracket.map(m => m.score[0] > m.score[1] ? m.home : m.away);
+    if (winners.length === 1) {
+      comp.champion = winners[0];
+      const champ = clubById(winners[0]);
+      state.news.unshift({ id: D().uid('n'), title, body: `Победитель: ${champ?.name}`, at: Date.now() });
+      if (winners[0] === state.clubId) {
+        club().budget += winPrize;
+        state.inbox.unshift({ id: D().uid('m'), type: 'cup', title: title + ' — победа!', body: `Призовые ${money(winPrize)}`, read: false, at: Date.now() });
+      }
+      return;
+    }
+    const next = [];
+    for (let i = 0; i < winners.length; i += 2) {
+      next.push({ home: winners[i], away: winners[i + 1], played: false, score: null });
+    }
+    comp.bracket = next;
+    comp.round = next.length === 4 ? '1/4' : next.length === 2 ? '1/2' : next.length === 1 ? 'Финал' : '1/' + (next.length * 2);
+  }
+
+  function resolveCompAI(comp, exceptMatch) {
+    if (!comp || comp.champion) return;
+    comp.bracket.forEach(m => {
       if (m.played) return;
       if (exceptMatch && m.home === exceptMatch.home && m.away === exceptMatch.away) return;
-      if (m.home === state.clubId || m.away === state.clubId) return; // wait for player
+      if (m.home === state.clubId || m.away === state.clubId) return;
       const home = clubById(m.home);
       const away = clubById(m.away);
       if (!home || !away) { m.played = true; m.score = [1, 0]; return; }
@@ -815,66 +968,130 @@ window.EYE_STATE = (() => {
       m.played = true;
       m.score = score;
     });
+  }
+
+  function resolveCupRoundAI(exceptMatch) {
+    resolveCompAI(state.cup, exceptMatch);
     maybeAdvanceCup();
   }
 
   function maybeAdvanceCup() {
-    const cup = state.cup;
-    if (!cup || cup.champion) return;
-    if (!cup.bracket.every(m => m.played)) return;
-    const winners = cup.bracket.map(m => m.score[0] > m.score[1] ? m.home : m.away);
-    if (winners.length === 1) {
-      cup.champion = winners[0];
-      const champ = clubById(winners[0]);
-      state.news.unshift({ id: D().uid('n'), title: 'Кубок EYE', body: `Победитель: ${champ?.name}`, at: Date.now() });
-      if (winners[0] === state.clubId) {
-        club().budget += 800000;
-        state.inbox.unshift({ id: D().uid('m'), type: 'cup', title: 'Кубок ваш!', body: 'Призовые 800 тыс €', read: false, at: Date.now() });
-      }
-      return;
-    }
-    const next = [];
-    for (let i = 0; i < winners.length; i += 2) {
-      next.push({ home: winners[i], away: winners[i + 1], played: false, score: null });
-    }
-    cup.bracket = next;
-    cup.round = next.length === 2 ? '1/2' : next.length === 1 ? 'Финал' : '1/' + (next.length * 2);
+    advanceKnockout(state.cup, 'Кубок EYE', 800000);
+  }
+
+  function maybePlayUclAiWeek() {
+    if (!state.ucl || state.ucl.champion) return;
+    // progress AI matches if player not in pending
+    const pending = playerUclMatch();
+    if (pending) return;
+    resolveCompAI(state.ucl, null);
+    advanceKnockout(state.ucl, 'ЛЧ EYE', 2500000);
   }
 
   function recordCupMatch(match, result) {
+    return recordKnockoutMatch(match, result, 'cup', 'Кубок EYE', 180000);
+  }
+
+  function recordUclMatch(match, result) {
+    return recordKnockoutMatch(match, result, 'ucl', 'Лига чемпионов EYE', 350000);
+  }
+
+  function recordKnockoutMatch(match, result, kind, label, prizeWin) {
     match.played = true;
     let score = result.score;
     if (score[0] === score[1]) {
-      // auto ET winner for cup
       score = Math.random() < 0.5 ? [score[0] + 1, score[1]] : [score[0], score[1] + 1];
       result.score = score;
       result.events.push({ minute: 95, type: 'goal', text: 'Победитель в доп. времени!', score });
     }
     match.score = score;
     trackStats(result);
-    resolveCupRoundAI(match);
-    maybeAdvanceCup();
+    if (kind === 'cup') {
+      resolveCupRoundAI(match);
+      maybeAdvanceCup();
+    } else {
+      resolveCompAI(state.ucl, match);
+      advanceKnockout(state.ucl, 'ЛЧ EYE', 2500000);
+    }
 
     const me = club();
     const isHome = match.home === me.id;
     const myGoals = isHome ? score[0] : score[1];
     const oppGoals = isHome ? score[1] : score[0];
     const won = myGoals > oppGoals;
-    const prize = won ? 180000 : 40000;
+    const prize = won ? prizeWin : 50000;
     me.budget += prize;
     me.morale = Math.min(100, me.morale + (won ? 5 : -2));
-    state.lastResult = { ...result, prize, income: 0, competition: 'Кубок EYE' };
+    if (state.board) B().applyMatchConfidence(state.board, won, false, true);
+    state.lastResult = { ...result, prize, income: 0, competition: label };
     state.history.unshift({
-      at: Date.now(), season: state.season, week: state.week, cup: true,
+      at: Date.now(), season: state.season, week: state.week, cup: kind === 'cup', ucl: kind === 'ucl',
       home: result.home, away: result.away, score
     });
     state.news.unshift({
-      id: D().uid('n'), title: won ? 'Кубок: победа' : 'Кубок: вылет',
+      id: D().uid('n'), title: won ? `${label}: победа` : `${label}: поражение`,
       body: `${result.home} ${score[0]}:${score[1]} ${result.away}`,
       at: Date.now()
     });
     advanceWeek();
     save();
+  }
+
+  function scoutPlayer(entryId) {
+    const me = club();
+    const item = state.transferList.find(e => e.id === entryId);
+    if (!item) return { ok: false, msg: 'Нет на рынке' };
+    const cost = Math.max(15000, 80000 - me.facilities.scout * 12000);
+    if (me.budget < cost) return { ok: false, msg: 'Нужно ' + money(cost) };
+    me.budget -= cost;
+    const p = item.player;
+    const noise = Math.max(0, 6 - me.facilities.scout);
+    const report = {
+      id: p.id,
+      name: p.name,
+      pot: Math.max(40, Math.min(95, p.pot + D().rnd(-noise, noise))),
+      age: p.age,
+      injuryRisk: p.age > 30 ? 'высокий' : p.stamina < 65 ? 'средний' : 'низкий',
+      hiddenForm: Math.max(30, Math.min(95, (p.form || 60) + D().rnd(-noise, noise))),
+      recommendation: p.pot - p.ovr >= 8 ? 'Перспектива' : p.ovr >= 84 ? 'Топ сейчас' : 'Рабочая лошадка',
+      at: Date.now(),
+      cost
+    };
+    state.scoutReports = state.scoutReports || {};
+    state.scoutReports[p.id] = report;
+    save();
+    return { ok: true, msg: `Отчёт по ${p.name} (−${money(cost)})`, report };
+  }
+
+  function takeNewJob(clubId) {
+    if (!state?.sacked) return { ok: false, msg: 'Вы не уволены' };
+    const tpl = W().clubTemplate(clubId);
+    if (!tpl) return { ok: false, msg: 'Клуб не найден' };
+    // clear old player flag
+    const old = club();
+    if (old) old.isPlayer = false;
+    const next = state.clubs.find(c => c.id === clubId);
+    if (!next) return { ok: false, msg: 'Нет клуба' };
+    next.isPlayer = true;
+    state.clubId = next.id;
+    state.leagueId = next.leagueId;
+    state.leagueName = next.leagueName;
+    state.sacked = false;
+    state.board = B().createBoard(next);
+    const lc = leagueClubs();
+    state.table = emptySeasonTable(lc);
+    state.fixtures = buildFixtures(lc.map(c => c.id));
+    state.week = 1;
+    state.cup = createCup(lc);
+    state.stats = { scorers: {}, assisters: {} };
+    state.inbox.unshift({
+      id: D().uid('m'), type: 'welcome', title: 'Новый контракт',
+      body: `Вы возглавили «${next.name}». Цель: ${state.board.targetLabel}.`,
+      read: false, at: Date.now()
+    });
+    refreshTransferMarket();
+    save();
+    return { ok: true, msg: `Контракт с «${next.name}»` };
   }
 
   function storeCounter(entryId, counter) {
@@ -886,11 +1103,12 @@ window.EYE_STATE = (() => {
   return {
     KEY, money, moneyHint, getCurrency, setCurrency, currencyInfo,
     createCareer, get, club, clubById, leagueClubs, save, load, clear,
-    currentFixture, playerMatch, nextMatch, playerCupMatch,
-    recordPlayerMatch, recordCupMatch, sortedTable, topScorers,
+    currentFixture, playerMatch, nextMatch, playerCupMatch, playerUclMatch,
+    recordPlayerMatch, recordCupMatch, recordUclMatch, sortedTable, topScorers,
     train, buyPlayer, makeOffer, sellPlayer, respondOffer, filterMarket, refreshTransferMarket,
     storeCounter, pendingCounters: () => state?.pendingCounters || {},
+    pendingWage: () => state?.pendingWage || {},
     upgradeFacility, promoteYouth, setTactics, setLineup, autoLineup, ensureLineup, swapIntoXi,
-    renewContract, financeSummary, resolveCupRoundAI
+    renewContract, financeSummary, resolveCupRoundAI, scoutPlayer, takeNewJob
   };
 })();

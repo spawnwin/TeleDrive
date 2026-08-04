@@ -98,6 +98,7 @@
         <div class="top-stats">
           <span id="hub-budget">—</span>
           <span id="hub-morale" class="pill">—</span>
+          <span id="hub-board" class="pill" title="Уверенность совета">Совет —</span>
           <div class="currency-switch" id="currency-switch" title="Валюта">
             <button type="button" data-cur="RUB" class="cur-btn">₽</button>
             <button type="button" data-cur="USD" class="cur-btn">$</button>
@@ -107,8 +108,9 @@
       </header>
 
       <div class="hub-next glass-panel" id="hub-next">
-        <div class="next-label">Следующий матч</div>
+        <div class="next-label" id="next-label">Следующий матч</div>
         <div class="next-fixture" id="next-fixture">—</div>
+        <div class="hint" id="hub-board-goal" style="margin:6px 0 0"></div>
         <button class="btn btn-primary" id="btn-play-match">К матчу</button>
       </div>
 
@@ -124,6 +126,8 @@
         <button class="tile glass-panel" data-nav="table"><strong>Таблица</strong><span>Лига</span></button>
         <button class="tile glass-panel" data-nav="calendar"><strong>Календарь</strong><span>Туры</span></button>
         <button class="tile glass-panel" data-nav="cup"><strong>Кубок</strong><span>EYE Cup</span></button>
+        <button class="tile glass-panel" data-nav="ucl"><strong>ЛЧ</strong><span>Чемпионов</span></button>
+        <button class="tile glass-panel" data-nav="board"><strong>Совет</strong><span>Цели</span></button>
         <button class="tile glass-panel" data-nav="stats"><strong>Бомбардиры</strong><span>Статистика</span></button>
         <button class="tile glass-panel" data-nav="finance"><strong>Финансы</strong><span>Бюджет</span></button>
         <button class="tile glass-panel" data-nav="train"><strong>Тренировка</strong><span>Развитие</span></button>
@@ -240,6 +244,25 @@
       <button class="btn btn-primary" id="btn-cup-play" hidden>Играть кубковый матч</button>
     </section>
 
+    <section id="screen-ucl" class="screen">
+      <header class="subhead">
+        <button class="icon-back" data-nav="hub">‹</button>
+        <h2>Лига чемпионов</h2>
+      </header>
+      <div class="glass-panel" id="ucl-status" style="padding:14px"></div>
+      <div class="list" id="ucl-list"></div>
+      <button class="btn btn-primary" id="btn-ucl-play" hidden>Играть матч ЛЧ</button>
+    </section>
+
+    <section id="screen-board" class="screen">
+      <header class="subhead">
+        <button class="icon-back" data-nav="hub">‹</button>
+        <h2>Совет директоров</h2>
+      </header>
+      <div class="glass-panel" id="board-card" style="padding:14px"></div>
+      <div class="list" id="job-list" hidden></div>
+    </section>
+
     <!-- FINANCE -->
     <section id="screen-finance" class="screen">
       <header class="subhead">
@@ -318,6 +341,8 @@
           </div>
         </div>
         <button class="btn btn-glass" data-nav="table">Таблица лиги</button>
+        <button class="btn btn-glass" data-nav="ucl">Лига чемпионов</button>
+        <button class="btn btn-glass" data-nav="board">Совет директоров</button>
         <button class="btn btn-glass" data-nav="stats">Бомбардиры и ассисты</button>
         <button class="btn btn-glass" data-nav="history">История матчей</button>
         <button class="btn btn-glass" data-nav="train">Тренировки</button>
@@ -370,7 +395,8 @@
       </div>
       <div id="ht-panel" class="ht-panel glass-panel" hidden>
         <strong>Перерыв</strong>
-        <p class="hint">Смените стиль или сделайте замену, затем второй тайм</p>
+        <p class="hint" id="ht-hint">Стиль, схема и до 3 замен · затем второй тайм</p>
+        <div class="filter-row" id="ht-formations"></div>
         <div class="filter-row" id="ht-styles"></div>
         <div class="list" id="ht-bench"></div>
         <button class="btn btn-primary" id="btn-second-half">Второй тайм</button>
@@ -382,7 +408,8 @@
       <div class="modal-card glass-panel">
         <h3 id="bid-title">Предложение</h3>
         <p class="hint" id="bid-meta"></p>
-        <label>Сумма (в евро)<input type="number" id="bid-amount" min="0" step="100000" /></label>
+        <label>Сумма трансфера (внутренние €)<input type="number" id="bid-amount" min="0" step="100000" /></label>
+        <label>Зарплата / нед (€)<input type="number" id="bid-wage" min="0" step="1000" /></label>
         <div class="filter-row">
           <button class="btn btn-glass" id="bid-cancel">Отмена</button>
           <button class="btn btn-primary" id="bid-submit">Отправить</button>
@@ -405,6 +432,7 @@
   <script src="js/world.js"></script>
   <script src="js/data.js"></script>
   <script src="js/engine.js"></script>
+  <script src="js/board.js"></script>
   <script src="js/state.js"></script>
   <script src="js/ui.js"></script>
   <script src="js/app.js"></script>

@@ -1,4 +1,4 @@
-const CACHE = 'eye-manager-v4';
+const CACHE = 'eye-manager-v5';
 const ASSETS = [
   './',
   './index.html',
@@ -7,6 +7,7 @@ const ASSETS = [
   './js/world.js',
   './js/data.js',
   './js/engine.js',
+  './js/board.js',
   './js/state.js',
   './js/ui.js',
   './js/app.js',

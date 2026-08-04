@@ -13,7 +13,7 @@ window.EYE_UI = (() => {
   let playerBack = 'squad';
   let selectedSlot = null;
   let bidEntryId = null;
-  let matchCtx = null; // { type, match, half1, score... }
+  let matchCtx = null; // { type, match, half1, subsUsed }
 
   function $(sel, root = document) { return root.querySelector(sel); }
   function $all(sel, root = document) { return [...root.querySelectorAll(sel)]; }
@@ -73,6 +73,8 @@ window.EYE_UI = (() => {
     if (id === 'player') renderPlayer();
     if (id === 'calendar') renderCalendar();
     if (id === 'cup') renderCup();
+    if (id === 'ucl') renderUcl();
+    if (id === 'board') renderBoard();
     if (id === 'finance') renderFinance();
     if (id === 'create') fillCreateForm();
     if (id === 'more') syncCurrencyButtons();
@@ -132,6 +134,12 @@ window.EYE_UI = (() => {
     `;
   }
 
+  function matchTypeLabel(type) {
+    if (type === 'cup') return 'Кубок EYE';
+    if (type === 'ucl') return 'Лига чемпионов EYE';
+    return S().get()?.leagueName || 'Лига';
+  }
+
   function renderHub() {
     const st = S().get();
     const me = S().club();
@@ -140,6 +148,19 @@ window.EYE_UI = (() => {
     $('#hub-meta').textContent = `${st.leagueName} · Сезон ${st.season} · Тур ${st.week}`;
     $('#hub-budget').textContent = S().money(me.budget);
     $('#hub-morale').textContent = 'Мораль ' + me.morale;
+    const board = st.board;
+    const boardEl = $('#hub-board');
+    if (boardEl) {
+      if (st.sacked) boardEl.textContent = 'Уволен';
+      else if (board) boardEl.textContent = `Совет ${board.confidence}%`;
+      else boardEl.textContent = 'Совет —';
+    }
+    const goal = $('#hub-board-goal');
+    if (goal) {
+      goal.textContent = st.sacked
+        ? 'Вас уволили — выберите новый клуб в разделе «Совет».'
+        : (board ? `Цель: ${board.targetLabel}${board.cupTarget ? ' · кубок' : ''}` : '');
+    }
     syncCurrencyButtons();
     const unread = st.inbox.filter(m => !m.read).length;
     $('#inbox-badge').textContent = unread ? unread + ' новых' : 'Почта';
@@ -147,17 +168,24 @@ window.EYE_UI = (() => {
     const next = S().nextMatch();
     const box = $('#next-fixture');
     const btn = $('#btn-play-match');
-    if (!next) {
+    const label = $('#next-label');
+    if (st.sacked) {
+      if (label) label.textContent = 'Карьера';
+      box.textContent = 'Нужен новый клуб';
+      btn.disabled = false;
+      btn.textContent = 'К совету';
+    } else if (!next) {
+      if (label) label.textContent = 'Сезон';
       box.textContent = 'Сезон завершён — новый стартует';
       btn.disabled = true;
       btn.textContent = 'Ожидание';
     } else {
       const home = S().clubById(next.match.home);
       const away = S().clubById(next.match.away);
-      const tag = next.type === 'cup' ? 'Кубок · ' : '';
-      box.textContent = `${tag}${home.name} — ${away.name}`;
+      if (label) label.textContent = 'Следующий матч · ' + matchTypeLabel(next.type);
+      box.textContent = `${home.name} — ${away.name}`;
       btn.disabled = false;
-      btn.textContent = next.type === 'cup' ? 'Кубковый матч' : 'К матчу';
+      btn.textContent = next.type === 'ucl' ? 'Матч ЛЧ' : next.type === 'cup' ? 'Кубковый матч' : 'К матчу';
     }
 
     const news = $('#news-strip');
@@ -357,19 +385,23 @@ window.EYE_UI = (() => {
     list.innerHTML = market.slice(0, 60).map(e => {
       const p = e.player;
       const counter = (S().pendingCounters() || {})[e.id];
+      const report = (S().get().scoutReports || {})[p.id];
       return `
         <div class="row">
           <div class="ovr">${p.ovr}</div>
           <div>
             <strong>${p.name}${p.real ? ' ★' : ''}</strong>
             <div class="meta">
-              ${D().POS_LABEL[p.pos]} · ${p.age}л · пот. ${p.pot}
+              ${D().POS_LABEL[p.pos]} · ${p.age}л · пот. ${report ? '~' + report.pot : p.pot}
               · ${e.clubName || 'свободный'}
+              · зп ${S().money(e.wageAsk || p.wage)}/нед
               ${e.type === 'star' ? ' · топ' : ''}
               ${counter ? ' · контр ' + S().money(counter) : ''}
+              ${report ? ' · скаут: ' + report.recommendation : ''}
             </div>
           </div>
           <div class="row-actions">
+            <button class="btn btn-tiny" data-scout="${e.id}">Скаут</button>
             <button class="btn btn-tiny" data-bid="${e.id}">${S().money(e.ask)}</button>
             ${e.clubId ? `<button class="btn btn-tiny" data-loan="${e.id}">Аренда</button>` : ''}
           </div>
@@ -385,8 +417,11 @@ window.EYE_UI = (() => {
     const modal = $('#bid-modal');
     modal.hidden = false;
     $('#bid-title').textContent = item.player.name;
-    $('#bid-meta').textContent = `Запрос: ${S().money(item.ask)} · ${item.clubName || 'свободный агент'}`;
+    const wageAsk = item.wageAsk || item.player.wage || 10000;
+    const pendingW = (S().pendingWage() || {})[entryId];
+    $('#bid-meta').textContent = `Запрос: ${S().money(item.ask)} · зп ~${S().money(wageAsk)}/нед · ${item.clubName || 'свободный агент'}`;
     $('#bid-amount').value = item.ask;
+    $('#bid-wage').value = pendingW || wageAsk;
     const counter = (S().pendingCounters() || {})[entryId];
     const btnC = $('#bid-counter');
     if (counter) {
@@ -434,6 +469,69 @@ window.EYE_UI = (() => {
       const mine = m.home === S().club().id || m.away === S().club().id;
       return `<div class="news-item${mine ? ' me-round' : ''}"><strong>${h?.name} — ${a?.name}</strong><div>${score}</div></div>`;
     }).join('');
+  }
+
+  function renderUcl() {
+    const ucl = S().get().ucl;
+    const status = $('#ucl-status');
+    const btn = $('#btn-ucl-play');
+    if (!ucl) { status.textContent = 'ЛЧ ещё не сформирована'; btn.hidden = true; return; }
+    if (ucl.champion) {
+      const c = S().clubById(ucl.champion);
+      status.innerHTML = `<strong>${ucl.name}</strong><div>Победитель: ${c?.name || '—'}</div>`;
+      btn.hidden = true;
+    } else {
+      const inComp = (ucl.bracket || []).some(m => m.home === S().club().id || m.away === S().club().id)
+        || (ucl.bracket || []).some(m => m.played && (m.home === S().club().id || m.away === S().club().id));
+      status.innerHTML = `<strong>${ucl.name}</strong><div>Стадия: ${ucl.round}${inComp ? '' : ' · ваш клуб вне сетки'}</div>`;
+      btn.hidden = !S().playerUclMatch();
+    }
+    $('#ucl-list').innerHTML = (ucl.bracket || []).map(m => {
+      const h = S().clubById(m.home); const a = S().clubById(m.away);
+      const score = m.played ? `${m.score[0]}:${m.score[1]}` : 'ожидается';
+      const mine = m.home === S().club().id || m.away === S().club().id;
+      return `<div class="news-item${mine ? ' me-round' : ''}"><strong>${h?.name} — ${a?.name}</strong><div>${score}</div></div>`;
+    }).join('') || `<div class="news-item">Сетка пуста</div>`;
+  }
+
+  function renderBoard() {
+    const st = S().get();
+    const board = st.board;
+    const me = S().club();
+    const card = $('#board-card');
+    const jobs = $('#job-list');
+    if (!board) {
+      card.innerHTML = '<p>Нет данных совета</p>';
+      jobs.hidden = true;
+      return;
+    }
+    const confColor = board.confidence >= 55 ? 'var(--good, #34d399)' : board.confidence >= 35 ? 'var(--warn, #fbbf24)' : 'var(--bad, #f87171)';
+    card.innerHTML = `
+      <div class="next-label">${st.sacked ? 'Вас уволили' : 'Цели сезона'}</div>
+      <h3 style="margin:6px 0;font-family:var(--display)">${board.targetLabel}</h3>
+      <div class="meta" style="color:var(--muted);line-height:1.5;font-size:13px">
+        Место не ниже ${board.targetPlace}${board.cupTarget ? ' · кубок: ' + (board.cupTarget === 'semi' ? 'полуфинал' : '1/4') : ''}<br/>
+        Уверенность: <strong style="color:${confColor}">${board.confidence}%</strong>
+        · предупреждений: ${board.warnings}<br/>
+        Клуб: «${me.name}» · ${st.leagueName}
+      </div>
+      ${st.sacked ? '<p class="hint" style="margin-top:10px">Выберите новый клуб ниже.</p>' : '<p class="hint" style="margin-top:10px">Поражения снижают доверие. Итог сезона решает судьбу контракта.</p>'}
+    `;
+    if (!st.sacked) { jobs.hidden = true; jobs.innerHTML = ''; return; }
+    jobs.hidden = false;
+    const candidates = [...st.clubs]
+      .filter(c => c.id !== me.id)
+      .sort((a, b) => b.reputation - a.reputation)
+      .slice(0, 18);
+    jobs.innerHTML = candidates.map(c => `
+      <button class="row row-btn" data-job="${c.id}">
+        <div class="ovr" style="background:${c.color}"></div>
+        <div>
+          <strong>${c.name}</strong>
+          <div class="meta">${c.leagueName} · реп. ${c.reputation} · бюджет ${S().money(c.budget)}</div>
+        </div>
+      </button>
+    `).join('');
   }
 
   function renderFinance() {
@@ -529,7 +627,14 @@ window.EYE_UI = (() => {
   }
 
   function renderPrematch() {
-    const next = S().nextMatch();
+    const st = S().get();
+    if (st?.sacked) { show('board'); return; }
+    let next = S().nextMatch();
+    if (matchCtx?.match && (matchCtx.type === 'cup' || matchCtx.type === 'ucl')) {
+      const still = !matchCtx.match.played &&
+        (matchCtx.match.home === st.clubId || matchCtx.match.away === st.clubId);
+      if (still) next = { type: matchCtx.type, match: matchCtx.match };
+    }
     if (!next) { show('hub'); return; }
     const pm = next.match;
     const home = S().clubById(pm.home);
@@ -540,7 +645,7 @@ window.EYE_UI = (() => {
     const myS = E().teamStrength(me, { home: home.id === me.id });
     const opS = E().teamStrength(opp, { home: home.id === opp.id });
     $('#prematch-card').innerHTML = `
-      <div class="next-label">${next.type === 'cup' ? 'Кубок EYE' : S().get().leagueName} · Тур ${S().get().week}</div>
+      <div class="next-label">${matchTypeLabel(next.type)} · Тур ${st.week}</div>
       <div class="vs">${home.name}</div>
       <div style="color:var(--dim)">против</div>
       <div class="vs">${away.name}</div>
@@ -550,7 +655,7 @@ window.EYE_UI = (() => {
         · ${me.formation} · ${D().STYLES.find(s => s.id === me.style)?.name || me.style}
       </div>
     `;
-    matchCtx = { type: next.type, match: pm };
+    matchCtx = { type: next.type, match: pm, subsUsed: matchCtx?.subsUsed || 0 };
   }
 
   function drawMatchFrame(ctx, w, h, minute, colors, ball) {
@@ -587,7 +692,7 @@ window.EYE_UI = (() => {
     if (!next) return;
     matchPlaying = true;
     matchAbort = false;
-    matchCtx = next;
+    matchCtx = { ...next, subsUsed: next.subsUsed || 0 };
     show('match');
     $('#ht-panel').hidden = true;
 
@@ -660,19 +765,38 @@ window.EYE_UI = (() => {
   function showHtPanel() {
     const panel = $('#ht-panel');
     panel.hidden = false;
+    const used = matchCtx?.subsUsed || 0;
+    const left = Math.max(0, 3 - used);
+    $('#ht-hint').textContent = `Стиль, схема и замены (осталось ${left}/3) · затем второй тайм`;
+    $('#ht-formations').innerHTML = Object.keys(D().FORMATIONS).map(f =>
+      `<button class="btn btn-tiny" data-ht-form="${f}">${f}</button>`
+    ).join('');
     $('#ht-styles').innerHTML = D().STYLES.map(s =>
       `<button class="btn btn-tiny" data-ht-style="${s.id}">${s.name}</button>`
     ).join('');
     const me = S().club();
     S().ensureLineup();
     const xiIds = new Set(me.lineup.map(p => p.id));
+    const slots = D().FORMATIONS[me.formation]?.slots || [];
     const bench = me.squad.filter(p => !xiIds.has(p.id) && !p.injured).slice(0, 8);
-    $('#ht-bench').innerHTML = bench.map((p, i) => `
-      <button class="row row-btn" data-ht-sub="${p.id}" data-ht-slot="${(i % 10)}">
-        <div class="ovr">${p.ovr}</div>
-        <div><strong>${p.name}</strong><div class="meta">замена · ${D().POS_LABEL[p.pos]}</div></div>
-      </button>
-    `).join('') || `<div class="news-item">Нет запасных</div>`;
+    $('#ht-bench').innerHTML = left <= 0
+      ? `<div class="news-item">Лимит замен исчерпан</div>`
+      : (bench.map(p => {
+          let slot = slots.findIndex((pos, i) => pos === p.pos && me.lineup[i]);
+          if (slot < 0) {
+            slot = slots.findIndex((pos, i) => {
+              const group = (a) => a === 'GK' ? 'GK' : ['CB','RB','LB'].includes(a) ? 'DF' : ['ST','RW','LW'].includes(a) ? 'FW' : 'MF';
+              return group(pos) === group(p.pos);
+            });
+          }
+          if (slot < 0) slot = 10;
+          return `
+            <button class="row row-btn" data-ht-sub="${p.id}" data-ht-slot="${slot}">
+              <div class="ovr">${p.ovr}</div>
+              <div><strong>${p.name}</strong><div class="meta">замена · ${D().POS_LABEL[p.pos]}</div></div>
+            </button>
+          `;
+        }).join('') || `<div class="news-item">Нет запасных</div>`);
   }
 
   async function continueSecondHalf() {
@@ -720,7 +844,8 @@ window.EYE_UI = (() => {
   }
 
   function finishMatch(next, result) {
-    if (next.type === 'cup') S().recordCupMatch(next.match, result);
+    if (next.type === 'ucl') S().recordUclMatch(next.match, result);
+    else if (next.type === 'cup') S().recordCupMatch(next.match, result);
     else S().recordPlayerMatch(next.match, result);
     matchPlaying = false;
     matchCtx = null;
@@ -754,6 +879,21 @@ window.EYE_UI = (() => {
 
       const bid = e.target.closest('[data-bid]');
       if (bid) { openBidModal(bid.dataset.bid); return; }
+      const scout = e.target.closest('[data-scout]');
+      if (scout) {
+        const r = S().scoutPlayer(scout.dataset.scout);
+        toast(r.msg);
+        if (r.ok && r.report) toast(`${r.report.name}: ${r.report.recommendation}, пот. ~${r.report.pot}`);
+        renderTransfers('market');
+        return;
+      }
+      const job = e.target.closest('[data-job]');
+      if (job) {
+        const r = S().takeNewJob(job.dataset.job);
+        toast(r.msg);
+        if (r.ok) { S().autoLineup(); show('hub'); }
+        return;
+      }
       const loan = e.target.closest('[data-loan]');
       if (loan) {
         const r = S().makeOffer(loan.dataset.loan, 0, true);
@@ -770,6 +910,14 @@ window.EYE_UI = (() => {
         const r = S().swapIntoXi(bench.dataset.bench, selectedSlot);
         toast(r.msg); selectedSlot = null; drawPitch(); renderBench(); return;
       }
+      const htForm = e.target.closest('[data-ht-form]');
+      if (htForm) {
+        S().setTactics(htForm.dataset.htForm, null);
+        S().autoLineup();
+        toast('Схема: ' + htForm.dataset.htForm);
+        showHtPanel();
+        return;
+      }
       const htStyle = e.target.closest('[data-ht-style]');
       if (htStyle) {
         S().setTactics(null, htStyle.dataset.htStyle);
@@ -777,8 +925,15 @@ window.EYE_UI = (() => {
       }
       const htSub = e.target.closest('[data-ht-sub]');
       if (htSub) {
-        const r = S().swapIntoXi(htSub.dataset.htSub, Number(htSub.dataset.htSlot) % 10);
-        toast(r.msg || 'Замена'); showHtPanel(); return;
+        if (!matchCtx) return;
+        if ((matchCtx.subsUsed || 0) >= 3) { toast('Лимит 3 замены'); return; }
+        const r = S().swapIntoXi(htSub.dataset.htSub, Number(htSub.dataset.htSlot));
+        if (r.ok !== false) {
+          matchCtx.subsUsed = (matchCtx.subsUsed || 0) + 1;
+          toast((r.msg || 'Замена') + ` · ${matchCtx.subsUsed}/3`);
+        } else toast(r.msg || 'Не вышло');
+        showHtPanel();
+        return;
       }
       const sell = e.target.closest('[data-sell]');
       if (sell) {
@@ -822,7 +977,10 @@ window.EYE_UI = (() => {
       }
     });
 
-    $('#btn-play-match')?.addEventListener('click', () => show('prematch'));
+    $('#btn-play-match')?.addEventListener('click', () => {
+      if (S().get()?.sacked) show('board');
+      else show('prematch');
+    });
     $('#btn-kickoff')?.addEventListener('click', () => runMatch());
     $('#btn-skip-match')?.addEventListener('click', () => { matchAbort = true; });
     $('#btn-auto-xi')?.addEventListener('click', () => { S().autoLineup(); toast('Состав собран'); renderSquad(); });
@@ -833,7 +991,14 @@ window.EYE_UI = (() => {
     $('#btn-cup-play')?.addEventListener('click', () => {
       const pm = S().playerCupMatch();
       if (!pm) return;
-      matchCtx = { type: 'cup', match: pm };
+      matchCtx = { type: 'cup', match: pm, subsUsed: 0 };
+      show('prematch');
+      renderPrematch();
+    });
+    $('#btn-ucl-play')?.addEventListener('click', () => {
+      const pm = S().playerUclMatch();
+      if (!pm) return;
+      matchCtx = { type: 'ucl', match: pm, subsUsed: 0 };
       show('prematch');
       renderPrematch();
     });
@@ -841,12 +1006,14 @@ window.EYE_UI = (() => {
     $('#bid-submit')?.addEventListener('click', () => {
       if (!bidEntryId) return;
       const amount = Number($('#bid-amount').value) || 0;
-      const r = S().makeOffer(bidEntryId, amount, false);
+      const wage = Number($('#bid-wage').value) || 0;
+      const r = S().makeOffer(bidEntryId, amount, false, wage);
       toast(r.msg);
       if (r.ok) closeBidModal();
       else if (r.counter) {
         $('#bid-counter').hidden = false;
         $('#bid-counter').textContent = 'Принять контр ' + S().money(r.counter);
+        if (r.wageAsk) $('#bid-wage').value = Math.round(r.wageAsk * 1.05);
       }
       renderTransfers('market');
     });
@@ -854,7 +1021,8 @@ window.EYE_UI = (() => {
       if (!bidEntryId) return;
       const counter = (S().pendingCounters() || {})[bidEntryId];
       if (!counter) return;
-      const r = S().makeOffer(bidEntryId, counter, false);
+      const wage = Number($('#bid-wage').value) || (S().pendingWage() || {})[bidEntryId] || 0;
+      const r = S().makeOffer(bidEntryId, counter, false, wage);
       toast(r.msg);
       if (r.ok) closeBidModal();
       renderTransfers('market');
