@@ -615,17 +615,17 @@ export function ChatSidebar({
   return (
     <div className="aurora-chats flex h-full flex-col text-sidebar-foreground">
       {/* Header */}
-      <div className="aurora-sidebar-safe-top aurora-chats-header flex items-center justify-between gap-2 px-4 pb-2.5">
+      <div className="aurora-sidebar-safe-top aurora-chats-header flex items-center justify-between gap-2 px-4 pb-3">
         {selectionMode ? (
           <>
             <button
               type="button"
               onClick={exitSelection}
-              className="text-sm font-medium text-primary"
+              className="text-sm font-medium text-[#5eb3f6]"
             >
               {t('misc.cancel')}
             </button>
-            <p className="text-sm font-semibold">
+            <p className="text-sm font-semibold text-white">
               {t('msg.selectedCount').replace('{n}', String(selectedIds.size))}
             </p>
             <button
@@ -639,22 +639,39 @@ export function ChatSidebar({
           </>
         ) : (
           <>
-        <div className="flex min-w-0 flex-1 items-center gap-2">
+        <div className="flex min-w-0 flex-1 items-center gap-3">
           {showArchived ? (
             <button
               type="button"
               onClick={() => setShowArchived(false)}
-              className="flex min-w-0 items-center gap-2 text-left"
+              className="flex min-w-0 items-center gap-2.5 text-left"
             >
-              <ArrowLeft className="h-5 w-5 shrink-0 text-[#3aa0ff]" />
-              <h1 className="aurora-chats-title truncate text-[26px] xl:text-lg">
-                {t('sidebar.archived')}
-              </h1>
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-white/[0.08] bg-white/[0.06] text-[#3aa0ff]">
+                <ArrowLeft className="h-4 w-4" />
+              </span>
+              <span className="min-w-0">
+                <h1 className="aurora-chats-title truncate text-[1.35rem] xl:text-lg">
+                  {t('sidebar.archived')}
+                </h1>
+                <p className="truncate text-[11px] tracking-wide text-[#8fa0b5]">
+                  {t('sidebar.archivedCount').replace('{count}', String(archivedCount))}
+                </p>
+              </span>
             </button>
           ) : (
-            <h1 className="aurora-chats-title truncate text-[26px] xl:text-lg">
-              {t('nav.chats')}
-            </h1>
+            <>
+              <div className="aurora-feed-orb flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-[linear-gradient(145deg,#3aa0ff,#2dd4bf)] text-white shadow-[0_8px_24px_rgb(58_160_255_/_28%)]">
+                <MessageSquare className="h-5 w-5" strokeWidth={2} />
+              </div>
+              <div className="min-w-0 flex-1">
+                <h1 className="aurora-chats-title truncate text-[1.35rem] xl:text-lg">
+                  {t('nav.chats')}
+                </h1>
+                <p className="truncate text-[11px] tracking-wide text-[#8fa0b5]">
+                  {t('sidebar.subtitle')}
+                </p>
+              </div>
+            </>
           )}
         </div>
         <div className="flex items-center gap-0.5">
@@ -842,12 +859,12 @@ export function ChatSidebar({
                   <button
                     type="button"
                     onClick={() => setShowArchived(false)}
-                    className="flex w-full items-center gap-2 px-4 py-2 text-sm font-medium text-primary"
+                    className="flex w-full items-center gap-2 px-4 py-2 text-sm font-medium text-[#5eb3f6]"
                   >
                     <ArrowLeft className="h-4 w-4" />
                     {t('sidebar.allChats')}
                   </button>
-                  <p className="px-4 pb-1 text-[11px] text-muted-foreground">
+                  <p className="px-4 pb-1 text-[11px] text-[#8fa0b5]">
                     {t('sidebar.swipeBackChats')}
                   </p>
                 </div>
@@ -855,22 +872,22 @@ export function ChatSidebar({
               {query.trim() && (
                 <div className="mb-3 space-y-3">
                   {searchingUsers && (
-                    <p className="px-3 py-2 text-center text-xs text-muted-foreground">{t('newChat.searching')}</p>
+                    <p className="px-3 py-2 text-center text-xs text-[#8fa0b5]">{t('newChat.searching')}</p>
                   )}
                   {!searchingUsers && hasGlobalHits && (
-                    <p className="px-3 pb-0.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    <p className="aurora-chats-section px-3 pb-0.5 text-[10px] font-semibold uppercase">
                       {t('sidebar.searchGlobal')}
                     </p>
                   )}
                   {userResults.length > 0 && (
                     <div>
-                      <p className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                      <p className="aurora-chats-section px-3 pb-1 text-[10px] font-semibold uppercase">
                         {t('profile.searchUsers')}
                       </p>
                       {userResults.map((u) => (
                         <div
                           key={u.id}
-                          className="flex items-center gap-2.5 px-3 py-2 transition hover:bg-sidebar-accent/70"
+                          className="aurora-chats-row flex items-center gap-2.5 px-3 py-2"
                         >
                           <button
                             type="button"
@@ -885,8 +902,8 @@ export function ChatSidebar({
                             onClick={() => void openSearchUserChat(u.id)}
                             className="min-w-0 flex-1 text-left"
                           >
-                            <p className="truncate text-[15px] font-medium leading-tight">{u.name}</p>
-                            <p className="truncate text-[12px] text-muted-foreground">@{u.username}</p>
+                            <p className="truncate text-[15px] font-medium leading-tight text-[#e8eef6]">{u.name}</p>
+                            <p className="truncate text-[12px] text-[#8fa0b5]">@{u.username}</p>
                           </button>
                           <FriendButton
                             userId={u.id}
@@ -901,7 +918,7 @@ export function ChatSidebar({
                   )}
                   {globalChannels.length > 0 && (
                     <div>
-                      <p className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                      <p className="aurora-chats-section px-3 pb-1 text-[10px] font-semibold uppercase">
                         {t('sidebar.searchChannels')}
                       </p>
                       {globalChannels.map((c) => (
@@ -910,20 +927,20 @@ export function ChatSidebar({
                           type="button"
                           disabled={joiningSlug === c.slug}
                           onClick={() => void openSearchPublicChat(c)}
-                          className="flex w-full items-center gap-2.5 px-3 py-2 text-left transition hover:bg-sidebar-accent/70 disabled:opacity-60"
+                          className="aurora-chats-row flex w-full items-center gap-2.5 px-3 py-2 text-left disabled:opacity-60"
                         >
                           <Avatar name={c.title} color={c.avatarColor} imageUrl={c.avatarUrl} size="md" />
                           <span className="min-w-0 flex-1">
                             <span className="flex items-center gap-1.5">
                               <Megaphone className="h-3.5 w-3.5 shrink-0 text-[#8b5cf6]" />
-                              <span className="truncate text-[15px] font-medium leading-tight">{c.title}</span>
+                              <span className="truncate text-[15px] font-medium leading-tight text-[#e8eef6]">{c.title}</span>
                             </span>
-                            <span className="block truncate text-[12px] text-muted-foreground">
+                            <span className="block truncate text-[12px] text-[#8fa0b5]">
                               @{c.slug}
                               {c.memberCount > 0 ? ` · ${c.memberCount} ${t('channel.subscribers')}` : ''}
                             </span>
                           </span>
-                          <span className="shrink-0 text-xs font-semibold text-primary">
+                          <span className="shrink-0 text-xs font-semibold text-[#5eb3f6]">
                             {joiningSlug === c.slug ? '…' : t('sidebar.joinChannel')}
                           </span>
                         </button>
@@ -932,7 +949,7 @@ export function ChatSidebar({
                   )}
                   {globalGroups.length > 0 && (
                     <div>
-                      <p className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                      <p className="aurora-chats-section px-3 pb-1 text-[10px] font-semibold uppercase">
                         {t('sidebar.searchGroups')}
                       </p>
                       {globalGroups.map((c) => (
@@ -941,20 +958,20 @@ export function ChatSidebar({
                           type="button"
                           disabled={joiningSlug === c.slug}
                           onClick={() => void openSearchPublicChat(c)}
-                          className="flex w-full items-center gap-2.5 px-3 py-2 text-left transition hover:bg-sidebar-accent/70 disabled:opacity-60"
+                          className="aurora-chats-row flex w-full items-center gap-2.5 px-3 py-2 text-left disabled:opacity-60"
                         >
                           <Avatar name={c.title} color={c.avatarColor} imageUrl={c.avatarUrl} size="md" />
                           <span className="min-w-0 flex-1">
                             <span className="flex items-center gap-1.5">
                               <Users className="h-3.5 w-3.5 shrink-0 text-[#2aabee]" />
-                              <span className="truncate text-[15px] font-medium leading-tight">{c.title}</span>
+                              <span className="truncate text-[15px] font-medium leading-tight text-[#e8eef6]">{c.title}</span>
                             </span>
-                            <span className="block truncate text-[12px] text-muted-foreground">
+                            <span className="block truncate text-[12px] text-[#8fa0b5]">
                               @{c.slug}
                               {c.memberCount > 0 ? ` · ${c.memberCount} ${t('sidebar.membersCount')}` : ''}
                             </span>
                           </span>
-                          <span className="shrink-0 text-xs font-semibold text-primary">
+                          <span className="shrink-0 text-xs font-semibold text-[#5eb3f6]">
                             {joiningSlug === c.slug ? '…' : t('sidebar.joinGroup')}
                           </span>
                         </button>
@@ -962,12 +979,12 @@ export function ChatSidebar({
                     </div>
                   )}
                   {!searchingUsers && !hasGlobalHits && !hasLocalHits && (
-                    <p className="px-3 py-2 text-center text-xs text-muted-foreground">{t('sidebar.noChatsFound')}</p>
+                    <p className="px-3 py-2 text-center text-xs text-[#8fa0b5]">{t('sidebar.noChatsFound')}</p>
                   )}
                   {hasLocalHits && (
                     <>
-                      <div className="my-1 ml-3 mr-3 border-t border-sidebar-border/50" />
-                      <p className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                      <div className="my-1 ml-3 mr-3 border-t border-white/[0.06]" />
+                      <p className="aurora-chats-section px-3 pb-1 text-[10px] font-semibold uppercase">
                         {t('sidebar.searchChatsSection')}
                       </p>
                     </>
@@ -975,12 +992,12 @@ export function ChatSidebar({
                 </div>
               )}
               {filtered.length === 0 && !query.trim() && !savedChat ? (
-                <div className="mx-4 my-10 flex flex-col items-center justify-center gap-3 rounded-3xl bg-gradient-to-b from-primary/10 via-muted/40 to-transparent px-6 py-12 text-center">
-                  <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/15 text-primary shadow-sm">
+                <div className="aurora-chats-empty mx-4 my-10 flex flex-col items-center justify-center gap-3 rounded-[1.5rem] px-6 py-12 text-center">
+                  <div className="aurora-feed-orb flex h-16 w-16 items-center justify-center rounded-2xl bg-[linear-gradient(145deg,#3aa0ff,#2dd4bf)] text-white shadow-[0_12px_32px_rgb(58_160_255_/_28%)]">
                     <MessageCirclePlus className="h-8 w-8" />
                   </div>
                   <div className="space-y-1">
-                    <p className="text-[15px] font-semibold text-foreground">
+                    <p className="aurora-chats-title text-[15px] !font-semibold">
                       {showArchived
                         ? t('sidebar.noArchived')
                         : activeFolder
@@ -988,13 +1005,13 @@ export function ChatSidebar({
                           : t('sidebar.noChats')}
                     </p>
                     {!showArchived && !activeFolder && (
-                      <p className="text-xs text-muted-foreground">{t('sidebar.startChatting')}</p>
+                      <p className="text-xs text-[#8fa0b5]">{t('sidebar.startChatting')}</p>
                     )}
                   </div>
                   {!showArchived && !activeFolder && (
                     <Button
                       size="sm"
-                      className="mt-1 rounded-full bg-primary px-5 text-primary-foreground hover:bg-primary/90"
+                      className="mt-1 rounded-full bg-[linear-gradient(145deg,#3aa0ff,#2dd4bf)] px-5 text-[#041018] shadow-[0_8px_20px_rgb(58_160_255_/_28%)] hover:brightness-110"
                       onClick={() => openNewChat('search')}
                     >
                       {t('sidebar.newChat')}
@@ -1015,13 +1032,13 @@ export function ChatSidebar({
                     <>
                       <SavedChatRow chat={savedChat} selectionMode={selectionMode} />
                       {(pinned.length > 0 || unpinned.length > 0) && (
-                        <div className="my-1.5 ml-3 mr-3 border-t border-sidebar-border/40" />
+                        <div className="my-1.5 ml-3 mr-3 border-t border-white/[0.06]" />
                       )}
                     </>
                   )}
                   {pinned.length > 0 && !showArchived && (
                     <>
-                      <p className="px-4 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                      <p className="aurora-chats-section px-4 pb-1 pt-2 text-[11px] font-semibold uppercase">
                         {t('sidebar.pinned')}
                       </p>
                       {pinned.map((chat) => (
@@ -1043,7 +1060,7 @@ export function ChatSidebar({
                         />
                       ))}
                       {unpinned.length > 0 && (
-                        <div className="my-1.5 ml-3 mr-3 border-t border-sidebar-border/40" />
+                        <div className="my-1.5 ml-3 mr-3 border-t border-white/[0.06]" />
                       )}
                     </>
                   )}
@@ -1280,7 +1297,7 @@ function ArchiveFolderRow({ count, onOpen }: { count: number; onOpen: () => void
           {t('sidebar.archivedCount').replace('{count}', String(count))}
         </p>
       </div>
-      <span className="flex h-5 min-w-[20px] items-center justify-center rounded-full bg-primary px-1.5 text-[10px] font-bold text-primary-foreground">
+      <span className="aurora-chats-badge flex h-5 min-w-[20px] items-center justify-center rounded-full px-1.5 text-[10px] font-bold">
         {count > 99 ? '99+' : count}
       </span>
     </button>
@@ -1363,7 +1380,7 @@ function FolderTabs({
         ))}
         <button
           onClick={onEdit}
-          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition hover:bg-muted hover:text-foreground"
+          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-[#8fa0b5] transition hover:bg-white/5 hover:text-white"
           title={t('folders.edit')}
         >
           <FolderPlus className="h-3.5 w-3.5" />
@@ -1410,7 +1427,7 @@ function FolderTab({
       {emoji && <span className="text-sm leading-none">{emoji}</span>}
       <span className="max-w-[120px] truncate">{label}</span>
       {unread > 0 && (
-        <span className="ml-0.5 inline-flex h-4 min-w-[16px] items-center justify-center rounded-full bg-primary px-1 text-[9px] font-bold leading-none text-primary-foreground">
+        <span className="aurora-chats-badge ml-0.5 inline-flex h-4 min-w-[16px] items-center justify-center rounded-full px-1 text-[9px] font-bold leading-none">
           {unread > 99 ? '99+' : unread}
         </span>
       )}
@@ -2225,17 +2242,17 @@ function NewChatDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md gap-0 overflow-hidden p-0">
+      <DialogContent className="aurora-chats-dialog max-w-md gap-0 overflow-hidden p-0">
         <DialogHeader className="px-5 pt-5">
-          <DialogTitle>{t('newChat.title')}</DialogTitle>
+          <DialogTitle className="aurora-chats-title text-lg">{t('newChat.title')}</DialogTitle>
         </DialogHeader>
         <div className="px-5 pt-3">
-          <div className="flex rounded-xl bg-muted p-1">
+          <div className="aurora-chats-seg flex rounded-xl p-1">
             <button
               onClick={() => setTab('search')}
               className={cn(
-                'flex-1 rounded-lg py-2 text-sm font-medium transition',
-                tab === 'search' ? 'bg-background shadow' : 'text-muted-foreground',
+                'aurora-chats-seg-btn flex-1 rounded-lg py-2 text-sm font-medium',
+                tab === 'search' && 'is-active',
               )}
             >
               {t('newChat.searchUser')}
@@ -2243,8 +2260,8 @@ function NewChatDialog({
             <button
               onClick={() => setTab('group')}
               className={cn(
-                'flex-1 rounded-lg py-2 text-sm font-medium transition',
-                tab === 'group' ? 'bg-background shadow' : 'text-muted-foreground',
+                'aurora-chats-seg-btn flex-1 rounded-lg py-2 text-sm font-medium',
+                tab === 'group' && 'is-active',
               )}
             >
               {t('newChat.createGroup')}
@@ -2252,8 +2269,8 @@ function NewChatDialog({
             <button
               onClick={() => setTab('channel')}
               className={cn(
-                'flex-1 rounded-lg py-2 text-sm font-medium transition',
-                tab === 'channel' ? 'bg-background shadow' : 'text-muted-foreground',
+                'aurora-chats-seg-btn flex-1 rounded-lg py-2 text-sm font-medium',
+                tab === 'channel' && 'is-active',
               )}
             >
               {t('channel.create')}
@@ -2263,21 +2280,21 @@ function NewChatDialog({
 
         {tab === 'search' ? (
           <div className="p-5">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <div className="aurora-chats-search relative rounded-xl">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#8fa0b5]" />
               <Input
                 value={search}
                 onChange={(e) => runSearch(e.target.value)}
                 placeholder={t('newChat.searchPlaceholder')}
-                className="pl-10"
+                className="border-0 bg-transparent pl-10 text-[#e8eef6] placeholder:text-[#6f8196] focus-visible:ring-0"
                 autoFocus
               />
             </div>
             <div className="mt-3 max-h-72 space-y-1 overflow-y-auto">
               {loading ? (
-                <p className="py-6 text-center text-sm text-muted-foreground">{t('newChat.searching')}</p>
+                <p className="py-6 text-center text-sm text-[#8fa0b5]">{t('newChat.searching')}</p>
               ) : results.length === 0 && channelHits.length === 0 && groupHits.length === 0 ? (
-                <p className="py-6 text-center text-sm text-muted-foreground">
+                <p className="py-6 text-center text-sm text-[#8fa0b5]">
                   {search ? t('newChat.nothingFound') : t('newChat.startTyping')}
                 </p>
               ) : (
@@ -2285,7 +2302,7 @@ function NewChatDialog({
                   {results.map((u) => (
                     <div
                       key={u.id}
-                      className="flex w-full items-center gap-2 rounded-xl px-2 py-2 transition hover:bg-muted"
+                      className="aurora-chats-row flex w-full items-center gap-2 rounded-xl px-2 py-2"
                     >
                       <button
                         onClick={() => onViewProfile?.(u.id)}
@@ -2323,7 +2340,7 @@ function NewChatDialog({
                   ))}
                   {channelHits.length > 0 && (
                     <>
-                      <p className="px-2 pt-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                      <p className="aurora-chats-section px-2 pt-2 text-[10px] font-semibold uppercase">
                         {t('sidebar.searchChannels')}
                       </p>
                       {channelHits.map((c) => (
@@ -2332,7 +2349,7 @@ function NewChatDialog({
                           type="button"
                           disabled={joiningSlug === c.slug}
                           onClick={() => void joinPublicFromDialog(c.slug)}
-                          className="flex w-full items-center gap-3 rounded-xl px-2 py-2 text-left transition hover:bg-muted disabled:opacity-60"
+                          className="aurora-chats-row flex w-full items-center gap-3 rounded-xl px-2 py-2 text-left disabled:opacity-60"
                         >
                           <Avatar name={c.title} color={c.avatarColor} imageUrl={c.avatarUrl} size="sm" />
                           <span className="min-w-0 flex-1">
@@ -2348,7 +2365,7 @@ function NewChatDialog({
                   )}
                   {groupHits.length > 0 && (
                     <>
-                      <p className="px-2 pt-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                      <p className="aurora-chats-section px-2 pt-2 text-[10px] font-semibold uppercase">
                         {t('sidebar.searchGroups')}
                       </p>
                       {groupHits.map((c) => (
@@ -2357,7 +2374,7 @@ function NewChatDialog({
                           type="button"
                           disabled={joiningSlug === c.slug}
                           onClick={() => void joinPublicFromDialog(c.slug)}
-                          className="flex w-full items-center gap-3 rounded-xl px-2 py-2 text-left transition hover:bg-muted disabled:opacity-60"
+                          className="aurora-chats-row flex w-full items-center gap-3 rounded-xl px-2 py-2 text-left disabled:opacity-60"
                         >
                           <Avatar name={c.title} color={c.avatarColor} imageUrl={c.avatarUrl} size="sm" />
                           <span className="min-w-0 flex-1">
@@ -2398,11 +2415,11 @@ function NewChatDialog({
               <button
                 type="button"
                 onClick={() => setGroupIsForum(!groupIsForum)}
-                className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left transition hover:bg-muted/60 active:bg-muted"
+                className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left transition hover:bg-white/5 active:bg-white/[0.08]"
               >
-                <div className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-lg border-2 transition ${groupIsForum ? 'border-primary bg-primary' : 'border-muted-foreground/40'}`}>
+                <div className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-lg border-2 transition ${groupIsForum ? 'border-[#3aa0ff] bg-[#3aa0ff]' : 'border-white/25'}`}>
                   {groupIsForum && (
-                    <svg className="h-3.5 w-3.5 text-primary-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                    <svg className="h-3.5 w-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                     </svg>
                   )}
@@ -2435,8 +2452,8 @@ function NewChatDialog({
                       )
                     }}
                     className={cn(
-                      'flex w-full items-center gap-3 rounded-xl px-2 py-2 text-left transition hover:bg-muted',
-                      checked && 'bg-[#3390ec]/10',
+                      'aurora-chats-row flex w-full items-center gap-3 rounded-xl px-2 py-2 text-left',
+                      checked && 'is-selected',
                     )}
                   >
                     <Avatar name={u.name} color={u.avatarColor} imageUrl={u.avatarUrl} size="sm" />
@@ -2444,14 +2461,14 @@ function NewChatDialog({
                       <p className="truncate text-sm font-medium">{u.name}</p>
                       <p className="truncate text-xs text-muted-foreground">@{u.username}</p>
                     </div>
-                    {checked && <Check className="h-4 w-4 text-[#3390ec]" />}
+                    {checked && <Check className="h-4 w-4 text-[#5eb3f6]" />}
                   </button>
                 )
               })}
             </div>
             <Button
               onClick={createGroup}
-              className="mt-4 w-full bg-[#3390ec] text-white hover:bg-[#2b82d9]"
+              className="mt-4 w-full bg-[linear-gradient(145deg,#3aa0ff,#2dd4bf)] text-[#041018] hover:brightness-110"
             >
               <Users className="mr-2 h-4 w-4" />
               {t('newChat.createGroupBtn')}

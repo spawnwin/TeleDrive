@@ -962,6 +962,33 @@ body[data-lightbox-open] [data-slot="sheet-content"] {
   backdrop-filter: blur(10px);
 }
 
+.aurora-chats-dialog {
+  --chats-ink: #e8eef6;
+  --chats-muted: #8fa0b5;
+  --chats-line: rgb(255 255 255 / 8%);
+  border: 1px solid var(--chats-line) !important;
+  background:
+    radial-gradient(520px 260px at 12% -20%, rgb(45 160 255 / 18%), transparent 55%),
+    radial-gradient(420px 220px at 100% 0%, rgb(45 212 191 / 10%), transparent 50%),
+    linear-gradient(180deg, #0e1621 0%, #0b131c 100%) !important;
+  color: var(--chats-ink);
+}
+
+.aurora-chats-dialog .text-muted-foreground {
+  color: var(--chats-muted) !important;
+}
+
+.aurora-chats-section {
+  color: #8fa0b5;
+  letter-spacing: 0.08em;
+}
+
+.aurora-chats-badge {
+  background: linear-gradient(145deg, #3aa0ff, #2dd4bf);
+  color: #041018;
+  box-shadow: 0 4px 12px rgb(58 160 255 / 28%);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .aurora-chats-row {
     animation: none !important;
