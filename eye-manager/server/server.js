@@ -250,21 +250,79 @@ function rewardUsers(home, away, match) {
   const apply = (user, won, draw, oppName) => {
     if (!user || user.isBot) return;
     const prize = won ? 45000 : draw ? 18000 : 8000;
-    user.money = (user.money || 0) + prize;
+    const club = db.getClub(user.id);
+    const tickets = club ? G.ticketIncome(club, user, won) : 0;
+    const total = prize + tickets;
+    user.money = (user.money || 0) + total;
     user.xp = (user.xp || 0) + (won ? 35 : draw ? 18 : 10);
     user.level = G.levelFromXp(user.xp);
     user.fans = Math.max(1000, (user.fans || 10000) + (won ? 120 : draw ? 20 : -40));
     if (won) user.points = (user.points || 0) + 3;
     else if (draw) user.points = (user.points || 0) + 1;
     persistUser(user);
-    const club = db.getClub(user.id);
     if (club) {
       G.pushLedger(club, prize, won ? `Победа vs ${oppName}` : draw ? `Ничья vs ${oppName}` : `Поражение vs ${oppName}`);
+      if (tickets) G.pushLedger(club, tickets, 'Билеты');
       db.setClub(user.id, club);
     }
   };
   apply(home, hg > ag, hg === ag, match.away?.name || 'соперник');
   apply(away, ag > hg, hg === ag, match.home?.name || 'соперник');
+}
+
+function annotateCupPens(matchId, score) {
+  const m = db.getMatch(matchId);
+  if (!m) return;
+  m.score = [score[0], score[1]];
+  m.events = m.events || [];
+  m.events.push({
+    minute: 120,
+    type: 'pens',
+    side: score[0] > score[1] ? 'home' : 'away',
+    player: 'Серия пенальти',
+    score: [score[0], score[1]]
+  });
+  db.addMatch(m);
+}
+
+function ensureBotClub(user, clubName) {
+  if (!user?.id) return 0;
+  let club = db.getClub(user.id);
+  if (!club) {
+    club = G.defaultClub(user, { name: clubName || user.clubName || `AI ${user.name}` });
+    G.ensureLineup(club);
+    db.setClub(user.id, club);
+  }
+  const str = G.clubStrength(club);
+  user.strength = str;
+  user.clubName = club.name;
+  return str;
+}
+
+function processWageDay(user, club) {
+  if (!user || user.isBot || !club) return null;
+  const WEEK_MS = 24 * 3600e3;
+  const now = Date.now();
+  if (user.lastWageAt && now - user.lastWageAt < WEEK_MS) return null;
+  const wages = G.weeklyWages(club);
+  // soft income so new clubs don't go broke immediately
+  const grant = Math.round((user.fans || 10000) * (2 + (club.stadiumLevel || 1)));
+  const delta = grant - wages;
+  user.money = (user.money || 0) + delta;
+  user.lastWageAt = now;
+  G.pushLedger(club, -wages, 'Зарплаты состава');
+  G.pushLedger(club, grant, 'Доход недели (фанаты/стадион)');
+  persistUser(user);
+  db.setClub(user.id, club);
+  return { wages, grant, delta, at: now };
+}
+
+function refreshTransferMarket(force = false, scoutLevel = 0) {
+  const tm = db.getTransferMarket();
+  const age = Date.now() - (tm.refreshedAt || 0);
+  if (!force && tm.list?.length && age < 60 * 60e3) return tm;
+  const list = G.generateTransferList(scoutLevel, 8);
+  return db.setTransferMarket(list, Date.now());
 }
 
 function playCupTie(homeEnt, awayEnt, meta = {}) {
@@ -398,13 +456,15 @@ const server = http.createServer(async (req, res) => {
     const auth = requireAuth(req, res);
     if (!auth) return;
     const club = ensureClub(auth.user);
+    const wage = processWageDay(auth.user, club);
     return json(res, 200, {
       ok: true,
       user: enrichUser(auth.user),
       club: G.publicClub(club, auth.user),
       online: db.listOnlineUsers().length,
       liveCup: cups.findMyLiveCup(auth.user.id),
-      cupEvents: cups.listCupEvents(auth.user.id, { limit: 8 })
+      cupEvents: cups.listCupEvents(auth.user.id, { limit: 8 }),
+      wageDay: wage
     });
   }
 
@@ -486,9 +546,11 @@ const server = http.createServer(async (req, res) => {
     try {
       const body = JSON.parse((await readBody(req)).toString('utf8'));
       const club = ensureClub(auth.user);
+      const quote = G.quoteStaff(club, body.role);
+      if (!quote.ok) return json(res, 400, quote);
+      if ((auth.user.money || 0) < quote.cost) return json(res, 400, { error: `Нужно ${quote.cost} ¤` });
       const r = G.hireStaff(club, body.role);
       if (!r.ok) return json(res, 400, r);
-      if ((auth.user.money || 0) < r.cost) return json(res, 400, { error: `Нужно ${r.cost} ¤` });
       auth.user.money -= r.cost;
       G.pushLedger(club, -r.cost, r.label);
       persistUser(auth.user);
@@ -503,9 +565,11 @@ const server = http.createServer(async (req, res) => {
     const auth = requireAuth(req, res);
     if (!auth) return;
     const club = ensureClub(auth.user);
+    const quote = G.quoteStadium(club);
+    if (!quote.ok) return json(res, 400, quote);
+    if ((auth.user.money || 0) < quote.cost) return json(res, 400, { error: `Нужно ${quote.cost} ¤` });
     const r = G.upgradeStadium(club);
     if (!r.ok) return json(res, 400, r);
-    if ((auth.user.money || 0) < r.cost) return json(res, 400, { error: `Нужно ${r.cost} ¤` });
     auth.user.money -= r.cost;
     auth.user.fans = (auth.user.fans || 0) + 800;
     G.pushLedger(club, -r.cost, r.label);
@@ -634,19 +698,118 @@ const server = http.createServer(async (req, res) => {
     return json(res, 200, { ok: true, match });
   }
 
+  if (pathname === '/api/friendly/challenge' && req.method === 'POST') {
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    try {
+      const body = JSON.parse((await readBody(req)).toString('utf8') || '{}');
+      const target = usersDb().users[body.userId];
+      if (!target || target.isBot) return json(res, 404, { error: 'Игрок не найден' });
+      if (target.id === auth.user.id) return json(res, 400, { error: 'Нельзя вызвать себя' });
+      const online = db.listOnlineUsers().some((u) => u.id === target.id);
+      if (!online) return json(res, 400, { error: 'Соперник не в сети' });
+      const homeClub = ensureClub(auth.user);
+      const awayClub = ensureClub(target);
+      const match = G.simulateMatch(homeClub, awayClub, {
+        competition: 'friendly',
+        homeUserId: auth.user.id,
+        awayUserId: target.id
+      });
+      db.setClub(auth.user.id, homeClub);
+      db.setClub(target.id, awayClub);
+      db.addMatch(match);
+      rewardUsers(auth.user, target, match);
+      return json(res, 200, { ok: true, match });
+    } catch (e) {
+      return json(res, 500, { error: String(e.message || e) });
+    }
+  }
+
   if (pathname === '/api/matches' && req.method === 'GET') {
     const auth = requireAuth(req, res);
     if (!auth) return;
-    return json(res, 200, { ok: true, matches: db.listMatchesFor(auth.user.id, 40) });
+    const matches = await db.listMatchesForAsync(auth.user.id, 40);
+    return json(res, 200, { ok: true, matches });
   }
 
   if (pathname.startsWith('/api/matches/') && req.method === 'GET') {
     const auth = requireAuth(req, res);
     if (!auth) return;
     const id = pathname.slice('/api/matches/'.length);
-    const match = db.getMatch(id);
+    const match = await db.loadMatch(id);
     if (!match) return json(res, 404, { error: 'Матч не найден' });
     return json(res, 200, { ok: true, match });
+  }
+
+  if (pathname === '/api/transfers' && req.method === 'GET') {
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    const club = ensureClub(auth.user);
+    const scout = club.staff?.scout || 0;
+    const tm = refreshTransferMarket(false, scout);
+    return json(res, 200, {
+      ok: true,
+      list: tm.list,
+      refreshedAt: tm.refreshedAt,
+      scoutLevel: scout,
+      squadSize: (club.players || []).length
+    });
+  }
+
+  if (pathname === '/api/transfers/refresh' && req.method === 'POST') {
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    const club = ensureClub(auth.user);
+    const scout = club.staff?.scout || 0;
+    if (scout < 1) return json(res, 400, { error: 'Нужен скаут ур. 1+ чтобы обновлять рынок' });
+    if ((auth.user.money || 0) < 5000) return json(res, 400, { error: 'Нужно 5 000 ¤' });
+    auth.user.money -= 5000;
+    G.pushLedger(club, -5000, 'Обновление рынка');
+    persistUser(auth.user);
+    db.setClub(auth.user.id, club);
+    const tm = refreshTransferMarket(true, scout);
+    return json(res, 200, { ok: true, list: tm.list, refreshedAt: tm.refreshedAt, user: enrichUser(auth.user), club: G.publicClub(club, auth.user) });
+  }
+
+  if (pathname === '/api/transfers/buy' && req.method === 'POST') {
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    try {
+      const body = JSON.parse((await readBody(req)).toString('utf8'));
+      const club = ensureClub(auth.user);
+      const tm = db.getTransferMarket();
+      const listing = (tm.list || []).find((p) => p.id === body.playerId);
+      if (!listing) return json(res, 404, { error: 'Игрок уже куплен или снят с рынка' });
+      if ((auth.user.money || 0) < listing.value) return json(res, 400, { error: `Нужно ${listing.value} ¤` });
+      const r = G.buyPlayer(club, listing);
+      if (!r.ok) return json(res, 400, r);
+      auth.user.money -= r.cost;
+      G.pushLedger(club, -r.cost, r.label);
+      db.removeTransferListing(listing.id);
+      persistUser(auth.user);
+      db.setClub(auth.user.id, club);
+      return json(res, 200, { ok: true, club: G.publicClub(club, auth.user), user: enrichUser(auth.user), player: r.player });
+    } catch (e) {
+      return json(res, 500, { error: String(e.message || e) });
+    }
+  }
+
+  if (pathname === '/api/transfers/sell' && req.method === 'POST') {
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    try {
+      const body = JSON.parse((await readBody(req)).toString('utf8'));
+      const club = ensureClub(auth.user);
+      const r = G.sellPlayer(club, body.playerId);
+      if (!r.ok) return json(res, 400, r);
+      auth.user.money = (auth.user.money || 0) + r.value;
+      G.pushLedger(club, r.value, r.label);
+      persistUser(auth.user);
+      db.setClub(auth.user.id, club);
+      return json(res, 200, { ok: true, club: G.publicClub(club, auth.user), user: enrichUser(auth.user), value: r.value });
+    } catch (e) {
+      return json(res, 500, { error: String(e.message || e) });
+    }
   }
 
   if (pathname === '/api/rating' && req.method === 'GET') {
@@ -687,9 +850,16 @@ const server = http.createServer(async (req, res) => {
   if (pathname.startsWith('/api/cups/') && req.method === 'GET') {
     const id = pathname.slice('/api/cups/'.length).split('/')[0];
     if (!id || id === 'meta' || id === 'leaderboard') return json(res, 404, { error: 'Нет' });
-    const cup = cups.getCup(id);
+    const cup = (await cups.getCupAsync?.(id)) || cups.getCup(id);
     if (!cup) return json(res, 404, { error: 'Кубок не найден' });
     return json(res, 200, { ok: true, cup });
+  }
+
+  if (pathname === '/api/cups/events/read' && req.method === 'POST') {
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    cups.markCupEventsRead(auth.user.id);
+    return json(res, 200, { ok: true });
   }
 
   if (pathname.match(/^\/api\/cups\/[^/]+\/join$/) && req.method === 'POST') {
@@ -746,11 +916,15 @@ async function main() {
       saveCups: (x) => db.saveCups(x),
       loadArchive: () => db.loadArchive(),
       saveArchive: (x) => db.saveArchive(x),
+      loadCupById: (id) => db.loadCupById(id),
       clubStrength: (userId) => {
         const club = db.getClub(userId);
         return club ? G.clubStrength(club) : 0;
       },
+      ensureBotClub,
+      hasClub: (userId) => db.hasClub(userId),
       playCupTie,
+      annotateCupPens,
       readCareerClub: (userId) => {
         const club = db.getClub(userId);
         const u = usersDb().users[userId];
@@ -790,6 +964,8 @@ async function main() {
   ensureAdminUser();
   ensureBotPool(24);
   cups.ensureBotPool?.(8);
+  Object.values(usersDb().users).filter((u) => u.isBot).forEach((u) => ensureBotClub(u, u.clubName));
+  refreshTransferMarket(true, 1);
 
   server.listen(PORT, '0.0.0.0', () => {
     console.log(`[EYE XI] http://0.0.0.0:${PORT}`);

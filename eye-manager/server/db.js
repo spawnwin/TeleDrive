@@ -22,6 +22,7 @@ const matchesCache = [];
 const cupsCache = { cups: {}, meta: { lastTick: 0 } };
 const archiveCache = { entries: [] };
 const friendlyQueue = [];
+const transferMarket = { list: [], refreshedAt: 0 };
 
 let writeChain = Promise.resolve();
 
@@ -118,6 +119,12 @@ async function flushSessions() {
       create: data,
       update: { userId: data.userId, lastAt: data.lastAt }
     });
+  }
+  // Drop sessions removed from cache (logout / expiry), or they resurrect on restart.
+  if (tokens.length === 0) {
+    await prisma.session.deleteMany({});
+  } else {
+    await prisma.session.deleteMany({ where: { NOT: { token: { in: tokens } } } });
   }
 }
 
@@ -239,7 +246,7 @@ async function hydrateFromDb() {
     if (club) clubsCache[row.userId] = club;
   }
   matchesCache.length = 0;
-  const recent = await prisma.matchRec.findMany({ orderBy: { createdAt: 'desc' }, take: 200 });
+  const recent = await prisma.matchRec.findMany({ orderBy: { createdAt: 'desc' }, take: 500 });
   for (const row of recent) {
     const m = parseJson(row.dataJson, null);
     if (m) matchesCache.push(m);
@@ -253,6 +260,13 @@ async function hydrateFromDb() {
   cupsCache.meta = metaRow ? parseJson(metaRow.valueJson, { lastTick: 0 }) : { lastTick: 0 };
   const archRow = await prisma.meta.findUnique({ where: { key: 'cups_archive' } });
   archiveCache.entries = archRow ? (parseJson(archRow.valueJson, { entries: [] }).entries || []) : [];
+  const fq = await prisma.meta.findUnique({ where: { key: 'friendly_queue' } });
+  friendlyQueue.length = 0;
+  const fqList = fq ? (parseJson(fq.valueJson, { queue: [] }).queue || []) : [];
+  for (const e of fqList) friendlyQueue.push(e);
+  const tm = await prisma.meta.findUnique({ where: { key: 'transfer_market' } });
+  transferMarket.list = tm ? (parseJson(tm.valueJson, { list: [], refreshedAt: 0 }).list || []) : [];
+  transferMarket.refreshedAt = tm ? (parseJson(tm.valueJson, { refreshedAt: 0 }).refreshedAt || 0) : 0;
 }
 
 async function init() {
@@ -311,8 +325,62 @@ function listMatchesFor(userId, limit = 30) {
     .slice(0, limit);
 }
 
+async function listMatchesForAsync(userId, limit = 30) {
+  const cached = listMatchesFor(userId, limit);
+  if (cached.length >= Math.min(limit, 5)) return cached;
+  try {
+    const rows = await prisma.matchRec.findMany({
+      where: { OR: [{ homeId: String(userId) }, { awayId: String(userId) }] },
+      orderBy: { createdAt: 'desc' },
+      take: limit
+    });
+    const out = [];
+    for (const row of rows) {
+      const m = parseJson(row.dataJson, null);
+      if (!m) continue;
+      out.push(m);
+      if (!matchesCache.find((x) => x.id === m.id)) {
+        matchesCache.push(m);
+      }
+    }
+    matchesCache.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+    if (matchesCache.length > 500) matchesCache.length = 500;
+    return out.slice(0, limit);
+  } catch {
+    return cached;
+  }
+}
+
 function getMatch(id) {
   return matchesCache.find((m) => m.id === id) || null;
+}
+
+async function loadMatch(id) {
+  const cached = getMatch(id);
+  if (cached) return cached;
+  try {
+    const row = await prisma.matchRec.findUnique({ where: { id: String(id) } });
+    if (!row) return null;
+    const m = parseJson(row.dataJson, null);
+    if (m) {
+      matchesCache.unshift(m);
+      if (matchesCache.length > 500) matchesCache.length = 500;
+    }
+    return m;
+  } catch {
+    return null;
+  }
+}
+
+async function loadCupById(id) {
+  if (cupsCache.cups?.[id]) return cupsCache.cups[id];
+  try {
+    const row = await prisma.cup.findUnique({ where: { id: String(id) } });
+    if (!row) return null;
+    return parseJson(row.dataJson, null);
+  } catch {
+    return null;
+  }
 }
 
 function loadCups() {
@@ -350,24 +418,69 @@ function listOnlineUsers() {
     .map((u) => ({ id: u.id, login: u.login, name: u.name, level: u.level, clubName: u.clubName }));
 }
 
+async function flushFriendly() {
+  await prisma.meta.upsert({
+    where: { key: 'friendly_queue' },
+    create: { key: 'friendly_queue', valueJson: JSON.stringify({ queue: friendlyQueue }) },
+    update: { valueJson: JSON.stringify({ queue: friendlyQueue }) }
+  });
+}
+
 function friendlyList() {
   const now = Date.now();
+  let changed = false;
   for (let i = friendlyQueue.length - 1; i >= 0; i--) {
-    if (friendlyQueue[i].expiresAt < now) friendlyQueue.splice(i, 1);
+    if (friendlyQueue[i].expiresAt < now) {
+      friendlyQueue.splice(i, 1);
+      changed = true;
+    }
   }
+  if (changed) enqueue('friendly', flushFriendly);
   return friendlyQueue.slice();
 }
 
 function friendlyPost(entry) {
   friendlyQueue.unshift(entry);
   if (friendlyQueue.length > 80) friendlyQueue.length = 80;
+  enqueue('friendly', flushFriendly);
   return entry;
 }
 
 function friendlyTake(id) {
   const i = friendlyQueue.findIndex((x) => x.id === id);
   if (i < 0) return null;
-  return friendlyQueue.splice(i, 1)[0];
+  const item = friendlyQueue.splice(i, 1)[0];
+  enqueue('friendly', flushFriendly);
+  return item;
+}
+
+async function flushTransfers() {
+  await prisma.meta.upsert({
+    where: { key: 'transfer_market' },
+    create: {
+      key: 'transfer_market',
+      valueJson: JSON.stringify({ list: transferMarket.list, refreshedAt: transferMarket.refreshedAt })
+    },
+    update: {
+      valueJson: JSON.stringify({ list: transferMarket.list, refreshedAt: transferMarket.refreshedAt })
+    }
+  });
+}
+
+function getTransferMarket() {
+  return transferMarket;
+}
+
+function setTransferMarket(list, refreshedAt = Date.now()) {
+  transferMarket.list = Array.isArray(list) ? list : [];
+  transferMarket.refreshedAt = refreshedAt;
+  enqueue('transfers', flushTransfers);
+  return transferMarket;
+}
+
+function removeTransferListing(playerId) {
+  transferMarket.list = (transferMarket.list || []).filter((p) => p.id !== playerId);
+  enqueue('transfers', flushTransfers);
 }
 
 async function flushAll() {
@@ -377,6 +490,8 @@ async function flushAll() {
   for (const id of Object.keys(clubsCache)) await flushClub(id);
   await flushCups();
   await flushArchive();
+  await flushFriendly();
+  await flushTransfers();
 }
 
 async function disconnect() {
@@ -400,7 +515,10 @@ module.exports = {
   hasClub,
   addMatch,
   listMatchesFor,
+  listMatchesForAsync,
   getMatch,
+  loadMatch,
+  loadCupById,
   loadCups,
   saveCups,
   loadArchive,
@@ -408,5 +526,8 @@ module.exports = {
   listOnlineUsers,
   friendlyList,
   friendlyPost,
-  friendlyTake
+  friendlyTake,
+  getTransferMarket,
+  setTransferMarket,
+  removeTransferListing
 };

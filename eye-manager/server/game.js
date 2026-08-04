@@ -217,19 +217,31 @@ function publicClub(club, user) {
   };
 }
 
-function applyFitnessAfterMatch(club, playedIds) {
+function styleFitnessMul(style) {
+  if (style === 'attack' || style === 'press') return 1.25;
+  if (style === 'defend') return 0.85;
+  if (style === 'counter') return 0.95;
+  return 1;
+}
+
+function applyFitnessAfterMatch(club, playedIds, opts = {}) {
   const set = new Set(playedIds);
+  const styleMul = styleFitnessMul(opts.style || club.style);
+  const medic = (club.staff && club.staff.medic) || 0;
+  const injuryChance = Math.max(0.02, 0.07 - medic * 0.015);
+  const resultDelta = opts.resultDelta || 0;
   club.players.forEach((p) => {
     if (set.has(p.id)) {
-      const loss = rnd(10, 22) + (p.age > 28 ? 3 : 0);
+      const loss = Math.round((rnd(10, 22) + (p.age > 28 ? 3 : 0)) * styleMul);
       p.fitness = Math.max(45, (p.fitness || 100) - loss);
-      if (Math.random() < 0.06) p.injuredHours = rnd(6, 36);
+      if (Math.random() < injuryChance) p.injuredHours = rnd(6, Math.max(8, 36 - medic * 6));
       p.xpPool = (p.xpPool || 0) + rnd(4, 14) + (p.talent || 5);
+      p.morale = Math.max(-20, Math.min(25, (p.morale || 0) + resultDelta + rnd(-1, 1)));
     } else {
-      p.fitness = Math.min(100, (p.fitness || 100) + rnd(4, 10));
-      if (p.injuredHours > 0) p.injuredHours = Math.max(0, p.injuredHours - 8);
+      p.fitness = Math.min(100, (p.fitness || 100) + rnd(4, 10) + medic);
+      if (p.injuredHours > 0) p.injuredHours = Math.max(0, p.injuredHours - (8 + medic * 4));
+      p.morale = Math.max(-20, Math.min(25, (p.morale || 0) + rnd(-1, 1)));
     }
-    p.morale = Math.max(-20, Math.min(25, (p.morale || 0) + rnd(-2, 2)));
   });
 }
 
@@ -271,8 +283,10 @@ function simulateMatch(homeClub, awayClub, meta = {}) {
     events.push({ minute: rnd(50, 88), type: 'goal', side: homeAtt ? 'home' : 'away', player: 'Стандарт', score: [hg, ag] });
   }
 
-  applyFitnessAfterMatch(homeClub, homeXi.map((p) => p.id));
-  applyFitnessAfterMatch(awayClub, awayXi.map((p) => p.id));
+  const homeResult = hg > ag ? 3 : hg === ag ? 1 : -2;
+  const awayResult = ag > hg ? 3 : hg === ag ? 1 : -2;
+  applyFitnessAfterMatch(homeClub, homeXi.map((p) => p.id), { style: homeClub.style, resultDelta: homeResult });
+  applyFitnessAfterMatch(awayClub, awayXi.map((p) => p.id), { style: awayClub.style, resultDelta: awayResult });
 
   const result = {
     id: uid('m'),
@@ -332,9 +346,10 @@ function trainPlayer(club, playerId, skillKey, amount = 1) {
 }
 
 function recoverSquad(club) {
+  const medic = (club.staff && club.staff.medic) || 0;
   club.players.forEach((p) => {
-    p.fitness = Math.min(100, (p.fitness || 100) + rnd(8, 16));
-    if (p.injuredHours > 0) p.injuredHours = Math.max(0, p.injuredHours - 12);
+    p.fitness = Math.min(100, (p.fitness || 100) + rnd(8, 16) + medic * 3);
+    if (p.injuredHours > 0) p.injuredHours = Math.max(0, p.injuredHours - (12 + medic * 6));
   });
   return club;
 }
@@ -345,30 +360,116 @@ function pushLedger(club, delta, label) {
   if (club.ledger.length > 80) club.ledger.length = 80;
 }
 
-function hireStaff(club, role) {
-  const roles = {
-    coach: { key: 'coach', label: 'Тренер', max: 5, cost: 80000 },
-    gkCoach: { key: 'gkCoach', label: 'Тренер вратарей', max: 5, cost: 60000 },
-    scout: { key: 'scout', label: 'Скаут', max: 3, cost: 50000 },
-    medic: { key: 'medic', label: 'Врач', max: 3, cost: 45000 }
-  };
-  const conf = roles[role];
+const STAFF_ROLES = {
+  coach: { key: 'coach', label: 'Тренер', max: 5, cost: 80000 },
+  gkCoach: { key: 'gkCoach', label: 'Тренер вратарей', max: 5, cost: 60000 },
+  scout: { key: 'scout', label: 'Скаут', max: 3, cost: 50000 },
+  medic: { key: 'medic', label: 'Врач', max: 3, cost: 45000 }
+};
+
+function quoteStaff(club, role) {
+  const conf = STAFF_ROLES[role];
   if (!conf) return { ok: false, error: 'Неизвестная роль' };
-  club.staff = club.staff || { coach: 1, gkCoach: 1, scout: 0, medic: 0 };
-  const cur = club.staff[conf.key] || 0;
+  const staff = club.staff || { coach: 1, gkCoach: 1, scout: 0, medic: 0 };
+  const cur = staff[conf.key] || 0;
   if (cur >= conf.max) return { ok: false, error: `${conf.label}: максимум ур. ${conf.max}` };
   const cost = conf.cost * (cur + 1);
-  club.staff[conf.key] = cur + 1;
-  return { ok: true, cost, label: `${conf.label} → ур. ${cur + 1}`, staff: club.staff };
+  return { ok: true, cost, label: `${conf.label} → ур. ${cur + 1}`, key: conf.key, next: cur + 1 };
+}
+
+function hireStaff(club, role) {
+  const q = quoteStaff(club, role);
+  if (!q.ok) return q;
+  club.staff = club.staff || { coach: 1, gkCoach: 1, scout: 0, medic: 0 };
+  club.staff[q.key] = q.next;
+  return { ok: true, cost: q.cost, label: q.label, staff: club.staff };
+}
+
+function quoteStadium(club) {
+  const level = club.stadiumLevel || 1;
+  if (level >= 8) return { ok: false, error: 'Стадион уже максимального уровня' };
+  return { ok: true, cost: 100000 * level, nextLevel: level + 1, nextCapacity: Math.round((club.capacity || 8000) * 1.35) };
 }
 
 function upgradeStadium(club) {
-  const level = club.stadiumLevel || 1;
-  if (level >= 8) return { ok: false, error: 'Стадион уже максимального уровня' };
-  const cost = 100000 * level;
-  club.stadiumLevel = level + 1;
-  club.capacity = Math.round((club.capacity || 8000) * 1.35);
-  return { ok: true, cost, label: `Стадион ур. ${club.stadiumLevel}`, stadiumLevel: club.stadiumLevel, capacity: club.capacity };
+  const q = quoteStadium(club);
+  if (!q.ok) return q;
+  club.stadiumLevel = q.nextLevel;
+  club.capacity = q.nextCapacity;
+  return { ok: true, cost: q.cost, label: `Стадион ур. ${club.stadiumLevel}`, stadiumLevel: club.stadiumLevel, capacity: club.capacity };
+}
+
+function ticketIncome(club, user, won) {
+  const fans = Math.max(1000, user?.fans || 10000);
+  const cap = club?.capacity || 8000;
+  const attendance = Math.min(cap, Math.round(fans * (won ? 0.85 : 0.55)));
+  const price = 8 + ((club?.stadiumLevel || 1) - 1) * 3;
+  return Math.round(attendance * price);
+}
+
+function weeklyWages(club) {
+  return (club.players || []).reduce((s, p) => s + (p.wage || 0), 0);
+}
+
+function playerValue(p) {
+  const m = masteryOf(p);
+  return Math.round(m * 4500 + (p.talent || 5) * 8000 + Math.max(0, 32 - (p.age || 24)) * 3000);
+}
+
+function generateTransferList(scoutLevel = 0, count = 6) {
+  const n = Math.min(12, count + scoutLevel * 2);
+  const quality = 11 + scoutLevel * 2;
+  const list = [];
+  for (let i = 0; i < n; i++) {
+    const pos = pick(POSITIONS.filter((p) => p !== 'Dm' && p !== 'Am').concat(['Dm', 'Am', 'Cf', 'Cm']));
+    const p = makePlayer(pos, quality + rnd(-1, 2));
+    p.age = rnd(17, 29);
+    p.wage = Math.round(playerValue(p) / 80);
+    list.push({
+      ...p,
+      mastery: masteryOf(p),
+      effective: effectiveMastery(p),
+      value: playerValue(p),
+      listedAt: Date.now()
+    });
+  }
+  return list.sort((a, b) => b.value - a.value);
+}
+
+function buyPlayer(club, listing) {
+  if (!listing?.id) return { ok: false, error: 'Игрок не найден на рынке' };
+  if ((club.players || []).length >= 25) return { ok: false, error: 'Состав полон (макс. 25)' };
+  if ((club.players || []).some((p) => p.id === listing.id)) return { ok: false, error: 'Уже в клубе' };
+  const player = {
+    id: listing.id,
+    name: listing.name,
+    pos: listing.pos,
+    age: listing.age,
+    talent: listing.talent,
+    fitness: listing.fitness || 95,
+    morale: listing.morale || 5,
+    wage: listing.wage || 2000,
+    skills: listing.skills,
+    specials: [],
+    xpPool: 0,
+    injuredHours: 0
+  };
+  club.players.push(player);
+  return { ok: true, player, cost: listing.value || playerValue(player), label: `Трансфер · ${player.name}` };
+}
+
+function sellPlayer(club, playerId) {
+  if ((club.lineupIds || []).includes(playerId)) {
+    return { ok: false, error: 'Сначала уберите игрока из основы' };
+  }
+  if ((club.players || []).length <= 16) return { ok: false, error: 'Нельзя продать — в составе минимум 16' };
+  const idx = (club.players || []).findIndex((p) => p.id === playerId);
+  if (idx < 0) return { ok: false, error: 'Игрок не найден' };
+  const p = club.players[idx];
+  const value = Math.round(playerValue(p) * 0.7);
+  club.players.splice(idx, 1);
+  club.benchIds = (club.benchIds || []).filter((id) => id !== playerId);
+  return { ok: true, value, player: p, label: `Продажа · ${p.name}` };
 }
 
 function setLineup(club, lineupIds, benchIds) {
@@ -391,6 +492,7 @@ module.exports = {
   FORMATIONS,
   STYLES,
   POSITIONS,
+  STAFF_ROLES,
   uid,
   levelFromXp,
   masteryOf,
@@ -405,8 +507,16 @@ module.exports = {
   recoverSquad,
   makePlayer,
   pushLedger,
+  quoteStaff,
   hireStaff,
+  quoteStadium,
   upgradeStadium,
   setLineup,
-  skillCap
+  skillCap,
+  ticketIncome,
+  weeklyWages,
+  playerValue,
+  generateTransferList,
+  buyPlayer,
+  sellPlayer
 };

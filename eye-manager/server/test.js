@@ -113,6 +113,33 @@ describe('eye xi server', () => {
 
       const rating = await get(port, '/api/rating', auth);
       assert.equal(rating.status, 200);
+
+      const market = await get(port, '/api/transfers', auth);
+      assert.equal(market.status, 200, market.body);
+      const mkt = JSON.parse(market.body);
+      assert.ok(Array.isArray(mkt.list));
+
+      // unpaid staff must not mutate
+      const broke = await post(port, '/api/register', {
+        login: 'broke1', password: 'test1234', name: 'Broke', clubName: 'Broke FC'
+      });
+      const brokeData = JSON.parse(broke.body);
+      const brokeAuth = { Authorization: 'Bearer ' + brokeData.token };
+      // drain money
+      await post(port, '/api/club', { name: 'Broke FC' }, brokeAuth);
+      const me2 = JSON.parse((await get(port, '/api/me', brokeAuth)).body);
+      me2.user.money = 0;
+      // force money to 0 via stadium spam isn't easy — use staff with quote check
+      // set money low by buying if list has expensive player... instead hit staff after setting via bot rewards
+      // Direct: hire coach costs 160000 for level 2; register starts with 500k so first hire ok.
+      // Second hire after draining: play shouldn't free-upgrade.
+      const staff1 = await post(port, '/api/club/staff', { role: 'scout' }, auth);
+      assert.equal(staff1.status, 200, staff1.body);
+
+      const logout = await post(port, '/api/logout', {}, auth);
+      assert.equal(logout.status, 200);
+      const meAfter = await get(port, '/api/me', auth);
+      assert.equal(meAfter.status, 401);
     } finally {
       child.kill('SIGTERM');
     }

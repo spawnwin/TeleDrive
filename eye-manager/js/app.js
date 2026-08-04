@@ -11,7 +11,8 @@
     club: null,
     cache: {},
     cupPoll: null,
-    watchingCup: null
+    watchingCup: null,
+    lastWageToast: null
   };
 
   const EVENT_LABELS = {
@@ -35,7 +36,8 @@
     players: [
       ['squad', 'Состав'],
       ['train', 'Тренировки'],
-      ['recover', 'Восстановление']
+      ['recover', 'Восстановление'],
+      ['market', 'Трансферы']
     ],
     matches: [
       ['friendly', 'Товарищеские'],
@@ -49,12 +51,28 @@
       ['shop', 'Бустеры']
     ],
     rating: [
-      ['board', 'Таблица']
+      ['board', 'Очки'],
+      ['cups', 'Кубки']
     ]
   };
 
+  const COMP_LABELS = { friendly: 'Товарищеский', cup: 'Кубок', match: 'Матч' };
+
   function money(n) {
     return new Intl.NumberFormat('ru-RU').format(Math.round(n || 0)) + ' ¤';
+  }
+
+  function esc(s) {
+    return String(s ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  function compLabel(c) {
+    return COMP_LABELS[c] || (c ? esc(c) : 'Матч');
   }
 
   function toast(msg) {
@@ -102,8 +120,8 @@
     const ceil = thr[lvl + 1] || floor + 1;
     const pct = lvl >= 10 ? 100 : Math.max(0, Math.min(100, Math.round(((xp - floor) / Math.max(1, ceil - floor)) * 100)));
     $('#side-user').innerHTML = `
-      <strong>${u?.name || u?.login || 'Менеджер'}</strong>
-      <small>@${u?.login || '—'} · ур. ${lvl}</small>
+      <strong>${esc(u?.name || u?.login || 'Менеджер')}</strong>
+      <small>@${esc(u?.login || '—')} · ур. ${lvl}</small>
       <div class="level-bar"><i style="width:${pct}%"></i></div>`;
     $('#side-wallet').innerHTML = `
       <div class="row"><span>Деньги</span><b>${money(u?.money)}</b></div>
@@ -135,7 +153,7 @@
     const xi = (club.lineupIds || []).map((id) => club.players.find((p) => p.id === id)).filter(Boolean);
     return `<div class="pitch">${xi.map((p, i) => {
       const [x, y] = form[i] || [50, 50];
-      return `<div class="player-chip" style="left:${x}%;top:${y}%"><b>${p.pos}</b>${p.name.split(' ').pop()}<div>${p.effective || p.mastery}</div></div>`;
+      return `<div class="player-chip" style="left:${x}%;top:${y}%"><b>${esc(p.pos)}</b>${esc((p.name || '').split(' ').pop())}<div>${p.effective || p.mastery}</div></div>`;
     }).join('')}</div>`;
   }
 
@@ -152,10 +170,10 @@
         </div>
         <section class="panel">
           <h3>Движение средств</h3>
-          <p class="hint">Товарищеские: победа 45 000 · ничья 18 000 · поражение 8 000. Кубки дают призовые и очки рейтинга.</p>
+          <p class="hint">Матчи: приз + билеты от стадиона. Раз в сутки — зарплаты и доход от фанатов. Кубки дают призовые, очки и престиж.</p>
           <div class="list">${ledger.length ? ledger.map((row) => `
             <div class="list-row">
-              <div><strong>${row.label}</strong><small>${new Date(row.at).toLocaleString('ru-RU')}</small></div>
+              <div><strong>${esc(row.label)}</strong><small>${new Date(row.at).toLocaleString('ru-RU')}</small></div>
               <b style="color:${row.delta >= 0 ? 'var(--grass-bright)' : 'var(--danger)'}">${row.delta >= 0 ? '+' : ''}${money(row.delta)}</b>
             </div>`).join('') : '<p class="hint">Пока нет операций — сыграйте матч</p>'}</div>
         </section>`;
@@ -167,16 +185,16 @@
         <section class="panel">
           <h3>События</h3>
           <div class="list">${events.length ? events.map((e) => `
-            <div class="list-row"><div><strong>${e.title || EVENT_LABELS[e.type] || e.type}</strong><small>${e.cupName || e.body || ''}${e.xp ? ' · +' + e.xp + ' XP' : ''}${e.money ? ' · +' + money(e.money) : ''}</small></div><small>${new Date(e.at || Date.now()).toLocaleString('ru-RU')}</small></div>
+            <div class="list-row"><div><strong>${esc(e.title || EVENT_LABELS[e.type] || e.type)}</strong><small>${esc(e.cupName || e.body || '')}${e.xp ? ' · +' + e.xp + ' XP' : ''}${e.money ? ' · +' + money(e.money) : ''}</small></div><small>${new Date(e.at || Date.now()).toLocaleString('ru-RU')}</small></div>
           `).join('') : '<p class="hint">Пока тихо — сыграйте матч или вступите в кубок.</p>'}</div>
         </section>`;
       return;
     }
     $('#view').innerHTML = `
       <div class="hero-strip">
-        <div class="club-banner" style="--club:${club?.color || '#1fa65a'}">
-          <h2>${club?.name || 'Клуб'}</h2>
-          <p>Сила состава ${club?.strength || '—'} · схема ${club?.formation || '4-4-2'} · ${club?.stadium || 'Стадион'}</p>
+        <div class="club-banner" style="--club:${esc(club?.color || '#1fa65a')}">
+          <h2>${esc(club?.name || 'Клуб')}</h2>
+          <p>Сила состава ${club?.strength || '—'} · схема ${esc(club?.formation || '4-4-2')} · ${esc(club?.stadium || 'Стадион')}</p>
           <div style="margin-top:16px;display:flex;gap:8px;flex-wrap:wrap">
             <button class="btn btn-primary btn-tiny" data-nav="matches">К матчам</button>
             <button class="btn btn-tiny" data-nav="players">Состав</button>
@@ -206,7 +224,7 @@
       const cost = 100000 * lvl;
       $('#view').innerHTML = `
         <section class="panel">
-          <div class="panel-head"><h3>${club.stadium}</h3><button class="btn btn-primary btn-tiny" id="btn-stadium" ${lvl >= 8 ? 'disabled' : ''}>Улучшить · ${money(cost)}</button></div>
+          <div class="panel-head"><h3>${esc(club.stadium)}</h3><button class="btn btn-primary btn-tiny" id="btn-stadium" ${lvl >= 8 ? 'disabled' : ''}>Улучшить · ${money(cost)}</button></div>
           <div class="grid-3">
             <div class="stat-card"><span>Уровень</span><b>${lvl} / 8</b></div>
             <div class="stat-card"><span>Вместимость</span><b>${money(club.capacity || 8000).replace(' ¤','')}</b></div>
@@ -294,21 +312,43 @@
         </section>`;
       return;
     }
+    if (state.tab === 'market') {
+      const data = await A().request('api/transfers');
+      const list = data.list || [];
+      const scout = data.scoutLevel || 0;
+      $('#view').innerHTML = `
+        <section class="panel">
+          <div class="panel-head">
+            <h3>Трансферный рынок</h3>
+            <button class="btn btn-tiny" id="btn-market-refresh" ${scout < 1 ? 'disabled' : ''}>Обновить · 5 000 ¤</button>
+          </div>
+          <p class="hint">Скаут ур. ${scout}: выше уровень — лучше кандидаты. Состав ${data.squadSize || 0}/25. Продажа — из вкладки «Состав».</p>
+          <div class="list">${list.length ? list.map((p) => `
+            <div class="list-row">
+              <div>
+                <strong>${esc(p.name)} · ${esc(p.pos)}</strong>
+                <small>маст. ${p.mastery} · ${p.age} лет · зарплата ${money(p.wage)}</small>
+              </div>
+              <button class="btn btn-primary btn-tiny" data-buy="${esc(p.id)}">${money(p.value)}</button>
+            </div>`).join('') : '<p class="hint">Рынок пуст — наймите скаута в Бонусе</p>'}</div>
+        </section>`;
+      return;
+    }
     $('#view').innerHTML = `
       <section class="panel">
         <div class="panel-head"><h3>Состав</h3><span class="badge">${players.length} игроков</span></div>
         <div class="table-wrap"><table class="sheet">
-          <thead><tr><th>Имя</th><th>Поз</th><th>Возр</th><th>Маст</th><th>Эфф</th><th>Физа</th><th>Мораль</th><th>Опыт</th></tr></thead>
+          <thead><tr><th>Имя</th><th>Поз</th><th>Возр</th><th>Маст</th><th>Эфф</th><th>Физа</th><th>Мораль</th><th></th></tr></thead>
           <tbody>${players.map((p) => `
             <tr>
-              <td><strong>${p.name}</strong></td>
-              <td><span class="badge">${p.pos}</span></td>
+              <td><button type="button" class="link" data-train="${esc(p.id)}"><strong>${esc(p.name)}</strong></button></td>
+              <td><span class="badge">${esc(p.pos)}</span></td>
               <td>${p.age}</td>
               <td>${p.mastery}</td>
               <td><b>${p.effective}</b></td>
               <td>${p.fitness}%${p.injuredHours ? ' <span class="badge danger">травма</span>' : ''}</td>
               <td>${p.morale > 0 ? '+' : ''}${p.morale}</td>
-              <td>${p.xpPool || 0}</td>
+              <td><button class="btn btn-tiny" data-sell="${esc(p.id)}">Продать</button></td>
             </tr>`).join('')}</tbody>
         </table></div>
       </section>`;
@@ -324,8 +364,8 @@
           <div class="list">${list.length ? list.map((m) => `
             <div class="list-row">
               <div>
-                <strong>${m.home?.name} ${m.score?.[0]}:${m.score?.[1]} ${m.away?.name}</strong>
-                <small>${m.competition || 'match'} · ${new Date(m.createdAt).toLocaleString('ru-RU')}</small>
+                <strong>${esc(m.home?.name)} ${m.score?.[0]}:${m.score?.[1]} ${esc(m.away?.name)}</strong>
+                <small>${compLabel(m.competition)} · ${new Date(m.createdAt).toLocaleString('ru-RU')}</small>
               </div>
               <button class="btn btn-tiny" data-match="${m.id}">Отчёт</button>
             </div>`).join('') : '<p class="hint">Матчей пока нет</p>'}</div>
@@ -339,42 +379,46 @@
         A().request('api/cups?status=finished')
       ]);
       const lvl = state.me?.user?.level || 1;
+      const myId = A().getUser()?.id;
       const cups = (openData.cups || []).filter((c) => lvl >= (c.minLevel || 1) && lvl <= (c.maxLevel || 10));
       const liveAll = liveData.cups || [];
       const finished = (doneData.cups || []).slice(0, 8);
       const live = state.me?.liveCup;
+      const inCup = (c) => (c.entrants || []).some((e) => e.userId === myId);
       $('#view').innerHTML = `
-        ${live ? `<section class="panel"><div class="panel-head"><h3>Ваш кубок идёт</h3><button class="btn btn-primary btn-tiny" data-cup="${live.id}">Смотреть</button></div>
-          <p>${live.name} · ${live.round || 'раунд'}${live.nextRoundAt ? ' · следующий раунд ' + new Date(live.nextRoundAt).toLocaleTimeString('ru-RU') : ''}</p></section>` : ''}
+        ${live ? `<section class="panel"><div class="panel-head"><h3>Ваш кубок идёт</h3><button class="btn btn-primary btn-tiny" data-cup="${esc(live.id)}">Смотреть</button></div>
+          <p>${esc(live.name)} · ${esc(live.round || 'раунд')}${live.nextRoundAt ? ' · следующий раунд ' + new Date(live.nextRoundAt).toLocaleTimeString('ru-RU') : ''}</p></section>` : ''}
         <section class="panel">
           <div class="panel-head"><h3>Кубки вашего уровня</h3><span class="badge">ур. ${lvl}</span></div>
-          <p class="hint">Запись открыта до старта. Без живых игроков кубок уходит в архив.</p>
+          <p class="hint">Запись ~5 минут до старта. Без живых игроков кубок уходит в архив.</p>
           <div class="list">${cups.length ? cups.map((c) => `
             <div class="list-row">
               <div>
-                <strong>${c.name}</strong>
-                <small>${c.bracketLabel || ''} · ${c.slotsFilled || c.entrantsCount || 0}/${c.size} · люди ${c.humans || 0} · старт ${c.startAt ? new Date(c.startAt).toLocaleTimeString('ru-RU') : 'скоро'}</small>
+                <strong>${esc(c.name)}</strong>
+                <small>${esc(c.bracketLabel || '')} · ${c.slotsFilled || c.entrantsCount || 0}/${c.size} · люди ${c.humans || 0} · старт ${c.startAt ? new Date(c.startAt).toLocaleTimeString('ru-RU') : 'ожидание'}</small>
               </div>
               <div style="display:flex;gap:6px">
-                <button class="btn btn-tiny" data-cup="${c.id}">Открыть</button>
-                <button class="btn btn-primary btn-tiny" data-cup-join="${c.id}">Вступить</button>
+                <button class="btn btn-tiny" data-cup="${esc(c.id)}">Открыть</button>
+                ${inCup(c)
+                  ? `<button class="btn btn-tiny" data-cup-leave="${esc(c.id)}">Выйти</button>`
+                  : `<button class="btn btn-primary btn-tiny" data-cup-join="${esc(c.id)}">Вступить</button>`}
               </div>
-            </div>`).join('') : '<p class="hint">Нет открытых кубков вашего уровня — подождите тик</p>'}</div>
+            </div>`).join('') : '<p class="hint">Нет открытых кубков вашего уровня — новые появятся в течение ~5 минут</p>'}</div>
         </section>
         <section class="panel">
           <h3>Идут сейчас</h3>
           <div class="list">${liveAll.length ? liveAll.map((c) => `
             <div class="list-row">
-              <div><strong>${c.name}</strong><small>${c.round || 'раунд'} · в сетке ${c.aliveCount || '—'}</small></div>
-              <button class="btn btn-tiny" data-cup="${c.id}">Смотреть</button>
+              <div><strong>${esc(c.name)}</strong><small>${esc(c.round || 'раунд')} · в сетке ${c.aliveCount || '—'}</small></div>
+              <button class="btn btn-tiny" data-cup="${esc(c.id)}">Смотреть</button>
             </div>`).join('') : '<p class="hint">Сейчас никто не играет</p>'}</div>
         </section>
         <section class="panel">
           <h3>Недавние итоги</h3>
           <div class="list">${finished.length ? finished.map((c) => `
             <div class="list-row">
-              <div><strong>${c.name}</strong><small>чемпион: ${c.champion?.clubName || c.champion?.name || '—'}</small></div>
-              <button class="btn btn-tiny" data-cup="${c.id}">Отчёт</button>
+              <div><strong>${esc(c.name)}</strong><small>чемпион: ${esc(c.champion?.clubName || c.champion?.name || '—')}</small></div>
+              <button class="btn btn-tiny" data-cup="${esc(c.id)}">Отчёт</button>
             </div>`).join('') : '<p class="hint">Пока пусто</p>'}</div>
         </section>`;
       return;
@@ -394,16 +438,19 @@
         <div class="list">${queue.length ? queue.map((q) => `
           <div class="list-row">
             <div>
-              <strong>${q.clubName}</strong>
-              <small>@${q.login} · ур. ${q.level} · сила ${q.strength}</small>
+              <strong>${esc(q.clubName)}</strong>
+              <small>@${esc(q.login)} · ур. ${q.level} · сила ${q.strength}</small>
             </div>
-            <button class="btn btn-primary btn-tiny" data-accept="${q.id}">Принять</button>
+            <button class="btn btn-primary btn-tiny" data-accept="${esc(q.id)}">Принять</button>
           </div>`).join('') : '<p class="hint">Очередь пуста — подайте заявку первым</p>'}</div>
       </section>
       <section class="panel">
         <h3>Онлайн сейчас</h3>
-        <div class="list">${(data.online || []).slice(0, 12).map((u) => `
-          <div class="list-row"><div><strong>${u.clubName || u.name}</strong><small>@${u.login} · ур. ${u.level}</small></div><span class="badge">online</span></div>
+        <div class="list">${(data.online || []).filter((u) => u.id !== A().getUser()?.id).slice(0, 12).map((u) => `
+          <div class="list-row">
+            <div><strong>${esc(u.clubName || u.name)}</strong><small>@${esc(u.login)} · ур. ${u.level}</small></div>
+            <button class="btn btn-primary btn-tiny" data-challenge="${esc(u.id)}">Вызвать</button>
+          </div>
         `).join('') || '<p class="hint">Никого нет в сети</p>'}</div>
       </section>`;
   }
@@ -458,7 +505,7 @@
       </section>
       <section class="panel">
         <h3>Персонал</h3>
-        <p class="hint">Тренер поднимает потолок умений полевых, тренер вратарей — голкиперов.</p>
+        <p class="hint">Тренер — потолок умений полевых; тренер вратарей — голкиперов; скаут — трансферный рынок; врач — меньше травм и быстрее восстановление.</p>
         <div class="list">${staffRows.map(([role, label, cur, max, base]) => {
           const cost = base * (cur + 1);
           return `<div class="list-row">
@@ -470,6 +517,27 @@
   }
 
   async function renderRating() {
+    if (state.tab === 'cups') {
+      const data = await A().request('api/cups/leaderboard');
+      const leaders = data.leaders || [];
+      $('#view').innerHTML = `
+        <section class="panel">
+          <h3>Кубковый рейтинг</h3>
+          <div class="table-wrap"><table class="sheet">
+            <thead><tr><th>#</th><th>Менеджер</th><th>Клуб</th><th>Ур.</th><th>Победы</th><th>Игры</th></tr></thead>
+            <tbody>${leaders.map((u) => `
+              <tr>
+                <td>${u.rank || '—'}</td>
+                <td><strong>${esc(u.name || u.login)}</strong></td>
+                <td>${esc(u.clubName || '—')}</td>
+                <td>${u.level || 1}</td>
+                <td><b>${u.cupsWon || 0}</b></td>
+                <td>${u.cupsPlayed || 0}</td>
+              </tr>`).join('') || '<tr><td colspan="6">Пока пусто</td></tr>'}</tbody>
+          </table></div>
+        </section>`;
+      return;
+    }
     const data = await A().request('api/rating');
     const leaders = data.leaders || [];
     $('#view').innerHTML = `
@@ -480,8 +548,8 @@
           <tbody>${leaders.map((u, i) => `
             <tr>
               <td>${i + 1}</td>
-              <td><strong>${u.name || u.login}</strong></td>
-              <td>${u.clubName || '—'}</td>
+              <td><strong>${esc(u.name || u.login)}</strong></td>
+              <td>${esc(u.clubName || '—')}</td>
               <td>${u.level}</td>
               <td><b>${u.points || 0}</b></td>
               <td>${u.strength || '—'}</td>
@@ -512,18 +580,19 @@
   function showMatch(match) {
     openModal(`
       <div class="panel-head">
-        <h2 style="margin:0;font-family:Syne,sans-serif">${match.competition === 'friendly' ? 'Товарищеский' : match.competition}</h2>
+        <h2 style="margin:0;font-family:Syne,sans-serif">${compLabel(match.competition)}${match.cupName ? ' · ' + esc(match.cupName) : ''}</h2>
         <button class="btn btn-tiny" id="modal-close">Закрыть</button>
       </div>
       <div class="match-score">
-        <div class="team"><strong>${match.home?.name}</strong><div class="hint">сила ${match.home?.strength}</div></div>
+        <div class="team"><strong>${esc(match.home?.name)}</strong><div class="hint">сила ${match.home?.strength}</div></div>
         <div class="score">${match.score?.[0]}:${match.score?.[1]}</div>
-        <div class="team"><strong>${match.away?.name}</strong><div class="hint">сила ${match.away?.strength}</div></div>
+        <div class="team"><strong>${esc(match.away?.name)}</strong><div class="hint">сила ${match.away?.strength}</div></div>
       </div>
       <h3>События</h3>
-      <div class="events">${(match.events || []).map((e) => `
-        <div class="event"><span class="min">${e.minute}'</span><span>⚽ ${e.side === 'home' ? match.home?.name : match.away?.name} — ${e.player} (${e.score?.[0]}:${e.score?.[1]})</span></div>
-      `).join('') || '<p class="hint">Без голов</p>'}</div>
+      <div class="events">${(match.events || []).map((e) => {
+        const kind = e.type === 'pens' ? 'Пенальти' : 'Гол';
+        return `<div class="event"><span class="min">${e.minute}'</span><span>${kind}: ${esc(e.side === 'home' ? match.home?.name : match.away?.name)} — ${esc(e.player)} (${e.score?.[0]}:${e.score?.[1]})</span></div>`;
+      }).join('') || '<p class="hint">Без голов</p>'}</div>
     `);
   }
 
@@ -537,39 +606,42 @@
 
   function renderCupCard(c) {
     const statusLabel = c.status === 'open' ? 'набор' : c.status === 'live' ? 'идёт' : 'завершён';
+    const myId = A().getUser()?.id;
+    const joined = (c.entrants || []).some((e) => e.userId === myId);
     const ties = (c.history || []).slice().reverse().flatMap((h) =>
       (h.ties || []).map((t) => ({ ...t, round: h.round }))
     );
     const bracket = c.bracket || [];
     return `
       <div class="panel-head">
-        <h2 style="margin:0;font-family:Syne,sans-serif">${c.name}</h2>
+        <h2 style="margin:0;font-family:Syne,sans-serif">${esc(c.name)}</h2>
         <button class="btn btn-tiny" id="modal-close">Закрыть</button>
       </div>
-      <p class="hint">${c.bracketLabel || ''} · <span class="badge">${statusLabel}</span> · ${c.slotsFilled || c.entrantsCount || 0}/${c.size}
-        ${c.round ? ' · ' + c.round : ''}
+      <p class="hint">${esc(c.bracketLabel || '')} · <span class="badge">${statusLabel}</span> · ${c.slotsFilled || c.entrantsCount || 0}/${c.size}
+        ${c.round ? ' · ' + esc(c.round) : ''}
         ${c.nextRoundAt && c.status === 'live' ? ' · след. раунд ' + new Date(c.nextRoundAt).toLocaleTimeString('ru-RU') : ''}
       </p>
-      ${c.champion ? `<div class="stat-card" style="margin-bottom:12px"><span>Чемпион</span><b>${c.champion.clubName || c.champion.name}</b></div>` : ''}
+      ${c.champion ? `<div class="stat-card" style="margin-bottom:12px"><span>Чемпион</span><b>${esc(c.champion.clubName || c.champion.name)}</b></div>` : ''}
       ${bracket.length ? `<h3>Текущая сетка</h3><div class="list">${bracket.map((t) => `
         <div class="list-row">
-          <div><strong>${t.home?.clubName || t.home?.name} ${t.score ? t.score[0] + ':' + t.score[1] : 'vs'} ${t.away?.clubName || t.away?.name}</strong>
+          <div><strong>${esc(t.home?.clubName || t.home?.name)} ${t.score ? t.score[0] + ':' + t.score[1] : 'vs'} ${esc(t.away?.clubName || t.away?.name)}</strong>
           <small>${t.score ? 'сыграно' : 'ожидание'}${t.matchId ? ' · есть отчёт' : ''}</small></div>
-          ${t.matchId ? `<button class="btn btn-tiny" data-match="${t.matchId}">Отчёт</button>` : ''}
+          ${t.matchId ? `<button class="btn btn-tiny" data-match="${esc(t.matchId)}">Отчёт</button>` : ''}
         </div>`).join('')}</div>` : ''}
       ${ties.length ? `<h3 style="margin-top:14px">История</h3><div class="list">${ties.slice(0, 16).map((t) => `
         <div class="list-row">
-          <div><strong>${t.round}: ${t.home?.clubName || t.home?.name} ${t.score?.[0]}:${t.score?.[1]} ${t.away?.clubName || t.away?.name}</strong></div>
-          ${t.matchId ? `<button class="btn btn-tiny" data-match="${t.matchId}">Отчёт</button>` : ''}
+          <div><strong>${esc(t.round)}: ${esc(t.home?.clubName || t.home?.name)} ${t.score?.[0]}:${t.score?.[1]} ${esc(t.away?.clubName || t.away?.name)}</strong></div>
+          ${t.matchId ? `<button class="btn btn-tiny" data-match="${esc(t.matchId)}">Отчёт</button>` : ''}
         </div>`).join('')}</div>` : ''}
       <h3 style="margin-top:14px">Участники</h3>
       <div class="list">${(c.entrants || []).map((e) => `
-        <div class="list-row"><div><strong>${e.clubName || e.name}</strong><small>${e.isBot ? 'бот' : 'игрок'} · сила ${e.strength || '—'} · ур. ${e.level || '?'}${e.out ? ' · выбыл' : ''}</small></div>
-        ${e.out ? '<span class="badge danger">out</span>' : '<span class="badge">in</span>'}</div>
+        <div class="list-row"><div><strong>${esc(e.clubName || e.name)}</strong><small>${e.isBot ? 'бот' : 'игрок'} · сила ${e.strength || '—'} · ур. ${e.level || '?'}${e.out ? ' · выбыл' : ''}</small></div>
+        ${e.out ? '<span class="badge danger">выбыл</span>' : '<span class="badge">в сетке</span>'}</div>
       `).join('') || '<p class="hint">Пока никого</p>'}</div>
       <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
-        ${c.status === 'open' ? `<button class="btn btn-primary" data-cup-join="${c.id}">Вступить</button>
-        <button class="btn" data-cup-leave="${c.id}">Выйти</button>` : ''}
+        ${c.status === 'open' ? (joined
+          ? `<button class="btn" data-cup-leave="${esc(c.id)}">Выйти из кубка</button>`
+          : `<button class="btn btn-primary" data-cup-join="${esc(c.id)}">Вступить</button>`) : ''}
         ${c.status === 'live' ? '<span class="badge warn">автообновление</span>' : ''}
       </div>`;
   }
@@ -705,8 +777,58 @@
       }
       const mid = e.target.closest('[data-match]');
       if (mid) {
-        const data = await A().request('api/matches/' + mid.dataset.match);
-        showMatch(data.match);
+        try {
+          const data = await A().request('api/matches/' + mid.dataset.match);
+          showMatch(data.match);
+        } catch (err) { toast(err.message || 'Матч не найден'); }
+      }
+      const challenge = e.target.closest('[data-challenge]');
+      if (challenge) {
+        try {
+          const data = await A().request('api/friendly/challenge', {
+            method: 'POST',
+            body: { userId: challenge.dataset.challenge }
+          });
+          await refreshMe();
+          showMatch(data.match);
+          toast('Матч сыгран');
+        } catch (err) { toast(err.message); }
+      }
+      const buy = e.target.closest('[data-buy]');
+      if (buy) {
+        try {
+          const data = await A().request('api/transfers/buy', { method: 'POST', body: { playerId: buy.dataset.buy } });
+          state.club = data.club;
+          state.me.user = data.user;
+          A().setUser(data.user);
+          paintSidebar();
+          toast('Игрок куплен');
+          render();
+        } catch (err) { toast(err.message); }
+      }
+      const sell = e.target.closest('[data-sell]');
+      if (sell) {
+        if (!confirm('Продать игрока?')) return;
+        try {
+          const data = await A().request('api/transfers/sell', { method: 'POST', body: { playerId: sell.dataset.sell } });
+          state.club = data.club;
+          state.me.user = data.user;
+          A().setUser(data.user);
+          paintSidebar();
+          toast('Продано за ' + money(data.value));
+          render();
+        } catch (err) { toast(err.message); }
+      }
+      if (e.target.id === 'btn-market-refresh') {
+        try {
+          const data = await A().request('api/transfers/refresh', { method: 'POST' });
+          state.club = data.club;
+          state.me.user = data.user;
+          A().setUser(data.user);
+          paintSidebar();
+          toast('Рынок обновлён');
+          render();
+        } catch (err) { toast(err.message); }
       }
       const cup = e.target.closest('[data-cup]');
       if (cup) showCup(cup.dataset.cup);
@@ -849,6 +971,24 @@
     bind();
     tickClock();
     setInterval(tickClock, 15000);
+    setInterval(async () => {
+      if (!A().isLoggedIn() || $('#app')?.hidden) return;
+      try {
+        const prevLive = state.me?.liveCup?.id;
+        const data = await refreshMe();
+        if (!data) return;
+        if (data.wageDay && data.wageDay.at !== state.lastWageToast) {
+          state.lastWageToast = data.wageDay.at || Date.now();
+          toast('Недельный расчёт: ' + (data.wageDay.delta >= 0 ? '+' : '') + money(data.wageDay.delta));
+        }
+        if (state.section === 'matches' && state.tab === 'cups') {
+          const nowLive = state.me?.liveCup?.id;
+          if (nowLive !== prevLive || nowLive) render();
+        } else {
+          paintSidebar();
+        }
+      } catch {}
+    }, 20000);
     try {
       const health = await fetch(A().apiBase() + 'api/health').then((r) => r.json());
       if (health?.online != null) $('#stat-online').textContent = health.online;

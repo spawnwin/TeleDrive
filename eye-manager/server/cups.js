@@ -163,6 +163,7 @@ function createCupsModule({ dataDir, usersDb, saveUsers, publicUser, store }) {
         const xp = XP_THRESHOLDS[level] + 10;
         const name = botName(botCount++);
         const login = ('bot_' + id.slice(-8)).toLowerCase();
+        const clubName = CLUB_NAMES[botCount % CLUB_NAMES.length];
         db.users[id] = {
           id,
           login,
@@ -176,12 +177,36 @@ function createCupsModule({ dataDir, usersDb, saveUsers, publicUser, store }) {
           xp,
           cupsPlayed: 0,
           cupsWon: 0,
-          clubName: CLUB_NAMES[botCount % CLUB_NAMES.length],
-          strength: 52 + level * 3 + (botCount % 5)
+          clubName,
+          strength: 52 + level * 3 + (botCount % 5),
+          money: 300000,
+          fans: 8000,
+          boosters: 0,
+          fame: 0,
+          prestige: 0,
+          points: 0
         };
+        if (store?.ensureBotClub) {
+          try {
+            const str = store.ensureBotClub(db.users[id], clubName);
+            if (str) db.users[id].strength = str;
+          } catch {}
+        }
         changed = true;
       }
     });
+    if (store?.ensureBotClub) {
+      Object.values(db.users).filter((u) => u.isBot).forEach((u) => {
+        if (store.hasClub && store.hasClub(u.id)) return;
+        try {
+          const str = store.ensureBotClub(u, u.clubName);
+          if (str) {
+            u.strength = str;
+            changed = true;
+          }
+        } catch {}
+      });
+    }
     if (changed) saveUsers(db);
     return Object.values(db.users).filter((u) => u.isBot);
   }
@@ -493,7 +518,7 @@ function createCupsModule({ dataDir, usersDb, saveUsers, publicUser, store }) {
         try {
           const r = store.playCupTie(m.home, m.away, { cupId: cup.id, cupName: cup.name, round: label });
           if (r?.score) {
-            score = r.score;
+            score = [r.score[0], r.score[1]];
             matchId = r.matchId || null;
             if (r.homeStrength) m.home.strength = r.homeStrength;
             if (r.awayStrength) m.away.strength = r.awayStrength;
@@ -503,7 +528,8 @@ function createCupsModule({ dataDir, usersDb, saveUsers, publicUser, store }) {
         }
       }
       if (!score) score = simScore(m.home.strength || 60, m.away.strength || 60);
-      // knockout cannot draw — extra-time / pens
+      else score = [score[0], score[1]];
+      // knockout cannot draw — extra-time / pens (copy, never mutate MatchRec.score)
       if (score[0] === score[1]) {
         const hs = m.home.strength || 60;
         const as = m.away.strength || 60;
@@ -512,6 +538,9 @@ function createCupsModule({ dataDir, usersDb, saveUsers, publicUser, store }) {
           else score[1] += 1;
         } else if (hs > as) score[0] += 1;
         else score[1] += 1;
+        if (store?.annotateCupPens && matchId) {
+          try { store.annotateCupPens(matchId, score); } catch {}
+        }
       }
       m.score = score;
       m.matchId = matchId;
@@ -575,6 +604,8 @@ function createCupsModule({ dataDir, usersDb, saveUsers, publicUser, store }) {
       u.level = levelFromXp(u.xp);
       u.points = (u.points || 0) + (won ? 10 : 3);
       u.fame = (u.fame || 0) + (won ? 5 : 1);
+      if (won) u.prestige = (u.prestige || 0) + 3;
+      else u.prestige = (u.prestige || 0) + 1;
       cup.xpAwards[e.userId] = xpGain;
       dirty = true;
 
@@ -584,8 +615,8 @@ function createCupsModule({ dataDir, usersDb, saveUsers, publicUser, store }) {
         money,
         won ? `Победа в ${cup.name}` : `Приз · ${cup.name}`,
         won
-          ? `Чемпион онлайн-кубка! На счёт клуба зачислено ${money.toLocaleString('ru-RU')} €.`
-          : `Участие в ${cup.name}: +${money.toLocaleString('ru-RU')} € и +${xpGain} XP.`
+          ? `Чемпион онлайн-кубка! На счёт клуба зачислено ${money.toLocaleString('ru-RU')} ¤.`
+          : `Участие в ${cup.name}: +${money.toLocaleString('ru-RU')} ¤ и +${xpGain} XP.`
       );
       if (applied) cup.moneyAwards[e.userId] = applied;
 
@@ -683,9 +714,16 @@ function createCupsModule({ dataDir, usersDb, saveUsers, publicUser, store }) {
       status: cup.status,
       createdAt: cup.createdAt,
       startAt: cup.startAt,
+      finishedAt: cup.finishedAt || null,
+      champion: cup.champion || null,
+      history: (cup.history || []).slice(-6),
+      bracket: cup.bracket || [],
+      entrants: (cup.entrants || []).map((e) => ({
+        userId: e.userId, name: e.name, clubName: e.clubName, isBot: !!e.isBot, level: e.level
+      })),
       archivedAt: Date.now()
     });
-    if (arch.entries.length > 200) arch.entries.length = 200;
+    if (arch.entries.length > 300) arch.entries.length = 300;
     saveArchive(arch);
     delete db.cups[cup.id];
   }
@@ -739,7 +777,8 @@ function createCupsModule({ dataDir, usersDb, saveUsers, publicUser, store }) {
       }
     });
     Object.values(db.cups).forEach((cup) => {
-      if (cup.status === 'finished' && cup.finishedAt && now - cup.finishedAt > 2 * 3600e3) {
+      // keep finished cups queryable for a week
+      if (cup.status === 'finished' && cup.finishedAt && now - cup.finishedAt > 7 * 24 * 3600e3) {
         archiveAndDelete(db, cup, 'finished_expired');
         results.push({ action: 'expired', id: cup.id });
       }
@@ -795,7 +834,34 @@ function createCupsModule({ dataDir, usersDb, saveUsers, publicUser, store }) {
   function getCup(id) {
     const db = loadCups();
     const c = db.cups[id];
-    return c ? publicCup(c) : null;
+    if (c) return publicCup(c);
+    const arch = loadArchive().entries.find((e) => e.id === id);
+    const hasReplay = !!(arch?.champion || (arch?.history && arch.history.length) || (arch?.bracket && arch.bracket.length));
+    if (arch && hasReplay) {
+      return publicCup({
+        ...arch,
+        status: 'finished',
+        entrants: arch.entrants || [],
+        history: arch.history || [],
+        bracket: arch.bracket || [],
+        alive: arch.champion ? [arch.champion] : [],
+        minLevel: arch.minLevel || 1,
+        maxLevel: arch.maxLevel || 10
+      });
+    }
+    return null;
+  }
+
+  async function getCupAsync(id) {
+    const live = getCup(id);
+    if (live) return live;
+    if (store?.loadCupById) {
+      try {
+        const raw = await store.loadCupById(id);
+        if (raw) return publicCup(raw);
+      } catch {}
+    }
+    return null;
   }
 
   function joinCup(cupId, user, clubName, opts = {}) {
@@ -975,6 +1041,7 @@ function createCupsModule({ dataDir, usersDb, saveUsers, publicUser, store }) {
     advanceLiveCups,
     listCups,
     getCup,
+    getCupAsync,
     joinCup,
     leaveCup,
     leaderboard,
