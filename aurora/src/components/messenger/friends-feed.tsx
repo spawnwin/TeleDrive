@@ -5,7 +5,6 @@ import {
   Heart,
   ImagePlus,
   Loader2,
-  Newspaper,
   Pencil,
   Send,
   Trash2,
@@ -25,7 +24,8 @@ import { ChatMusicPlayer } from './chat-music-player'
 import { buildChatMusicMetadata } from '@/lib/music-message'
 import { WallPostComments } from './wall-post-comments'
 import { openFeedShareTarget, parseFeedShareRef } from '@/lib/feed-share'
-import { Clapperboard, Radio, Store, CircleDot } from 'lucide-react'
+import { formatFeedTime } from '@/lib/format'
+import { Clapperboard, Radio, Store, CircleDot, Sparkles, ArrowLeft } from 'lucide-react'
 
 export interface FeedPost {
   id: string
@@ -60,7 +60,7 @@ interface FriendsFeedProps {
 }
 
 export function FriendsFeed({ onBack }: FriendsFeedProps) {
-  const { t } = useI18n()
+  const { t, lang } = useI18n()
   const { currentUser, setProfileUserId } = useAppStore()
   const [posts, setPosts] = useState<FeedPost[]>([])
   const [loading, setLoading] = useState(true)
@@ -240,29 +240,34 @@ export function FriendsFeed({ onBack }: FriendsFeedProps) {
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-background">
-      <header className="flex shrink-0 items-center gap-3 border-b border-border px-4 py-3">
+    <div className="aurora-feed flex h-full min-h-0 flex-col">
+      <header className="aurora-feed-header flex shrink-0 items-center gap-3 px-4 py-3.5 sm:px-5">
         {onBack && (
           <button
             type="button"
             onClick={onBack}
-            className="xl:hidden text-sm font-medium text-primary"
+            className="xl:hidden flex h-9 w-9 items-center justify-center rounded-xl text-[#8fa0b5] transition hover:bg-white/5 hover:text-white"
+            aria-label={t('misc.back')}
           >
-            {t('misc.back')}
+            <ArrowLeft className="h-4 w-4" />
           </button>
         )}
-        <Newspaper className="h-5 w-5 text-[#3390ec]" />
+        <div className="aurora-feed-orb flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-[linear-gradient(145deg,#3aa0ff,#2dd4bf)] text-white shadow-[0_8px_24px_rgb(58_160_255_/_28%)]">
+          <Sparkles className="h-5 w-5" strokeWidth={2} />
+        </div>
         <div className="min-w-0 flex-1">
-          <h1 className="truncate text-base font-semibold">{t('feed.title')}</h1>
-          <p className="truncate text-[11px] text-muted-foreground">{t('feed.subtitle')}</p>
+          <h1 className="aurora-feed-title truncate text-[1.35rem] text-white sm:text-[1.5rem]">
+            {t('feed.title')}
+          </h1>
+          <p className="truncate text-[11px] tracking-wide text-[#8fa0b5]">{t('feed.subtitle')}</p>
         </div>
       </header>
 
       <div className="min-h-0 flex-1 overflow-y-auto">
-        <div className="mx-auto w-full max-w-xl space-y-3 px-3 py-4 pb-[calc(5.5rem+env(safe-area-inset-bottom))] sm:px-4 xl:pb-4">
+        <div className="mx-auto w-full max-w-xl space-y-4 px-3 py-5 pb-[calc(5.5rem+env(safe-area-inset-bottom))] sm:px-5 xl:pb-6">
           {currentUser && (
-            <div className="space-y-2 rounded-2xl border border-border bg-card/70 p-3 shadow-sm">
-              <div className="flex items-start gap-2">
+            <div className="aurora-feed-composer space-y-3 rounded-[1.35rem] p-3.5 sm:p-4">
+              <div className="flex items-start gap-3">
                 <Avatar
                   name={currentUser.name}
                   color={currentUser.avatarColor}
@@ -273,16 +278,16 @@ export function FriendsFeed({ onBack }: FriendsFeedProps) {
                   value={text}
                   onChange={(e) => setText(e.target.value)}
                   placeholder={t('feed.placeholder')}
-                  className="min-h-[64px] flex-1 resize-none border-0 bg-transparent p-0 focus-visible:ring-0"
+                  className="min-h-[72px] flex-1 resize-none border-0 bg-transparent p-0 text-[15px] leading-relaxed text-[#e8eef6] placeholder:text-[#6f8196] focus-visible:ring-0"
                   rows={2}
                 />
               </div>
               {imagePreview && (
-                <div className="relative">
+                <div className="relative overflow-hidden rounded-2xl">
                   <img
                     src={imagePreview}
                     alt=""
-                    className="max-h-56 w-full rounded-xl object-contain"
+                    className="max-h-64 w-full object-cover"
                   />
                   <button
                     type="button"
@@ -291,17 +296,17 @@ export function FriendsFeed({ onBack }: FriendsFeedProps) {
                       if (imagePreview) URL.revokeObjectURL(imagePreview)
                       setImagePreview(null)
                     }}
-                    className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full bg-background/85 shadow"
+                    className="absolute right-2.5 top-2.5 flex h-8 w-8 items-center justify-center rounded-xl bg-black/55 text-white backdrop-blur-sm transition hover:bg-black/70"
                   >
                     <X className="h-4 w-4" />
                   </button>
                 </div>
               )}
-              <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center justify-between gap-2 border-t border-white/[0.06] pt-3">
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
-                  className="flex h-9 items-center gap-1.5 rounded-xl px-2.5 text-sm text-muted-foreground transition hover:bg-muted hover:text-foreground"
+                  className="flex h-9 items-center gap-1.5 rounded-xl px-2.5 text-sm text-[#8fa0b5] transition hover:bg-white/5 hover:text-[#e8eef6]"
                 >
                   <ImagePlus className="h-4 w-4" />
                   {t('feed.photo')}
@@ -324,7 +329,7 @@ export function FriendsFeed({ onBack }: FriendsFeedProps) {
                   type="button"
                   disabled={sending || (!text.trim() && !imageFile)}
                   onClick={() => void publish()}
-                  className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-[#3390ec] px-3.5 text-sm font-medium text-white disabled:opacity-40"
+                  className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-[linear-gradient(135deg,#3aa0ff,#2b82d9)] px-4 text-sm font-semibold text-white shadow-[0_8px_20px_rgb(58_160_255_/_28%)] transition hover:brightness-110 disabled:opacity-40 disabled:shadow-none"
                 >
                   {sending ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
@@ -338,23 +343,30 @@ export function FriendsFeed({ onBack }: FriendsFeedProps) {
           )}
 
           {loading && (
-            <div className="flex justify-center py-10">
-              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            <div className="flex flex-col items-center justify-center gap-3 py-16">
+              <div className="h-9 w-9 animate-spin rounded-full border-2 border-[#3aa0ff]/30 border-t-[#3aa0ff]" />
+              <p className="text-xs tracking-wide text-[#8fa0b5]">{t('feed.loading')}</p>
             </div>
           )}
 
           {!loading && posts.length === 0 && (
-            <div className="rounded-2xl border border-dashed border-border px-4 py-10 text-center">
-              <Newspaper className="mx-auto mb-2 h-8 w-8 text-muted-foreground/50" />
-              <p className="text-sm font-medium">{t('feed.empty')}</p>
-              <p className="mt-1 text-xs text-muted-foreground">{t('feed.emptyHint')}</p>
+            <div className="aurora-feed-composer rounded-[1.35rem] px-6 py-14 text-center">
+              <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-[linear-gradient(145deg,rgb(58_160_255_/_22%),rgb(45_212_191_/_14%))] text-[#3aa0ff]">
+                <Sparkles className="h-6 w-6" />
+              </div>
+              <p className="aurora-feed-title text-lg text-white">{t('feed.empty')}</p>
+              <p className="mx-auto mt-2 max-w-xs text-sm leading-relaxed text-[#8fa0b5]">
+                {t('feed.emptyHint')}
+              </p>
             </div>
           )}
 
-          {posts.map((post) => (
+          {posts.map((post, index) => (
             <FeedPostCard
               key={post.id}
               post={post}
+              index={index}
+              lang={lang}
               onOpenAuthor={() => setProfileUserId(post.author.id)}
               onLike={() => void toggleLike(post.id)}
               onDelete={() => void remove(post.id)}
@@ -378,8 +390,8 @@ export function FriendsFeed({ onBack }: FriendsFeedProps) {
 
           <div ref={sentinelRef} className="h-4" />
           {loadingMore && (
-            <div className="flex justify-center py-3">
-              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+            <div className="flex justify-center py-4">
+              <div className="h-5 w-5 animate-spin rounded-full border-2 border-[#3aa0ff]/30 border-t-[#3aa0ff]" />
             </div>
           )}
         </div>
@@ -432,7 +444,7 @@ function FeedShareCard({
     <button
       type="button"
       onClick={() => openFeedShareTarget(ref.kind, ref.id)}
-      className="mb-2 w-full overflow-hidden rounded-xl border border-border bg-muted/40 text-left transition hover:bg-muted/70"
+      className="aurora-feed-share mb-1 w-full rounded-2xl text-left"
     >
       {attachmentCoverUrl && (
         <img
@@ -441,21 +453,21 @@ function FeedShareCard({
           className="max-h-56 w-full object-cover"
         />
       )}
-      <div className="flex items-start gap-2.5 p-3">
-        <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#3390ec]/15 text-[#3390ec]">
+      <div className="flex items-start gap-3 p-3.5">
+        <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[linear-gradient(145deg,rgb(58_160_255_/_22%),rgb(45_212_191_/_14%))] text-[#3aa0ff]">
           <KindIcon className="h-4 w-4" />
         </span>
         <div className="min-w-0 flex-1">
-          <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[#8fa0b5]">
             {kindLabel}
           </p>
-          <p className="truncate text-sm font-semibold">
+          <p className="mt-0.5 truncate text-[15px] font-semibold text-white">
             {attachmentName || kindLabel}
           </p>
           {content && content !== attachmentName && (
-            <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">{content}</p>
+            <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-[#8fa0b5]">{content}</p>
           )}
-          <p className="mt-1 text-[11px] font-medium text-[#3390ec]">{t('feed.openShare')}</p>
+          <p className="mt-2 text-[11px] font-semibold text-[#3aa0ff]">{t('feed.openShare')} →</p>
         </div>
       </div>
     </button>
@@ -464,6 +476,8 @@ function FeedShareCard({
 
 function FeedPostCard({
   post,
+  index,
+  lang,
   onOpenAuthor,
   onLike,
   onDelete,
@@ -472,6 +486,8 @@ function FeedPostCard({
   t,
 }: {
   post: FeedPost
+  index: number
+  lang: 'ru' | 'en'
   onOpenAuthor: () => void
   onLike: () => void
   onDelete: () => void
@@ -501,8 +517,11 @@ function FeedPostCard({
   }
 
   return (
-    <article className="rounded-2xl border border-border bg-card/70 p-3 shadow-sm">
-      <div className="mb-2 flex items-center gap-2">
+    <article
+      className="aurora-feed-post rounded-[1.35rem] p-3.5 sm:p-4"
+      style={{ animationDelay: `${Math.min(index, 8) * 45}ms` }}
+    >
+      <div className="mb-3 flex items-center gap-2.5">
         <button type="button" onClick={onOpenAuthor} className="shrink-0">
           <Avatar
             name={post.author.name}
@@ -512,9 +531,13 @@ function FeedPostCard({
           />
         </button>
         <button type="button" onClick={onOpenAuthor} className="min-w-0 flex-1 text-left">
-          <p className="truncate text-sm font-medium">{post.author.name}</p>
-          <p className="text-[11px] text-muted-foreground">
-            {new Date(post.createdAt).toLocaleString()}
+          <p className="truncate text-[15px] font-semibold tracking-tight text-white">
+            {post.author.name}
+          </p>
+          <p className="text-[11px] text-[#8fa0b5]">
+            @{post.author.username}
+            <span className="mx-1.5 text-white/15">·</span>
+            {formatFeedTime(post.createdAt, lang)}
             {post.editedAt ? ` · ${t('feed.edited')}` : ''}
           </p>
         </button>
@@ -523,7 +546,7 @@ function FeedPostCard({
             <button
               type="button"
               onClick={() => setEditing(true)}
-              className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground"
+              className="flex h-8 w-8 items-center justify-center rounded-xl text-[#8fa0b5] transition hover:bg-white/5 hover:text-white"
               title={t('feed.edit')}
             >
               <Pencil className="h-3.5 w-3.5" />
@@ -531,7 +554,7 @@ function FeedPostCard({
             <button
               type="button"
               onClick={onDelete}
-              className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+              className="flex h-8 w-8 items-center justify-center rounded-xl text-[#8fa0b5] transition hover:bg-rose-500/10 hover:text-rose-400"
               title={t('feed.delete')}
             >
               <Trash2 className="h-3.5 w-3.5" />
@@ -545,7 +568,7 @@ function FeedPostCard({
           <Textarea
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
-            className="min-h-[72px] resize-none"
+            className="min-h-[80px] resize-none border-white/10 bg-black/20 text-[#e8eef6]"
             rows={3}
           />
           <div className="flex justify-end gap-2">
@@ -555,7 +578,7 @@ function FeedPostCard({
                 setEditing(false)
                 setDraft(post.content || '')
               }}
-              className="rounded-lg px-3 py-1.5 text-xs text-muted-foreground hover:bg-muted"
+              className="rounded-xl px-3 py-1.5 text-xs text-[#8fa0b5] transition hover:bg-white/5"
             >
               {t('misc.cancel')}
             </button>
@@ -563,7 +586,7 @@ function FeedPostCard({
               type="button"
               disabled={saving}
               onClick={() => void save()}
-              className="inline-flex items-center gap-1 rounded-lg bg-[#3390ec] px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50"
+              className="inline-flex items-center gap-1 rounded-xl bg-[#3aa0ff] px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
             >
               {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
               {t('feed.save')}
@@ -573,7 +596,9 @@ function FeedPostCard({
       ) : (
         post.content &&
         post.type !== 'share' && (
-          <p className="mb-2 whitespace-pre-wrap break-words text-sm">{post.content}</p>
+          <p className="mb-3 whitespace-pre-wrap break-words text-[15px] leading-relaxed text-[#e8eef6]">
+            {post.content}
+          </p>
         )
       )}
 
@@ -582,13 +607,13 @@ function FeedPostCard({
           src={post.attachmentUrl}
           alt={post.attachmentName || ''}
           className={cn(
-            'mb-2 max-h-96 w-full rounded-xl object-contain',
-            post.type === 'drawing' && 'bg-white',
+            'mb-3 max-h-[28rem] w-full rounded-2xl object-cover',
+            post.type === 'drawing' && 'bg-white object-contain',
           )}
         />
       )}
       {post.type === 'voice' && post.attachmentUrl && (
-        <div className="mb-2">
+        <div className="mb-3">
           <VoicePlayer
             url={resolveMediaUrl(post.attachmentUrl) || post.attachmentUrl}
             durationSec={post.attachmentDuration ?? 0}
@@ -599,7 +624,7 @@ function FeedPostCard({
         </div>
       )}
       {post.type === 'music' && post.attachmentUrl && (
-        <div className="mb-2">
+        <div className="mb-3">
           {(() => {
             const yandexId =
               post.attachmentMime === 'application/x-yandex-music' &&
@@ -610,7 +635,7 @@ function FeedPostCard({
                   : null
             if (!yandexId) {
               return (
-                <p className="text-xs text-muted-foreground">{post.attachmentName || '🎵'}</p>
+                <p className="text-xs text-[#8fa0b5]">{post.attachmentName || 'Track'}</p>
               )
             }
             const parts = (post.attachmentName || '').split(' — ')
@@ -643,16 +668,16 @@ function FeedPostCard({
         />
       )}
 
-      <div className="mt-1 flex flex-col gap-1 border-t border-border/60 pt-2">
+      <div className="mt-1 flex flex-col gap-1 border-t border-white/[0.06] pt-2.5">
         <div className="flex flex-wrap items-center gap-1">
           <button
             type="button"
             onClick={onLike}
             className={cn(
-              'inline-flex items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-xs font-medium transition',
+              'aurora-feed-like inline-flex items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-xs font-medium',
               post.likedByMe
-                ? 'bg-rose-500/10 text-rose-500'
-                : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+                ? 'is-liked bg-rose-500/15 text-rose-400'
+                : 'text-[#8fa0b5] hover:bg-white/5 hover:text-white',
             )}
           >
             <Heart className={cn('h-4 w-4', post.likedByMe && 'fill-current')} />

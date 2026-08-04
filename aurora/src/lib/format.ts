@@ -72,3 +72,28 @@ export function formatLastSeen(
   const date = d.toLocaleDateString(locale, { day: 'numeric', month: 'short' })
   return lang === 'ru' ? `был(а) ${date}` : `last seen ${date}`
 }
+
+/** Compact relative time for the friends feed. */
+export function formatFeedTime(iso: string | Date, lang: 'ru' | 'en' = 'ru'): string {
+  const d = typeof iso === 'string' ? new Date(iso) : iso
+  const now = new Date()
+  const diffSec = Math.floor((now.getTime() - d.getTime()) / 1000)
+  if (diffSec < 45) return lang === 'ru' ? 'только что' : 'just now'
+  if (diffSec < 3600) {
+    const m = Math.max(1, Math.floor(diffSec / 60))
+    return lang === 'ru' ? `${m} мин назад` : `${m}m ago`
+  }
+  if (diffSec < 86400) {
+    const h = Math.floor(diffSec / 3600)
+    return lang === 'ru' ? `${h} ч назад` : `${h}h ago`
+  }
+  if (diffSec < 86400 * 7) {
+    const days = Math.floor(diffSec / 86400)
+    if (lang === 'ru') return days === 1 ? 'вчера' : `${days} дн назад`
+    return days === 1 ? 'yesterday' : `${days}d ago`
+  }
+  return d.toLocaleDateString(lang === 'ru' ? 'ru-RU' : 'en-US', {
+    day: 'numeric',
+    month: 'short',
+  })
+}
