@@ -77,20 +77,26 @@
     </section>
 
     <!-- HOME / MENU -->
-    <section id="screen-home" class="screen">
-      <header class="hero-home">
-        <div class="eye-logo hero-eye">
-          <img src="assets/eye.svg" alt="" width="72" height="72" />
+    <section id="screen-home" class="screen screen-home">
+      <div class="home-hero-bg" aria-hidden="true">
+        <img src="assets/eye-home-pitch.jpg" alt="" width="1920" height="1080" decoding="async" fetchpriority="high" />
+        <div class="home-hero-veil"></div>
+      </div>
+      <div class="home-hero-content">
+        <header class="hero-home">
+          <div class="eye-logo hero-eye">
+            <img src="assets/eye.svg" alt="" width="72" height="72" />
+          </div>
+          <h1 class="brand">EYE</h1>
+          <p class="lede">Симулятор футбольного менеджера. Глаз видит поле целиком.</p>
+        </header>
+        <div class="home-user glass-panel" id="home-user" hidden></div>
+        <div class="home-actions">
+          <button class="btn btn-primary btn-glow" id="btn-auth" type="button" hidden>Войти</button>
+          <button class="btn btn-primary btn-glow" id="btn-new" type="button" hidden>Новая карьера</button>
+          <button class="btn btn-glass" id="btn-continue" type="button" hidden>Продолжить</button>
+          <button class="btn btn-glass" id="btn-logout" type="button" hidden>Выйти</button>
         </div>
-        <h1 class="brand">EYE</h1>
-        <p class="lede">Симулятор футбольного менеджера. Глаз видит поле целиком.</p>
-      </header>
-      <div class="home-user glass-panel" id="home-user" hidden></div>
-      <div class="home-actions">
-        <button class="btn btn-primary btn-glow" id="btn-auth" type="button" hidden>Войти</button>
-        <button class="btn btn-primary btn-glow" id="btn-new" type="button" hidden>Новая карьера</button>
-        <button class="btn btn-glass" id="btn-continue" type="button" hidden>Продолжить</button>
-        <button class="btn btn-glass" id="btn-logout" type="button" hidden>Выйти</button>
       </div>
     </section>
 
