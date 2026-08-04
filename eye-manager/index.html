@@ -624,8 +624,12 @@
           <button class="btn btn-glass" id="btn-skip-match">Пропустить</button>
         </div>
       </div>
+      <div id="ht-scrim" class="ht-scrim" hidden></div>
       <div id="ht-panel" class="ht-panel glass-panel" hidden>
-        <strong>Перерыв</strong>
+        <header class="ht-head">
+          <strong>Перерыв</strong>
+          <button type="button" class="entry-close" id="btn-ht-close" aria-label="Закрыть">×</button>
+        </header>
         <p class="hint" id="ht-hint">Стиль, схема и до 3 замен · затем второй тайм</p>
         <div class="filter-row" id="ht-formations"></div>
         <div class="filter-row" id="ht-styles"></div>
@@ -644,8 +648,12 @@
 
     <!-- BID MODAL -->
     <div id="bid-modal" class="modal" hidden>
+      <button type="button" class="modal-scrim" id="bid-scrim" aria-label="Закрыть"></button>
       <div class="modal-card glass-panel">
-        <h3 id="bid-title">Предложение</h3>
+        <header class="entry-head">
+          <h3 id="bid-title">Предложение</h3>
+          <button type="button" class="entry-close" id="bid-close" aria-label="Закрыть">×</button>
+        </header>
         <p class="hint" id="bid-meta"></p>
         <label>Сумма трансфера (внутренние €)<input type="number" id="bid-amount" min="0" step="100000" /></label>
         <label>Зарплата / нед (€)<input type="number" id="bid-wage" min="0" step="1000" /></label>
@@ -656,6 +664,31 @@
         <button class="btn btn-tiny" id="bid-counter" hidden>Принять контрпредложение</button>
       </div>
     </div>
+
+    <!-- EDGE SWIPE DRAWER -->
+    <div id="edge-hit" class="edge-hit" aria-hidden="true"></div>
+    <div id="drawer-scrim" class="drawer-scrim" hidden></div>
+    <aside id="drawer" class="drawer" aria-hidden="true">
+      <div class="drawer-brand">
+        <img src="assets/eye.svg" alt="" width="28" height="28" />
+        <strong>EYE</strong>
+        <button type="button" class="entry-close" id="drawer-close" aria-label="Закрыть">×</button>
+      </div>
+      <nav class="drawer-nav" aria-label="Меню">
+        <button type="button" data-nav="hub" class="drawer-link"><span>⌂</span>Центр</button>
+        <button type="button" data-nav="squad" class="drawer-link"><span>◈</span>Состав</button>
+        <button type="button" data-nav="tactics" class="drawer-link"><span>⬡</span>Тактика</button>
+        <button type="button" data-nav="transfers" class="drawer-link"><span>⇄</span>Рынок</button>
+        <button type="button" data-nav="table" class="drawer-link"><span>#</span>Таблица</button>
+        <button type="button" data-nav="calendar" class="drawer-link"><span>▦</span>Календарь</button>
+        <button type="button" data-nav="inbox" class="drawer-link"><span>✉</span>Почта</button>
+        <button type="button" data-nav="finance" class="drawer-link"><span>¤</span>Финансы</button>
+        <button type="button" data-nav="train" class="drawer-link"><span>▴</span>Тренировка</button>
+        <button type="button" data-nav="lobby" class="drawer-link"><span>◇</span>Лобби</button>
+        <button type="button" data-nav="more" class="drawer-link"><span>☰</span>Ещё</button>
+      </nav>
+      <p class="hint drawer-hint">Свайп от левого края</p>
+    </aside>
 
     <!-- TOAST -->
     <div id="toast" class="toast" hidden></div>

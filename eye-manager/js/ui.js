@@ -86,6 +86,7 @@ window.EYE_UI = (() => {
       if (id === 'create') renderLobby();
       else renderHome();
     }
+    closeDrawer();
     refresh(id);
   }
 
@@ -737,6 +738,79 @@ window.EYE_UI = (() => {
     bidEntryId = null;
   }
 
+  function openDrawer() {
+    const app = document.getElementById('app');
+    if (!app || app.classList.contains('menu-mode')) return;
+    if (matchPlaying && $('#ht-panel') && !$('#ht-panel').hidden) return;
+    const d = $('#drawer');
+    const s = $('#drawer-scrim');
+    if (!d) return;
+    d.classList.add('open');
+    d.setAttribute('aria-hidden', 'false');
+    if (s) s.hidden = false;
+    const active = document.querySelector('#stage > .screen.active');
+    const id = active?.id?.replace('screen-', '') || '';
+    $all('.drawer-link').forEach(b => {
+      const nav = b.dataset.nav;
+      b.classList.toggle('active', nav === id || (id === 'player' && nav === 'squad'));
+    });
+  }
+
+  function closeDrawer() {
+    const d = $('#drawer');
+    const s = $('#drawer-scrim');
+    if (d) {
+      d.classList.remove('open');
+      d.setAttribute('aria-hidden', 'true');
+    }
+    if (s) s.hidden = true;
+  }
+
+  function bindEdgeSwipe() {
+    let startX = 0, startY = 0, tracking = false, edge = false;
+    const onStart = (x, y, fromEdge) => {
+      startX = x; startY = y; tracking = true; edge = fromEdge;
+    };
+    const onMove = (x, y) => {
+      if (!tracking) return;
+      const dx = x - startX;
+      const dy = y - startY;
+      if (Math.abs(dy) > Math.abs(dx) && Math.abs(dy) > 12) { tracking = false; return; }
+      if (edge && dx > 56 && Math.abs(dy) < 40) {
+        tracking = false;
+        openDrawer();
+      } else if ($('#drawer')?.classList.contains('open') && dx < -56 && Math.abs(dy) < 40) {
+        tracking = false;
+        closeDrawer();
+      }
+    };
+    const onEnd = () => { tracking = false; edge = false; };
+
+    document.addEventListener('touchstart', (e) => {
+      const t = e.changedTouches[0];
+      if (!t) return;
+      const fromEdge = t.clientX <= 24;
+      if (fromEdge || $('#drawer')?.classList.contains('open')) onStart(t.clientX, t.clientY, fromEdge);
+    }, { passive: true });
+    document.addEventListener('touchmove', (e) => {
+      const t = e.changedTouches[0];
+      if (t) onMove(t.clientX, t.clientY);
+    }, { passive: true });
+    document.addEventListener('touchend', onEnd, { passive: true });
+    document.addEventListener('touchcancel', onEnd, { passive: true });
+
+    $('#edge-hit')?.addEventListener('click', () => openDrawer());
+    $('#drawer-scrim')?.addEventListener('click', () => closeDrawer());
+    $('#drawer-close')?.addEventListener('click', () => closeDrawer());
+    $('#drawer')?.addEventListener('click', (e) => {
+      const link = e.target.closest('[data-nav]');
+      if (!link) return;
+      closeDrawer();
+      show(link.dataset.nav);
+      e.stopPropagation();
+    });
+  }
+
   function renderCalendar() {
     const st = S().get();
     const me = S().club();
@@ -1331,7 +1405,7 @@ window.EYE_UI = (() => {
     matchPaused = false;
     matchCtx = { ...next, subsUsed: next.subsUsed || 0 };
     show('match');
-    $('#ht-panel').hidden = true;
+    closeHtPanel();
     syncSpeedButtons();
     syncPauseButton();
     $('#goal-flash').hidden = true;
@@ -1411,6 +1485,8 @@ window.EYE_UI = (() => {
 
   function showHtPanel() {
     const panel = $('#ht-panel');
+    const scrim = $('#ht-scrim');
+    if (scrim) scrim.hidden = false;
     panel.hidden = false;
     matchPaused = false;
     syncPauseButton();
@@ -1448,8 +1524,15 @@ window.EYE_UI = (() => {
         }).join('') || `<div class="news-item">Нет запасных</div>`);
   }
 
+  function closeHtPanel() {
+    const panel = $('#ht-panel');
+    const scrim = $('#ht-scrim');
+    if (panel) panel.hidden = true;
+    if (scrim) scrim.hidden = true;
+  }
+
   async function continueSecondHalf() {
-    $('#ht-panel').hidden = true;
+    closeHtPanel();
     matchAbort = false;
     matchSkipHalf = false;
     matchPaused = false;
@@ -1826,7 +1909,10 @@ window.EYE_UI = (() => {
       }
     });
     document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape' && document.getElementById('app')?.classList.contains('entry-open')) {
+      if (e.key !== 'Escape') return;
+      if ($('#drawer')?.classList.contains('open')) { closeDrawer(); return; }
+      if ($('#bid-modal') && !$('#bid-modal').hidden) { closeBidModal(); return; }
+      if (document.getElementById('app')?.classList.contains('entry-open')) {
         const createOpen = $('#screen-create')?.classList.contains('entry-open');
         show(createOpen && A().isLoggedIn() ? 'lobby' : 'home');
       }
@@ -1897,6 +1983,8 @@ window.EYE_UI = (() => {
     $('#sel-formation')?.addEventListener('change', (e) => { S().setTactics(e.target.value, null); S().autoLineup(); drawPitch(); renderBench(); });
     $('#sel-style')?.addEventListener('change', (e) => { S().setTactics(null, e.target.value); });
     $('#btn-second-half')?.addEventListener('click', () => continueSecondHalf());
+    $('#btn-ht-close')?.addEventListener('click', () => continueSecondHalf());
+    $('#ht-scrim')?.addEventListener('click', () => continueSecondHalf());
     $('#btn-cup-play')?.addEventListener('click', () => {
       const pm = S().playerCupMatch();
       if (!pm) return;
@@ -1912,6 +2000,9 @@ window.EYE_UI = (() => {
       renderPrematch();
     });
     $('#bid-cancel')?.addEventListener('click', () => closeBidModal());
+    $('#bid-close')?.addEventListener('click', () => closeBidModal());
+    $('#bid-scrim')?.addEventListener('click', () => closeBidModal());
+    bindEdgeSwipe();
     $('#bid-submit')?.addEventListener('click', () => {
       if (!bidEntryId) return;
       const amount = Number($('#bid-amount').value) || 0;
