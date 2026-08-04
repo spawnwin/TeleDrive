@@ -5,6 +5,7 @@ window.EYE_UI = (() => {
   const E = () => window.EYE_ENGINE;
   const W = () => window.EYE_WORLD;
   const A = () => window.EYE_AUTH;
+  const O = () => window.EYE_ONLINE;
 
   let matchAbort = false;
   let matchSkipHalf = false;
@@ -29,6 +30,11 @@ window.EYE_UI = (() => {
   let createStep = 1;
   let createMode = 'custom'; // custom | takeover
   let createDirty = false;
+  let onlineCupsTab = 'open';
+  let onlineCupId = null;
+  let onlinePollTimer = null;
+  let adminTab = 'cups';
+  let adminCache = { cups: [], archive: [], users: [], bots: [], stats: null };
 
   function $(sel, root = document) { return root.querySelector(sel); }
   function $all(sel, root = document) { return [...root.querySelectorAll(sel)]; }
@@ -38,6 +44,11 @@ window.EYE_UI = (() => {
   function show(id) {
     if (id === 'home' && A().isLoggedIn()) id = 'lobby';
     if (id === 'lobby' && !A().isLoggedIn()) id = 'home';
+    if ((id === 'onlinecups' || id === 'cupdetail' || id === 'admin') && !A().isLoggedIn()) id = 'auth';
+    if (id === 'admin' && A().isLoggedIn() && !isAdminUser()) {
+      toast('Только для администратора');
+      id = S().get() ? 'more' : 'lobby';
+    }
 
     // Block leaving a live match (finishMatch clears matchPlaying before show('result'))
     if (matchPlaying && id !== 'match') {
@@ -73,22 +84,34 @@ window.EYE_UI = (() => {
     const dockIds = ['hub', 'squad', 'tactics', 'transfers', 'more'];
     $all('.dock-btn').forEach(b => b.classList.toggle('active', b.dataset.nav === id));
     if (!dockIds.includes(id) && id !== 'match' && id !== 'prematch' && id !== 'result') {
-      if (['table','calendar','cup','ucl','cwc','board','youth','inbox','stats','finance','train','club','history','player'].includes(id)) {
+      if (['table','calendar','cup','ucl','cwc','board','youth','inbox','stats','finance','train','club','history','player','onlinecups','cupdetail','admin'].includes(id)) {
         $all('.dock-btn').forEach(b => b.classList.toggle('active', b.dataset.nav === 'more'));
       }
     }
 
     // Desktop: exact match; player card keeps origin tab highlighted
-    const deskAlias = { player: playerBack === 'youth' ? 'youth' : playerBack === 'inbox' ? 'inbox' : 'squad' };
+    const deskAlias = {
+      player: playerBack === 'youth' ? 'youth' : playerBack === 'inbox' ? 'inbox' : 'squad',
+      cupdetail: 'onlinecups'
+    };
     const deskActive = deskAlias[id] || id;
     $all('.desk-btn').forEach(b => b.classList.toggle('active', b.dataset.nav === deskActive));
 
     const app = document.getElementById('app');
     if (app) {
-      app.classList.toggle('menu-mode', ['boot', 'home', 'auth', 'register', 'create', 'lobby'].includes(id));
+      const menuScreens = ['boot', 'home', 'auth', 'register', 'create', 'lobby'];
+      const noCareerOk = ['onlinecups', 'cupdetail', 'admin'];
+      const inMenu = menuScreens.includes(id) || (noCareerOk.includes(id) && !S().get());
+      app.classList.toggle('menu-mode', inMenu);
       app.classList.toggle('match-mode', id === 'match');
       app.classList.toggle('entry-open', isWindow);
     }
+
+    if (id !== 'onlinecups' && id !== 'cupdetail') {
+      clearTimeout(onlinePollTimer);
+      onlinePollTimer = null;
+    }
+    syncAdminNav();
 
     window.scrollTo(0, 0);
     if (id === 'create' && !createDirty) createStep = 1;
@@ -229,7 +252,7 @@ window.EYE_UI = (() => {
 
   function refresh(id) {
     const st = S().get();
-    if (!st && !['boot','home','create','auth','register','lobby'].includes(id)) return;
+    if (!st && !['boot','home','create','auth','register','lobby','onlinecups','cupdetail','admin'].includes(id)) return;
     if (id === 'hub') renderHub();
     if (id === 'squad') renderSquad();
     if (id === 'tactics') renderTactics();
@@ -254,11 +277,40 @@ window.EYE_UI = (() => {
       setCreateStep(createStep || 1);
       fillCreateForm();
     }
-    if (id === 'more') syncCurrencyButtons();
+    if (id === 'more') { syncCurrencyButtons(); syncAdminNav(); }
     if (id === 'auth') renderAuth();
     if (id === 'register') renderRegister();
     if (id === 'home') renderHome();
     if (id === 'lobby') renderLobby();
+    if (id === 'onlinecups') renderOnlineCups();
+    if (id === 'cupdetail') renderCupDetail();
+    if (id === 'admin') renderAdmin();
+  }
+
+  function isAdminUser(user = A().getUser()) {
+    return !!user && (user.role === 'admin' || user.login === 'admin');
+  }
+
+  function syncAdminNav() {
+    const show = isAdminUser();
+    ['desk-admin', 'btn-lobby-admin', 'menu-admin'].forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) el.hidden = !show;
+    });
+  }
+
+  function levelBarHtml(user) {
+    if (!user) return '';
+    const lvl = user.level || 1;
+    const xp = user.xp || 0;
+    const next = user.xpNext != null ? user.xpNext : 0;
+    const pct = lvl >= 10 ? 100 : Math.min(100, Math.round((xp / Math.max(1, xp + next)) * 100));
+    return `<div class="level-row">
+      <span class="level-badge">Ур. ${lvl}</span>
+      <div class="level-track"><div class="level-fill" style="width:${pct}%"></div></div>
+      <small>${lvl >= 10 ? 'макс' : `${xp} XP · ещё ${next}`}</small>
+    </div>
+    <div class="meta">Кубки: ${user.cupsPlayed || 0} · Победы: ${user.cupsWon || 0}</div>`;
   }
 
   function renderAuth() {
@@ -281,7 +333,7 @@ window.EYE_UI = (() => {
     const user = A().getUser();
     const box = $('#lobby-user');
     if (box && user) {
-      box.innerHTML = `<div><strong>${user.name || user.login}</strong><small>@${user.login}</small></div>`;
+      box.innerHTML = `<div><strong>${user.name || user.login}</strong><small>@${user.login}${isAdminUser(user) ? ' · админ' : ''}</small></div>${levelBarHtml(user)}`;
     }
     let local = !!S().get();
     if (!local) {
@@ -296,10 +348,201 @@ window.EYE_UI = (() => {
     }
     if (hint) {
       hint.textContent = (local || cloudHasCareer)
-        ? 'Можно продолжить сохранение или создать новую команду.'
-        : 'Сохранений нет — создайте свою команду со случайным составом.';
+        ? 'Можно продолжить сохранение или создать новую команду. Онлайн-кубки доступны по уровню.'
+        : 'Сохранений нет — создайте команду или зайдите в онлайн-кубки по уровню.';
     }
+    const back = $('#onlinecups-back');
+    if (back) back.setAttribute('data-nav', S().get() ? 'more' : 'lobby');
+    const aback = $('#admin-back');
+    if (aback) aback.setAttribute('data-nav', S().get() ? 'more' : 'lobby');
+    syncAdminNav();
     syncDesktopUser();
+  }
+
+  async function renderOnlineCups() {
+    if (!A().isLoggedIn()) { show('auth'); return; }
+    syncAdminNav();
+    let bracket = null;
+    try {
+      const me = await A().refreshMe();
+      bracket = me?.bracket || null;
+    } catch {}
+    const user = A().getUser();
+    const card = $('#online-level-card');
+    if (card) {
+      const range = bracket ? bracket.label : `Ур. ${user?.level || 1}`;
+      card.innerHTML = `<strong>${user?.name || user?.login || 'Игрок'}</strong>
+        ${levelBarHtml(user)}
+        <p class="hint" style="margin:8px 0 0">Ваш диапазон: ${range}. Кубки других уровней недоступны.</p>`;
+    }
+    $all('#online-cups-tabs .tab').forEach((t) => t.classList.toggle('active', t.dataset.oc === onlineCupsTab));
+    const list = $('#online-cups-list');
+    const metaEl = $('#online-cups-meta');
+    if (list) list.innerHTML = '<div class="hint">Загрузка…</div>';
+    try {
+      const data = await O().listCups(onlineCupsTab === 'all' ? undefined : onlineCupsTab);
+      const cups = data.cups || [];
+      if (metaEl && data.meta) {
+        const next = data.meta.nextTick ? O().formatEta(data.meta.nextTick - Date.now()) : 'скоро';
+        metaEl.textContent = `Открыто: ${data.meta.cupsOpen || 0} · Ботов: ${data.meta.bots || 0} · След. тик ~${next}. Без реальных игроков кубок уходит в архив.`;
+      }
+      if (!cups.length) {
+        list.innerHTML = '<div class="hint">Кубков пока нет — подождите тик или зайдите как админ.</div>';
+      } else {
+        const uid = user?.id;
+        list.innerHTML = cups.map((c) => {
+          const mine = (c.entrants || []).some((e) => e.userId === uid);
+          const canJoin = c.status === 'open' && user && user.level >= c.minLevel && user.level <= c.maxLevel;
+          const eta = c.status === 'open' ? O().formatEta((c.startAt || 0) - Date.now()) : '';
+          return `<button type="button" class="menu-row cup-row" data-cup-open="${c.id}">
+            <span class="menu-ico">${c.size}</span>
+            <span class="menu-txt">
+              <strong>${c.name}</strong>
+              <small>${O().statusLabel(c.status)} · ${c.slotsFilled}/${c.size} · люди ${c.humans}${eta ? ' · старт ' + eta : ''}${mine ? ' · вы внутри' : ''}${!canJoin && c.status === 'open' ? ' · не ваш уровень' : ''}</small>
+            </span>
+          </button>`;
+        }).join('');
+      }
+    } catch (err) {
+      if (list) list.innerHTML = `<div class="hint">${err.message || 'Ошибка загрузки'}</div>`;
+    }
+    clearTimeout(onlinePollTimer);
+    onlinePollTimer = setTimeout(() => {
+      if (document.getElementById('screen-onlinecups')?.classList.contains('active')) renderOnlineCups();
+    }, 15000);
+  }
+
+  async function renderCupDetail() {
+    if (!A().isLoggedIn()) { show('auth'); return; }
+    if (!onlineCupId) { show('onlinecups'); return; }
+    const head = $('#cupdetail-head');
+    const actions = $('#cupdetail-actions');
+    const entrants = $('#cupdetail-entrants');
+    const bracket = $('#cupdetail-bracket');
+    const title = $('#cupdetail-title');
+    if (head) head.innerHTML = 'Загрузка…';
+    try {
+      const data = await O().getCup(onlineCupId);
+      const c = data.cup;
+      if (!c) throw new Error('Кубок не найден');
+      if (title) title.textContent = c.name;
+      const user = A().getUser();
+      const mine = (c.entrants || []).some((e) => e.userId === user?.id);
+      const canJoin = c.status === 'open' && user && user.level >= c.minLevel && user.level <= c.maxLevel && !mine;
+      if (head) {
+        head.innerHTML = `<div class="cup-detail-meta">
+          <div><strong>${O().statusLabel(c.status)}</strong> · ${c.bracketLabel} · ${c.slotsFilled}/${c.size}</div>
+          <div class="meta">Люди: ${c.humans} · Боты: ${c.bots}${c.status === 'open' ? ' · старт через ' + O().formatEta((c.startAt || 0) - Date.now()) : ''}</div>
+          ${c.champion ? `<div class="meta">Чемпион: <strong>${c.champion.clubName || c.champion.name}</strong>${c.champion.isBot ? ' (бот)' : ''}</div>` : ''}
+        </div>`;
+      }
+      if (actions) {
+        actions.innerHTML = `
+          ${canJoin ? `<button class="btn btn-primary" type="button" data-cup-join="${c.id}">Вступить</button>` : ''}
+          ${mine && c.status === 'open' ? `<button class="btn btn-glass" type="button" data-cup-leave="${c.id}">Выйти</button>` : ''}
+          <button class="btn btn-glass" type="button" data-nav="onlinecups">К списку</button>
+        `;
+      }
+      if (entrants) {
+        const rows = (c.entrants || []).map((e, i) =>
+          `<div class="cup-entrant${e.userId === user?.id ? ' mine' : ''}"><span>${i + 1}. ${e.clubName || e.name}</span><small>ур.${e.level}${e.isBot ? ' · бот' : ''} · ${e.strength || '—'}</small></div>`
+        ).join('') || '<div class="hint">Пока пусто</div>';
+        entrants.innerHTML = `<strong>Участники</strong><div class="cup-entrants">${rows}</div>`;
+      }
+      if (bracket) {
+        if (!(c.history || []).length) {
+          bracket.innerHTML = '<strong>Сетка</strong><p class="hint">Появится после старта. При старте свободные места заполнят боты вашего уровня.</p>';
+        } else {
+          bracket.innerHTML = `<strong>Сетка</strong>` + (c.history || []).map((h) => {
+            const ties = (h.ties || []).map((t) => {
+              const hs = t.score ? `${t.score[0]}:${t.score[1]}` : '—';
+              const hw = t.winnerId === t.home?.userId ? ' win' : '';
+              const aw = t.winnerId === t.away?.userId ? ' win' : '';
+              return `<div class="cup-tie"><span class="${hw}">${t.home?.clubName || t.home?.name}</span><b>${hs}</b><span class="${aw}">${t.away?.clubName || t.away?.name}</span></div>`;
+            }).join('');
+            return `<div class="cup-round"><div class="meta">${h.round}</div>${ties}</div>`;
+          }).join('');
+        }
+      }
+    } catch (err) {
+      if (head) head.innerHTML = `<div class="hint">${err.message || 'Ошибка'}</div>`;
+    }
+    clearTimeout(onlinePollTimer);
+    onlinePollTimer = setTimeout(() => {
+      if (document.getElementById('screen-cupdetail')?.classList.contains('active')) renderCupDetail();
+    }, 12000);
+  }
+
+  async function renderAdmin() {
+    if (!A().isLoggedIn()) { show('auth'); return; }
+    if (!isAdminUser()) {
+      toast('Только для администратора');
+      show('lobby');
+      return;
+    }
+    $all('#admin-tabs .tab').forEach((t) => t.classList.toggle('active', t.dataset.ad === adminTab));
+    const statsEl = $('#admin-stats');
+    const list = $('#admin-list');
+    if (list) list.innerHTML = '<div class="hint">Загрузка…</div>';
+    try {
+      const [stats, cupsPack, usersPack, botsPack] = await Promise.all([
+        O().adminStats(),
+        O().adminCups(),
+        O().adminUsers(),
+        O().adminBots()
+      ]);
+      adminCache = {
+        stats,
+        cups: cupsPack.cups || [],
+        archive: cupsPack.archive || [],
+        users: usersPack.users || [],
+        bots: botsPack.bots || []
+      };
+      if (statsEl) {
+        statsEl.innerHTML = `<strong>Сводка</strong>
+          <div class="admin-stats-grid">
+            <div><b>${stats.humans || 0}</b><small>игроки</small></div>
+            <div><b>${stats.bots || 0}</b><small>боты</small></div>
+            <div><b>${stats.cupsOpen || 0}</b><small>набор</small></div>
+            <div><b>${stats.cupsFinished || 0}</b><small>готово</small></div>
+            <div><b>${stats.archive || 0}</b><small>архив</small></div>
+            <div><b>${O().formatEta((stats.nextTick || 0) - Date.now())}</b><small>до тика</small></div>
+          </div>`;
+      }
+      if (adminTab === 'cups') {
+        list.innerHTML = (adminCache.cups.length ? adminCache.cups : []).map((c) =>
+          `<div class="admin-row">
+            <div><strong>${c.name}</strong><small>${O().statusLabel(c.status)} · ${c.slotsFilled}/${c.size} · люди ${c.humans}</small></div>
+            <div class="admin-row-actions">
+              ${c.status === 'open' ? `<button type="button" class="btn btn-tiny" data-admin-start="${c.id}">Старт</button>` : ''}
+              <button type="button" class="btn btn-tiny" data-cup-open="${c.id}">Открыть</button>
+              <button type="button" class="btn btn-tiny btn-danger-tiny" data-admin-del="${c.id}">Удал.</button>
+            </div>
+          </div>`
+        ).join('') || '<div class="hint">Нет активных кубков</div>';
+      } else if (adminTab === 'users') {
+        list.innerHTML = adminCache.users.map((u) =>
+          `<div class="admin-row">
+            <div><strong>${u.name || u.login}</strong><small>@${u.login} · ур.${u.level} · XP ${u.xp} · кубки ${u.cupsPlayed}/${u.cupsWon}</small></div>
+            <div class="admin-row-actions">
+              <button type="button" class="btn btn-tiny" data-admin-lvl="${u.id}" data-lvl="${Math.max(1, (u.level || 1) - 1)}">−</button>
+              <button type="button" class="btn btn-tiny" data-admin-lvl="${u.id}" data-lvl="${Math.min(10, (u.level || 1) + 1)}">+</button>
+            </div>
+          </div>`
+        ).join('') || '<div class="hint">Нет игроков</div>';
+      } else if (adminTab === 'bots') {
+        list.innerHTML = adminCache.bots.slice(0, 80).map((u) =>
+          `<div class="admin-row"><div><strong>${u.name}</strong><small>@${u.login} · ур.${u.level} · сила ${u.strength || '—'} · ${u.cupsPlayed || 0} игр</small></div></div>`
+        ).join('') || '<div class="hint">Ботов нет</div>';
+      } else {
+        list.innerHTML = adminCache.archive.map((a) =>
+          `<div class="admin-row"><div><strong>${a.name}</strong><small>${a.reason} · люди ${a.humans} · ${new Date(a.archivedAt).toLocaleString('ru-RU')}</small></div></div>`
+        ).join('') || '<div class="hint">Архив пуст</div>';
+      }
+    } catch (err) {
+      if (statsEl) statsEl.innerHTML = `<div class="hint">${err.message || 'Нет доступа'}</div>`;
+      if (list) list.innerHTML = '';
+    }
   }
 
   function fillCreateForm() {
@@ -2586,6 +2829,47 @@ window.EYE_UI = (() => {
     });
     $('#btn-save-cloud')?.addEventListener('click', () => cloudSave());
 
+    $('#online-cups-tabs')?.addEventListener('click', (e) => {
+      const tab = e.target.closest('[data-oc]');
+      if (!tab) return;
+      onlineCupsTab = tab.dataset.oc;
+      renderOnlineCups();
+    });
+
+    $('#admin-tabs')?.addEventListener('click', (e) => {
+      const tab = e.target.closest('[data-ad]');
+      if (!tab) return;
+      adminTab = tab.dataset.ad;
+      renderAdmin();
+    });
+
+    $('#admin-tick')?.addEventListener('click', async () => {
+      try {
+        const r = await O().adminTick();
+        toast(`Тик: ${ (r.results || []).length } действий`);
+        renderAdmin();
+      } catch (err) { toast(err.message || 'Ошибка тика'); }
+    });
+    $('#admin-bots')?.addEventListener('click', async () => {
+      try {
+        const r = await O().adminEnsureBots();
+        toast(`Ботов: ${r.count}`);
+        renderAdmin();
+      } catch (err) { toast(err.message || 'Ошибка'); }
+    });
+    $('#admin-refresh')?.addEventListener('click', () => renderAdmin());
+    $('#admin-cup-create')?.addEventListener('click', async () => {
+      try {
+        const size = Number($('#admin-cup-size')?.value || 8);
+        const bracketId = $('#admin-cup-bracket')?.value || 'l1_2';
+        const delay = Math.max(0, Number($('#admin-cup-delay')?.value || 60)) * 1000;
+        await O().adminCreateCup({ size, bracketId, startInMs: delay });
+        toast('Кубок создан');
+        adminTab = 'cups';
+        renderAdmin();
+      } catch (err) { toast(err.message || 'Не удалось создать'); }
+    });
+
     document.body.addEventListener('click', (e) => {
       const curBtn = e.target.closest('[data-cur]');
       if (curBtn && curBtn.classList.contains('cur-btn')) {
@@ -2597,6 +2881,75 @@ window.EYE_UI = (() => {
         const r = S().resolvePlayerRequest(req.dataset.req, req.dataset.reqAct || 'dismiss');
         toast(r.msg);
         renderInbox();
+        e.stopPropagation();
+      }
+      const openCup = e.target.closest('[data-cup-open]');
+      if (openCup) {
+        onlineCupId = openCup.dataset.cupOpen;
+        show('cupdetail');
+        e.stopPropagation();
+        return;
+      }
+      const joinBtn = e.target.closest('[data-cup-join]');
+      if (joinBtn) {
+        (async () => {
+          try {
+            const club = S().get() ? S().club()?.name : null;
+            const r = await O().joinCup(joinBtn.dataset.cupJoin, club);
+            toast(r.started ? 'Кубок стартовал!' : 'Вы в кубке');
+            try { await A().refreshMe(); } catch {}
+            onlineCupId = joinBtn.dataset.cupJoin;
+            renderCupDetail();
+          } catch (err) { toast(err.message || 'Не удалось вступить'); }
+        })();
+        e.stopPropagation();
+        return;
+      }
+      const leaveBtn = e.target.closest('[data-cup-leave]');
+      if (leaveBtn) {
+        (async () => {
+          try {
+            await O().leaveCup(leaveBtn.dataset.cupLeave);
+            toast('Вы вышли из кубка');
+            renderCupDetail();
+          } catch (err) { toast(err.message || 'Не удалось выйти'); }
+        })();
+        e.stopPropagation();
+        return;
+      }
+      const startBtn = e.target.closest('[data-admin-start]');
+      if (startBtn) {
+        (async () => {
+          try {
+            const r = await O().adminStartCup(startBtn.dataset.adminStart);
+            toast(r.action === 'started' ? 'Кубок запущен' : (r.action === 'archived' ? 'В архив (нет людей)' : 'Готово'));
+            renderAdmin();
+          } catch (err) { toast(err.message || 'Ошибка старта'); }
+        })();
+        e.stopPropagation();
+        return;
+      }
+      const delBtn = e.target.closest('[data-admin-del]');
+      if (delBtn) {
+        (async () => {
+          try {
+            await O().adminDeleteCup(delBtn.dataset.adminDel);
+            toast('Кубок удалён');
+            renderAdmin();
+          } catch (err) { toast(err.message || 'Ошибка удаления'); }
+        })();
+        e.stopPropagation();
+        return;
+      }
+      const lvlBtn = e.target.closest('[data-admin-lvl]');
+      if (lvlBtn) {
+        (async () => {
+          try {
+            await O().adminSetLevel(lvlBtn.dataset.adminLvl, Number(lvlBtn.dataset.lvl));
+            toast('Уровень обновлён');
+            renderAdmin();
+          } catch (err) { toast(err.message || 'Ошибка'); }
+        })();
         e.stopPropagation();
       }
     });

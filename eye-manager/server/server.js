@@ -6,6 +6,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { URL } = require('url');
+const { createCupsModule } = require('./cups');
 
 const PORT = Number(process.env.EYE_PORT || 9140);
 const ROOT = path.resolve(__dirname, '..');
@@ -13,6 +14,8 @@ const DATA_DIR = process.env.EYE_DATA || path.join(__dirname, 'data');
 const USERS_FILE = path.join(DATA_DIR, 'users.json');
 const SESSIONS_FILE = path.join(DATA_DIR, 'sessions.json');
 const SAVES = path.join(DATA_DIR, 'saves');
+const ADMIN_LOGIN = normalizeLogin(process.env.EYE_ADMIN_LOGIN || 'admin');
+const ADMIN_PASS = String(process.env.EYE_ADMIN_PASSWORD || 'eyeadmin');
 
 fs.mkdirSync(SAVES, { recursive: true });
 fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -37,14 +40,22 @@ function hashPassword(password, salt) {
 }
 
 function verifyPassword(password, salt, hash) {
-  const check = crypto.scryptSync(String(password), salt, 64).toString('hex');
-  return crypto.timingSafeEqual(Buffer.from(check, 'hex'), Buffer.from(hash, 'hex'));
+  try {
+    const check = crypto.scryptSync(String(password), salt, 64).toString('hex');
+    return crypto.timingSafeEqual(Buffer.from(check, 'hex'), Buffer.from(hash, 'hex'));
+  } catch {
+    return false;
+  }
 }
 
 function usersDb() {
   const db = loadJson(USERS_FILE, { users: {} });
   if (!db.users) db.users = {};
   return db;
+}
+
+function saveUsers(db) {
+  saveJson(USERS_FILE, db);
 }
 
 function sessionsDb() {
@@ -57,11 +68,21 @@ function publicUser(u) {
   return { id: u.id, login: u.login, name: u.name, createdAt: u.createdAt };
 }
 
+function normalizeLogin(login) {
+  return String(login || '').trim().toLowerCase().replace(/[^a-z0-9_\-\.]/g, '').slice(0, 24);
+}
+
+const cups = createCupsModule({
+  dataDir: DATA_DIR,
+  usersDb,
+  saveUsers,
+  publicUser
+});
+
 function createSession(userId) {
   const db = sessionsDb();
   const token = crypto.randomBytes(24).toString('hex');
   db.sessions[token] = { userId, createdAt: Date.now(), lastAt: Date.now() };
-  // prune old (>30d)
   const cut = Date.now() - 30 * 864e5;
   Object.keys(db.sessions).forEach((t) => {
     if ((db.sessions[t].lastAt || 0) < cut) delete db.sessions[t];
@@ -80,14 +101,63 @@ function authUser(req) {
   if (!s) return null;
   s.lastAt = Date.now();
   saveJson(SESSIONS_FILE, db);
-  const users = usersDb().users;
-  const u = users[s.userId];
+  const u = usersDb().users[s.userId];
   if (!u) return null;
+  cups.ensureUserProgress(u);
   return { user: u, token };
+}
+
+function requireAuth(req, res) {
+  const auth = authUser(req);
+  if (!auth) {
+    json(res, 401, { error: 'Не авторизован' });
+    return null;
+  }
+  return auth;
+}
+
+function requireAdmin(req, res) {
+  const auth = requireAuth(req, res);
+  if (!auth) return null;
+  if (auth.user.role !== 'admin' && auth.user.login !== ADMIN_LOGIN) {
+    json(res, 403, { error: 'Только для администратора' });
+    return null;
+  }
+  return auth;
 }
 
 function savePathFor(userId) {
   return path.join(SAVES, `user_${userId}.json`);
+}
+
+function ensureAdminUser() {
+  const db = usersDb();
+  let admin = Object.values(db.users).find((u) => u.login === ADMIN_LOGIN);
+  if (!admin) {
+    const id = crypto.randomBytes(8).toString('hex');
+    const { salt, hash } = hashPassword(ADMIN_PASS);
+    admin = {
+      id,
+      login: ADMIN_LOGIN,
+      name: 'Админ EYE',
+      salt,
+      hash,
+      createdAt: Date.now(),
+      role: 'admin',
+      isBot: false,
+      level: 10,
+      xp: cups.XP_THRESHOLDS[10],
+      cupsPlayed: 0,
+      cupsWon: 0
+    };
+    db.users[id] = admin;
+    saveUsers(db);
+    console.log(`[EYE] admin created · login=${ADMIN_LOGIN}`);
+  } else {
+    admin.role = 'admin';
+    cups.ensureUserProgress(admin);
+    saveUsers(db);
+  }
 }
 
 const MIME = {
@@ -117,7 +187,7 @@ function json(res, code, obj) {
     'Cache-Control': 'no-store',
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Eye-Token',
-    'Access-Control-Allow-Methods': 'GET,POST,OPTIONS'
+    'Access-Control-Allow-Methods': 'GET,POST,DELETE,OPTIONS'
   });
 }
 
@@ -143,9 +213,14 @@ function readBody(req) {
   });
 }
 
-function normalizeLogin(login) {
-  return String(login || '').trim().toLowerCase().replace(/[^a-z0-9_\-\.]/g, '').slice(0, 24);
+function persistUser(user) {
+  const db = usersDb();
+  db.users[user.id] = user;
+  saveUsers(db);
 }
+
+ensureAdminUser();
+cups.ensureBotPool();
 
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
@@ -156,7 +231,12 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (pathname === '/api/health') {
-    return json(res, 200, { ok: true, service: 'eye-manager', ts: Date.now() });
+    return json(res, 200, {
+      ok: true,
+      service: 'eye-manager',
+      ts: Date.now(),
+      cups: cups.stats()
+    });
   }
 
   // ——— AUTH ———
@@ -168,17 +248,21 @@ const server = http.createServer(async (req, res) => {
       const name = String(body.name || login).trim().slice(0, 32);
       if (login.length < 3) return json(res, 400, { error: 'Логин минимум 3 символа (a-z, 0-9)' });
       if (password.length < 4) return json(res, 400, { error: 'Пароль минимум 4 символа' });
+      if (login === ADMIN_LOGIN) return json(res, 400, { error: 'Логин зарезервирован' });
       const db = usersDb();
       if (Object.values(db.users).some((u) => u.login === login)) {
         return json(res, 409, { error: 'Логин уже занят' });
       }
       const id = crypto.randomBytes(8).toString('hex');
       const { salt, hash } = hashPassword(password);
-      const user = { id, login, name, salt, hash, createdAt: Date.now() };
+      const user = {
+        id, login, name, salt, hash, createdAt: Date.now(),
+        role: 'user', isBot: false, level: 1, xp: 0, cupsPlayed: 0, cupsWon: 0
+      };
       db.users[id] = user;
-      saveJson(USERS_FILE, db);
+      saveUsers(db);
       const token = createSession(id);
-      return json(res, 200, { ok: true, token, user: publicUser(user) });
+      return json(res, 200, { ok: true, token, user: cups.enrichPublic(user) });
     } catch (e) {
       return json(res, 500, { error: String(e.message || e) });
     }
@@ -191,13 +275,19 @@ const server = http.createServer(async (req, res) => {
       const password = String(body.password || '');
       const db = usersDb();
       const user = Object.values(db.users).find((u) => u.login === login);
-      if (!user || !verifyPassword(password, user.salt, user.hash)) {
+      if (!user || user.isBot || !verifyPassword(password, user.salt, user.hash)) {
         return json(res, 401, { error: 'Неверный логин или пароль' });
       }
+      cups.ensureUserProgress(user);
+      persistUser(user);
       const token = createSession(user.id);
-      const file = savePathFor(user.id);
-      const hasCareer = fs.existsSync(file);
-      return json(res, 200, { ok: true, token, user: publicUser(user), hasCareer });
+      const hasCareer = fs.existsSync(savePathFor(user.id));
+      return json(res, 200, {
+        ok: true,
+        token,
+        user: cups.enrichPublic(user),
+        hasCareer
+      });
     } catch (e) {
       return json(res, 500, { error: String(e.message || e) });
     }
@@ -214,15 +304,21 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (pathname === '/api/me' && req.method === 'GET') {
-    const auth = authUser(req);
-    if (!auth) return json(res, 401, { error: 'Не авторизован' });
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    persistUser(auth.user);
     const hasCareer = fs.existsSync(savePathFor(auth.user.id));
-    return json(res, 200, { ok: true, user: publicUser(auth.user), hasCareer });
+    return json(res, 200, {
+      ok: true,
+      user: cups.enrichPublic(auth.user),
+      hasCareer,
+      bracket: cups.bracketForLevel(auth.user.level || 1)
+    });
   }
 
   if (pathname === '/api/career' && req.method === 'GET') {
-    const auth = authUser(req);
-    if (!auth) return json(res, 401, { error: 'Не авторизован' });
+    const auth = requireAuth(req, res);
+    if (!auth) return;
     const file = savePathFor(auth.user.id);
     if (!fs.existsSync(file)) return json(res, 404, { error: 'Нет сохранения' });
     const payload = JSON.parse(fs.readFileSync(file, 'utf8'));
@@ -230,8 +326,8 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (pathname === '/api/career' && req.method === 'POST') {
-    const auth = authUser(req);
-    if (!auth) return json(res, 401, { error: 'Не авторизован' });
+    const auth = requireAuth(req, res);
+    if (!auth) return;
     try {
       const body = JSON.parse((await readBody(req)).toString('utf8'));
       if (!body || !body.state) return json(res, 400, { error: 'state required' });
@@ -249,7 +345,7 @@ const server = http.createServer(async (req, res) => {
     }
   }
 
-  // legacy anonymous save (kept for compatibility)
+  // legacy anonymous save
   if (pathname === '/api/save' && req.method === 'POST') {
     const auth = authUser(req);
     try {
@@ -288,6 +384,139 @@ const server = http.createServer(async (req, res) => {
     return json(res, 200, { saves: [] });
   }
 
+  // ——— ONLINE CUPS ———
+  if (pathname === '/api/cups' && req.method === 'GET') {
+    const status = url.searchParams.get('status') || undefined;
+    return json(res, 200, {
+      ok: true,
+      cups: cups.listCups({ status }),
+      meta: cups.stats()
+    });
+  }
+
+  if (pathname === '/api/cups/meta' && req.method === 'GET') {
+    return json(res, 200, { ok: true, ...cups.stats() });
+  }
+
+  if (pathname.startsWith('/api/cups/') && req.method === 'GET') {
+    const id = pathname.slice('/api/cups/'.length).split('/')[0];
+    if (!id || id === 'meta') return json(res, 404, { error: 'Нет' });
+    const cup = cups.getCup(id);
+    if (!cup) return json(res, 404, { error: 'Кубок не найден' });
+    return json(res, 200, { ok: true, cup });
+  }
+
+  if (pathname.match(/^\/api\/cups\/[^/]+\/join$/) && req.method === 'POST') {
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    const id = pathname.split('/')[3];
+    try {
+      const body = JSON.parse((await readBody(req)).toString('utf8') || '{}');
+      const r = cups.joinCup(id, auth.user, body.clubName);
+      if (!r.ok) return json(res, 400, r);
+      return json(res, 200, r);
+    } catch (e) {
+      return json(res, 500, { error: String(e.message || e) });
+    }
+  }
+
+  if (pathname.match(/^\/api\/cups\/[^/]+\/leave$/) && req.method === 'POST') {
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    const id = pathname.split('/')[3];
+    const r = cups.leaveCup(id, auth.user.id);
+    if (!r.ok) return json(res, 400, r);
+    return json(res, 200, r);
+  }
+
+  // ——— ADMIN ———
+  if (pathname === '/api/admin/stats' && req.method === 'GET') {
+    if (!requireAdmin(req, res)) return;
+    return json(res, 200, { ok: true, ...cups.stats() });
+  }
+
+  if (pathname === '/api/admin/users' && req.method === 'GET') {
+    if (!requireAdmin(req, res)) return;
+    const list = Object.values(usersDb().users)
+      .filter((u) => !u.isBot)
+      .map((u) => cups.enrichPublic(u));
+    return json(res, 200, { ok: true, users: list });
+  }
+
+  if (pathname === '/api/admin/bots' && req.method === 'GET') {
+    if (!requireAdmin(req, res)) return;
+    cups.ensureBotPool();
+    const list = Object.values(usersDb().users)
+      .filter((u) => u.isBot)
+      .map((u) => cups.enrichPublic(u));
+    return json(res, 200, { ok: true, bots: list });
+  }
+
+  if (pathname === '/api/admin/bots/ensure' && req.method === 'POST') {
+    if (!requireAdmin(req, res)) return;
+    const bots = cups.ensureBotPool(8);
+    return json(res, 200, { ok: true, count: bots.length });
+  }
+
+  if (pathname === '/api/admin/users/level' && req.method === 'POST') {
+    if (!requireAdmin(req, res)) return;
+    try {
+      const body = JSON.parse((await readBody(req)).toString('utf8'));
+      const db = usersDb();
+      const u = db.users[body.userId];
+      if (!u) return json(res, 404, { error: 'Нет пользователя' });
+      const level = Math.max(1, Math.min(10, Number(body.level) || 1));
+      u.level = level;
+      u.xp = cups.XP_THRESHOLDS[level] || 0;
+      saveUsers(db);
+      return json(res, 200, { ok: true, user: cups.enrichPublic(u) });
+    } catch (e) {
+      return json(res, 500, { error: String(e.message || e) });
+    }
+  }
+
+  if (pathname === '/api/admin/cups' && req.method === 'GET') {
+    if (!requireAdmin(req, res)) return;
+    return json(res, 200, {
+      ok: true,
+      cups: cups.listCups(),
+      archive: cups.loadArchive().entries.slice(0, 40)
+    });
+  }
+
+  if (pathname === '/api/admin/cups' && req.method === 'POST') {
+    if (!requireAdmin(req, res)) return;
+    try {
+      const body = JSON.parse((await readBody(req)).toString('utf8') || '{}');
+      const cup = cups.adminCreateCup(body);
+      return json(res, 200, { ok: true, cup });
+    } catch (e) {
+      return json(res, 500, { error: String(e.message || e) });
+    }
+  }
+
+  if (pathname.match(/^\/api\/admin\/cups\/[^/]+\/start$/) && req.method === 'POST') {
+    if (!requireAdmin(req, res)) return;
+    const id = pathname.split('/')[4];
+    const r = cups.adminForceStart(id);
+    if (!r.ok) return json(res, 400, r);
+    return json(res, 200, r);
+  }
+
+  if (pathname.match(/^\/api\/admin\/cups\/[^/]+$/) && req.method === 'DELETE') {
+    if (!requireAdmin(req, res)) return;
+    const id = pathname.split('/')[4];
+    const r = cups.adminDeleteCup(id);
+    if (!r.ok) return json(res, 400, r);
+    return json(res, 200, r);
+  }
+
+  if (pathname === '/api/admin/tick' && req.method === 'POST') {
+    if (!requireAdmin(req, res)) return;
+    const r = cups.tick();
+    return json(res, 200, r);
+  }
+
   // static
   let target = pathname === '/' ? '/index.html' : pathname;
   let file = safeJoin(ROOT, target);
@@ -311,4 +540,5 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log(`[EYE] listening on http://0.0.0.0:${PORT}`);
   console.log(`[EYE] root ${ROOT}`);
   console.log(`[EYE] data ${DATA_DIR}`);
+  cups.startScheduler();
 });

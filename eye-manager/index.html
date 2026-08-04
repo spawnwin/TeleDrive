@@ -56,6 +56,11 @@
           <button type="button" data-nav="inbox" class="desk-btn"><span>✉</span>Почта</button>
         </div>
         <div class="nav-group">
+          <span class="nav-group-label">Онлайн</span>
+          <button type="button" data-nav="onlinecups" class="desk-btn"><span>◎</span>Кубки онлайн</button>
+          <button type="button" data-nav="admin" class="desk-btn" id="desk-admin" hidden><span>✦</span>Админ</button>
+        </div>
+        <div class="nav-group">
           <span class="nav-group-label">Система</span>
           <button type="button" data-nav="history" class="desk-btn"><span>◷</span>История</button>
           <button type="button" data-nav="more" class="desk-btn"><span>⚙</span>Настройки</button>
@@ -111,9 +116,85 @@
       <div class="lobby-actions">
         <button class="btn btn-primary btn-glow" id="btn-continue" type="button" hidden>Продолжить</button>
         <button class="btn btn-glass" id="btn-new" type="button">Создать команду</button>
+        <button class="btn btn-glass" data-nav="onlinecups" type="button">Кубки онлайн</button>
+        <button class="btn btn-glass" data-nav="admin" id="btn-lobby-admin" type="button" hidden>Админ-панель</button>
         <button class="btn btn-glass" id="btn-logout" type="button">Выйти из аккаунта</button>
       </div>
       <p class="hint" id="lobby-hint"></p>
+    </section>
+
+    <!-- ONLINE CUPS -->
+    <section id="screen-onlinecups" class="screen">
+      <header class="subhead">
+        <button class="icon-back" data-nav="lobby" id="onlinecups-back">‹</button>
+        <h2>Кубки онлайн</h2>
+      </header>
+      <div class="glass-panel online-level-card" id="online-level-card"></div>
+      <p class="hint" id="online-cups-meta">Кубки создаются и стартуют каждые 5 минут. Если нет реальных игроков — кубок уходит в архив.</p>
+      <div class="tabs" id="online-cups-tabs">
+        <button type="button" class="tab active" data-oc="open">Набор</button>
+        <button type="button" class="tab" data-oc="finished">Итоги</button>
+        <button type="button" class="tab" data-oc="all">Все</button>
+      </div>
+      <div class="list" id="online-cups-list"></div>
+    </section>
+
+    <!-- CUP DETAIL -->
+    <section id="screen-cupdetail" class="screen">
+      <header class="subhead">
+        <button class="icon-back" data-nav="onlinecups">‹</button>
+        <h2 id="cupdetail-title">Кубок</h2>
+      </header>
+      <div class="glass-panel" id="cupdetail-head" style="padding:14px"></div>
+      <div class="filter-row" id="cupdetail-actions" style="margin-top:10px"></div>
+      <div class="glass-panel" id="cupdetail-entrants" style="padding:14px;margin-top:10px"></div>
+      <div class="glass-panel" id="cupdetail-bracket" style="padding:14px;margin-top:10px"></div>
+    </section>
+
+    <!-- ADMIN -->
+    <section id="screen-admin" class="screen">
+      <header class="subhead">
+        <button class="icon-back" data-nav="lobby" id="admin-back">‹</button>
+        <h2>Админ-панель</h2>
+      </header>
+      <div class="glass-panel" id="admin-stats" style="padding:14px"></div>
+      <div class="filter-row" style="margin-top:10px;flex-wrap:wrap;gap:8px">
+        <button class="btn btn-primary" id="admin-tick" type="button">Тик кубков</button>
+        <button class="btn btn-glass" id="admin-bots" type="button">Досыпать ботов</button>
+        <button class="btn btn-glass" id="admin-refresh" type="button">Обновить</button>
+      </div>
+      <div class="tabs" id="admin-tabs" style="margin-top:12px">
+        <button type="button" class="tab active" data-ad="cups">Кубки</button>
+        <button type="button" class="tab" data-ad="users">Игроки</button>
+        <button type="button" class="tab" data-ad="bots">Боты</button>
+        <button type="button" class="tab" data-ad="archive">Архив</button>
+      </div>
+      <div class="glass-panel" id="admin-create" style="padding:14px;margin-top:10px">
+        <strong>Создать кубок</strong>
+        <div class="create-row" style="margin-top:8px">
+          <label>Размер
+            <select id="admin-cup-size">
+              <option value="4">4</option>
+              <option value="8" selected>8</option>
+              <option value="16">16</option>
+            </select>
+          </label>
+          <label>Уровень
+            <select id="admin-cup-bracket">
+              <option value="l1_2">1–2</option>
+              <option value="l3_4">3–4</option>
+              <option value="l5_6">5–6</option>
+              <option value="l7_8">7–8</option>
+              <option value="l9_10">9–10</option>
+            </select>
+          </label>
+          <label>Старт через (сек)
+            <input type="number" id="admin-cup-delay" value="60" min="0" step="5" />
+          </label>
+        </div>
+        <button class="btn btn-primary" id="admin-cup-create" type="button" style="margin-top:8px">Создать</button>
+      </div>
+      <div class="list" id="admin-list" style="margin-top:10px"></div>
     </section>
 
     <!-- LOGIN (window over home) -->
@@ -547,6 +628,13 @@
           </div>
         </section>
         <section class="menu-section">
+          <h3 class="menu-section-title">Онлайн</h3>
+          <div class="menu-list">
+            <button type="button" class="menu-row" data-nav="onlinecups"><span class="menu-ico">◎</span><span class="menu-txt"><strong>Кубки онлайн</strong><small>Автостарт · уровни · боты</small></span></button>
+            <button type="button" class="menu-row" data-nav="admin" id="menu-admin" hidden><span class="menu-ico">✦</span><span class="menu-txt"><strong>Админ-панель</strong><small>Игроки · боты · кубки</small></span></button>
+          </div>
+        </section>
+        <section class="menu-section">
           <h3 class="menu-section-title">Карьера</h3>
           <div class="menu-list">
             <button type="button" class="menu-row" data-nav="history"><span class="menu-ico">◷</span><span class="menu-txt"><strong>История</strong><small>Матчи и сезоны</small></span></button>
@@ -564,7 +652,7 @@
               <button type="button" data-cur="EUR" class="cur-btn">Евро €</button>
             </div>
           </div>
-          <p class="hint" id="eye-build-ver" style="margin:0 0 10px">EYE · сборка v40</p>
+          <p class="hint" id="eye-build-ver" style="margin:0 0 10px">EYE · сборка v41</p>
           <div class="menu-actions">
             <button class="btn btn-glass" id="btn-save-cloud">Сохранить в облако</button>
             <button class="btn btn-glass" id="btn-logout-more">Выйти из аккаунта</button>
@@ -707,6 +795,7 @@
   <script src="js/engine.js"></script>
   <script src="js/board.js"></script>
   <script src="js/auth.js"></script>
+  <script src="js/online.js"></script>
   <script src="js/state.js"></script>
   <script src="js/ui.js"></script>
   <script src="js/app.js"></script>
