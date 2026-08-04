@@ -1705,7 +1705,23 @@ window.EYE_UI = (() => {
     });
 
     $('#btn-auth')?.addEventListener('click', () => show('auth'));
-    $('#btn-register')?.addEventListener('click', () => show('register'));
+    $('#btn-register')?.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      show('register');
+    });
+    // Delegated fallback — home buttons must always open windows
+    document.body.addEventListener('click', (e) => {
+      if (e.target.closest('#btn-register')) {
+        e.preventDefault();
+        show('register');
+        return;
+      }
+      if (e.target.closest('#btn-auth')) {
+        e.preventDefault();
+        show('auth');
+      }
+    }, true);
     $('#btn-new')?.addEventListener('click', () => {
       if (!A().isLoggedIn()) { show('auth'); toast('Сначала войдите'); return; }
       show('create');
