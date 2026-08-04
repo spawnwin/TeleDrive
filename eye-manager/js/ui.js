@@ -11,6 +11,8 @@ window.EYE_UI = (() => {
   let matchPaused = false;
   let matchSpeed = 1;
   let matchPlaying = false;
+  let secondHalfRunning = false;
+  let matchFinishing = false;
   let transferTab = 'market';
   let statsTab = 'goals';
   let selectedPlayerId = null;
@@ -34,6 +36,12 @@ window.EYE_UI = (() => {
   function show(id) {
     if (id === 'home' && A().isLoggedIn()) id = 'lobby';
     if (id === 'lobby' && !A().isLoggedIn()) id = 'home';
+
+    // Block leaving a live match (finishMatch clears matchPlaying before show('result'))
+    if (matchPlaying && id !== 'match') {
+      toast('Сначала завершите матч или нажмите «Пропустить»');
+      return;
+    }
 
     const isWindow = ENTRY_WINDOWS.has(id);
 
@@ -741,7 +749,8 @@ window.EYE_UI = (() => {
   function openDrawer() {
     const app = document.getElementById('app');
     if (!app || app.classList.contains('menu-mode')) return;
-    if (matchPlaying && $('#ht-panel') && !$('#ht-panel').hidden) return;
+    if (matchPlaying && isHtOpen()) return;
+    if (matchPlaying) return; // don't open drawer mid-match
     const d = $('#drawer');
     const s = $('#drawer-scrim');
     if (!d) return;
@@ -1488,6 +1497,8 @@ window.EYE_UI = (() => {
     const scrim = $('#ht-scrim');
     if (scrim) scrim.hidden = false;
     panel.hidden = false;
+    document.body.classList.add('ht-open');
+    closeDrawer();
     matchPaused = false;
     syncPauseButton();
     const used = matchCtx?.subsUsed || 0;
@@ -1529,66 +1540,95 @@ window.EYE_UI = (() => {
     const scrim = $('#ht-scrim');
     if (panel) panel.hidden = true;
     if (scrim) scrim.hidden = true;
+    document.body.classList.remove('ht-open');
   }
 
-  async function continueSecondHalf() {
+  function isHtOpen() {
+    const panel = $('#ht-panel');
+    return !!(panel && !panel.hidden);
+  }
+
+  async function continueSecondHalf(opts = {}) {
+    if (secondHalfRunning || matchFinishing) return;
+    const next = matchCtx;
+    if (!next?.half1 || !matchPlaying) return;
+    secondHalfRunning = true;
     closeHtPanel();
     matchAbort = false;
     matchSkipHalf = false;
     matchPaused = false;
     syncPauseButton();
-    const next = matchCtx;
-    const half1 = next.half1;
-    const home = S().clubById(next.match.home);
-    const away = S().clubById(next.match.away);
-    const feed = $('#match-feed');
-    const canvas = $('#match-canvas');
-    const ctx = canvas.getContext('2d');
-    let score = half1.score;
-    let ball = { x: canvas.width / 2, y: canvas.height / 2 };
+    try {
+      const half1 = next.half1;
+      const home = S().clubById(next.match.home);
+      const away = S().clubById(next.match.away);
+      const feed = $('#match-feed');
+      const canvas = $('#match-canvas');
+      const ctx = canvas.getContext('2d');
+      let score = half1.score;
+      let ball = { x: canvas.width / 2, y: canvas.height / 2 };
 
-    const onEvent = (ev) => {
-      if (ev.type === 'goal') {
-        score = ev.score || score;
+      const onEvent = (ev) => {
+        if (ev.type === 'goal') {
+          score = ev.score || score;
+          $('#m-score').textContent = score.join(':');
+          showGoalFlash();
+        }
+        const div = document.createElement('div');
+        div.className = 'feed-item' + (ev.type === 'goal' ? ' goal' : ev.type === 'red' ? ' red' : ev.type === 'card' ? ' card' : '');
+        div.textContent = `${ev.minute}′  ${ev.text}`;
+        feed.prepend(div);
+      };
+      const onTick = (minute, result) => {
+        $('#m-min').textContent = minute + '′';
+        $('#m-progress').style.width = Math.min(100, (minute / 90) * 100) + '%';
+        drawMatchFrame(ctx, canvas.width, canvas.height, minute, { home: home.color, away: away.color }, ball);
+        $('#match-stats').innerHTML = `
+          <div><strong>${result.stats.possession[0]}%</strong>владение</div>
+          <div><strong>${result.stats.shots[0]}-${result.stats.shots[1]}</strong>удары</div>
+          <div><strong>${result.stats.onTarget[0]}-${result.stats.onTarget[1]}</strong>в створ</div>
+        `;
+      };
+
+      const half2 = E().simulateMatch(home, away, {
+        startMinute: 46, endMinute: 90, score: half1.score, stats: half1.stats,
+        scorersH: half1.scorersH, scorersA: half1.scorersA,
+        applyFatigue: true, finalizeStats: true
+      });
+      if (!opts.skip) {
+        await E().playLive(half2, onEvent, onTick, liveOpts(46, 90));
+      } else {
+        // Dump feed quickly for skip-from-HT
+        (half2.events || []).forEach(onEvent);
+        score = half2.score;
         $('#m-score').textContent = score.join(':');
-        showGoalFlash();
+        $('#m-min').textContent = '90′';
+        onTick(90, half2);
       }
-      const div = document.createElement('div');
-      div.className = 'feed-item' + (ev.type === 'goal' ? ' goal' : ev.type === 'red' ? ' red' : ev.type === 'card' ? ' card' : '');
-      div.textContent = `${ev.minute}′  ${ev.text}`;
-      feed.prepend(div);
-    };
-    const onTick = (minute, result) => {
-      $('#m-min').textContent = minute + '′';
-      $('#m-progress').style.width = Math.min(100, (minute / 90) * 100) + '%';
-      drawMatchFrame(ctx, canvas.width, canvas.height, minute, { home: home.color, away: away.color }, ball);
-      $('#match-stats').innerHTML = `
-        <div><strong>${result.stats.possession[0]}%</strong>владение</div>
-        <div><strong>${result.stats.shots[0]}-${result.stats.shots[1]}</strong>удары</div>
-        <div><strong>${result.stats.onTarget[0]}-${result.stats.onTarget[1]}</strong>в створ</div>
-      `;
-    };
-
-    const half2 = E().simulateMatch(home, away, {
-      startMinute: 46, endMinute: 90, score: half1.score, stats: half1.stats,
-      scorersH: half1.scorersH, scorersA: half1.scorersA,
-      applyFatigue: true, finalizeStats: true
-    });
-    await E().playLive(half2, onEvent, onTick, liveOpts(46, 90));
-    const result = E().mergeResults(half1, half2);
-    $('#m-progress').style.width = '100%';
-    finishMatch(next, result);
+      const result = E().mergeResults(half1, half2);
+      $('#m-progress').style.width = '100%';
+      finishMatch(next, result);
+    } finally {
+      secondHalfRunning = false;
+    }
   }
 
   function finishMatch(next, result) {
-    if (next.type === 'ucl') S().recordUclMatch(next.match, result);
-    else if (next.type === 'cup') S().recordCupMatch(next.match, result);
-    else S().recordPlayerMatch(next.match, result);
-    matchPlaying = false;
-    matchPaused = false;
-    matchCtx = null;
-    show('result');
-    cloudSave(true);
+    if (matchFinishing || !next || !matchPlaying) return;
+    matchFinishing = true;
+    try {
+      if (next.type === 'ucl') S().recordUclMatch(next.match, result);
+      else if (next.type === 'cup') S().recordCupMatch(next.match, result);
+      else S().recordPlayerMatch(next.match, result);
+      matchPlaying = false;
+      matchPaused = false;
+      matchCtx = null;
+      closeHtPanel();
+      show('result');
+      cloudSave(true);
+    } finally {
+      matchFinishing = false;
+    }
   }
 
   function renderResult() {
@@ -1618,7 +1658,7 @@ window.EYE_UI = (() => {
     $('#result-card').innerHTML = `
       <div class="result-layout">
         <div class="result-scoreboard">
-          <div class="next-label">${last.derby ? 'Дерби · ' + last.derby : 'Итог матча'}</div>
+          <div class="next-label">${last.derby ? 'Дерби · ' + last.derby : 'Итог матча'}${last.koDecided === 'et' ? ' · доп. время' : ''}${last.competition ? ' · ' + last.competition : ''}</div>
           <div>${last.home}</div>
           <div class="score">${hg}:${ag}</div>
           <div>${last.away}</div>
@@ -1702,9 +1742,9 @@ window.EYE_UI = (() => {
       }
       const htForm = e.target.closest('[data-ht-form]');
       if (htForm) {
+        // Keep current XI during HT — autoLineup would wipe half-time subs
         S().setTactics(htForm.dataset.htForm, null);
-        S().autoLineup();
-        toast('Схема: ' + htForm.dataset.htForm);
+        toast('Схема: ' + htForm.dataset.htForm + ' · состав сохранён');
         showHtPanel();
         return;
       }
@@ -1815,6 +1855,13 @@ window.EYE_UI = (() => {
     }, true);
     $('#btn-new')?.addEventListener('click', () => {
       if (!A().isLoggedIn()) { show('auth'); toast('Сначала войдите'); return; }
+      let hasLocal = !!S().get();
+      if (!hasLocal) {
+        try { hasLocal = !!localStorage.getItem(S().KEY); } catch { hasLocal = false; }
+      }
+      if ((hasLocal || cloudHasCareer) && !confirm('Начать новую карьеру? Текущее сохранение будет перезаписано.')) {
+        return;
+      }
       show('create');
     });
     document.body.addEventListener('click', (e) => {
@@ -1853,26 +1900,51 @@ window.EYE_UI = (() => {
     });
     $('#btn-continue')?.addEventListener('click', async () => {
       if (!A().isLoggedIn()) { show('auth'); return; }
-      if (S().load()) { show('hub'); return; }
-      toast('Загрузка из облака…');
-      const remote = await A().loadCareer();
-      if (!remote) { toast('Сохранение не найдено'); return; }
-      try { localStorage.setItem(S().KEY, JSON.stringify(remote)); } catch {}
-      if (S().load()) { toast('Карьера загружена'); show('hub'); }
-      else toast('Не удалось загрузить');
+      toast('Синхронизация…');
+      try {
+        const remote = await A().loadCareer();
+        if (remote) {
+          let preferRemote = true;
+          let localNewer = false;
+          try {
+            const raw = localStorage.getItem(S().KEY);
+            if (raw) {
+              const local = JSON.parse(raw);
+              const lS = local.season || 0, lW = local.week || 0;
+              const rS = remote.season || 0, rW = remote.week || 0;
+              preferRemote = rS > lS || (rS === lS && rW >= lW);
+              localNewer = !preferRemote;
+            }
+          } catch { preferRemote = true; }
+          if (preferRemote) {
+            try { localStorage.setItem(S().KEY, JSON.stringify(remote)); } catch {}
+          }
+          if (S().load()) {
+            cloudHasCareer = true;
+            if (localNewer) cloudSave(true);
+            toast(preferRemote ? 'Карьера загружена' : 'Локальное сохранение новее — продолжаем его');
+            show('hub');
+            return;
+          }
+        }
+      } catch {}
+      if (S().load()) {
+        cloudHasCareer = true;
+        toast('Карьера загружена');
+        show('hub');
+        return;
+      }
+      toast('Сохранение не найдено');
     });
-    $('#btn-logout')?.addEventListener('click', async () => {
+    async function doLogout() {
       await A().logout();
+      S().clear();
       cloudHasCareer = false;
       toast('Вы вышли');
       show('home');
-    });
-    $('#btn-logout-more')?.addEventListener('click', async () => {
-      await A().logout();
-      cloudHasCareer = false;
-      toast('Вы вышли');
-      show('home');
-    });
+    }
+    $('#btn-logout')?.addEventListener('click', () => doLogout());
+    $('#btn-logout-more')?.addEventListener('click', () => doLogout());
     $('#form-login')?.addEventListener('submit', async (e) => {
       e.preventDefault();
       const fd = new FormData(e.target);
@@ -1903,7 +1975,7 @@ window.EYE_UI = (() => {
         cloudHasCareer = false;
         $('#register-msg').textContent = '';
         toast('Аккаунт создан');
-        show('create');
+        show('lobby');
       } catch (err) {
         $('#register-msg').textContent = err.message;
       }
@@ -1912,6 +1984,7 @@ window.EYE_UI = (() => {
       if (e.key !== 'Escape') return;
       if ($('#drawer')?.classList.contains('open')) { closeDrawer(); return; }
       if ($('#bid-modal') && !$('#bid-modal').hidden) { closeBidModal(); return; }
+      if (isHtOpen()) { continueSecondHalf(); return; }
       if (document.getElementById('app')?.classList.contains('entry-open')) {
         const createOpen = $('#screen-create')?.classList.contains('entry-open');
         show(createOpen && A().isLoggedIn() ? 'lobby' : 'home');
@@ -1957,18 +2030,29 @@ window.EYE_UI = (() => {
       renderPrematch();
     });
     $('#btn-skip-match')?.addEventListener('click', () => {
+      if (isHtOpen()) {
+        continueSecondHalf({ skip: true });
+        return;
+      }
+      if (!matchPlaying) return;
       matchPaused = false;
       matchAbort = true;
       syncPauseButton();
     });
     $('#btn-skip-half')?.addEventListener('click', () => {
+      if (isHtOpen()) {
+        // Already at HT — same as continue
+        continueSecondHalf();
+        return;
+      }
+      if (!matchPlaying) return;
       matchPaused = false;
       matchSkipHalf = true;
       if (matchCtx?.half1) matchAbort = true;
       syncPauseButton();
     });
     $('#btn-pause-match')?.addEventListener('click', () => {
-      if (!matchPlaying || !$('#ht-panel').hidden) return;
+      if (!matchPlaying || isHtOpen()) return;
       matchPaused = !matchPaused;
       syncPauseButton();
     });

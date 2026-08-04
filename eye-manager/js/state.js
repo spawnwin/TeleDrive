@@ -1791,7 +1791,12 @@ window.EYE_STATE = (() => {
     if (score[0] === score[1]) {
       score = Math.random() < 0.5 ? [score[0] + 1, score[1]] : [score[0], score[1] + 1];
       result.score = score;
-      result.events.push({ minute: 95, type: 'goal', text: 'Победитель в доп. времени!', score });
+      result.koDecided = 'et';
+      result.events = result.events || [];
+      result.events.push({
+        minute: 105, type: 'goal', side: score[0] > score[1] ? 'home' : 'away',
+        text: 'Победа в дополнительное время!', score
+      });
     }
     match.score = score;
     trackStats(result);
@@ -1863,7 +1868,6 @@ window.EYE_STATE = (() => {
     if (!state?.sacked) return { ok: false, msg: 'Вы не уволены' };
     const tpl = W().clubTemplate(clubId);
     if (!tpl) return { ok: false, msg: 'Клуб не найден' };
-    // clear old player flag
     const old = club();
     if (old) old.isPlayer = false;
     const next = state.clubs.find(c => c.id === clubId);
@@ -1877,9 +1881,25 @@ window.EYE_STATE = (() => {
     const lc = leagueClubs();
     state.table = emptySeasonTable(lc);
     state.fixtures = buildFixtures(lc.map(c => c.id));
+    state.otherLeagues = buildOtherLeagues(state.clubs, next.leagueId);
     state.week = 1;
+    state.day = 1;
+    state.phase = 'season';
     state.cup = createCup(lc);
+    state.ucl = createUcl(state.clubs);
+    state.cupBest = '';
+    state.uclBest = '';
     state.stats = { scorers: {}, assisters: {}, motm: {} };
+    state.lastResult = null;
+    state.pendingPress = null;
+    state.pendingCounters = {};
+    state.pendingWage = {};
+    state.transferOffers = [];
+    state.knockoutPlayedWeek = null;
+    state.sponsor = null;
+    ensureClubExtras(next);
+    pickSponsor(next);
+    refillYouth(next, true);
     state.inbox.unshift({
       id: D().uid('m'), type: 'welcome', title: 'Новый контракт',
       body: `Вы возглавили «${next.name}». Цель: ${state.board.targetLabel}.`,
