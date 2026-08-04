@@ -133,7 +133,7 @@ window.EYE_STATE = (() => {
       cup: createCup(leagueClubs),
       cupBest: '',
       uclBest: '',
-      stats: { scorers: {}, assisters: {} },
+      stats: { scorers: {}, assisters: {}, motm: {} },
       sacked: false,
       pendingPress: null
     };
@@ -501,9 +501,11 @@ window.EYE_STATE = (() => {
       derby: result.derby || null,
       highlights: extractHighlights(result)
     };
+    applyMatchAwards(result);
     state.history.unshift({
       at: Date.now(), season: state.season, week: state.week,
-      home: result.home, away: result.away, score: result.score
+      home: result.home, away: result.away, score: result.score,
+      motm: result.motm ? { id: result.motm.id, name: result.motm.name, rating: result.motm.rating } : null
     });
     state.news.unshift({
       id: D().uid('n'),
@@ -533,6 +535,29 @@ window.EYE_STATE = (() => {
     return [...goals, ...extras]
       .sort((a, b) => (a.minute || 0) - (b.minute || 0))
       .slice(0, 14);
+  }
+
+  function applyMatchAwards(result) {
+    if (!result) return;
+    if (!result.ratings && result.xiHome) {
+      Object.assign(result, E().rateMatch(result));
+    }
+    const motm = result.motm;
+    if (!motm) return;
+    state.stats = state.stats || { scorers: {}, assisters: {}, motm: {} };
+    state.stats.motm = state.stats.motm || {};
+    state.stats.motm[motm.id] = state.stats.motm[motm.id] || { id: motm.id, name: motm.name, count: 0 };
+    state.stats.motm[motm.id].count++;
+    state.stats.motm[motm.id].name = motm.name;
+    // boost player if in any club
+    for (const c of state.clubs || []) {
+      const p = c.squad.find(x => x.id === motm.id);
+      if (p) {
+        p.form = Math.min(99, (p.form || 60) + 3);
+        p.morale = Math.min(100, (p.morale || 60) + 3);
+        break;
+      }
+    }
   }
 
   function simOtherLeaguesWeek() {
@@ -617,12 +642,66 @@ window.EYE_STATE = (() => {
     processIncomingOffers();
     processSquadRequests();
     processContractPressure();
+    maybeYouthIntake();
     midSeasonBoardCheck();
     pulseWorldNews();
     maybePlayCupAiWeek();
     maybePlayUclAiWeek();
     const allPlayed = state.fixtures.every(r => r.matches.every(m => m.played));
     if (allPlayed) endSeason();
+  }
+
+  function maybeYouthIntake() {
+    const me = club();
+    if (!me) return;
+    // набор: тур 2 и середина сезона
+    const half = Math.max(8, Math.floor((state.fixtures?.length || 20) / 2));
+    if (state.week !== 2 && state.week !== half) return;
+    if (state.youthIntakeWeek === state.week && state.youthIntakeSeason === state.season) return;
+    runYouthIntake();
+  }
+
+  function runYouthIntake() {
+    const me = club();
+    ensureClubExtras(me);
+    const level = me.facilities.youth || 1;
+    const n = Math.min(4, 1 + Math.floor(level / 2) + (Math.random() < 0.45 ? 1 : 0));
+    const intake = [];
+    for (let i = 0; i < n; i++) {
+      const pos = D().pick(['CB', 'CM', 'ST', 'RW', 'LW', 'RB', 'LB', 'CAM', 'CDM', 'GK']);
+      const base = 46 + level * 3 + D().rnd(0, 6);
+      const p = D().genPlayer(pos, base, D().rnd(15, 18), me.id);
+      p.pot = Math.min(94, p.ovr + D().rnd(10, 22) + level);
+      p.youth = true;
+      p.intake = true;
+      D().ensureTraits(p);
+      me.youth.push(p);
+      intake.push(p);
+    }
+    state.youthIntakeWeek = state.week;
+    state.youthIntakeSeason = state.season;
+    state.inbox.unshift({
+      id: D().uid('m'), type: 'youth_intake', title: 'Набор в академию',
+      body: `Пришли ${intake.length}: ${intake.map(p => `${p.name} (${D().POS_LABEL[p.pos]}, пот. ${p.pot})`).join(', ')}. Можно выпустить лучшего или отчислить слабых.`,
+      players: intake.map(p => p.id),
+      read: false, at: Date.now(), week: state.week
+    });
+    state.news.unshift({
+      id: D().uid('n'), title: 'Академия пополнилась',
+      body: intake.map(p => p.name).join(', '),
+      at: Date.now()
+    });
+    return intake;
+  }
+
+  function releaseYouth(playerId) {
+    const me = club();
+    ensureClubExtras(me);
+    const p = me.youth.find(x => x.id === playerId);
+    if (!p) return { ok: false, msg: 'Нет в академии' };
+    me.youth = me.youth.filter(x => x.id !== playerId);
+    save();
+    return { ok: true, msg: `${p.name} отчислен из академии` };
   }
 
   function processContractPressure() {
@@ -903,7 +982,7 @@ window.EYE_STATE = (() => {
     const lc = leagueClubs();
     state.table = emptySeasonTable(lc);
     state.fixtures = buildFixtures(lc.map(c => c.id));
-    state.stats = { scorers: {}, assisters: {} };
+    state.stats = { scorers: {}, assisters: {}, motm: {} };
     state.cup = createCup(lc);
     state.ucl = createUcl(state.clubs);
     state.otherLeagues = buildOtherLeagues(state.clubs, state.leagueId);
@@ -1593,9 +1672,11 @@ window.EYE_STATE = (() => {
     me.morale = Math.min(100, me.morale + (won ? 5 : -2));
     if (state.board) B().applyMatchConfidence(state.board, won, false, true);
     state.lastResult = { ...result, prize, income: 0, competition: label, derby: result.derby || null, highlights: extractHighlights(result) };
+    applyMatchAwards(result);
     state.history.unshift({
       at: Date.now(), season: state.season, week: state.week, cup: kind === 'cup', ucl: kind === 'ucl',
-      home: result.home, away: result.away, score
+      home: result.home, away: result.away, score,
+      motm: result.motm ? { id: result.motm.id, name: result.motm.name, rating: result.motm.rating } : null
     });
     state.news.unshift({
       id: D().uid('n'), title: won ? `${label}: победа` : `${label}: поражение`,
@@ -1655,7 +1736,7 @@ window.EYE_STATE = (() => {
     state.fixtures = buildFixtures(lc.map(c => c.id));
     state.week = 1;
     state.cup = createCup(lc);
-    state.stats = { scorers: {}, assisters: {} };
+    state.stats = { scorers: {}, assisters: {}, motm: {} };
     state.inbox.unshift({
       id: D().uid('m'), type: 'welcome', title: 'Новый контракт',
       body: `Вы возглавили «${next.name}». Цель: ${state.board.targetLabel}.`,
@@ -1682,7 +1763,7 @@ window.EYE_STATE = (() => {
     pendingWage: () => state?.pendingWage || {},
     upgradeFacility, promoteYouth, setTactics, setLineup, autoLineup, ensureLineup, swapIntoXi,
     renewContract, negotiateContract, setDevFocus, financeSummary, resolveCupRoundAI, scoutPlayer, takeNewJob,
-    hireStaff, answerPress, refillYouth, pendingPress: () => state?.pendingPress || null,
+    hireStaff, answerPress, refillYouth, releaseYouth, runYouthIntake, pendingPress: () => state?.pendingPress || null,
     xiStatus, fixXi, matchRivalry, transferWindowOpen, listLeagueTables,
     resolvePlayerRequest, seasonLog: () => state?.seasonLog || []
   };

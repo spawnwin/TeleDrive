@@ -449,7 +449,26 @@ input:focus, select:focus { border-color: rgba(94,234,212,.45); box-shadow: 0 0 
   background: rgba(94,234,212,.12);
   border: 1px solid rgba(94,234,212,.22);
 }
-.contract-box label { font-size: 13px; color: var(--muted); }
+.motm-banner {
+  margin-top: 10px; padding: 10px 12px; border-radius: 12px;
+  background: rgba(94,234,212,.12); border: 1px solid rgba(94,234,212,.28);
+  color: var(--accent-2); font-size: 14px;
+}
+.ratings-block {
+  margin-top: 14px; text-align: left; display: grid; gap: 6px;
+}
+.ratings-block > strong { font-family: var(--display); font-size: 14px; }
+.rating-row {
+  display: flex; justify-content: space-between; gap: 10px;
+  padding: 6px 8px; border-radius: 8px;
+  background: rgba(255,255,255,.04); font-size: 13px; color: var(--muted);
+}
+.rating-row strong { color: var(--ink); font-variant-numeric: tabular-nums; }
+.rating-row.motm {
+  color: var(--accent-2);
+  border: 1px solid rgba(94,234,212,.3);
+  background: rgba(94,234,212,.1);
+}
 
 .squad-summary { padding: 14px 16px; font-size: 13px; color: var(--muted); }
 

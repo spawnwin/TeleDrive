@@ -36,10 +36,14 @@ window.EYE_ENGINE = (() => {
     });
     let atk = 0, def = 0, mid = 0, cond = 0;
     let leaders = 0;
+    let chemPts = 0;
     XI.forEach((p, i) => {
       D().ensureTraits(p);
       const pos = slots[i];
       const g = D().POS_GROUP[pos];
+      if (p.pos === pos) chemPts += 10;
+      else if (D().POS_GROUP[p.pos] === g) chemPts += 6;
+      else chemPts += 2;
       const formMod = (p.form || 60) / 70;
       const condMod = (p.condition || 80) / 90;
       const moraleMod = (p.morale || 60) / 70;
@@ -59,6 +63,8 @@ window.EYE_ENGINE = (() => {
       else { def += d * 1.35; }
       cond += (p.condition || 80);
     });
+    const chemistry = Math.round((chemPts / 11) * 10); // ~20–100
+    const chemMod = 0.90 + Math.min(0.14, (chemistry / 100) * 0.14);
     const leaderBoost = 1 + Math.min(0.04, leaders * 0.015);
     const style = club.style || 'balance';
     const styleMod = {
@@ -71,10 +77,11 @@ window.EYE_ENGINE = (() => {
     const homeBoost = opts.home ? 1.04 : 1;
     const derbyBoost = opts.derby ? 1.05 : 1;
     return {
-      attack: (atk / 11) * styleMod.a * homeBoost * derbyBoost * leaderBoost,
-      defense: (def / 11) * styleMod.d * (opts.derby ? 0.98 : 1) * leaderBoost,
-      mid: (mid / 11) * styleMod.m * derbyBoost * leaderBoost,
+      attack: (atk / 11) * styleMod.a * homeBoost * derbyBoost * leaderBoost * chemMod,
+      defense: (def / 11) * styleMod.d * (opts.derby ? 0.98 : 1) * leaderBoost * chemMod,
+      mid: (mid / 11) * styleMod.m * derbyBoost * leaderBoost * chemMod,
       condition: cond / 11,
+      chemistry,
       xi: XI,
       slots,
       derby: !!opts.derby
@@ -283,7 +290,7 @@ window.EYE_ENGINE = (() => {
       });
     }
 
-    return {
+    const result = {
       home: home.name, away: away.name,
       homeId: home.id, awayId: away.id,
       score: [hg, ag],
@@ -296,7 +303,70 @@ window.EYE_ENGINE = (() => {
       },
       scorersH, scorersA,
       homeColor: home.color, awayColor: away.color,
-      startMinute, endMinute
+      startMinute, endMinute,
+      xiHome: homeS.xi,
+      xiAway: awayS.xi,
+      slotsHome: homeS.slots,
+      slotsAway: awayS.slots,
+      chemistryHome: homeS.chemistry,
+      chemistryAway: awayS.chemistry
+    };
+    if (endMinute >= 90 && startMinute <= 1) {
+      Object.assign(result, rateMatch(result));
+    }
+    return result;
+  }
+
+  function rateMatch(result) {
+    const [hg, ag] = result.score || [0, 0];
+    const homeWon = hg > ag;
+    const drew = hg === ag;
+    const goalIds = {};
+    const assistIds = {};
+    (result.scorersH || []).forEach(s => {
+      goalIds[s.player.id] = (goalIds[s.player.id] || 0) + 1;
+      if (s.assist) assistIds[s.assist.id] = (assistIds[s.assist.id] || 0) + 1;
+    });
+    (result.scorersA || []).forEach(s => {
+      goalIds[s.player.id] = (goalIds[s.player.id] || 0) + 1;
+      if (s.assist) assistIds[s.assist.id] = (assistIds[s.assist.id] || 0) + 1;
+    });
+    const cards = {};
+    const reds = {};
+    const injured = {};
+    (result.events || []).forEach(e => {
+      const id = e.player?.id;
+      if (!id) return;
+      if (e.type === 'card') cards[id] = (cards[id] || 0) + 1;
+      if (e.type === 'red') reds[id] = true;
+      if (e.type === 'injury') injured[id] = true;
+    });
+
+    const rateSide = (xi, slots, side, won) => (xi || []).map((p, i) => {
+      const slot = slots?.[i] || p.pos;
+      let r = 6.1 + ((p.form || 60) - 60) / 50 + ((p.condition || 80) - 70) / 80;
+      if (p.pos === slot) r += 0.25;
+      else if (D().POS_GROUP[p.pos] === D().POS_GROUP[slot]) r += 0.1;
+      else r -= 0.25;
+      r += (goalIds[p.id] || 0) * 1.05;
+      r += (assistIds[p.id] || 0) * 0.65;
+      r -= (cards[p.id] || 0) * 0.35;
+      if (reds[p.id]) r -= 1.4;
+      if (injured[p.id]) r -= 0.25;
+      if (won) r += 0.2;
+      else if (!drew && side === (homeWon ? 'away' : 'home')) r -= 0.15;
+      if (D().hasTrait(p, 'leader') && won) r += 0.15;
+      r = Math.max(4.0, Math.min(9.8, Math.round(r * 10) / 10));
+      return { id: p.id, name: p.name, pos: slot, ovr: p.ovr, rating: r, side };
+    });
+
+    const homeRatings = rateSide(result.xiHome, result.slotsHome, 'home', homeWon);
+    const awayRatings = rateSide(result.xiAway, result.slotsAway, 'away', !homeWon && !drew);
+    const list = [...homeRatings, ...awayRatings].sort((a, b) => b.rating - a.rating || b.ovr - a.ovr);
+    const motm = list[0] || null;
+    return {
+      ratings: { home: homeRatings, away: awayRatings, list },
+      motm
     };
   }
 
@@ -311,7 +381,7 @@ window.EYE_ENGINE = (() => {
   }
 
   function mergeResults(a, b) {
-    return {
+    const merged = {
       ...b,
       events: [...(a.events || []), ...(b.events || [])],
       scorersH: b.scorersH,
@@ -319,8 +389,18 @@ window.EYE_ENGINE = (() => {
       score: b.score,
       stats: b.stats,
       startMinute: a.startMinute || 1,
-      endMinute: b.endMinute || 90
+      endMinute: b.endMinute || 90,
+      xiHome: b.xiHome || a.xiHome,
+      xiAway: b.xiAway || a.xiAway,
+      slotsHome: b.slotsHome || a.slotsHome,
+      slotsAway: b.slotsAway || a.slotsAway,
+      chemistryHome: b.chemistryHome ?? a.chemistryHome,
+      chemistryAway: b.chemistryAway ?? a.chemistryAway
     };
+    if ((merged.endMinute || 90) >= 90) {
+      Object.assign(merged, rateMatch(merged));
+    }
+    return merged;
   }
 
   async function playLive(result, onEvent, onTick, opts = {}) {
@@ -352,5 +432,5 @@ window.EYE_ENGINE = (() => {
 
   function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
-  return { teamStrength, simulateMatch, mergeResults, playLive, sleep, COMMENT, isUnavailable };
+  return { teamStrength, simulateMatch, mergeResults, playLive, sleep, COMMENT, isUnavailable, rateMatch };
 })();

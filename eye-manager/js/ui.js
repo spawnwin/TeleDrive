@@ -465,6 +465,11 @@ window.EYE_UI = (() => {
     selectedSlot = null;
     drawPitch();
     renderBench();
+    const chem = E().teamStrength(me).chemistry;
+    const hint = $('#tactics-hint');
+    if (hint) {
+      hint.textContent = `Химия схемы: ${chem}/100 · нажмите игрока на поле, затем замену со скамейки`;
+    }
   }
 
   function drawPitch() {
@@ -813,6 +818,17 @@ window.EYE_UI = (() => {
 
   function renderStats() {
     $all('#stats-tabs .tab').forEach(t => t.classList.toggle('active', t.dataset.stab === statsTab));
+    if (statsTab === 'motm') {
+      const rows = Object.values(S().get().stats?.motm || {}).sort((a, b) => b.count - a.count);
+      $('#stats-list').innerHTML = rows.map((r, i) => `
+        <div class="row">
+          <div class="ovr">${i + 1}</div>
+          <div><strong>${r.name}</strong><div class="meta">Игрок матча</div></div>
+          <div class="meta"><strong>${r.count}</strong></div>
+        </div>
+      `).join('') || `<div class="news-item">Сыграйте матчи — появятся игроки матча</div>`;
+      return;
+    }
     const rows = S().topScorers(25);
     const sorted = statsTab === 'assists'
       ? [...rows].sort((a, b) => b.assists - a.assists || b.goals - a.goals)
@@ -866,36 +882,53 @@ window.EYE_UI = (() => {
   function renderYouth() {
     const me = S().club();
     const list = me.youth || [];
+    const intake = list.filter(p => p.intake).length;
     $('#youth-status').innerHTML = `
       <strong>Академия ур. ${me.facilities?.youth || 1}</strong>
       <div class="meta" style="color:var(--muted);margin-top:4px;font-size:13px">
-        Воспитанников: ${list.length}. Рост каждую неделю. Выпуск переводит в основу.
+        Воспитанников: ${list.length}${intake ? ` · новый набор: ${intake}` : ''}.
+        Рост каждую неделю. Выпуск — в основу, крестик — отчисление.
       </div>
     `;
-    $('#youth-list').innerHTML = list.slice().sort((a, b) => b.pot - a.pot).map(p => `
+    $('#youth-list').innerHTML = list.slice().sort((a, b) => b.pot - a.pot).map(p => {
+      D().ensureTraits(p);
+      const trait = (p.traits || [])[0] ? D().traitInfo(p.traits[0]).name : '';
+      return `
       <div class="row">
         <div class="ovr">${p.ovr}</div>
         <div>
-          <strong>${p.name}</strong>
-          <div class="meta">${D().POS_LABEL[p.pos]} · ${p.age}л · пот. ${p.pot} · форма ${p.form}</div>
+          <strong>${p.name}${p.intake ? ' · новый' : ''}</strong>
+          <div class="meta">${D().POS_LABEL[p.pos]} · ${p.age}л · пот. ${p.pot}${trait ? ' · ' + trait : ''}</div>
         </div>
-        <button class="btn btn-tiny" data-promote="${p.id}">В основу</button>
-      </div>
-    `).join('') || `<div class="news-item">Академия пуста — набор в конце сезона</div>`;
+        <div class="row-actions">
+          <button class="btn btn-tiny" data-promote="${p.id}">В основу</button>
+          <button class="btn btn-tiny" data-youth-drop="${p.id}">Отчислить</button>
+        </div>
+      </div>`;
+    }).join('') || `<div class="news-item">Академия пуста — набор на 2-м туре и в середине сезона</div>`;
   }
 
   function renderInbox() {
     const st = S().get();
-    st.inbox.forEach(m => { if (m.type !== 'request' || m.resolved) m.read = true; });
+    st.inbox.forEach(m => {
+      if ((m.type === 'request' && !m.resolved) || m.type === 'youth_intake') return;
+      m.read = true;
+    });
     S().save();
     $('#inbox-list').innerHTML = st.inbox.map(m => {
-      const actions = (m.type === 'request' && m.playerId && !m.resolved)
-        ? `<div class="row-actions" style="margin-top:8px">
+      let actions = '';
+      if (m.type === 'request' && m.playerId && !m.resolved) {
+        actions = `<div class="row-actions" style="margin-top:8px">
             <button class="btn btn-tiny" data-req="${m.playerId}" data-req-act="promise">Обещать XI</button>
             <button class="btn btn-tiny" data-req="${m.playerId}" data-req-act="list">На трансфер</button>
             <button class="btn btn-tiny" data-req="${m.playerId}" data-req-act="dismiss">Отказать</button>
-          </div>`
-        : '';
+          </div>`;
+      } else if (m.type === 'youth_intake' && !m.resolved) {
+        actions = `<div class="row-actions" style="margin-top:8px">
+            <button class="btn btn-tiny" data-nav="youth">Открыть академию</button>
+          </div>`;
+        m.resolved = true;
+      }
       return `<div class="news-item"><strong>${m.title}</strong><div>${m.body}</div>${actions}</div>`;
     }).join('') || `<div class="news-item">Писем нет</div>`;
   }
@@ -954,6 +987,7 @@ window.EYE_UI = (() => {
       <div class="meta" style="color:var(--muted);margin-top:8px">
         Сила: вы ${Math.round((myS.attack + myS.defense + myS.mid) / 3)}
         · соперник ${Math.round((opS.attack + opS.defense + opS.mid) / 3)}
+        · химия ${myS.chemistry}
         · ${me.formation} · ${D().STYLES.find(s => s.id === me.style)?.name || me.style}
       </div>
     `;
@@ -1271,11 +1305,29 @@ window.EYE_UI = (() => {
     const highs = (last.highlights || []).slice(0, 8).map(h =>
       `<div class="feed-item ${h.type === 'goal' ? 'goal' : h.type === 'red' ? 'red' : h.type === 'injury' ? 'injury' : ''}">${h.minute || '?'}′ ${h.text}</div>`
     ).join('');
+    const me = S().club();
+    const mySide = last.homeId === me?.id ? 'home' : last.awayId === me?.id ? 'away' : null;
+    const myRatings = mySide && last.ratings ? last.ratings[mySide] : (last.ratings?.list || []).filter(r => true);
+    const ratingsHtml = (mySide ? (last.ratings?.[mySide] || []) : (last.ratings?.list || []).slice(0, 11))
+      .slice()
+      .sort((a, b) => b.rating - a.rating)
+      .map(r => {
+        const motm = last.motm?.id === r.id;
+        return `<div class="rating-row${motm ? ' motm' : ''}"><span>${r.name}</span><strong>${r.rating.toFixed(1)}</strong></div>`;
+      }).join('');
+    const motmLine = last.motm
+      ? `<div class="motm-banner">Игрок матча: <strong>${last.motm.name}</strong> · ${Number(last.motm.rating).toFixed(1)}</div>`
+      : '';
+    const chemLine = (last.chemistryHome != null && mySide)
+      ? `<div class="hint">Химия XI: ${mySide === 'home' ? last.chemistryHome : last.chemistryAway}</div>`
+      : '';
     $('#result-card').innerHTML = `
       <div class="next-label">${last.derby ? 'Дерби · ' + last.derby : 'Итог матча'}</div>
       <div>${last.home}</div>
       <div class="score">${hg}:${ag}</div>
       <div>${last.away}</div>
+      ${motmLine}
+      ${chemLine}
       <div style="color:var(--muted);font-size:13px;margin-top:8px;line-height:1.5">
         ${scorersH ? `<div><strong>Голы ${last.home}:</strong> ${scorersH}</div>` : ''}
         ${scorersA ? `<div><strong>Голы ${last.away}:</strong> ${scorersA}</div>` : ''}
@@ -1283,6 +1335,7 @@ window.EYE_UI = (() => {
         Удары ${last.stats.shots.join(' — ')} · в створ ${last.stats.onTarget.join(' — ')}<br/>
         ${last.prize != null ? `Призовые ${S().money(last.prize)}${last.income ? ' · касса ' + S().money(last.income) : ''}${last.competition ? ' · ' + last.competition : ''}` : ''}
       </div>
+      ${ratingsHtml ? `<div class="ratings-block"><strong>Оценки</strong>${ratingsHtml}</div>` : ''}
       ${highs ? `<div style="margin-top:12px;text-align:left">${highs}</div>` : ''}
     `;
     const press = S().pendingPress();
