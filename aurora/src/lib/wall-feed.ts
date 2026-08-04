@@ -107,30 +107,46 @@ export async function filterShareTargetsForViewer<
   const storyIds = [...new Set(refs.filter((r) => r.ref.kind === 'story').map((r) => r.ref.id))]
   const listingIds = [...new Set(refs.filter((r) => r.ref.kind === 'listing').map((r) => r.ref.id))]
 
-  const [shorts, stories, listings] = await Promise.all([
-    shortIds.length
-      ? db.short.findMany({
-          where: { id: { in: shortIds } },
-          select: { id: true, creatorId: true, isHidden: true, reviewStatus: true },
-        })
-      : Promise.resolve([]),
-    storyIds.length
-      ? db.story.findMany({
-          where: { id: { in: storyIds }, ...activeStoryFilter() },
-          select: { id: true, userId: true, visibility: true, audienceIds: true },
-        })
-      : Promise.resolve([]),
-    listingIds.length
-      ? db.marketplaceListing.findMany({
-          where: { id: { in: listingIds } },
-          select: { id: true, sellerId: true, status: true },
-        })
-      : Promise.resolve([]),
-  ])
+  type ShortShareRow = {
+    id: string
+    creatorId: string
+    isHidden: boolean
+    reviewStatus: string
+  }
+  type StoryShareRow = {
+    id: string
+    userId: string
+    visibility: string
+    audienceIds: string | null
+  }
+  type ListingShareRow = {
+    id: string
+    sellerId: string
+    status: string
+  }
 
-  const shortById = new Map(shorts.map((s) => [s.id, s]))
-  const storyById = new Map(stories.map((s) => [s.id, s]))
-  const listingById = new Map(listings.map((l) => [l.id, l]))
+  const shorts: ShortShareRow[] = shortIds.length
+    ? await db.short.findMany({
+        where: { id: { in: shortIds } },
+        select: { id: true, creatorId: true, isHidden: true, reviewStatus: true },
+      })
+    : []
+  const stories: StoryShareRow[] = storyIds.length
+    ? await db.story.findMany({
+        where: { id: { in: storyIds }, ...activeStoryFilter() },
+        select: { id: true, userId: true, visibility: true, audienceIds: true },
+      })
+    : []
+  const listings: ListingShareRow[] = listingIds.length
+    ? await db.marketplaceListing.findMany({
+        where: { id: { in: listingIds } },
+        select: { id: true, sellerId: true, status: true },
+      })
+    : []
+
+  const shortById = new Map<string, ShortShareRow>(shorts.map((s) => [s.id, s]))
+  const storyById = new Map<string, StoryShareRow>(stories.map((s) => [s.id, s]))
+  const listingById = new Map<string, ListingShareRow>(listings.map((l) => [l.id, l]))
 
   const hide = new Set<T>()
   for (const { post, ref } of refs) {
