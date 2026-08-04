@@ -24,9 +24,13 @@ window.EYE_ONLINE = (() => {
     return data;
   }
 
-  function listCups(status) {
-    const q = status ? `?status=${encodeURIComponent(status)}` : '';
-    return request('api/cups' + q);
+  function listCups({ status, bracketId, mine } = {}) {
+    const q = new URLSearchParams();
+    if (status) q.set('status', status);
+    if (bracketId) q.set('bracketId', bracketId);
+    if (mine) q.set('mine', '1');
+    const qs = q.toString();
+    return request('api/cups' + (qs ? '?' + qs : ''));
   }
 
   function getCup(id) {
@@ -49,6 +53,22 @@ window.EYE_ONLINE = (() => {
 
   function meta() {
     return request('api/cups/meta', { auth: false });
+  }
+
+  function leaderboard({ bracketId, limit } = {}) {
+    const q = new URLSearchParams();
+    if (bracketId) q.set('bracketId', bracketId);
+    if (limit) q.set('limit', String(limit));
+    const qs = q.toString();
+    return request('api/cups/leaderboard' + (qs ? '?' + qs : ''), { auth: false });
+  }
+
+  function events() {
+    return request('api/cups/events');
+  }
+
+  function markEventsRead(ids) {
+    return request('api/cups/events/read', { method: 'POST', body: { ids: ids || [] } });
   }
 
   function adminStats() {
@@ -116,6 +136,15 @@ window.EYE_ONLINE = (() => {
     return map[reason] || reason || '—';
   }
 
+  function eventText(ev) {
+    if (!ev) return '';
+    if (ev.type === 'cup_started') return `${ev.cupName}: старт · ${ev.round || 'раунд'}`;
+    if (ev.type === 'cup_out') return `${ev.cupName}: вылет (${ev.round || 'раунд'})`;
+    if (ev.type === 'cup_won') return `${ev.cupName}: победа! +${ev.xp || 0} XP` + (ev.money ? ` · +${ev.money}€` : '');
+    if (ev.type === 'cup_done') return `${ev.cupName}: итог · +${ev.xp || 0} XP` + (ev.money ? ` · +${ev.money}€` : '');
+    return ev.cupName || ev.type || 'Событие';
+  }
+
   function formatEta(ms) {
     if (ms == null || Number.isNaN(ms)) return '—';
     const sec = Math.max(0, Math.floor(ms / 1000));
@@ -128,10 +157,31 @@ window.EYE_ONLINE = (() => {
     return `${m}:${String(s).padStart(2, '0')}`;
   }
 
+  function formatMoney(n) {
+    const v = Number(n) || 0;
+    if (Math.abs(v) >= 1e6) return (v / 1e6).toFixed(1).replace('.0', '') + ' млн €';
+    if (Math.abs(v) >= 1e3) return Math.round(v / 1e3) + ' тыс €';
+    return v + ' €';
+  }
+
+  function findMyTie(cup, userId) {
+    if (!cup || !userId) return null;
+    const rounds = [...(cup.history || [])].reverse();
+    for (const h of rounds) {
+      const tie = (h.ties || []).find((t) => t.home?.userId === userId || t.away?.userId === userId);
+      if (tie) return { round: h.round, tie, latest: true };
+    }
+    // upcoming: still alive, next round not played
+    if (cup.status === 'live' && (cup.aliveIds || []).includes(userId) && !(cup.history || []).length) {
+      return { round: cup.round, tie: null, pending: true };
+    }
+    return null;
+  }
+
   return {
-    listCups, getCup, joinCup, leaveCup, meta,
+    listCups, getCup, joinCup, leaveCup, meta, leaderboard, events, markEventsRead,
     adminStats, adminUsers, adminBots, adminEnsureBots,
     adminCups, adminCreateCup, adminStartCup, adminAdvanceCup, adminFinishCup, adminDeleteCup,
-    adminTick, adminSetLevel, statusLabel, archiveReasonRu, formatEta
+    adminTick, adminSetLevel, statusLabel, archiveReasonRu, eventText, formatEta, formatMoney, findMyTie
   };
 })();

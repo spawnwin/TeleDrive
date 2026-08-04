@@ -1841,6 +1841,15 @@ input:focus, select:focus { border-color: rgba(94,234,212,.45); box-shadow: 0 0 
   font-size: 0.92rem;
 }
 .cup-entrant.mine { color: #7fd0ff; }
+.cup-entrant.out { opacity: 0.55; }
+.cup-tie.mine-tie {
+  background: rgba(127, 208, 255, 0.08);
+  border-radius: 8px;
+  padding: 6px 8px;
+}
+#cupdetail-mymatch {
+  border: 1px solid rgba(127, 208, 255, 0.25);
+}
 .cup-round { margin-top: 12px; }
 .cup-tie {
   display: grid;

@@ -312,7 +312,10 @@ const server = http.createServer(async (req, res) => {
       ok: true,
       user: cups.enrichPublic(auth.user),
       hasCareer,
-      bracket: cups.bracketForLevel(auth.user.level || 1)
+      bracket: cups.bracketForLevel(auth.user.level || 1),
+      liveCup: cups.findMyLiveCup(auth.user.id),
+      cupEvents: cups.listCupEvents(auth.user.id, { limit: 10 }),
+      cupEventsUnread: cups.listCupEvents(auth.user.id, { unreadOnly: true, limit: 20 }).length
     });
   }
 
@@ -387,9 +390,17 @@ const server = http.createServer(async (req, res) => {
   // ——— ONLINE CUPS ———
   if (pathname === '/api/cups' && req.method === 'GET') {
     const status = url.searchParams.get('status') || undefined;
+    const bracketId = url.searchParams.get('bracketId') || undefined;
+    const mine = url.searchParams.get('mine') === '1';
+    const auth = mine ? requireAuth(req, res) : authUser(req);
+    if (mine && !auth) return;
     return json(res, 200, {
       ok: true,
-      cups: cups.listCups({ status }),
+      cups: cups.listCups({
+        status,
+        bracketId,
+        mineFor: mine ? auth.user.id : undefined
+      }),
       meta: cups.stats()
     });
   }
@@ -398,9 +409,41 @@ const server = http.createServer(async (req, res) => {
     return json(res, 200, { ok: true, ...cups.stats() });
   }
 
+  if (pathname === '/api/cups/leaderboard' && req.method === 'GET') {
+    const bracketId = url.searchParams.get('bracketId') || undefined;
+    const limit = Math.min(50, Math.max(5, Number(url.searchParams.get('limit') || 30)));
+    return json(res, 200, {
+      ok: true,
+      leaders: cups.leaderboard({ bracketId, limit }),
+      brackets: cups.LEVEL_BRACKETS
+    });
+  }
+
+  if (pathname === '/api/cups/events' && req.method === 'GET') {
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    return json(res, 200, {
+      ok: true,
+      events: cups.listCupEvents(auth.user.id, { limit: 30 }),
+      unread: cups.listCupEvents(auth.user.id, { unreadOnly: true, limit: 40 }).length
+    });
+  }
+
+  if (pathname === '/api/cups/events/read' && req.method === 'POST') {
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    try {
+      const body = JSON.parse((await readBody(req)).toString('utf8') || '{}');
+      const r = cups.markCupEventsRead(auth.user.id, body.ids || []);
+      return json(res, 200, r);
+    } catch (e) {
+      return json(res, 500, { error: String(e.message || e) });
+    }
+  }
+
   if (pathname.startsWith('/api/cups/') && req.method === 'GET') {
     const id = pathname.slice('/api/cups/'.length).split('/')[0];
-    if (!id || id === 'meta') return json(res, 404, { error: 'Нет' });
+    if (!id || id === 'meta' || id === 'leaderboard' || id === 'events') return json(res, 404, { error: 'Нет' });
     const cup = cups.getCup(id);
     if (!cup) return json(res, 404, { error: 'Кубок не найден' });
     return json(res, 200, { ok: true, cup });

@@ -33,6 +33,9 @@ window.EYE_UI = (() => {
   let onlineCupsTab = 'open';
   let onlineCupId = null;
   let onlinePollTimer = null;
+  let cupClockTimer = null;
+  let cupClockTarget = null;
+  let lastMePayload = null;
   let adminTab = 'cups';
   let adminCache = { cups: [], archive: [], users: [], bots: [], stats: null };
 
@@ -110,10 +113,14 @@ window.EYE_UI = (() => {
     if (id !== 'onlinecups' && id !== 'cupdetail') {
       clearTimeout(onlinePollTimer);
       onlinePollTimer = null;
+      stopCupClock();
     }
     syncAdminNav();
     if (id === 'onlinecups' || id === 'cupdetail' || id === 'admin' || id === 'lobby' || id === 'more') {
       syncOnlineBackNav();
+    }
+    if (id === 'hub' || id === 'lobby') {
+      maybeToastCupEvents();
     }
 
     window.scrollTo(0, 0);
@@ -340,6 +347,65 @@ window.EYE_UI = (() => {
     <div class="meta">Онлайн-кубки: ${user.cupsPlayed || 0} · Победы: ${user.cupsWon || 0}</div>`;
   }
 
+  function stopCupClock() {
+    clearInterval(cupClockTimer);
+    cupClockTimer = null;
+    cupClockTarget = null;
+  }
+
+  function startCupClock(selector, atMs) {
+    stopCupClock();
+    cupClockTarget = { selector, atMs };
+    const tick = () => {
+      const el = $(cupClockTarget.selector);
+      if (!el || cupClockTarget.atMs == null) return;
+      el.textContent = O().formatEta(cupClockTarget.atMs - Date.now());
+    };
+    tick();
+    cupClockTimer = setInterval(tick, 1000);
+  }
+
+  async function maybeToastCupEvents() {
+    if (!A().isLoggedIn() || !O()) return;
+    try {
+      const me = lastMePayload || await A().refreshMe();
+      lastMePayload = me;
+      const events = (me?.cupEvents || []).filter((e) => !e.read).slice(0, 2);
+      if (!events.length) return;
+      events.forEach((ev) => toast(O().eventText(ev)));
+      await O().markEventsRead(events.map((e) => e.id));
+      lastMePayload = null;
+    } catch {}
+  }
+
+  function cupRowHtml(c, user) {
+    const uid = user?.id;
+    const mine = (c.entrants || []).some((e) => e.userId === uid);
+    const levelOk = isAdminUser(user) || (user && user.level >= c.minLevel && user.level <= c.maxLevel);
+    const canJoin = c.status === 'open' && levelOk;
+    let eta = '';
+    if (c.status === 'open') eta = ' · старт <span data-eta="' + (c.startAt || 0) + '">' + O().formatEta((c.startAt || 0) - Date.now()) + '</span>';
+    else if (c.status === 'live') {
+      eta = ` · ${c.round || 'раунд'}`;
+      if (c.nextRoundAt) eta += ' · след. <span data-eta="' + c.nextRoundAt + '">' + O().formatEta(c.nextRoundAt - Date.now()) + '</span>';
+    } else if (c.status === 'finished' && c.champion) eta = ' · ' + (c.champion.clubName || c.champion.name);
+    return `<button type="button" class="menu-row cup-row" data-cup-open="${c.id}">
+      <span class="menu-ico">${c.size}</span>
+      <span class="menu-txt">
+        <strong>${c.name}</strong>
+        <small>${O().statusLabel(c.status)} · ${c.slotsFilled}/${c.size} · люди ${c.humans}${eta}${mine ? ' · вы внутри' : ''}${!canJoin && c.status === 'open' ? ' · не ваш уровень' : ''}</small>
+      </span>
+    </button>`;
+  }
+
+  function refreshEtaSpans(root = document) {
+    root.querySelectorAll('[data-eta]').forEach((el) => {
+      const at = Number(el.getAttribute('data-eta'));
+      if (!at) return;
+      el.textContent = O().formatEta(at - Date.now());
+    });
+  }
+
   function careerXiStrength() {
     try {
       const me = S().get() ? S().club() : null;
@@ -403,51 +469,68 @@ window.EYE_UI = (() => {
     syncAdminNav();
     syncOnlineBackNav();
     let bracket = null;
+    let mePayload = null;
     try {
-      const me = await A().refreshMe();
-      bracket = me?.bracket || null;
+      mePayload = await A().refreshMe();
+      lastMePayload = mePayload;
+      bracket = mePayload?.bracket || null;
     } catch {}
     const user = A().getUser();
     const card = $('#online-level-card');
     if (card) {
       const range = bracket ? bracket.label : `Ур. ${user?.level || 1}`;
-      const adminNote = isAdminUser(user) ? ' Как админ можете вступать в любой кубок.' : '';
+      const adminNote = isAdminUser(user) ? ' Админ: любой бракет.' : '';
+      const live = mePayload?.liveCup;
       card.innerHTML = `<strong>${user?.name || user?.login || 'Игрок'}</strong>
         ${levelBarHtml(user)}
-        <p class="hint" style="margin:8px 0 0">Ваш диапазон: ${range}.${adminNote} Раунды live идут ~20 сек.</p>`;
+        <p class="hint" style="margin:8px 0 0">Диапазон: ${range}.${adminNote} Раунды ~20 сек.</p>
+        ${live ? `<button type="button" class="btn btn-primary" style="margin-top:8px" data-cup-open="${live.id}">Ваш live-кубок · ${live.round || 'раунд'}</button>` : ''}`;
     }
     $all('#online-cups-tabs .tab').forEach((t) => t.classList.toggle('active', t.dataset.oc === onlineCupsTab));
     const list = $('#online-cups-list');
     const metaEl = $('#online-cups-meta');
-    if (list) list.innerHTML = '<div class="hint">Загрузка…</div>';
+    const hadContent = !!(list && list.children.length && !list.querySelector('.hint'));
+    if (list && !hadContent) list.innerHTML = '<div class="hint">Загрузка…</div>';
+
     try {
-      const data = await O().listCups(onlineCupsTab === 'all' ? undefined : onlineCupsTab);
-      const cups = data.cups || [];
-      if (metaEl && data.meta) {
-        const next = data.meta.nextTick ? O().formatEta(data.meta.nextTick - Date.now()) : 'скоро';
-        const liveSec = Math.round((data.meta.liveRoundMs || 20000) / 1000);
-        metaEl.textContent = `Набор: ${data.meta.cupsOpen || 0} · Идут: ${data.meta.cupsLive || 0} · Ботов: ${data.meta.bots || 0} · Тик ~${next} · раунд ${liveSec}с. Без людей кубок в архив.`;
-      }
-      if (!cups.length) {
-        list.innerHTML = '<div class="hint">Кубков в этой вкладке нет.</div>';
+      if (onlineCupsTab === 'board') {
+        const data = await O().leaderboard({ bracketId: bracket?.id, limit: 30 });
+        if (metaEl) metaEl.textContent = `Рейтинг${bracket ? ' · ' + bracket.label : ''} по победам, затем XP.`;
+        const leaders = data.leaders || [];
+        list.innerHTML = leaders.length
+          ? leaders.map((u) =>
+            `<div class="admin-row">
+              <div><strong>#${u.rank} ${u.name || u.login}</strong>
+              <small>ур.${u.level} · XP ${u.xp} · побед ${u.cupsWon || 0} · игр ${u.cupsPlayed || 0}</small></div>
+            </div>`
+          ).join('')
+          : '<div class="hint">Пока пусто — сыграйте кубок.</div>';
+        stopCupClock();
       } else {
-        const uid = user?.id;
-        list.innerHTML = cups.map((c) => {
-          const mine = (c.entrants || []).some((e) => e.userId === uid);
-          const levelOk = isAdminUser(user) || (user && user.level >= c.minLevel && user.level <= c.maxLevel);
-          const canJoin = c.status === 'open' && levelOk;
-          let eta = '';
-          if (c.status === 'open') eta = ' · старт ' + O().formatEta((c.startAt || 0) - Date.now());
-          else if (c.status === 'live') eta = ` · ${c.round || 'раунд'}` + (c.nextRoundAt ? ' · след. ' + O().formatEta(c.nextRoundAt - Date.now()) : '');
-          else if (c.status === 'finished' && c.champion) eta = ' · ' + (c.champion.clubName || c.champion.name);
-          return `<button type="button" class="menu-row cup-row" data-cup-open="${c.id}">
-            <span class="menu-ico">${c.size}</span>
-            <span class="menu-txt">
-              <strong>${c.name}</strong>
-              <small>${O().statusLabel(c.status)} · ${c.slotsFilled}/${c.size} · люди ${c.humans}${eta}${mine ? ' · вы внутри' : ''}${!canJoin && c.status === 'open' ? ' · не ваш уровень' : ''}</small>
-            </span>
-          </button>`;
-        }).join('');
+        const opts = {};
+        if (onlineCupsTab === 'open') {
+          opts.status = 'open';
+          if (bracket?.id && !isAdminUser(user)) opts.bracketId = bracket.id;
+        } else if (onlineCupsTab === 'mine') {
+          opts.mine = true;
+        } else if (onlineCupsTab === 'live' || onlineCupsTab === 'finished') {
+          opts.status = onlineCupsTab;
+        }
+        const data = await O().listCups(opts);
+        let cups = data.cups || [];
+        if (onlineCupsTab === 'open' && isAdminUser(user) && bracket?.id) {
+          cups = [...cups].sort((a, b) => (a.bracketId === bracket.id ? 0 : 1) - (b.bracketId === bracket.id ? 0 : 1));
+        }
+        if (metaEl && data.meta) {
+          const next = data.meta.nextTick ? O().formatEta(data.meta.nextTick - Date.now()) : 'скоро';
+          const liveSec = Math.round((data.meta.liveRoundMs || 20000) / 1000);
+          metaEl.textContent = `Набор: ${data.meta.cupsOpen || 0} · Идут: ${data.meta.cupsLive || 0} · Ботов: ${data.meta.bots || 0} · Тик ~${next} · раунд ${liveSec}с.`;
+        }
+        list.innerHTML = cups.length
+          ? cups.map((c) => cupRowHtml(c, user)).join('')
+          : '<div class="hint">Кубков в этой вкладке нет.</div>';
+        stopCupClock();
+        cupClockTimer = setInterval(() => refreshEtaSpans(list), 1000);
       }
     } catch (err) {
       if (list) list.innerHTML = `<div class="hint">${err.message || 'Ошибка загрузки'}</div>`;
@@ -455,7 +538,7 @@ window.EYE_UI = (() => {
     clearTimeout(onlinePollTimer);
     onlinePollTimer = setTimeout(() => {
       if (document.getElementById('screen-onlinecups')?.classList.contains('active')) renderOnlineCups();
-    }, onlineCupsTab === 'live' ? 5000 : 12000);
+    }, onlineCupsTab === 'live' || onlineCupsTab === 'mine' ? 5000 : 12000);
   }
 
   async function renderCupDetail() {
@@ -463,11 +546,13 @@ window.EYE_UI = (() => {
     if (!onlineCupId) { show('onlinecups'); return; }
     syncOnlineBackNav();
     const head = $('#cupdetail-head');
+    const myMatch = $('#cupdetail-mymatch');
     const actions = $('#cupdetail-actions');
     const entrants = $('#cupdetail-entrants');
-    const bracket = $('#cupdetail-bracket');
+    const bracketEl = $('#cupdetail-bracket');
     const title = $('#cupdetail-title');
-    if (head) head.innerHTML = 'Загрузка…';
+    const firstLoad = !(head && head.dataset.ready === '1');
+    if (head && firstLoad) head.innerHTML = 'Загрузка…';
     try {
       const data = await O().getCup(onlineCupId);
       const c = data.cup;
@@ -477,20 +562,43 @@ window.EYE_UI = (() => {
       const mine = (c.entrants || []).some((e) => e.userId === user?.id);
       const levelOk = isAdminUser(user) || (user && user.level >= c.minLevel && user.level <= c.maxLevel);
       const canJoin = c.status === 'open' && levelOk && !mine;
-      let liveLine = '';
-      if (c.status === 'live') {
-        liveLine = ` · ${c.round || 'раунд'}` + (c.nextRoundAt ? ' · след. раунд ' + O().formatEta(c.nextRoundAt - Date.now()) : '');
-      } else if (c.status === 'open') {
-        liveLine = ' · старт через ' + O().formatEta((c.startAt || 0) - Date.now());
-      }
+      const clockAt = c.status === 'live' ? c.nextRoundAt : (c.status === 'open' ? c.startAt : null);
       if (head) {
+        head.dataset.ready = '1';
         head.innerHTML = `<div class="cup-detail-meta">
           <div><strong>${O().statusLabel(c.status)}</strong> · ${c.bracketLabel} · ${c.slotsFilled}/${c.size}</div>
-          <div class="meta">Люди: ${c.humans} · Боты: ${c.bots}${liveLine}</div>
+          <div class="meta">Люди: ${c.humans} · Боты: ${c.bots}${c.status === 'live' ? ' · ' + (c.round || 'раунд') : ''}</div>
+          ${clockAt ? `<div class="meta">Таймер: <strong id="cup-clock">${O().formatEta(clockAt - Date.now())}</strong></div>` : ''}
           ${c.champion ? `<div class="meta">Чемпион: <strong>${c.champion.clubName || c.champion.name}</strong>${c.champion.isBot ? ' (бот)' : ''}</div>` : ''}
           ${c.status === 'finished' && mine && c.xpAwards && c.xpAwards[user.id] != null
-            ? `<div class="meta">Ваш XP за кубок: +${c.xpAwards[user.id]}</div>` : ''}
+            ? `<div class="meta">XP: +${c.xpAwards[user.id]}${c.moneyAwards && c.moneyAwards[user.id] ? ' · приз ' + O().formatMoney(c.moneyAwards[user.id]) : ''}</div>` : ''}
         </div>`;
+        if (clockAt) startCupClock('#cup-clock', clockAt);
+        else stopCupClock();
+      }
+      if (myMatch) {
+        const info = O().findMyTie(c, user?.id);
+        if (mine && info) {
+          myMatch.hidden = false;
+          if (info.pending) {
+            myMatch.innerHTML = `<strong>Ваш матч</strong><p class="hint" style="margin:6px 0 0">Ожидание раунда «${info.round || c.round}» · таймер выше.</p>`;
+          } else if (info.tie) {
+            const t = info.tie;
+            const hs = t.score ? `${t.score[0]}:${t.score[1]}` : '—';
+            const won = t.winnerId === user.id;
+            const alive = (c.aliveIds || []).includes(user.id);
+            myMatch.innerHTML = `<strong>Ваш матч · ${info.round}</strong>
+              <div class="cup-tie mine-tie" style="margin-top:8px">
+                <span class="${t.winnerId === t.home?.userId ? 'win' : ''}">${t.home?.clubName || t.home?.name}</span>
+                <b>${hs}</b>
+                <span class="${t.winnerId === t.away?.userId ? 'win' : ''}">${t.away?.clubName || t.away?.name}</span>
+              </div>
+              <p class="hint" style="margin:6px 0 0">${c.status === 'finished' && c.champion?.userId === user.id ? 'Вы чемпион!' : (won ? (alive || c.status === 'finished' ? 'Победа в раунде' : 'Дальше по сетке') : 'Вылет из кубка')}</p>`;
+          }
+        } else {
+          myMatch.hidden = true;
+          myMatch.innerHTML = '';
+        }
       }
       if (actions) {
         actions.innerHTML = `
@@ -501,20 +609,21 @@ window.EYE_UI = (() => {
       }
       if (entrants) {
         const rows = (c.entrants || []).map((e, i) =>
-          `<div class="cup-entrant${e.userId === user?.id ? ' mine' : ''}"><span>${i + 1}. ${e.clubName || e.name}</span><small>ур.${e.level}${e.isBot ? ' · бот' : ''} · сила ${e.strength || '—'}</small></div>`
+          `<div class="cup-entrant${e.userId === user?.id ? ' mine' : ''}${e.out ? ' out' : ''}"><span>${i + 1}. ${e.clubName || e.name}</span><small>ур.${e.level}${e.isBot ? ' · бот' : ''} · сила ${e.strength || '—'}${e.out ? ' · выбыли' : ''}</small></div>`
         ).join('') || '<div class="hint">Пока пусто</div>';
         entrants.innerHTML = `<strong>Участники</strong><div class="cup-entrants">${rows}</div>`;
       }
-      if (bracket) {
+      if (bracketEl) {
         if (!(c.history || []).length) {
-          bracket.innerHTML = '<strong>Сетка</strong><p class="hint">Появится после старта. Места заполнят боты вашего уровня; раунды идут по ~20 сек.</p>';
+          bracketEl.innerHTML = `<strong>Сетка</strong><p class="hint">Первый раунд «${c.round || 'скоро'}» стартует по таймеру. Свободные места займут боты.</p>`;
         } else {
-          bracket.innerHTML = `<strong>Сетка</strong>` + (c.history || []).map((h) => {
+          bracketEl.innerHTML = `<strong>Сетка</strong>` + (c.history || []).map((h) => {
             const ties = (h.ties || []).map((t) => {
               const hs = t.score ? `${t.score[0]}:${t.score[1]}` : '—';
               const hw = t.winnerId === t.home?.userId ? ' win' : '';
               const aw = t.winnerId === t.away?.userId ? ' win' : '';
-              return `<div class="cup-tie"><span class="${hw}">${t.home?.clubName || t.home?.name}</span><b>${hs}</b><span class="${aw}">${t.away?.clubName || t.away?.name}</span></div>`;
+              const mineTie = t.home?.userId === user?.id || t.away?.userId === user?.id ? ' mine-tie' : '';
+              return `<div class="cup-tie${mineTie}"><span class="${hw}">${t.home?.clubName || t.home?.name}</span><b>${hs}</b><span class="${aw}">${t.away?.clubName || t.away?.name}</span></div>`;
             }).join('');
             return `<div class="cup-round"><div class="meta">${h.round}</div>${ties}</div>`;
           }).join('');
@@ -530,8 +639,20 @@ window.EYE_UI = (() => {
           try { await A().refreshMe(); } catch {}
           const after = A().getUser();
           const gain = c.xpAwards[user.id];
+          const money = c.moneyAwards && c.moneyAwards[user.id];
           const leveled = after && before && after.level > before.level;
-          toast(leveled ? `+${gain} XP · новый уровень ${after.level}!` : `Кубок завершён · +${gain} XP`);
+          let msg = leveled ? `+${gain} XP · уровень ${after.level}!` : `Кубок завершён · +${gain} XP`;
+          if (money) msg += ` · ${O().formatMoney(money)}`;
+          toast(msg);
+          if (S().get()) {
+            try {
+              const cloud = await A().loadCareer();
+              if (cloud) {
+                try { localStorage.setItem(S().KEY, JSON.stringify(cloud)); } catch {}
+                S().load();
+              }
+            } catch {}
+          }
         }
       }
     } catch (err) {
@@ -747,10 +868,55 @@ window.EYE_UI = (() => {
     return S().get()?.leagueName || 'Лига';
   }
 
+  function paintHubChips(opts = {}) {
+    const st = opts.st || S().get();
+    if (!st) return;
+    const pulse = $('#hub-pulse');
+    if (!pulse) return;
+    const unread = opts.unread != null ? opts.unread : st.inbox.filter(m => !m.read).length;
+    const next = opts.next !== undefined ? opts.next : S().nextMatch();
+    const chips = [];
+    const user = A().getUser();
+    if (lastMePayload?.liveCup) {
+      const lc = lastMePayload.liveCup;
+      chips.push(`<button type="button" class="hub-chip warn" data-cup-open="${lc.id}"><span class="hub-chip-n">LIVE</span>${lc.round || 'Кубок'}</button>`);
+    } else if (user?.level) {
+      chips.push(`<button type="button" class="hub-chip" data-nav="onlinecups"><span class="hub-chip-n">Ур.${user.level}</span>Онлайн</button>`);
+    }
+    if (lastMePayload?.cupEventsUnread) {
+      chips.push(`<button type="button" class="hub-chip" data-nav="onlinecups"><span class="hub-chip-n">${lastMePayload.cupEventsUnread}</span>Кубки</button>`);
+    }
+    if (unread) {
+      chips.push(`<button type="button" class="hub-chip warn" data-nav="inbox"><span class="hub-chip-n">${unread}</span>Почта</button>`);
+    }
+    if (st.sacked) {
+      chips.push(`<button type="button" class="hub-chip warn" data-nav="board">Новый клуб</button>`);
+    } else if (next && next.type !== 'league') {
+      const label = next.type === 'cwc' ? 'Матч ЧМ' : next.type === 'ucl' ? 'Матч ЛЧ' : 'Кубок';
+      chips.push(`<button type="button" class="hub-chip" data-nav="hub">${label} в очереди</button>`);
+    }
+    const fin = S().financeSummary?.();
+    if (fin && fin.statusLevel >= 2) {
+      chips.push(`<button type="button" class="hub-chip warn" data-nav="finance">${fin.statusLabel}${fin.embargo ? ' · эмбарго' : ''}</button>`);
+    } else if (fin && fin.statusLevel === 1) {
+      chips.push(`<button type="button" class="hub-chip" data-nav="finance">Касса напряжена</button>`);
+    }
+    pulse.innerHTML = chips.join('');
+  }
+
   function renderHub() {
     const st = S().get();
     const me = S().club();
     if (!st || !me) return;
+    if (A().isLoggedIn()) {
+      A().refreshMe().then((payload) => {
+        lastMePayload = payload;
+        // re-paint chips only if still on hub
+        if (document.getElementById('screen-hub')?.classList.contains('active')) {
+          paintHubChips();
+        }
+      }).catch(() => {});
+    }
     const hubClub = $('#hub-club');
     const hubColor = $('#hub-color');
     const hubMeta = $('#hub-meta');
@@ -789,30 +955,7 @@ window.EYE_UI = (() => {
     if (badge) badge.textContent = unread ? unread + ' новых' : 'Сообщения';
 
     const next = S().nextMatch();
-    const pulse = $('#hub-pulse');
-    if (pulse) {
-      const chips = [];
-      const user = A().getUser();
-      if (user?.level) {
-        chips.push(`<button type="button" class="hub-chip" data-nav="onlinecups"><span class="hub-chip-n">Ур.${user.level}</span>Онлайн</button>`);
-      }
-      if (unread) {
-        chips.push(`<button type="button" class="hub-chip warn" data-nav="inbox"><span class="hub-chip-n">${unread}</span>Почта</button>`);
-      }
-      if (st.sacked) {
-        chips.push(`<button type="button" class="hub-chip warn" data-nav="board">Новый клуб</button>`);
-      } else if (next && next.type !== 'league') {
-        const label = next.type === 'cwc' ? 'Матч ЧМ' : next.type === 'ucl' ? 'Матч ЛЧ' : 'Кубок';
-        chips.push(`<button type="button" class="hub-chip" data-nav="hub">${label} в очереди</button>`);
-      }
-      const fin = S().financeSummary?.();
-      if (fin && fin.statusLevel >= 2) {
-        chips.push(`<button type="button" class="hub-chip warn" data-nav="finance">${fin.statusLabel}${fin.embargo ? ' · эмбарго' : ''}</button>`);
-      } else if (fin && fin.statusLevel === 1) {
-        chips.push(`<button type="button" class="hub-chip" data-nav="finance">Касса напряжена</button>`);
-      }
-      pulse.innerHTML = chips.join('');
-    }
+    paintHubChips({ unread, next, st });
 
     const dev = $('#hub-dev');
     if (dev) {
