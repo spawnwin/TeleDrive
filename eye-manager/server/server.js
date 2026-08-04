@@ -6,8 +6,9 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { URL } = require('url');
-const { createCupsModule } = require('./cups');
 const db = require('./db');
+const G = require('./game');
+const { createCupsModule } = require('./cups');
 
 const PORT = Number(process.env.EYE_PORT || 9140);
 const ROOT = path.resolve(__dirname, '..');
@@ -32,22 +33,6 @@ function verifyPassword(password, salt, hash) {
   }
 }
 
-function usersDb() {
-  return db.usersDb();
-}
-
-function saveUsers(users) {
-  db.saveUsers(users);
-}
-
-function sessionsDb() {
-  return db.sessionsDb();
-}
-
-function publicUser(u) {
-  return { id: u.id, login: u.login, name: u.name, createdAt: u.createdAt };
-}
-
 function normalizeLogin(login) {
   return String(login || '').trim().toLowerCase().replace(/[^a-z0-9_\-\.]/g, '').slice(0, 24);
 }
@@ -58,29 +43,53 @@ function clientIp(req) {
   return String(req.socket?.remoteAddress || '').slice(0, 64);
 }
 
-function hasCareer(userId) {
-  return db.hasCareer(userId);
+function usersDb() { return db.usersDb(); }
+function saveUsers(u) { db.saveUsers(u); }
+function sessionsDb() { return db.sessionsDb(); }
+function publicUser(u) {
+  return { id: u.id, login: u.login, name: u.name, createdAt: u.createdAt };
 }
 
-function markTeamBound(user, clubName) {
-  user.teamBound = true;
-  user.teamCreatedAt = user.teamCreatedAt || Date.now();
-  if (clubName) user.clubName = String(clubName).slice(0, 40);
+function enrichUser(u) {
+  const club = db.getClub(u.id);
+  return {
+    ...publicUser(u),
+    level: u.level || 1,
+    xp: u.xp || 0,
+    xpNext: u.level >= 10 ? 0 : Math.max(0, [0, 0, 100, 250, 500, 900, 1500, 2400, 3600, 5200, 7500][(u.level || 1) + 1] - (u.xp || 0)),
+    role: u.role || 'user',
+    isBot: !!u.isBot,
+    money: u.money ?? 500000,
+    fans: u.fans ?? 12000,
+    boosters: u.boosters ?? 3,
+    fame: u.fame || 0,
+    prestige: u.prestige || 0,
+    points: u.points || 0,
+    cupsPlayed: u.cupsPlayed || 0,
+    cupsWon: u.cupsWon || 0,
+    clubName: club?.name || u.clubName || null,
+    strength: club ? G.clubStrength(club) : (u.strength || 0),
+    teamBound: !!(u.teamBound || club)
+  };
 }
 
-function registrationBlocked(users, ip) {
-  const local = !ip || ip === '127.0.0.1' || ip === '::1' || ip === ':ffff:127.0.0.1';
-  const humans = Object.values(users.users).filter((u) => !u.isBot && u.role !== 'bot');
-  const sameIp = humans.filter((u) => u.regIp && u.regIp === ip);
-  if (!sameIp.length) return null;
-  const withTeam = sameIp.find((u) => u.teamBound || hasCareer(u.id));
-  if (withTeam) {
-    return 'Мультиаккаунты запрещены: с этой сети уже есть аккаунт с командой. Войдите в существующий.';
+function persistUser(user) {
+  const users = usersDb();
+  users.users[user.id] = user;
+  saveUsers(users);
+}
+
+function ensureClub(user, opts = {}) {
+  let club = db.getClub(user.id);
+  if (!club) {
+    club = G.defaultClub(user, opts);
+    G.ensureLineup(club);
+    db.setClub(user.id, club);
+    user.teamBound = true;
+    user.clubName = club.name;
+    persistUser(user);
   }
-  if (!local && sameIp.length >= 1) {
-    return 'С этой сети аккаунт уже создан. Перерегистрация запрещена правилами.';
-  }
-  return null;
+  return club;
 }
 
 let cups;
@@ -109,7 +118,6 @@ function authUser(req) {
   db.saveSessions(sess);
   const u = usersDb().users[s.userId];
   if (!u) return null;
-  cups.ensureUserProgress(u);
   return { user: u, token };
 }
 
@@ -139,27 +147,47 @@ function ensureAdminUser() {
     const id = crypto.randomBytes(8).toString('hex');
     const { salt, hash } = hashPassword(ADMIN_PASS);
     admin = {
-      id,
-      login: ADMIN_LOGIN,
-      name: 'Админ EYE',
-      salt,
-      hash,
-      createdAt: Date.now(),
-      role: 'admin',
-      isBot: false,
-      level: 10,
-      xp: cups.XP_THRESHOLDS[10],
-      cupsPlayed: 0,
-      cupsWon: 0
+      id, login: ADMIN_LOGIN, name: 'Админ EYE', salt, hash,
+      createdAt: Date.now(), role: 'admin', isBot: false,
+      level: 10, xp: 7500, cupsPlayed: 0, cupsWon: 0,
+      money: 2000000, fans: 80000, boosters: 20, fame: 100, prestige: 50, points: 0
     };
     users.users[id] = admin;
     saveUsers(users);
+    ensureClub(admin, { name: 'EYE Admin FC', short: 'ADM', color: '#0B3D2E' });
     console.log(`[EYE] admin created · login=${ADMIN_LOGIN}`);
   } else {
     admin.role = 'admin';
-    cups.ensureUserProgress(admin);
-    saveUsers(users);
+    persistUser(admin);
+    ensureClub(admin, { name: admin.clubName || 'EYE Admin FC' });
   }
+}
+
+function ensureBotPool(n = 24) {
+  const users = usersDb();
+  const bots = Object.values(users.users).filter((u) => u.isBot);
+  while (bots.length < n) {
+    const id = crypto.randomBytes(8).toString('hex');
+    const login = 'bot_' + id.slice(0, 6);
+    const bot = {
+      id, login, name: 'Бот ' + (bots.length + 1),
+      salt: '', hash: '', createdAt: Date.now(),
+      role: 'bot', isBot: true, level: rndLevel(), xp: 0,
+      cupsPlayed: 0, cupsWon: 0,
+      money: 300000, fans: 8000, boosters: 0, fame: 0, prestige: 0, points: 0
+    };
+    users.users[id] = bot;
+    bots.push(bot);
+    const club = G.defaultClub(bot);
+    G.ensureLineup(club);
+    db.setClub(id, club);
+  }
+  saveUsers(users);
+  return bots;
+}
+
+function rndLevel() {
+  return 1 + Math.floor(Math.random() * 8);
 }
 
 const MIME = {
@@ -169,6 +197,8 @@ const MIME = {
   '.svg': 'image/svg+xml',
   '.json': 'application/json; charset=utf-8',
   '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
   '.ico': 'image/x-icon',
   '.webmanifest': 'application/manifest+json'
 };
@@ -176,7 +206,7 @@ const MIME = {
 function send(res, code, body, headers = {}) {
   const data = typeof body === 'string' || Buffer.isBuffer(body) ? body : JSON.stringify(body);
   res.writeHead(code, {
-    'Cache-Control': code === 200 && headers['Content-Type']?.includes('text/html') ? 'no-cache' : 'public, max-age=3600',
+    'Cache-Control': headers['Cache-Control'] || 'no-cache',
     ...headers,
     'Content-Length': Buffer.byteLength(data)
   });
@@ -215,58 +245,75 @@ function readBody(req) {
   });
 }
 
-function persistUser(user) {
-  const users = usersDb();
-  users.users[user.id] = user;
-  saveUsers(users);
+function rewardUsers(home, away, match) {
+  const [hg, ag] = match.score;
+  const apply = (user, won, draw) => {
+    if (!user || user.isBot) return;
+    const prize = won ? 45000 : draw ? 18000 : 8000;
+    user.money = (user.money || 0) + prize;
+    user.xp = (user.xp || 0) + (won ? 35 : draw ? 18 : 10);
+    user.level = G.levelFromXp(user.xp);
+    user.fans = Math.max(1000, (user.fans || 10000) + (won ? 120 : draw ? 20 : -40));
+    if (won) user.points = (user.points || 0) + 3;
+    else if (draw) user.points = (user.points || 0) + 1;
+    persistUser(user);
+  };
+  apply(home, hg > ag, hg === ag);
+  apply(away, ag > hg, hg === ag);
 }
 
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
   const pathname = url.pathname;
 
-  if (req.method === 'OPTIONS') {
-    return json(res, 204, {});
-  }
+  if (req.method === 'OPTIONS') return json(res, 204, {});
 
   if (pathname === '/api/health') {
     return json(res, 200, {
       ok: true,
       service: 'eye-manager',
+      product: 'EYE XI',
       ts: Date.now(),
       db: 'sqlite',
-      cups: cups.stats()
+      online: db.listOnlineUsers().length,
+      cups: cups ? cups.stats() : null
     });
   }
 
-  // ——— AUTH ———
   if (pathname === '/api/register' && req.method === 'POST') {
     try {
       const body = JSON.parse((await readBody(req)).toString('utf8'));
       const login = normalizeLogin(body.login);
       const password = String(body.password || '');
       const name = String(body.name || login).trim().slice(0, 32);
-      if (login.length < 3) return json(res, 400, { error: 'Логин минимум 3 символа (a-z, 0-9)' });
+      if (login.length < 3) return json(res, 400, { error: 'Логин минимум 3 символа' });
       if (password.length < 4) return json(res, 400, { error: 'Пароль минимум 4 символа' });
       if (login === ADMIN_LOGIN) return json(res, 400, { error: 'Логин зарезервирован' });
-      const db = usersDb();
-      if (Object.values(db.users).some((u) => u.login === login)) {
+      const users = usersDb();
+      if (Object.values(users.users).some((u) => u.login === login)) {
         return json(res, 409, { error: 'Логин уже занят' });
       }
-      const ip = clientIp(req);
-      const blocked = registrationBlocked(db, ip);
-      if (blocked) return json(res, 403, { error: blocked, code: 'multi_account' });
       const id = crypto.randomBytes(8).toString('hex');
       const { salt, hash } = hashPassword(password);
       const user = {
         id, login, name, salt, hash, createdAt: Date.now(),
         role: 'user', isBot: false, level: 1, xp: 0, cupsPlayed: 0, cupsWon: 0,
-        teamBound: false, regIp: ip || null
+        teamBound: false, regIp: clientIp(req) || null,
+        money: 500000, fans: 12000, boosters: 3, fame: 0, prestige: 0, points: 0
       };
-      db.users[id] = user;
-      saveUsers(db);
+      users.users[id] = user;
+      saveUsers(users);
+      const club = ensureClub(user, {
+        name: body.clubName ? String(body.clubName).slice(0, 32) : undefined,
+        color: body.color
+      });
       const token = createSession(id);
-      return json(res, 200, { ok: true, token, user: cups.enrichPublic(user) });
+      return json(res, 200, {
+        ok: true,
+        token,
+        user: enrichUser(user),
+        club: G.publicClub(club, user)
+      });
     } catch (e) {
       return json(res, 500, { error: String(e.message || e) });
     }
@@ -277,25 +324,17 @@ const server = http.createServer(async (req, res) => {
       const body = JSON.parse((await readBody(req)).toString('utf8'));
       const login = normalizeLogin(body.login);
       const password = String(body.password || '');
-      const db = usersDb();
-      const user = Object.values(db.users).find((u) => u.login === login);
+      const user = Object.values(usersDb().users).find((u) => u.login === login);
       if (!user || user.isBot || !verifyPassword(password, user.salt, user.hash)) {
         return json(res, 401, { error: 'Неверный логин или пароль' });
       }
-      cups.ensureUserProgress(user);
-      persistUser(user);
+      const club = ensureClub(user);
       const token = createSession(user.id);
-      const careerOk = hasCareer(user.id);
-      if (careerOk && !user.teamBound) {
-        markTeamBound(user);
-        persistUser(user);
-      }
       return json(res, 200, {
         ok: true,
         token,
-        user: cups.enrichPublic(user),
-        hasCareer: careerOk,
-        teamBound: !!(user.teamBound || careerOk)
+        user: enrichUser(user),
+        club: G.publicClub(club, user)
       });
     } catch (e) {
       return json(res, 500, { error: String(e.message || e) });
@@ -315,134 +354,184 @@ const server = http.createServer(async (req, res) => {
   if (pathname === '/api/me' && req.method === 'GET') {
     const auth = requireAuth(req, res);
     if (!auth) return;
-    const careerOk = hasCareer(auth.user.id);
-    if (careerOk && !auth.user.teamBound) {
-      markTeamBound(auth.user);
-      persistUser(auth.user);
-    } else {
-      persistUser(auth.user);
-    }
+    const club = ensureClub(auth.user);
     return json(res, 200, {
       ok: true,
-      user: cups.enrichPublic(auth.user),
-      hasCareer: careerOk,
-      teamBound: !!(auth.user.teamBound || careerOk),
-      bracket: cups.bracketForLevel(auth.user.level || 1),
+      user: enrichUser(auth.user),
+      club: G.publicClub(club, auth.user),
+      online: db.listOnlineUsers().length,
       liveCup: cups.findMyLiveCup(auth.user.id),
-      cupEvents: cups.listCupEvents(auth.user.id, { limit: 10 }),
-      cupEventsUnread: cups.listCupEvents(auth.user.id, { unreadOnly: true, limit: 20 }).length
+      cupEvents: cups.listCupEvents(auth.user.id, { limit: 8 })
     });
   }
 
-  if (pathname === '/api/career' && req.method === 'GET') {
+  if (pathname === '/api/club' && req.method === 'GET') {
     const auth = requireAuth(req, res);
     if (!auth) return;
-    const payload = db.getCareer(auth.user.id);
-    if (!payload?.state) return json(res, 404, { error: 'Нет карьеры' });
-    return json(res, 200, { ok: true, ...payload });
+    const club = ensureClub(auth.user);
+    return json(res, 200, { ok: true, club: G.publicClub(club, auth.user), user: enrichUser(auth.user) });
   }
 
-  if (pathname === '/api/career' && req.method === 'POST') {
+  if (pathname === '/api/club' && req.method === 'POST') {
     const auth = requireAuth(req, res);
-    if (!auth) return;
-    try {
-      const body = JSON.parse((await readBody(req)).toString('utf8'));
-      if (!body || !body.state) return json(res, 400, { error: 'state required' });
-      const mode = body.mode === 'create' ? 'create' : 'save';
-      const exists = hasCareer(auth.user.id);
-      const bound = !!(auth.user.teamBound || exists);
-
-      if (mode === 'create' && bound) {
-        return json(res, 403, {
-          error: 'Команда уже создана. Новая команда и пересоздание запрещены (антимультиаккаунт).',
-          code: 'team_bound'
-        });
-      }
-
-      if (exists) {
-        const prev = db.getCareer(auth.user.id);
-        const oldClub = prev?.state?.clubId;
-        const newClub = body.state?.clubId;
-        if (oldClub && newClub && oldClub !== newClub) {
-          return json(res, 403, {
-            error: 'Нельзя заменить существующую команду. Пересоздание запрещено правилами.',
-            code: 'team_bound'
-          });
-        }
-      }
-
-      if (mode === 'create' || (!exists && !auth.user.teamBound)) {
-        const club = (body.state.clubs || []).find((c) => c.id === body.state.clubId);
-        markTeamBound(auth.user, club?.name || body.state.managerName);
-        persistUser(auth.user);
-      } else if (exists && !auth.user.teamBound) {
-        markTeamBound(auth.user);
-        persistUser(auth.user);
-      }
-
-      const payload = {
-        id: auth.user.id,
-        manager: body.manager || body.state.managerName || auth.user.name,
-        userId: auth.user.id,
-        updatedAt: Date.now(),
-        state: body.state
-      };
-      db.setCareer(auth.user.id, payload);
-      return json(res, 200, {
-        ok: true,
-        id: auth.user.id,
-        created: mode === 'create' || !exists,
-        teamBound: true
-      });
-    } catch (e) {
-      return json(res, 500, { error: String(e.message || e) });
-    }
-  }
-
-  if (pathname === '/api/career' && req.method === 'DELETE') {
-    const auth = requireAdmin(req, res);
     if (!auth) return;
     try {
       const body = JSON.parse((await readBody(req)).toString('utf8') || '{}');
-      const targetId = body.userId || auth.user.id;
-      const users = usersDb();
-      const u = users.users[targetId];
-      if (!u) return json(res, 404, { error: 'Нет пользователя' });
-      db.deleteCareer(targetId);
-      u.teamBound = false;
-      u.teamCreatedAt = null;
-      saveUsers(users);
-      return json(res, 200, { ok: true });
+      const club = ensureClub(auth.user);
+      if (body.name) club.name = String(body.name).slice(0, 32);
+      if (body.short) club.short = String(body.short).slice(0, 4).toUpperCase();
+      if (body.color) club.color = String(body.color).slice(0, 16);
+      if (body.stadium) club.stadium = String(body.stadium).slice(0, 40);
+      if (body.formation && G.FORMATIONS[body.formation]) club.formation = body.formation;
+      if (body.style && G.STYLES.includes(body.style)) club.style = body.style;
+      if (Array.isArray(body.instructions)) club.instructions = body.instructions.slice(0, 8);
+      G.ensureLineup(club);
+      db.setClub(auth.user.id, club);
+      auth.user.clubName = club.name;
+      persistUser(auth.user);
+      return json(res, 200, { ok: true, club: G.publicClub(club, auth.user) });
     } catch (e) {
       return json(res, 500, { error: String(e.message || e) });
     }
   }
 
-  // legacy endpoints — career only via auth + DB
-  if (pathname === '/api/save' && req.method === 'POST') {
+  if (pathname === '/api/players/train' && req.method === 'POST') {
     const auth = requireAuth(req, res);
     if (!auth) return;
     try {
       const body = JSON.parse((await readBody(req)).toString('utf8'));
-      if (!body || !body.state) return json(res, 400, { error: 'state required' });
-      db.setCareer(auth.user.id, {
-        id: auth.user.id,
-        manager: body.manager || body.state.managerName || auth.user.name,
-        userId: auth.user.id,
-        updatedAt: Date.now(),
-        state: body.state
-      });
-      return json(res, 200, { ok: true, id: auth.user.id });
+      const club = ensureClub(auth.user);
+      const r = G.trainPlayer(club, body.playerId, body.skill, Number(body.amount) || 1);
+      if (!r.ok) return json(res, 400, r);
+      db.setClub(auth.user.id, club);
+      return json(res, 200, { ok: true, player: r.player, club: G.publicClub(club, auth.user) });
     } catch (e) {
       return json(res, 500, { error: String(e.message || e) });
     }
   }
 
-  if (pathname === '/api/saves' && req.method === 'GET') {
-    return json(res, 200, { saves: [] });
+  if (pathname === '/api/players/recover' && req.method === 'POST') {
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    const club = ensureClub(auth.user);
+    if ((auth.user.money || 0) < 15000) return json(res, 400, { error: 'Нужно 15 000 на восстановление' });
+    auth.user.money -= 15000;
+    G.recoverSquad(club);
+    persistUser(auth.user);
+    db.setClub(auth.user.id, club);
+    return json(res, 200, { ok: true, club: G.publicClub(club, auth.user), user: enrichUser(auth.user) });
   }
 
-  // ——— ONLINE CUPS ———
+  if (pathname === '/api/friendly' && req.method === 'GET') {
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    return json(res, 200, {
+      ok: true,
+      queue: db.friendlyList().map((f) => ({
+        id: f.id,
+        userId: f.userId,
+        login: f.login,
+        name: f.name,
+        clubName: f.clubName,
+        level: f.level,
+        strength: f.strength,
+        expiresAt: f.expiresAt
+      })),
+      online: db.listOnlineUsers()
+    });
+  }
+
+  if (pathname === '/api/friendly' && req.method === 'POST') {
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    const club = ensureClub(auth.user);
+    // remove old own
+    db.friendlyList().filter((f) => f.userId === auth.user.id).forEach((f) => db.friendlyTake(f.id));
+    const entry = db.friendlyPost({
+      id: G.uid('fr'),
+      userId: auth.user.id,
+      login: auth.user.login,
+      name: auth.user.name,
+      clubName: club.name,
+      level: auth.user.level,
+      strength: G.clubStrength(club),
+      expiresAt: Date.now() + 20 * 60 * 1000
+    });
+    return json(res, 200, { ok: true, entry });
+  }
+
+  if (pathname.match(/^\/api\/friendly\/[^/]+\/accept$/) && req.method === 'POST') {
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    const id = pathname.split('/')[3];
+    const entry = db.friendlyTake(id);
+    if (!entry) return json(res, 404, { error: 'Заявка не найдена или устарела' });
+    if (entry.userId === auth.user.id) {
+      db.friendlyPost(entry);
+      return json(res, 400, { error: 'Нельзя принять свою заявку' });
+    }
+    const homeUser = usersDb().users[entry.userId];
+    const awayUser = auth.user;
+    if (!homeUser) return json(res, 404, { error: 'Соперник недоступен' });
+    const homeClub = ensureClub(homeUser);
+    const awayClub = ensureClub(awayUser);
+    const match = G.simulateMatch(homeClub, awayClub, {
+      competition: 'friendly',
+      homeUserId: homeUser.id,
+      awayUserId: awayUser.id
+    });
+    db.setClub(homeUser.id, homeClub);
+    db.setClub(awayUser.id, awayClub);
+    db.addMatch(match);
+    rewardUsers(homeUser, awayUser, match);
+    return json(res, 200, { ok: true, match });
+  }
+
+  if (pathname === '/api/friendly/bot' && req.method === 'POST') {
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    ensureBotPool(12);
+    const bots = Object.values(usersDb().users).filter((u) => u.isBot);
+    const bot = bots[Math.floor(Math.random() * bots.length)];
+    const homeClub = ensureClub(auth.user);
+    const awayClub = ensureClub(bot);
+    const match = G.simulateMatch(homeClub, awayClub, {
+      competition: 'friendly',
+      homeUserId: auth.user.id,
+      awayUserId: bot.id
+    });
+    db.setClub(auth.user.id, homeClub);
+    db.setClub(bot.id, awayClub);
+    db.addMatch(match);
+    rewardUsers(auth.user, bot, match);
+    return json(res, 200, { ok: true, match });
+  }
+
+  if (pathname === '/api/matches' && req.method === 'GET') {
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    return json(res, 200, { ok: true, matches: db.listMatchesFor(auth.user.id, 40) });
+  }
+
+  if (pathname.startsWith('/api/matches/') && req.method === 'GET') {
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    const id = pathname.slice('/api/matches/'.length);
+    const match = db.getMatch(id);
+    if (!match) return json(res, 404, { error: 'Матч не найден' });
+    return json(res, 200, { ok: true, match });
+  }
+
+  if (pathname === '/api/rating' && req.method === 'GET') {
+    const list = Object.values(usersDb().users)
+      .filter((u) => !u.isBot)
+      .map((u) => enrichUser(u))
+      .sort((a, b) => (b.points - a.points) || (b.xp - a.xp))
+      .slice(0, 50);
+    return json(res, 200, { ok: true, leaders: list });
+  }
+
+  // ——— cups (reuse module) ———
   if (pathname === '/api/cups' && req.method === 'GET') {
     const status = url.searchParams.get('status') || undefined;
     const bracketId = url.searchParams.get('bracketId') || undefined;
@@ -451,11 +540,7 @@ const server = http.createServer(async (req, res) => {
     if (mine && !auth) return;
     return json(res, 200, {
       ok: true,
-      cups: cups.listCups({
-        status,
-        bracketId,
-        mineFor: mine ? auth.user.id : undefined
-      }),
+      cups: cups.listCups({ status, bracketId, mineFor: mine ? auth.user.id : undefined }),
       meta: cups.stats()
     });
   }
@@ -465,40 +550,16 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (pathname === '/api/cups/leaderboard' && req.method === 'GET') {
-    const bracketId = url.searchParams.get('bracketId') || undefined;
-    const limit = Math.min(50, Math.max(5, Number(url.searchParams.get('limit') || 30)));
     return json(res, 200, {
       ok: true,
-      leaders: cups.leaderboard({ bracketId, limit }),
+      leaders: cups.leaderboard({ limit: 40 }),
       brackets: cups.LEVEL_BRACKETS
     });
   }
 
-  if (pathname === '/api/cups/events' && req.method === 'GET') {
-    const auth = requireAuth(req, res);
-    if (!auth) return;
-    return json(res, 200, {
-      ok: true,
-      events: cups.listCupEvents(auth.user.id, { limit: 30 }),
-      unread: cups.listCupEvents(auth.user.id, { unreadOnly: true, limit: 40 }).length
-    });
-  }
-
-  if (pathname === '/api/cups/events/read' && req.method === 'POST') {
-    const auth = requireAuth(req, res);
-    if (!auth) return;
-    try {
-      const body = JSON.parse((await readBody(req)).toString('utf8') || '{}');
-      const r = cups.markCupEventsRead(auth.user.id, body.ids || []);
-      return json(res, 200, r);
-    } catch (e) {
-      return json(res, 500, { error: String(e.message || e) });
-    }
-  }
-
   if (pathname.startsWith('/api/cups/') && req.method === 'GET') {
     const id = pathname.slice('/api/cups/'.length).split('/')[0];
-    if (!id || id === 'meta' || id === 'leaderboard' || id === 'events') return json(res, 404, { error: 'Нет' });
+    if (!id || id === 'meta' || id === 'leaderboard') return json(res, 404, { error: 'Нет' });
     const cup = cups.getCup(id);
     if (!cup) return json(res, 404, { error: 'Кубок не найден' });
     return json(res, 200, { ok: true, cup });
@@ -508,14 +569,10 @@ const server = http.createServer(async (req, res) => {
     const auth = requireAuth(req, res);
     if (!auth) return;
     const id = pathname.split('/')[3];
-    try {
-      const body = JSON.parse((await readBody(req)).toString('utf8') || '{}');
-      const r = cups.joinCup(id, auth.user, body.clubName, { strength: body.strength });
-      if (!r.ok) return json(res, 400, r);
-      return json(res, 200, r);
-    } catch (e) {
-      return json(res, 500, { error: String(e.message || e) });
-    }
+    const club = ensureClub(auth.user);
+    const r = cups.joinCup(id, auth.user, club.name, { strength: G.clubStrength(club) });
+    if (!r.ok) return json(res, 400, r);
+    return json(res, 200, r);
   }
 
   if (pathname.match(/^\/api\/cups\/[^/]+\/leave$/) && req.method === 'POST') {
@@ -527,126 +584,26 @@ const server = http.createServer(async (req, res) => {
     return json(res, 200, r);
   }
 
-  // ——— ADMIN ———
-  if (pathname === '/api/admin/stats' && req.method === 'GET') {
-    if (!requireAdmin(req, res)) return;
-    return json(res, 200, { ok: true, ...cups.stats() });
-  }
-
-  if (pathname === '/api/admin/users' && req.method === 'GET') {
-    if (!requireAdmin(req, res)) return;
-    const list = Object.values(usersDb().users)
-      .filter((u) => !u.isBot)
-      .map((u) => cups.enrichPublic(u));
-    return json(res, 200, { ok: true, users: list });
-  }
-
-  if (pathname === '/api/admin/bots' && req.method === 'GET') {
-    if (!requireAdmin(req, res)) return;
-    cups.ensureBotPool();
-    const list = Object.values(usersDb().users)
-      .filter((u) => u.isBot)
-      .map((u) => cups.enrichPublic(u));
-    return json(res, 200, { ok: true, bots: list });
-  }
-
-  if (pathname === '/api/admin/bots/ensure' && req.method === 'POST') {
-    if (!requireAdmin(req, res)) return;
-    const bots = cups.ensureBotPool(8);
-    return json(res, 200, { ok: true, count: bots.length });
-  }
-
-  if (pathname === '/api/admin/users/level' && req.method === 'POST') {
-    if (!requireAdmin(req, res)) return;
-    try {
-      const body = JSON.parse((await readBody(req)).toString('utf8'));
-      const db = usersDb();
-      const u = db.users[body.userId];
-      if (!u) return json(res, 404, { error: 'Нет пользователя' });
-      const level = Math.max(1, Math.min(10, Number(body.level) || 1));
-      u.level = level;
-      u.xp = cups.XP_THRESHOLDS[level] || 0;
-      saveUsers(db);
-      return json(res, 200, { ok: true, user: cups.enrichPublic(u) });
-    } catch (e) {
-      return json(res, 500, { error: String(e.message || e) });
-    }
-  }
-
-  if (pathname === '/api/admin/cups' && req.method === 'GET') {
-    if (!requireAdmin(req, res)) return;
-    return json(res, 200, {
-      ok: true,
-      cups: cups.listCups(),
-      archive: cups.loadArchive().entries.slice(0, 40)
-    });
-  }
-
-  if (pathname === '/api/admin/cups' && req.method === 'POST') {
-    if (!requireAdmin(req, res)) return;
-    try {
-      const body = JSON.parse((await readBody(req)).toString('utf8') || '{}');
-      const cup = cups.adminCreateCup(body);
-      return json(res, 200, { ok: true, cup });
-    } catch (e) {
-      return json(res, 500, { error: String(e.message || e) });
-    }
-  }
-
-  if (pathname.match(/^\/api\/admin\/cups\/[^/]+\/start$/) && req.method === 'POST') {
-    if (!requireAdmin(req, res)) return;
-    const id = pathname.split('/')[4];
-    const r = cups.adminForceStart(id);
-    if (!r.ok) return json(res, 400, r);
-    return json(res, 200, r);
-  }
-
-  if (pathname.match(/^\/api\/admin\/cups\/[^/]+\/advance$/) && req.method === 'POST') {
-    if (!requireAdmin(req, res)) return;
-    const id = pathname.split('/')[4];
-    const r = cups.adminAdvanceCup(id);
-    if (!r.ok) return json(res, 400, r);
-    return json(res, 200, r);
-  }
-
-  if (pathname.match(/^\/api\/admin\/cups\/[^/]+\/finish$/) && req.method === 'POST') {
-    if (!requireAdmin(req, res)) return;
-    const id = pathname.split('/')[4];
-    const r = cups.adminFinishCup(id);
-    if (!r.ok) return json(res, 400, r);
-    return json(res, 200, r);
-  }
-
-  if (pathname.match(/^\/api\/admin\/cups\/[^/]+$/) && req.method === 'DELETE') {
-    if (!requireAdmin(req, res)) return;
-    const id = pathname.split('/')[4];
-    const r = cups.adminDeleteCup(id);
-    if (!r.ok) return json(res, 400, r);
-    return json(res, 200, r);
-  }
-
   if (pathname === '/api/admin/tick' && req.method === 'POST') {
     if (!requireAdmin(req, res)) return;
-    const r = cups.tick();
-    return json(res, 200, r);
+    return json(res, 200, cups.tick());
+  }
+
+  if (pathname === '/api/admin/stats' && req.method === 'GET') {
+    if (!requireAdmin(req, res)) return;
+    return json(res, 200, { ok: true, ...cups.stats(), humans: Object.values(usersDb().users).filter((u) => !u.isBot).length });
   }
 
   // static
   let target = pathname === '/' ? '/index.html' : pathname;
   let file = safeJoin(ROOT, target);
   if (!file) return send(res, 403, 'Forbidden');
-  if (fs.existsSync(file) && fs.statSync(file).isDirectory()) {
-    file = path.join(file, 'index.html');
-  }
-  if (!fs.existsSync(file) || !fs.statSync(file).isFile()) {
-    file = path.join(ROOT, 'index.html');
-  }
-  if (file.startsWith(path.join(ROOT, 'server', 'data'))) {
-    return send(res, 404, 'Not found');
-  }
+  if (fs.existsSync(file) && fs.statSync(file).isDirectory()) file = path.join(file, 'index.html');
+  if (!fs.existsSync(file) || !fs.statSync(file).isFile()) file = path.join(ROOT, 'index.html');
+  if (file.startsWith(path.join(ROOT, 'server', 'data'))) return send(res, 404, 'Not found');
   const ext = path.extname(file);
   const type = MIME[ext] || 'application/octet-stream';
-  const cache = ext === '.html' || ext === '.js' || ext === '.css' ? 'no-cache' : 'public, max-age=86400';
+  const cache = ['.html', '.js', '.css'].includes(ext) ? 'no-cache' : 'public, max-age=86400';
   send(res, 200, fs.readFileSync(file), { 'Content-Type': type, 'Cache-Control': cache });
 });
 
@@ -662,18 +619,37 @@ async function main() {
       saveCups: (x) => db.saveCups(x),
       loadArchive: () => db.loadArchive(),
       saveArchive: (x) => db.saveArchive(x),
-      readCareerClub: (userId) => db.readCareerClub(userId),
-      writeCareer: (userId, payload) => db.writeCareerPayload(userId, payload)
+      readCareerClub: (userId) => {
+        const club = db.getClub(userId);
+        const u = usersDb().users[userId];
+        if (!club || !u) return null;
+        const me = {
+          id: 'me',
+          name: club.name,
+          budget: u.money || 0,
+          squad: club.players,
+          lineup: club.lineupIds
+        };
+        const st = { clubId: 'me', clubs: [me], week: 1, season: 1, ledger: [], inbox: [] };
+        return { payload: { state: st }, st, me };
+      },
+      writeCareer: (userId, payload) => {
+        const u = usersDb().users[userId];
+        const me = payload?.state?.clubs?.find((c) => c.id === payload.state.clubId);
+        if (u && me && me.budget != null) {
+          u.money = Math.round(me.budget);
+          persistUser(u);
+        }
+      }
     }
   });
   ensureAdminUser();
-  cups.ensureBotPool();
+  ensureBotPool(24);
+  cups.ensureBotPool?.(8);
 
   server.listen(PORT, '0.0.0.0', () => {
-    console.log(`[EYE] listening on http://0.0.0.0:${PORT}`);
-    console.log(`[EYE] root ${ROOT}`);
-    console.log(`[EYE] data ${DATA_DIR}`);
-    console.log(`[EYE] db ${db.DB_FILE}`);
+    console.log(`[EYE XI] http://0.0.0.0:${PORT}`);
+    console.log(`[EYE XI] db ${db.DB_FILE}`);
     cups.startScheduler();
   });
 

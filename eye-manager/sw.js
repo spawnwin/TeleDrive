@@ -1,17 +1,9 @@
-const CACHE = 'eye-manager-v47';
+const CACHE = 'eye-xi-v1';
 const ASSETS = [
   './',
   './index.html',
   './css/style.css',
-  './js/i18n.js',
-  './js/world.js',
-  './js/data.js',
-  './js/engine.js',
-  './js/board.js',
-  './js/auth.js',
-  './js/online.js',
-  './js/state.js',
-  './js/ui.js',
+  './js/api.js',
   './js/app.js',
   './assets/eye.svg',
   './assets/eye-home-pitch.jpg',
@@ -20,10 +12,6 @@ const ASSETS = [
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS)).then(() => self.skipWaiting()));
-});
-
-self.addEventListener('message', (e) => {
-  if (e.data?.type === 'SKIP_WAITING') self.skipWaiting();
 });
 
 self.addEventListener('activate', (e) => {
@@ -35,15 +23,12 @@ self.addEventListener('activate', (e) => {
 
 self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url);
-  if (url.pathname.startsWith('/api/')) return;
-  // Network-first so menu/UI updates are not stuck behind SW cache
+  if (url.pathname.includes('/api/')) return;
   e.respondWith(
     fetch(e.request).then((res) => {
-      if (res && res.ok && e.request.method === 'GET') {
-        const copy = res.clone();
-        caches.open(CACHE).then((c) => c.put(e.request, copy));
-      }
+      const copy = res.clone();
+      caches.open(CACHE).then((c) => c.put(e.request, copy));
       return res;
-    }).catch(() => caches.match(e.request).then((cached) => cached || caches.match('./index.html')))
+    }).catch(() => caches.match(e.request))
   );
 });

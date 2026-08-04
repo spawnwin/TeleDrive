@@ -1,825 +1,125 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1" />
-  <meta name="theme-color" content="#05070A" />
-  <meta name="description" content="EYE — футбольный менеджер нового поколения. Тёмный Liquid Glass, карьера, тактика, трансферы." />
-  <title>EYE — Футбольный менеджер</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0A2F22" />
+  <title>EYE XI — футбольный менеджер</title>
+  <meta name="description" content="EYE XI — онлайн футбольный менеджер. Создайте клуб, играйте матчи и кубки с реальными соперниками." />
   <link rel="icon" href="assets/eye.svg" type="image/svg+xml" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@500;600;700;800&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Syne:wght@600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="css/style.css" />
   <link rel="manifest" href="manifest.json" />
 </head>
 <body>
-  <div class="ambient" aria-hidden="true">
-    <div class="orb orb-a"></div>
-    <div class="orb orb-b"></div>
-    <div class="grid-fade"></div>
+  <!-- GATE / LANDING -->
+  <div id="gate" class="gate">
+    <div class="gate-bg" aria-hidden="true">
+      <img src="assets/eye-home-pitch.jpg" alt="" />
+      <div class="gate-veil"></div>
+      <div class="gate-grain"></div>
+    </div>
+    <aside class="gate-side">
+      <div class="gate-brand">
+        <img src="assets/eye.svg" alt="" width="48" height="48" />
+        <div>
+          <strong>EYE XI</strong>
+          <small>футбольный менеджер</small>
+        </div>
+      </div>
+      <form id="form-login" class="gate-form">
+        <h2>Вход в игру</h2>
+        <label>Логин<input name="login" required minlength="3" autocomplete="username" placeholder="login" /></label>
+        <label>Пароль<input name="password" type="password" required minlength="4" autocomplete="current-password" /></label>
+        <button class="btn btn-primary" type="submit">Войти</button>
+        <p class="hint" id="login-msg"></p>
+        <p class="gate-switch">Нет аккаунта? <button type="button" class="link" id="btn-show-register">Регистрация</button></p>
+      </form>
+      <form id="form-register" class="gate-form" hidden>
+        <h2>Создать клуб</h2>
+        <label>Логин<input name="login" required minlength="3" autocomplete="username" /></label>
+        <label>Имя менеджера<input name="name" maxlength="32" autocomplete="nickname" /></label>
+        <label>Название клуба<input name="clubName" maxlength="32" placeholder="Северный Шторм" /></label>
+        <label>Пароль<input name="password" type="password" required minlength="4" autocomplete="new-password" /></label>
+        <button class="btn btn-primary" type="submit">Играть</button>
+        <p class="hint" id="register-msg"></p>
+        <p class="gate-switch">Уже есть аккаунт? <button type="button" class="link" id="btn-show-login">Войти</button></p>
+      </form>
+      <div class="gate-stats">
+        <div><b id="stat-online">—</b><span>онлайн</span></div>
+        <div><b>XI</b><span>на поле</span></div>
+        <div><b>24/7</b><span>кубки</span></div>
+      </div>
+    </aside>
+    <section class="gate-hero">
+      <p class="eyebrow">онлайн · с 2026</p>
+      <h1>Управляйте клубом.<br/>Побеждайте людей.</h1>
+      <p class="lede">Товарищеские, кубки и чемпионаты — как в классических браузерных менеджерах, только быстрее и красивее.</p>
+      <ul class="gate-points">
+        <li>Команда из 18 игроков сразу после регистрации</li>
+        <li>Тактика, тренировки, восстановление</li>
+        <li>Кубки по уровню каждые 5 минут</li>
+      </ul>
+    </section>
   </div>
 
-  <div id="app" class="menu-mode">
-    <aside id="desktop-nav" class="desktop-nav" aria-label="Навигация ПК">
-      <div class="desktop-brand">
+  <!-- APP SHELL -->
+  <div id="app" class="app" hidden>
+    <aside class="sidebar">
+      <div class="side-brand">
         <img src="assets/eye.svg" alt="" width="36" height="36" />
         <div>
-          <strong>EYE</strong>
-          <small>Менеджер</small>
+          <strong>EYE XI</strong>
+          <small id="side-club">Клуб</small>
         </div>
       </div>
-      <nav class="desktop-nav-list">
-        <div class="nav-group">
-          <span class="nav-group-label">Команда</span>
-          <button type="button" data-nav="hub" class="desk-btn active"><span>⌂</span>Центр</button>
-          <button type="button" data-nav="squad" class="desk-btn"><span>◈</span>Состав</button>
-          <button type="button" data-nav="tactics" class="desk-btn"><span>⬡</span>Тактика</button>
-          <button type="button" data-nav="transfers" class="desk-btn"><span>⇄</span>Рынок</button>
-        </div>
-        <div class="nav-group">
-          <span class="nav-group-label">Сезон</span>
-          <button type="button" data-nav="table" class="desk-btn"><span>#</span>Таблица</button>
-          <button type="button" data-nav="calendar" class="desk-btn"><span>▦</span>Календарь</button>
-          <button type="button" data-nav="cup" class="desk-btn"><span>◆</span>Кубок</button>
-          <button type="button" data-nav="ucl" class="desk-btn"><span>★</span>ЛЧ</button>
-          <button type="button" data-nav="cwc" class="desk-btn"><span>♛</span>ЧМ</button>
-          <button type="button" data-nav="stats" class="desk-btn"><span>〡</span>Статистика</button>
-        </div>
-        <div class="nav-group">
-          <span class="nav-group-label">Клуб</span>
-          <button type="button" data-nav="board" class="desk-btn"><span>○</span>Совет</button>
-          <button type="button" data-nav="youth" class="desk-btn"><span>◇</span>Академия</button>
-          <button type="button" data-nav="club" class="desk-btn"><span>▣</span>Инфра</button>
-          <button type="button" data-nav="finance" class="desk-btn"><span>¤</span>Финансы</button>
-          <button type="button" data-nav="train" class="desk-btn"><span>▴</span>Тренировка</button>
-          <button type="button" data-nav="inbox" class="desk-btn"><span>✉</span>Почта</button>
-        </div>
-        <div class="nav-group">
-          <span class="nav-group-label">Онлайн</span>
-          <button type="button" data-nav="onlinecups" class="desk-btn"><span>◎</span>Кубки онлайн</button>
-          <button type="button" data-nav="admin" class="desk-btn" id="desk-admin" hidden><span>✦</span>Админ</button>
-        </div>
-        <div class="nav-group">
-          <span class="nav-group-label">Система</span>
-          <button type="button" data-nav="history" class="desk-btn"><span>◷</span>История</button>
-          <button type="button" data-nav="more" class="desk-btn"><span>⚙</span>Настройки</button>
-        </div>
+      <div class="side-user" id="side-user"></div>
+      <div class="side-wallet" id="side-wallet"></div>
+      <nav class="side-links">
+        <button type="button" data-nav="cabinet">Кабинет</button>
+        <button type="button" data-nav="team">Команда</button>
+        <button type="button" data-nav="players">Игроки</button>
+        <button type="button" data-nav="matches">Матчи</button>
+        <button type="button" data-nav="tactics">Тактика</button>
+        <button type="button" data-nav="rating">Рейтинг</button>
       </nav>
-      <div class="desktop-nav-foot" id="desktop-user"><strong>Гость</strong><small>ПК-версия</small></div>
+      <div class="side-foot">
+        <div class="side-live"><span class="dot"></span> <span id="side-online">0</span> онлайн</div>
+        <button type="button" class="btn btn-ghost" id="btn-logout">Выход</button>
+      </div>
     </aside>
 
-    <div id="stage">
-    <!-- BOOT -->
-    <section id="screen-boot" class="screen active">
-      <div class="boot-stage">
-        <div class="eye-logo boot-eye" id="boot-eye">
-          <img src="assets/eye.svg" alt="" width="96" height="96" />
-        </div>
-        <h1 class="brand">EYE</h1>
-        <p class="brand-sub">Футбольный менеджер</p>
-        <div class="boot-track"><div class="boot-fill" id="boot-fill"></div></div>
-      </div>
-    </section>
-
-    <!-- HOME / MENU -->
-    <section id="screen-home" class="screen screen-home">
-      <div class="home-hero-bg" aria-hidden="true">
-        <img src="assets/eye-home-pitch.jpg" alt="" width="1920" height="1080" decoding="async" fetchpriority="high" />
-        <div class="home-hero-veil"></div>
-      </div>
-      <div class="home-hero-content">
-        <header class="hero-home">
-          <div class="eye-logo hero-eye">
-            <img src="assets/eye.svg" alt="" width="72" height="72" />
-          </div>
-          <h1 class="brand">EYE</h1>
-          <p class="lede" id="home-lede">Войдите в аккаунт, затем выберите режим.</p>
-        </header>
-        <div class="home-actions" id="home-guest-actions">
-          <button class="btn btn-primary btn-glow" id="btn-auth" type="button">Войти</button>
-          <button class="btn btn-glass" id="btn-register" type="button">Создать аккаунт</button>
-        </div>
-        <div class="home-actions" id="home-mode-actions" hidden>
-          <button class="btn btn-primary btn-glow" id="btn-career" type="button">Карьера</button>
-          <button class="btn btn-glass" id="btn-online" type="button">Онлайн</button>
-        </div>
-        <p class="hint home-mode-hint" id="home-hint"></p>
-      </div>
-    </section>
-
-    <!-- LOBBY — онлайн с другими игроками -->
-    <section id="screen-lobby" class="screen">
-      <header class="lobby-hero">
-        <div class="eye-logo hero-eye" style="width:64px;height:64px;margin:0 auto 8px">
-          <img src="assets/eye.svg" alt="" width="56" height="56" />
-        </div>
-        <h1 class="lobby-title">Онлайн</h1>
-        <p class="hint" id="lobby-lede">Кубки с реальными менеджерами. Карьера — отдельно: реальные лиги и клубы против ИИ.</p>
+    <div class="workspace">
+      <header class="topnav">
+        <nav class="topnav-main" id="topnav">
+          <button type="button" data-nav="cabinet" class="active">Кабинет</button>
+          <button type="button" data-nav="team">Команда</button>
+          <button type="button" data-nav="players">Игроки</button>
+          <button type="button" data-nav="matches">Матчи</button>
+          <button type="button" data-nav="tactics">Тактика</button>
+          <button type="button" data-nav="bonus">Бонус</button>
+          <button type="button" data-nav="rating">Рейтинг</button>
+        </nav>
+        <div class="topnav-clock" id="clock">--:--</div>
       </header>
-      <div class="lobby-user glass-panel" id="lobby-user"></div>
-
-      <section class="lobby-block">
-        <div class="lobby-block-head">
-          <h3 class="lobby-block-title">Кубки онлайн</h3>
-          <button type="button" class="link-btn" data-nav="onlinecups" id="btn-lobby-cups-all">Все кубки</button>
-        </div>
-        <div class="glass-panel" id="lobby-cups-live" style="padding:12px;margin-bottom:8px" hidden></div>
-        <div class="list" id="lobby-cups-list"></div>
-      </section>
-
-      <div class="lobby-actions lobby-actions-foot">
-        <button class="btn btn-glass" data-nav="home" id="btn-lobby-modes" type="button">Режимы</button>
-        <button class="btn btn-primary btn-glow" id="btn-continue" type="button" hidden>В карьеру</button>
-        <button class="btn btn-glass" id="btn-new" type="button" hidden>Новая карьера</button>
-        <button class="btn btn-glass" data-nav="admin" id="btn-lobby-admin" type="button" hidden>Админ-панель</button>
-        <button class="btn btn-glass" id="btn-logout" type="button">Выйти</button>
-      </div>
-      <p class="hint" id="lobby-hint" style="text-align:center;margin-top:8px"></p>
-    </section>
-
-    <!-- ONLINE CUPS -->
-    <section id="screen-onlinecups" class="screen">
-      <header class="subhead">
-        <button class="icon-back" data-nav="lobby" id="onlinecups-back">‹</button>
-        <h2>Кубки онлайн</h2>
-      </header>
-      <div class="glass-panel online-level-card" id="online-level-card"></div>
-      <p class="hint" id="online-cups-meta">Кубки создаются и стартуют каждые 5 минут. Если нет реальных игроков — кубок уходит в архив.</p>
-      <div class="tabs" id="online-cups-tabs">
-        <button type="button" class="tab active" data-oc="open">Мой уровень</button>
-        <button type="button" class="tab" data-oc="mine">Мои</button>
-        <button type="button" class="tab" data-oc="live">Идут</button>
-        <button type="button" class="tab" data-oc="finished">Итоги</button>
-        <button type="button" class="tab" data-oc="board">Рейтинг</button>
-        <button type="button" class="tab" data-oc="all">Все</button>
-      </div>
-      <div class="list" id="online-cups-list"></div>
-    </section>
-
-    <!-- CUP DETAIL -->
-    <section id="screen-cupdetail" class="screen">
-      <header class="subhead">
-        <button class="icon-back" data-nav="onlinecups">‹</button>
-        <h2 id="cupdetail-title">Кубок</h2>
-      </header>
-      <div class="glass-panel" id="cupdetail-head" style="padding:14px"></div>
-      <div class="glass-panel" id="cupdetail-mymatch" style="padding:14px;margin-top:10px" hidden></div>
-      <div class="filter-row" id="cupdetail-actions" style="margin-top:10px"></div>
-      <div class="glass-panel" id="cupdetail-entrants" style="padding:14px;margin-top:10px"></div>
-      <div class="glass-panel" id="cupdetail-bracket" style="padding:14px;margin-top:10px"></div>
-    </section>
-
-    <!-- ADMIN -->
-    <section id="screen-admin" class="screen">
-      <header class="subhead">
-        <button class="icon-back" data-nav="lobby" id="admin-back">‹</button>
-        <h2>Админ-панель</h2>
-      </header>
-      <div class="glass-panel" id="admin-stats" style="padding:14px"></div>
-      <div class="filter-row" style="margin-top:10px;flex-wrap:wrap;gap:8px">
-        <button class="btn btn-primary" id="admin-tick" type="button">Тик кубков</button>
-        <button class="btn btn-glass" id="admin-bots" type="button">Досыпать ботов</button>
-        <button class="btn btn-glass" id="admin-refresh" type="button">Обновить</button>
-      </div>
-      <div class="tabs" id="admin-tabs" style="margin-top:12px">
-        <button type="button" class="tab active" data-ad="cups">Кубки</button>
-        <button type="button" class="tab" data-ad="users">Игроки</button>
-        <button type="button" class="tab" data-ad="bots">Боты</button>
-        <button type="button" class="tab" data-ad="archive">Архив</button>
-      </div>
-      <div class="glass-panel" id="admin-create" style="padding:14px;margin-top:10px">
-        <strong>Создать кубок</strong>
-        <div class="create-row" style="margin-top:8px">
-          <label>Размер
-            <select id="admin-cup-size">
-              <option value="4">4</option>
-              <option value="8" selected>8</option>
-              <option value="16">16</option>
-            </select>
-          </label>
-          <label>Уровень
-            <select id="admin-cup-bracket">
-              <option value="l1_2">1–2</option>
-              <option value="l3_4">3–4</option>
-              <option value="l5_6">5–6</option>
-              <option value="l7_8">7–8</option>
-              <option value="l9_10">9–10</option>
-            </select>
-          </label>
-          <label>Старт через (сек)
-            <input type="number" id="admin-cup-delay" value="60" min="0" step="5" />
-          </label>
-        </div>
-        <button class="btn btn-primary" id="admin-cup-create" type="button" style="margin-top:8px">Создать</button>
-      </div>
-      <div class="list" id="admin-list" style="margin-top:10px"></div>
-    </section>
-
-    <!-- LOGIN (window over home) -->
-    <section id="screen-auth" class="screen entry-screen" aria-hidden="true">
-      <button type="button" class="entry-scrim" data-nav="home" aria-label="Закрыть"></button>
-      <div class="entry-panel glass-panel" role="dialog" aria-modal="true" aria-labelledby="auth-title">
-        <header class="entry-head">
-          <h2 id="auth-title">Вход</h2>
-          <button type="button" class="entry-close" data-nav="home" aria-label="Закрыть">×</button>
-        </header>
-        <form id="form-login" class="create-form entry-form">
-          <label>Логин<input name="login" required minlength="3" maxlength="24" autocomplete="username" placeholder="login" /></label>
-          <label>Пароль<input name="password" type="password" required minlength="4" autocomplete="current-password" placeholder="••••" /></label>
-          <button class="btn btn-primary" type="submit">Войти</button>
-          <p class="hint" id="login-msg"></p>
-        </form>
-        <p class="entry-switch">Нет аккаунта? <button type="button" class="link-btn" data-nav="register">Создать</button></p>
-      </div>
-    </section>
-
-    <!-- REGISTER (window over home) -->
-    <section id="screen-register" class="screen entry-screen" aria-hidden="true">
-      <button type="button" class="entry-scrim" data-nav="home" aria-label="Закрыть"></button>
-      <div class="entry-panel glass-panel" role="dialog" aria-modal="true" aria-labelledby="register-title">
-        <header class="entry-head">
-          <h2 id="register-title">Создать аккаунт</h2>
-          <button type="button" class="entry-close" data-nav="home" aria-label="Закрыть">×</button>
-        </header>
-        <form id="form-register" class="create-form entry-form">
-          <label>Логин<input name="login" required minlength="3" maxlength="24" autocomplete="username" placeholder="login" /></label>
-          <label>Имя менеджера<input name="name" maxlength="32" autocomplete="nickname" placeholder="Как вас зовут" /></label>
-          <label>Пароль<input name="password" type="password" required minlength="4" autocomplete="new-password" placeholder="минимум 4 символа" /></label>
-          <button class="btn btn-primary" type="submit">Зарегистрироваться</button>
-          <p class="hint" id="register-msg"></p>
-        </form>
-        <p class="entry-switch">Уже есть аккаунт? <button type="button" class="link-btn" data-nav="auth">Войти</button></p>
-        <p class="hint" style="margin-top:8px">Один аккаунт — одна карьера. Выберите реальную лигу и клуб при старте.</p>
-      </div>
-    </section>
-
-    <!-- CREATE — карьера: реальная лига + клуб -->
-    <section id="screen-create" class="screen entry-screen" aria-hidden="true">
-      <button type="button" class="entry-scrim" data-nav="home" id="create-scrim" aria-label="Закрыть"></button>
-      <div class="entry-panel entry-panel-wide glass-panel" role="dialog" aria-modal="true" aria-labelledby="create-title">
-        <header class="entry-head">
-          <h2 id="create-title">Новая карьера</h2>
-          <button type="button" class="entry-close" data-nav="home" id="create-close" aria-label="Закрыть">×</button>
-        </header>
-        <div class="create-stepper" id="create-stepper" role="tablist" aria-label="Шаги">
-          <button type="button" class="create-step active" data-goto-step="1" role="tab" aria-selected="true">1 · Лига</button>
-          <button type="button" class="create-step" data-goto-step="2" role="tab" aria-selected="false">2 · Клуб</button>
-          <button type="button" class="create-step" data-goto-step="3" role="tab" aria-selected="false">3 · Старт</button>
-        </div>
-        <form id="form-create" class="create-form entry-form">
-          <div class="create-pane active" data-create-pane="1">
-            <label>Менеджер
-              <input name="manager" maxlength="24" required placeholder="Ваше имя" autocomplete="nickname" />
-            </label>
-            <div class="field-block">
-              <span class="field-label">Реальная лига</span>
-              <div class="league-pills" id="league-pills" role="listbox" aria-label="Лига"></div>
-              <input type="hidden" name="league" id="sel-league" required />
-            </div>
-            <p class="hint">Карьера в аккаунте: реальные лиги и клубы, соперники — ИИ. Без других игроков.</p>
-            <button type="button" class="btn btn-primary" data-create-next="2">Далее · клуб</button>
-          </div>
-
-          <div class="create-pane" data-create-pane="2" hidden>
-            <div class="mode-switch" id="create-mode-switch" role="tablist" hidden>
-              <button type="button" class="mode-chip" data-create-mode="custom">Свой клуб</button>
-              <button type="button" class="mode-chip active" data-create-mode="takeover">Реальный клуб</button>
-            </div>
-
-            <div id="create-custom-block" hidden>
-              <label>Название клуба
-                <input name="clubName" id="inp-club-name" maxlength="28" placeholder="Например, Северный Шторм" />
-              </label>
-              <div class="create-row">
-                <label>Аббревиатура
-                  <input name="clubShort" id="inp-club-short" maxlength="4" placeholder="СШ" style="text-transform:uppercase" />
-                </label>
-                <label>Стадион
-                  <input name="stadium" id="inp-stadium" maxlength="40" placeholder="Арена клуба" />
-                </label>
-              </div>
-              <div class="field-block">
-                <span class="field-label">Цвет</span>
-                <div class="color-pills" id="color-pills" role="listbox" aria-label="Цвет"></div>
-                <input type="hidden" name="clubColor" id="sel-color" value="#C8102E" />
-              </div>
-              <div class="club-preview glass-panel" id="custom-preview">
-                <div class="club-preview-body">
-                  <strong>Случайный состав</strong>
-                  <div class="meta">18 игроков · OVR ~52–63 · база и академия ур. 1 · бюджет старта.</div>
-                </div>
-              </div>
-            </div>
-
-            <div id="create-takeover-block">
-              <div class="field-block">
-                <span class="field-label">Выберите клуб лиги</span>
-                <div class="club-picker" id="club-picker" role="listbox" aria-label="Клуб"></div>
-                <input type="hidden" name="clubId" id="sel-club" />
-              </div>
-              <div class="club-preview glass-panel" id="club-preview" hidden></div>
-            </div>
-
-            <div class="create-nav-row">
-              <button type="button" class="btn btn-glass" data-create-next="1">Назад</button>
-              <button type="button" class="btn btn-primary" data-create-next="3">Далее · тактика</button>
-            </div>
-          </div>
-
-          <div class="create-pane" data-create-pane="3" hidden>
-            <div class="create-row">
-              <label>Схема
-                <select name="formation">
-                  <option>4-3-3</option>
-                  <option>4-4-2</option>
-                  <option>4-2-3-1</option>
-                  <option>3-5-2</option>
-                  <option>5-3-2</option>
-                  <option>4-1-4-1</option>
-                </select>
-              </label>
-              <label>Стиль
-                <select name="style">
-                  <option value="balance">Баланс</option>
-                  <option value="attack">Атака</option>
-                  <option value="defend">Оборона</option>
-                  <option value="possession">Владение</option>
-                  <option value="counter">Контратака</option>
-                </select>
-              </label>
-            </div>
-            <div class="glass-panel" id="create-summary" style="padding:12px"></div>
-            <div class="create-nav-row">
-              <button type="button" class="btn btn-glass" data-create-next="2">Назад</button>
-              <button class="btn btn-primary create-submit" type="submit" id="btn-create-submit">Начать карьеру</button>
-            </div>
-          </div>
-        </form>
-      </div>
-    </section>
-
-    <!-- HUB -->
-    <section id="screen-hub" class="screen">
-      <header class="topbar glass-bar">
-        <div class="club-chip">
-          <span class="club-dot" id="hub-color"></span>
-          <div>
-            <strong id="hub-club">—</strong>
-            <small id="hub-meta">Сезон 1 · Тур 1</small>
-          </div>
-        </div>
-        <div class="top-stats">
-          <span id="hub-budget">—</span>
-          <span id="hub-morale" class="pill">—</span>
-          <span id="hub-board" class="pill" title="Уверенность совета">Совет —</span>
-        </div>
-      </header>
-
-      <div class="hub-next glass-panel" id="hub-next">
-        <div class="next-label" id="next-label">Следующий матч</div>
-        <div class="next-fixture" id="next-fixture">—</div>
-        <div class="hint" id="hub-board-goal" style="margin:6px 0 0"></div>
-        <button class="btn btn-primary" id="btn-play-match">К матчу</button>
-      </div>
-
-      <div class="hub-pulse" id="hub-pulse"></div>
-      <div class="hub-dev glass-panel" id="hub-dev" hidden></div>
-      <div class="news-strip" id="news-strip"></div>
-    </section>
-
-    <!-- SQUAD -->
-    <section id="screen-squad" class="screen">
-      <header class="subhead">
-        <button class="icon-back" data-nav="hub">‹</button>
-        <h2>Состав</h2>
-        <button class="btn btn-tiny" id="btn-auto-xi">Авто XI</button>
-      </header>
-      <div class="squad-summary glass-panel" id="squad-summary"></div>
-      <div class="list" id="squad-list"></div>
-    </section>
-
-    <!-- TACTICS -->
-    <section id="screen-tactics" class="screen">
-      <header class="subhead">
-        <button class="icon-back" data-nav="hub">‹</button>
-        <h2>Тактика</h2>
-      </header>
-      <div class="pitch-wrap glass-panel">
-        <div class="pitch" id="pitch"></div>
-      </div>
-      <p class="hint" id="tactics-hint">Нажмите игрока на поле, затем замену со скамейки</p>
-      <div class="list" id="bench-list"></div>
-      <div class="tactics-controls glass-panel">
-        <label>Схема<select id="sel-formation"></select></label>
-        <label>Стиль<select id="sel-style"></select></label>
-        <button class="btn btn-glass" id="btn-auto-xi-tac" type="button">Авто состав</button>
-      </div>
-    </section>
-
-    <!-- TRANSFERS -->
-    <section id="screen-transfers" class="screen">
-      <header class="subhead">
-        <button class="icon-back" data-nav="hub">‹</button>
-        <h2>Трансферы</h2>
-      </header>
-      <div class="tabs" id="transfer-tabs">
-        <button type="button" class="tab active" data-tab="market">Рынок</button>
-        <button type="button" class="tab" data-tab="sell">Продать</button>
-        <button type="button" class="tab" data-tab="offers">Предложения</button>
-      </div>
-      <div class="filters glass-panel" id="transfer-filters">
-        <input type="search" id="tf-q" placeholder="Поиск игрока / клуба" />
-        <div class="filter-row">
-          <select id="tf-pos">
-            <option value="ALL">Позиция</option>
-            <option value="GK">ВР</option>
-            <option value="DEF">Защита</option>
-            <option value="MID">Полузащита</option>
-            <option value="ATT">Атака</option>
-            <option value="ST">НАП</option>
-            <option value="CB">ЦЗ</option>
-            <option value="CM">ЦП</option>
-          </select>
-          <select id="tf-league">
-            <option value="ALL">Все лиги</option>
-          </select>
-          <select id="tf-ovr">
-            <option value="0">Рейтинг любой</option>
-            <option value="70">70+</option>
-            <option value="75">75+</option>
-            <option value="80">80+</option>
-            <option value="85">85+</option>
-          </select>
-          <select id="tf-age">
-            <option value="0">Возраст любой</option>
-            <option value="21">до 21</option>
-            <option value="23">до 23</option>
-            <option value="25">до 25</option>
-            <option value="28">до 28</option>
-          </select>
-          <select id="tf-price">
-            <option value="0">Бюджет любой</option>
-            <option value="5000000">до 5 млн €</option>
-            <option value="15000000">до 15 млн €</option>
-            <option value="40000000">до 40 млн €</option>
-            <option value="100000000">до 100 млн €</option>
-          </select>
-        </div>
-      </div>
-      <div class="list" id="transfer-list"></div>
-    </section>
-
-    <!-- TABLE -->
-    <section id="screen-table" class="screen">
-      <header class="subhead">
-        <button class="icon-back" data-nav="more">‹</button>
-        <h2 id="table-title">Таблица</h2>
-      </header>
-      <div class="league-pills" id="table-league-pills" style="margin-bottom:10px"></div>
-      <div class="table-wrap glass-panel" id="league-table"></div>
-    </section>
-
-    <!-- CALENDAR -->
-    <section id="screen-calendar" class="screen">
-      <header class="subhead">
-        <button class="icon-back" data-nav="more">‹</button>
-        <h2>Календарь</h2>
-      </header>
-      <div class="tabs" id="calendar-tabs">
-        <button type="button" class="tab active" data-cal="mine">Мои матчи</button>
-        <button type="button" class="tab" data-cal="rounds">Туры лиги</button>
-      </div>
-      <div class="list" id="calendar-list"></div>
-    </section>
-
-    <!-- CUP -->
-    <section id="screen-cup" class="screen">
-      <header class="subhead">
-        <button class="icon-back" data-nav="more">‹</button>
-        <h2>Кубок EYE</h2>
-      </header>
-      <div class="glass-panel" id="cup-status" style="padding:14px"></div>
-      <div class="list" id="cup-list"></div>
-      <div class="ko-play-wrap">
-        <button class="btn btn-primary" id="btn-cup-play" hidden>Играть кубковый матч</button>
-      </div>
-    </section>
-
-    <section id="screen-ucl" class="screen">
-      <header class="subhead">
-        <button class="icon-back" data-nav="more">‹</button>
-        <h2>Лига чемпионов</h2>
-      </header>
-      <div class="glass-panel" id="ucl-status" style="padding:14px"></div>
-      <div class="list" id="ucl-list"></div>
-      <div class="ko-play-wrap">
-        <button class="btn btn-primary" id="btn-ucl-play" hidden>Играть матч ЛЧ</button>
-      </div>
-    </section>
-
-    <section id="screen-cwc" class="screen">
-      <header class="subhead">
-        <button class="icon-back" data-nav="more">‹</button>
-        <h2>Клубный чемпионат мира</h2>
-      </header>
-      <div class="glass-panel" id="cwc-status" style="padding:14px"></div>
-      <div class="list" id="cwc-list"></div>
-      <div class="ko-play-wrap">
-        <button class="btn btn-primary" id="btn-cwc-play" hidden>Играть матч ЧМ</button>
-      </div>
-    </section>
-
-    <section id="screen-board" class="screen">
-      <header class="subhead">
-        <button class="icon-back" data-nav="more">‹</button>
-        <h2>Совет директоров</h2>
-      </header>
-      <div class="glass-panel" id="board-card" style="padding:14px"></div>
-      <div class="list" id="job-list" hidden></div>
-    </section>
-
-    <!-- FINANCE -->
-    <section id="screen-finance" class="screen">
-      <header class="subhead">
-        <button class="icon-back" data-nav="more">‹</button>
-        <h2>Финансы</h2>
-      </header>
-      <div class="glass-panel" id="finance-card" style="padding:16px"></div>
-    </section>
-
-    <!-- STATS -->
-    <section id="screen-stats" class="screen">
-      <header class="subhead">
-        <button class="icon-back" data-nav="more">‹</button>
-        <h2>Статистика лиги</h2>
-      </header>
-      <div class="tabs" id="stats-tabs">
-        <button class="tab active" data-stab="goals">Голы</button>
-        <button class="tab" data-stab="assists">Ассисты</button>
-        <button class="tab" data-stab="motm">Игрок матча</button>
-      </div>
-      <div class="list" id="stats-list"></div>
-    </section>
-
-    <!-- PLAYER -->
-    <section id="screen-player" class="screen">
-      <header class="subhead">
-        <button class="icon-back" id="player-back" data-nav="squad">‹</button>
-        <h2>Игрок</h2>
-      </header>
-      <div class="player-card glass-panel" id="player-card"></div>
-    </section>
-
-    <!-- TRAIN -->
-    <section id="screen-train" class="screen">
-      <header class="subhead">
-        <button class="icon-back" data-nav="more">‹</button>
-        <h2>Тренировка</h2>
-      </header>
-      <div class="glass-panel" id="train-status" style="padding:14px;margin-bottom:10px"></div>
-      <div class="train-grid" id="train-grid"></div>
-      <div class="glass-panel" id="train-report" hidden style="padding:14px;margin-top:10px"></div>
-      <p class="hint" id="train-msg"></p>
-    </section>
-
-    <!-- CLUB -->
-    <section id="screen-club" class="screen">
-      <header class="subhead">
-        <button class="icon-back" data-nav="more">‹</button>
-        <h2>Клуб</h2>
-      </header>
-      <div class="glass-panel" id="medical-bay" style="padding:14px;margin-bottom:10px"></div>
-      <div class="facility-list" id="facility-list"></div>
-      <h3 class="section-label" style="margin:14px 0 8px;font-family:var(--display)">Штаб</h3>
-      <div class="facility-list" id="staff-list"></div>
-      <button class="btn btn-glass" data-nav="youth">Академия</button>
-      <p class="hint" id="club-msg"></p>
-    </section>
-
-    <!-- YOUTH -->
-    <section id="screen-youth" class="screen">
-      <header class="subhead">
-        <button class="icon-back" data-nav="more">‹</button>
-        <h2>Академия</h2>
-      </header>
-      <div class="glass-panel" id="youth-status" style="padding:14px;margin-bottom:10px"></div>
-      <div class="list" id="youth-list"></div>
-      <button class="btn btn-primary" id="btn-youth-best">Выпустить лучшего</button>
-      <p class="hint" id="youth-msg"></p>
-    </section>
-
-    <!-- INBOX -->
-    <section id="screen-inbox" class="screen">
-      <header class="subhead">
-        <button class="icon-back" data-nav="more">‹</button>
-        <h2>Почта</h2>
-      </header>
-      <div class="list" id="inbox-list"></div>
-    </section>
-
-    <!-- MORE / MENU (secondary — like 11x11 sections) -->
-    <section id="screen-more" class="screen">
-      <header class="subhead">
-        <button class="icon-back" data-nav="hub">‹</button>
-        <h2>Меню</h2>
-      </header>
-      <div class="more-stack">
-        <section class="menu-section phone-only-nav">
-          <h3 class="menu-section-title">Сезон</h3>
-          <div class="menu-list">
-            <button type="button" class="menu-row" data-nav="table"><span class="menu-ico">#</span><span class="menu-txt"><strong>Таблица</strong><small>Лига и зоны</small></span></button>
-            <button type="button" class="menu-row" data-nav="calendar"><span class="menu-ico">▦</span><span class="menu-txt"><strong>Календарь</strong><small>Туры</small></span></button>
-            <button type="button" class="menu-row" data-nav="cup"><span class="menu-ico">◆</span><span class="menu-txt"><strong>Кубок</strong><small>Национальный кубок</small></span></button>
-            <button type="button" class="menu-row" data-nav="ucl"><span class="menu-ico">★</span><span class="menu-txt"><strong>Лига чемпионов</strong><small>Сетка</small></span></button>
-            <button type="button" class="menu-row" data-nav="cwc"><span class="menu-ico">♛</span><span class="menu-txt"><strong>Клубный ЧМ</strong><small>Группы и плей-офф</small></span></button>
-            <button type="button" class="menu-row" data-nav="stats"><span class="menu-ico">〡</span><span class="menu-txt"><strong>Статистика</strong><small>Голы · передачи · игрок матча</small></span></button>
-          </div>
-        </section>
-        <section class="menu-section phone-only-nav">
-          <h3 class="menu-section-title">Клуб</h3>
-          <div class="menu-list">
-            <button type="button" class="menu-row" data-nav="board"><span class="menu-ico">○</span><span class="menu-txt"><strong>Совет</strong><small>Цели сезона</small></span></button>
-            <button type="button" class="menu-row" data-nav="youth"><span class="menu-ico">◇</span><span class="menu-txt"><strong>Академия</strong><small>Молодёжь</small></span></button>
-            <button type="button" class="menu-row" data-nav="club"><span class="menu-ico">▣</span><span class="menu-txt"><strong>Инфраструктура</strong><small>Стадион и штаб</small></span></button>
-            <button type="button" class="menu-row" data-nav="finance"><span class="menu-ico">¤</span><span class="menu-txt"><strong>Финансы</strong><small>Бюджет и журнал</small></span></button>
-            <button type="button" class="menu-row" data-nav="train"><span class="menu-ico">▴</span><span class="menu-txt"><strong>Тренировка</strong><small>Фокус недели</small></span></button>
-            <button type="button" class="menu-row" data-nav="inbox"><span class="menu-ico">✉</span><span class="menu-txt"><strong>Почта</strong><small id="inbox-badge">Сообщения</small></span></button>
-          </div>
-        </section>
-        <section class="menu-section">
-          <h3 class="menu-section-title">Онлайн</h3>
-          <div class="menu-list">
-            <button type="button" class="menu-row" data-nav="onlinecups"><span class="menu-ico">◎</span><span class="menu-txt"><strong>Кубки онлайн</strong><small>Автостарт · уровни · боты</small></span></button>
-            <button type="button" class="menu-row" data-nav="admin" id="menu-admin" hidden><span class="menu-ico">✦</span><span class="menu-txt"><strong>Админ-панель</strong><small>Игроки · боты · кубки</small></span></button>
-          </div>
-        </section>
-        <section class="menu-section">
-          <h3 class="menu-section-title">Карьера</h3>
-          <div class="menu-list">
-            <button type="button" class="menu-row" data-nav="history"><span class="menu-ico">◷</span><span class="menu-txt"><strong>История</strong><small>Матчи и сезоны</small></span></button>
-            <button type="button" class="menu-row" data-nav="hub" id="menu-home-row"><span class="menu-ico">⌂</span><span class="menu-txt"><strong>Центр</strong><small>Карьера · лига ИИ</small></span></button>
-            <button type="button" class="menu-row" data-nav="home" id="menu-modes-row"><span class="menu-ico">◈</span><span class="menu-txt"><strong>Режимы</strong><small>Карьера · Онлайн</small></span></button>
-          </div>
-        </section>
-        <section class="menu-section">
-          <h3 class="menu-section-title">Настройки</h3>
-          <div class="glass-panel" id="more-account-level" style="padding:14px;margin-bottom:10px"></div>
-          <div class="glass-panel currency-panel">
-            <strong>Валюта отображения</strong>
-            <p class="hint" id="currency-rates">Курсы к евро: 1 € = 100 ₽ = 1,08 $</p>
-            <div class="currency-switch large" id="currency-switch-more">
-              <button type="button" data-cur="RUB" class="cur-btn">Рубли ₽</button>
-              <button type="button" data-cur="USD" class="cur-btn">Доллары $</button>
-              <button type="button" data-cur="EUR" class="cur-btn">Евро €</button>
-            </div>
-          </div>
-          <p class="hint" id="eye-build-ver" style="margin:0 0 10px">EYE · сборка v47</p>
-          <div class="menu-actions">
-            <button class="btn btn-glass" data-nav="lobby" id="btn-account-home">Аккаунт</button>
-            <button class="btn btn-glass" id="btn-logout-more">Выйти из аккаунта</button>
-            <button class="btn btn-danger" id="btn-reset" hidden>Сбросить карьеру (админ)</button>
-          </div>
-        </section>
-      </div>
-    </section>
-
-    <!-- HISTORY -->
-    <section id="screen-history" class="screen">
-      <header class="subhead">
-        <button class="icon-back" data-nav="more">‹</button>
-        <h2>История</h2>
-      </header>
-      <div class="tabs" id="history-tabs">
-        <button type="button" class="tab active" data-hist="matches">Матчи</button>
-        <button type="button" class="tab" data-hist="seasons">Сезоны</button>
-      </div>
-      <div class="list" id="history-list"></div>
-    </section>
-
-    <!-- PREMATCH -->
-    <section id="screen-prematch" class="screen">
-      <header class="subhead">
-        <button class="icon-back" data-nav="hub">‹</button>
-        <h2>Перед матчем</h2>
-      </header>
-      <div class="prematch glass-panel" id="prematch-card"></div>
-      <div class="glass-panel" id="prematch-lineup" style="padding:14px;margin-top:10px"></div>
-      <div class="glass-panel" id="opp-dossier" style="padding:14px;margin-top:10px"></div>
-      <div class="glass-panel" id="prematch-warnings" hidden style="padding:12px;margin-top:10px"></div>
-      <div class="prematch-actions">
-        <button class="btn btn-glass" data-nav="tactics">Тактика</button>
-        <button class="btn btn-glass" id="btn-fix-xi" hidden>Авто-замена</button>
-        <button class="btn btn-glass" id="btn-fresh-xi" hidden>Свежий XI</button>
-        <button class="btn btn-primary btn-glow" id="btn-kickoff">Начать матч</button>
-      </div>
-    </section>
-
-    <!-- MATCH -->
-    <section id="screen-match" class="screen screen-match">
-      <div class="match-top glass-bar">
-        <div class="scoreboard">
-          <div class="sb-side">
-            <span class="sb-dot" id="m-home-dot"></span>
-            <span id="m-home">HOME</span>
-          </div>
-          <div class="sb-center">
-            <strong id="m-score">0:0</strong>
-            <div class="match-min" id="m-min">0′</div>
-          </div>
-          <div class="sb-side right">
-            <span id="m-away">AWAY</span>
-            <span class="sb-dot" id="m-away-dot"></span>
-          </div>
-        </div>
-        <div class="match-progress"><i id="m-progress"></i></div>
-      </div>
-      <div class="match-pitch-wrap">
-        <canvas id="match-canvas" width="360" height="520"></canvas>
-        <div class="goal-flash" id="goal-flash" hidden>ГОЛ!</div>
-      </div>
-      <div class="match-stats glass-panel" id="match-stats"></div>
-      <div class="match-feed" id="match-feed"></div>
-      <div class="match-controls glass-panel">
-        <div class="speed-row" id="speed-row">
-          <button type="button" class="speed-btn" data-speed="0.5">0.5×</button>
-          <button type="button" class="speed-btn active" data-speed="1">1×</button>
-          <button type="button" class="speed-btn" data-speed="2">2×</button>
-          <button type="button" class="speed-btn" data-speed="4">4×</button>
-        </div>
-        <div class="match-ctrl-row">
-          <button class="btn btn-glass" id="btn-pause-match">Пауза</button>
-          <button class="btn btn-glass" id="btn-skip-half">До перерыва</button>
-          <button class="btn btn-glass" id="btn-skip-match">Пропустить</button>
-        </div>
-      </div>
-      <div id="ht-scrim" class="ht-scrim" hidden></div>
-      <div id="ht-panel" class="ht-panel glass-panel" hidden>
-        <header class="ht-head">
-          <strong>Перерыв</strong>
-          <button type="button" class="entry-close" id="btn-ht-close" aria-label="Закрыть">×</button>
-        </header>
-        <div class="ht-body">
-          <p class="hint" id="ht-hint">Стиль, схема и до 3 замен · затем второй тайм</p>
-          <div class="filter-row" id="ht-formations"></div>
-          <div class="filter-row" id="ht-styles"></div>
-          <div class="list" id="ht-bench"></div>
-        </div>
-        <div class="ht-foot">
-          <button class="btn btn-primary" id="btn-second-half">Второй тайм</button>
-        </div>
-      </div>
-    </section>
-
-    <!-- RESULT -->
-    <section id="screen-result" class="screen">
-      <div class="result-card glass-panel" id="result-card"></div>
-      <div class="glass-panel" id="press-card" hidden style="padding:14px;margin-top:12px"></div>
-      <button class="btn btn-primary" data-nav="hub" id="btn-result-hub">В центр управления</button>
-    </section>
-    </div><!-- /stage -->
-
-    <!-- Persistent mobile dock (11x11-style primary tabs) -->
-    <nav class="dock glass-dock" id="dock" aria-label="Основное меню">
-      <button type="button" data-nav="hub" class="dock-btn active"><span>⌂</span>Центр</button>
-      <button type="button" data-nav="squad" class="dock-btn"><span>◈</span>Состав</button>
-      <button type="button" data-nav="tactics" class="dock-btn"><span>⬡</span>Тактика</button>
-      <button type="button" data-nav="transfers" class="dock-btn"><span>⇄</span>Рынок</button>
-      <button type="button" data-nav="more" class="dock-btn"><span>☰</span>Меню</button>
-    </nav>
-
-    <!-- BID MODAL -->
-    <div id="bid-modal" class="modal" hidden>
-      <button type="button" class="modal-scrim" id="bid-scrim" aria-label="Закрыть"></button>
-      <div class="modal-card glass-panel">
-        <header class="entry-head">
-          <h3 id="bid-title">Предложение</h3>
-          <button type="button" class="entry-close" id="bid-close" aria-label="Закрыть">×</button>
-        </header>
-        <p class="hint" id="bid-meta"></p>
-        <label>Сумма трансфера (внутренние €)<input type="number" id="bid-amount" min="0" step="100000" /></label>
-        <label>Зарплата / нед (€)<input type="number" id="bid-wage" min="0" step="1000" /></label>
-        <div class="filter-row">
-          <button class="btn btn-glass" id="bid-cancel">Отмена</button>
-          <button class="btn btn-primary" id="bid-submit">Отправить</button>
-        </div>
-        <button class="btn btn-tiny" id="bid-counter" hidden>Принять контрпредложение</button>
-      </div>
+      <div class="subnav" id="subnav"></div>
+      <main class="view" id="view"></main>
     </div>
-
-    <!-- TOAST -->
-    <div id="toast" class="toast" hidden></div>
   </div>
 
-  <script src="js/i18n.js"></script>
-  <script src="js/world.js"></script>
-  <script src="js/data.js"></script>
-  <script src="js/engine.js"></script>
-  <script src="js/board.js"></script>
-  <script src="js/auth.js"></script>
-  <script src="js/online.js"></script>
-  <script src="js/state.js"></script>
-  <script src="js/ui.js"></script>
+  <div id="toast" class="toast" hidden></div>
+  <div id="modal" class="modal" hidden>
+    <div class="modal-card" id="modal-card"></div>
+  </div>
+
+  <script src="js/api.js"></script>
   <script src="js/app.js"></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('sw.js').catch(() => {});
+    }
+  </script>
 </body>
 </html>

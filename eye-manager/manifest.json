@@ -1,13 +1,12 @@
 {
-  "name": "EYE — Футбольный менеджер",
-  "short_name": "EYE",
-  "description": "Футбольный менеджер: реальные лиги, трансферы, валюта ₽ $ €",
+  "name": "EYE XI",
+  "short_name": "EYE XI",
+  "description": "Онлайн футбольный менеджер",
   "start_url": "./",
   "display": "standalone",
-  "background_color": "#05070A",
-  "theme_color": "#05070A",
-  "lang": "ru",
+  "background_color": "#0A2F22",
+  "theme_color": "#0A2F22",
   "icons": [
-    { "src": "assets/eye.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+    { "src": "assets/eye.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
   ]
 }

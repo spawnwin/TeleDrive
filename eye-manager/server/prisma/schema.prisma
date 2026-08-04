@@ -25,9 +25,15 @@ model User {
   clubName      String?
   regIp         String?
   strength      Int?
+  money         Int      @default(500000)
+  fans          Int      @default(12000)
+  boosters      Int      @default(3)
+  fame          Int      @default(0)
+  prestige      Int      @default(0)
+  points        Int      @default(0)
   cupEventsJson String   @default("[]")
   sessions      Session[]
-  career        Career?
+  club          Club?
 }
 
 model Session {
@@ -40,12 +46,27 @@ model Session {
   @@index([userId])
 }
 
-model Career {
+model Club {
   userId    String @id
   user      User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  manager   String?
+  name      String
+  short     String @default("EYE")
+  color     String @default("#1FA65A")
   updatedAt BigInt
-  stateJson String
+  dataJson  String
+}
+
+model MatchRec {
+  id        String @id
+  status    String @default("done")
+  homeId    String
+  awayId    String
+  createdAt BigInt
+  dataJson  String
+
+  @@index([homeId])
+  @@index([awayId])
+  @@index([status])
 }
 
 model Cup {
