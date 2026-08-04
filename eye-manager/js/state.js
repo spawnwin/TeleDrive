@@ -108,6 +108,7 @@ window.EYE_STATE = (() => {
       displayCurrency: getCurrency(),
       table: emptySeasonTable(leagueClubs),
       fixtures,
+      otherLeagues: buildOtherLeagues(allClubs, league.id),
       board,
       scoutReports: {},
       ucl: createUcl(allClubs),
@@ -160,6 +161,35 @@ window.EYE_STATE = (() => {
       p.wage = Math.max(500, Math.round(p.wage * 0.25));
       clubObj.youth.push(p);
     }
+  }
+
+  function buildOtherLeagues(allClubs, myLeagueId) {
+    const map = {};
+    (W().LEAGUES || []).forEach(l => {
+      if (l.id === myLeagueId) return;
+      const clubs = allClubs.filter(c => c.leagueId === l.id);
+      if (clubs.length < 2) return;
+      const name = (window.EYE_I18N?.leagueRu(l.id, l)?.name) || l.name;
+      map[l.id] = {
+        id: l.id,
+        name,
+        table: emptySeasonTable(clubs),
+        fixtures: buildFixtures(clubs.map(c => c.id))
+      };
+    });
+    return map;
+  }
+
+  function applyToAnyTable(table, homeId, awayId, score) {
+    const ht = table[homeId];
+    const at = table[awayId];
+    if (!ht || !at) return;
+    const [hg, ag] = score;
+    ht.played++; at.played++;
+    ht.gf += hg; ht.ga += ag; at.gf += ag; at.ga += hg;
+    if (hg > ag) { ht.w++; at.l++; ht.pts += 3; }
+    else if (hg < ag) { at.w++; ht.l++; at.pts += 3; }
+    else { ht.d++; at.d++; ht.pts++; at.pts++; }
   }
 
   function createUcl(allClubs) {
@@ -264,6 +294,7 @@ window.EYE_STATE = (() => {
     try {
       if (typeof localStorage !== 'undefined') localStorage.setItem(KEY, JSON.stringify(state));
     } catch (e) { console.warn('save', e); }
+    try { if (typeof window !== 'undefined' && window.EYE_ON_SAVE) window.EYE_ON_SAVE(state); } catch {}
   }
 
   function load() {
@@ -283,6 +314,7 @@ window.EYE_STATE = (() => {
       if (!state.cup && leagueClubs().length) state.cup = createCup(leagueClubs());
       if (state.cupBest == null) state.cupBest = '';
       if (state.uclBest == null) state.uclBest = '';
+      if (!state.otherLeagues) state.otherLeagues = buildOtherLeagues(state.clubs || [], state.leagueId);
       state.clubs?.forEach(ensureClubExtras);
       if (club()) refillYouth(club());
       if (!state.transferList?.length) refreshTransferMarket();
@@ -401,7 +433,9 @@ window.EYE_STATE = (() => {
 
     state.lastResult = {
       ...result, prize, income,
-      opponent: isHome ? clubById(match.away).name : clubById(match.home).name
+      opponent: isHome ? clubById(match.away).name : clubById(match.home).name,
+      derby: result.derby || null,
+      highlights: extractHighlights(result)
     };
     state.history.unshift({
       at: Date.now(), season: state.season, week: state.week,
@@ -423,23 +457,43 @@ window.EYE_STATE = (() => {
     save();
   }
 
+  function extractHighlights(result) {
+    const goals = [];
+    (result.scorersH || []).forEach(s => {
+      goals.push({ minute: s.minute, type: 'goal', side: 'home', text: `${s.player.name}${s.assist ? ' (п. ' + s.assist.name + ')' : ''}` });
+    });
+    (result.scorersA || []).forEach(s => {
+      goals.push({ minute: s.minute, type: 'goal', side: 'away', text: `${s.player.name}${s.assist ? ' (п. ' + s.assist.name + ')' : ''}` });
+    });
+    const extras = (result.events || []).filter(e => e.type === 'red' || e.type === 'injury');
+    return [...goals, ...extras]
+      .sort((a, b) => (a.minute || 0) - (b.minute || 0))
+      .slice(0, 14);
+  }
+
   function simOtherLeaguesWeek() {
-    const other = state.clubs.filter(c => c.leagueId !== state.leagueId);
-    // random friendly results affecting form only
-    for (let i = 0; i < Math.min(8, Math.floor(other.length / 2)); i++) {
-      const a = other[D().rnd(0, other.length - 1)];
-      const b = other[D().rnd(0, other.length - 1)];
-      if (a.id === b.id) continue;
-      const res = simulateAIMatch(a, b);
-      // only form tick already applied inside sim
-      if (Math.random() < 0.15) {
-        state.news.unshift({
-          id: D().uid('n'), title: `${a.leagueName || a.leagueId}`,
-          body: `${res.home} ${res.score[0]}:${res.score[1]} ${res.away}`,
-          at: Date.now()
-        });
-      }
-    }
+    const map = state.otherLeagues || {};
+    Object.values(map).forEach(lg => {
+      const round = (lg.fixtures || []).find(r => r.round === state.week);
+      if (!round) return;
+      round.matches.forEach(m => {
+        if (m.played) return;
+        const home = clubById(m.home);
+        const away = clubById(m.away);
+        if (!home || !away) { m.played = true; m.score = [0, 0]; return; }
+        const res = simulateAIMatch(home, away);
+        m.played = true;
+        m.score = res.score;
+        applyToAnyTable(lg.table, m.home, m.away, res.score);
+        if (Math.random() < 0.08) {
+          state.news.unshift({
+            id: D().uid('n'), title: lg.name,
+            body: `${res.home} ${res.score[0]}:${res.score[1]} ${res.away}`,
+            at: Date.now()
+          });
+        }
+      });
+    });
   }
 
   function advanceWeek() {
@@ -492,8 +546,20 @@ window.EYE_STATE = (() => {
     if (allPlayed) endSeason();
   }
 
-  function sortedTable() {
-    return Object.values(state.table).sort((a, b) => b.pts - a.pts || (b.gf - b.ga) - (a.gf - a.ga) || b.gf - a.gf);
+  function sortedTable(leagueId) {
+    const lid = leagueId || state.leagueId;
+    if (lid === state.leagueId) {
+      return Object.values(state.table).sort((a, b) => b.pts - a.pts || (b.gf - b.ga) - (a.gf - a.ga) || b.gf - a.gf);
+    }
+    const lg = state.otherLeagues?.[lid];
+    if (!lg) return [];
+    return Object.values(lg.table).sort((a, b) => b.pts - a.pts || (b.gf - b.ga) - (a.gf - a.ga) || b.gf - a.gf);
+  }
+
+  function listLeagueTables() {
+    const mine = { id: state.leagueId, name: state.leagueName };
+    const others = Object.values(state.otherLeagues || {}).map(l => ({ id: l.id, name: l.name }));
+    return [mine, ...others];
   }
 
   function topScorers(limit = 20) {
@@ -584,6 +650,7 @@ window.EYE_STATE = (() => {
     state.stats = { scorers: {}, assisters: {} };
     state.cup = createCup(lc);
     state.ucl = createUcl(state.clubs);
+    state.otherLeagues = buildOtherLeagues(state.clubs, state.leagueId);
     refillYouth(me, true);
     me.squad.forEach(p => { p.seasonYellows = 0; p.yellow = 0; p.suspended = 0; });
     state.inbox.unshift({
@@ -651,6 +718,9 @@ window.EYE_STATE = (() => {
   }
 
   function makeOffer(entryId, bid, loan = false, wageOffer = null) {
+    if (!transferWindowOpen() && !loan) {
+      return { ok: false, msg: 'Трансферное окно закрыто (открыто туры 1–8 и 20–28)' };
+    }
     const me = club();
     const item = state.transferList.find(e => e.id === entryId || e.player.id === entryId);
     if (!item) return { ok: false, msg: 'Игрок снят с рынка' };
@@ -937,10 +1007,46 @@ window.EYE_STATE = (() => {
     return xi;
   }
 
+  function transferWindowOpen() {
+    const w = state?.week || 1;
+    return (w >= 1 && w <= 8) || (w >= 20 && w <= 28);
+  }
+
   function ensureLineup() {
     const me = club();
     if (!me.lineup || me.lineup.length < 11) autoLineup();
     return me.lineup;
+  }
+
+  function xiStatus() {
+    const me = club();
+    ensureLineup();
+    const unavailable = (me.lineup || []).filter(p => (p.injured > 0) || (p.suspended > 0));
+    return {
+      ok: unavailable.length === 0 && (me.lineup || []).length >= 11,
+      unavailable: unavailable.map(p => ({
+        id: p.id,
+        name: p.name,
+        reason: p.injured > 0 ? `травма ${p.injured}` : `бан ${p.suspended}`
+      }))
+    };
+  }
+
+  function fixXi() {
+    const before = xiStatus();
+    autoLineup();
+    const after = xiStatus();
+    return {
+      ok: after.ok,
+      msg: before.unavailable.length
+        ? `Заменены: ${before.unavailable.map(u => u.name).join(', ')}`
+        : 'Состав в порядке',
+      status: after
+    };
+  }
+
+  function matchRivalry(homeId, awayId) {
+    return D().findRivalry(homeId, awayId);
   }
 
   function swapIntoXi(benchPlayerId, slotIndex) {
@@ -1165,7 +1271,7 @@ window.EYE_STATE = (() => {
     me.budget += prize;
     me.morale = Math.min(100, me.morale + (won ? 5 : -2));
     if (state.board) B().applyMatchConfidence(state.board, won, false, true);
-    state.lastResult = { ...result, prize, income: 0, competition: label };
+    state.lastResult = { ...result, prize, income: 0, competition: label, derby: result.derby || null, highlights: extractHighlights(result) };
     state.history.unshift({
       at: Date.now(), season: state.season, week: state.week, cup: kind === 'cup', ucl: kind === 'ucl',
       home: result.home, away: result.away, score
@@ -1254,6 +1360,7 @@ window.EYE_STATE = (() => {
     pendingWage: () => state?.pendingWage || {},
     upgradeFacility, promoteYouth, setTactics, setLineup, autoLineup, ensureLineup, swapIntoXi,
     renewContract, financeSummary, resolveCupRoundAI, scoutPlayer, takeNewJob,
-    hireStaff, answerPress, refillYouth, pendingPress: () => state?.pendingPress || null
+    hireStaff, answerPress, refillYouth, pendingPress: () => state?.pendingPress || null,
+    xiStatus, fixXi, matchRivalry, transferWindowOpen, listLeagueTables
   };
 })();

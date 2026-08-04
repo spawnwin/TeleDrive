@@ -59,6 +59,27 @@ window.EYE_DATA = (() => {
     { id: 'promise', label: 'Обещаю исправить', morale: -1, board: 3, risk: 0 },
     { id: 'silent', label: 'Без комментариев', morale: 0, board: -1, risk: 0 }
   ];
+  const RIVALRIES = [
+    { a: 'rma', b: 'bar', name: 'Эль Класико' },
+    { a: 'int', b: 'mil', name: 'Дерби Милана' },
+    { a: 'liv', b: 'mun', name: 'Северо-западное дерби' },
+    { a: 'ars', b: 'tot', name: 'Северное Лондонское дерби' },
+    { a: 'mci', b: 'mun', name: 'Манчестерское дерби' },
+    { a: 'bay', b: 'bvb', name: 'Der Klassiker' },
+    { a: 'psg', b: 'om', name: 'Le Classique' },
+    { a: 'rom', b: 'laz', name: 'Дерби Рима' },
+    { a: 'atm', b: 'rma', name: 'Мадридское дерби' },
+    { a: 'zen', b: 'spm', name: 'Дерби двух столиц' },
+    { a: 'spm', b: 'csk', name: 'Главное московское дерби' },
+    { a: 'csk', b: 'dyn', name: 'Дерби Москвы' },
+    { a: 'spm', b: 'lok', name: 'Дерби Москвы' },
+    { a: 'juv', b: 'int', name: 'Дерби Италии' },
+    { a: 'juv', b: 'mil', name: 'Дерби Италии' }
+  ];
+
+  function findRivalry(idA, idB) {
+    return RIVALRIES.find(r => (r.a === idA && r.b === idB) || (r.a === idB && r.b === idA)) || null;
+  }
 
   const FILL_SLOTS = ['GK','RB','CB','CB','LB','CDM','CM','CM','CAM','RW','ST','LW','GK','CB','CM','ST','RB','LB'];
 
@@ -220,10 +241,10 @@ window.EYE_DATA = (() => {
   const LEAGUES = () => W().LEAGUES;
 
   return {
-    FORMATIONS, POS_GROUP, POS_LABEL, STYLES, TRAINING, FACILITIES, STAFF_ROLES, PRESS_OPTIONS,
+    FORMATIONS, POS_GROUP, POS_LABEL, STYLES, TRAINING, FACILITIES, STAFF_ROLES, PRESS_OPTIONS, RIVALRIES,
     get LEAGUES() { return W().LEAGUES; },
     rnd, pick, uid, genName, genPlayer, makePlayer, starToPlayer,
     buildSquadFromTemplate, instantiateClub, buildWorldClubs, pitchCoords,
-    valueOf, attrsFromOvr
+    valueOf, attrsFromOvr, findRivalry
   };
 })();

@@ -60,13 +60,15 @@ window.EYE_ENGINE = (() => {
       counter: { a: 1.08, d: 1.06, m: 0.92 }
     }[style] || { a: 1, d: 1, m: 1 };
     const homeBoost = opts.home ? 1.04 : 1;
+    const derbyBoost = opts.derby ? 1.05 : 1;
     return {
-      attack: (atk / 11) * styleMod.a * homeBoost,
-      defense: (def / 11) * styleMod.d,
-      mid: (mid / 11) * styleMod.m,
+      attack: (atk / 11) * styleMod.a * homeBoost * derbyBoost,
+      defense: (def / 11) * styleMod.d * (opts.derby ? 0.98 : 1),
+      mid: (mid / 11) * styleMod.m * derbyBoost,
       condition: cond / 11,
       xi: XI,
-      slots
+      slots,
+      derby: !!opts.derby
     };
   }
 
@@ -140,9 +142,17 @@ window.EYE_ENGINE = (() => {
   function simulateMatch(home, away, options = {}) {
     const startMinute = options.startMinute || 1;
     const endMinute = options.endMinute || 90;
-    const homeS = teamStrength(home, { home: true });
-    const awayS = teamStrength(away, { home: false });
+    const rivalry = D().findRivalry(home.id, away.id);
+    const isDerby = !!rivalry || !!options.derby;
+    const homeS = teamStrength(home, { home: true, derby: isDerby });
+    const awayS = teamStrength(away, { home: false, derby: isDerby });
     const events = [];
+    if (isDerby && startMinute <= 1) {
+      events.push({
+        minute: 1, type: 'chance', side: 'home',
+        text: `Дерби${rivalry ? ': ' + rivalry.name : ''}! Накал максимальный.`
+      });
+    }
     let hg = options.score ? options.score[0] : 0;
     let ag = options.score ? options.score[1] : 0;
     let possessionH = options.stats?.possession?.[0] ?? 50;
@@ -156,6 +166,8 @@ window.EYE_ENGINE = (() => {
     const medA = options.medicalAway ?? away.facilities?.medical ?? 2;
     const physioH = home.staff?.physio || 1;
     const physioA = away.staff?.physio || 1;
+    const shotMul = isDerby ? 1.12 : 1;
+    const cardMul = isDerby ? 1.45 : 1;
 
     for (let minute = startMinute; minute <= endMinute; minute++) {
       const midDiff = homeS.mid - awayS.mid;
@@ -163,7 +175,7 @@ window.EYE_ENGINE = (() => {
 
       const ch = chance(homeS, awayS, minute);
       const roll = Math.random();
-      const attackSide = roll < ch.home * 0.085 ? 'home' : roll < (ch.home + ch.away) * 0.085 ? 'away' : null;
+      const attackSide = roll < ch.home * 0.085 * shotMul ? 'home' : roll < (ch.home + ch.away) * 0.085 * shotMul ? 'away' : null;
 
       if (attackSide) {
         const isHome = attackSide === 'home';
@@ -198,7 +210,7 @@ window.EYE_ENGINE = (() => {
         }
       }
 
-      if (Math.random() < 0.012) {
+      if (Math.random() < 0.012 * cardMul) {
         const side = Math.random() < 0.5 ? 'home' : 'away';
         const xi = side === 'home' ? homeS.xi : awayS.xi;
         const p = D().pick(xi);
@@ -239,6 +251,7 @@ window.EYE_ENGINE = (() => {
       homeId: home.id, awayId: away.id,
       score: [hg, ag],
       events,
+      derby: isDerby ? (rivalry?.name || 'Дерби') : null,
       stats: {
         possession: [Math.round(possessionH), 100 - Math.round(possessionH)],
         shots: [shotsH, shotsA],

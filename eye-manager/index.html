@@ -265,6 +265,7 @@
         <button class="icon-back" data-nav="hub">‹</button>
         <h2 id="table-title">Таблица</h2>
       </header>
+      <div class="league-pills" id="table-league-pills" style="margin-bottom:10px"></div>
       <div class="table-wrap glass-panel" id="league-table"></div>
     </section>
 
@@ -429,8 +430,10 @@
         <h2>Перед матчем</h2>
       </header>
       <div class="prematch glass-panel" id="prematch-card"></div>
+      <div class="glass-panel" id="prematch-warnings" hidden style="padding:12px;margin-top:10px"></div>
       <div class="prematch-actions">
         <button class="btn btn-glass" data-nav="tactics">Тактика</button>
+        <button class="btn btn-glass" id="btn-fix-xi" hidden>Авто-замена</button>
         <button class="btn btn-primary btn-glow" id="btn-kickoff">Начать матч</button>
       </div>
     </section>

@@ -527,7 +527,22 @@ input:focus, select:focus { border-color: rgba(94,234,212,.45); box-shadow: 0 0 
 .prematch .vs {
   font-family: var(--display); font-size: 28px; font-weight: 800; letter-spacing: -.03em;
 }
-.prematch-actions { display: grid; grid-template-columns: 1fr 1.4fr; gap: 10px; }
+.derby-badge {
+  display: inline-block;
+  margin: 0 auto;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: #FDE68A;
+  background: rgba(251, 191, 36, .14);
+  border: 1px solid rgba(251, 191, 36, .35);
+}
+.prematch-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.prematch-actions #btn-kickoff { grid-column: 1 / -1; }
+#prematch-warnings { border-color: rgba(251,113,133,.35); }
 
 .screen-match { gap: 10px !important; }
 .match-top {
