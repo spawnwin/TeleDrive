@@ -10,8 +10,9 @@ import {
   Stats,
 } from './api'
 import FinancePanel from './Finance'
+import SettingsPanel from './Settings'
+import TabBar, { type Tab } from './TabBar'
 
-type Tab = 'home' | 'stats' | 'finance'
 type Theme = 'dark' | 'light'
 type SheetMode = 'expense' | 'categories' | 'category-form' | null
 
@@ -339,18 +340,8 @@ export default function App() {
               {me?.firstName ? `Привет, ${me.firstName}` : 'Учёт расходов'}
             </div>
           </div>
-          <div className="header-actions">
-            <button
-              type="button"
-              className="theme-toggle glass"
-              aria-label={theme === 'dark' ? 'Светлая тема' : 'Тёмная тема'}
-              onClick={toggleTheme}
-            >
-              {theme === 'dark' ? '☀' : '☾'}
-            </button>
-            <div className="avatar" aria-hidden>
-              {initial}
-            </div>
+          <div className="avatar" aria-hidden>
+            {initial}
           </div>
         </header>
 
@@ -463,6 +454,15 @@ export default function App() {
           </>
         ) : tab === 'finance' ? (
           <FinancePanel onToast={setToast} haptic={haptic} />
+        ) : tab === 'settings' ? (
+          <SettingsPanel
+            theme={theme}
+            onToggleTheme={toggleTheme}
+            firstName={me?.firstName}
+            categoriesCount={categories.length}
+            categories={categories}
+            onOpenCategories={openCategories}
+          />
         ) : (
           <section className="section rise rise-delay-2">
             <div className="section-head">
@@ -514,37 +514,7 @@ export default function App() {
         )}
       </div>
 
-      <nav className="dock glass-strong dock-4" aria-label="Навигация">
-        <button
-          type="button"
-          className={tab === 'home' ? 'active' : ''}
-          onClick={() => setTab('home')}
-        >
-          Главная
-        </button>
-        <button
-          type="button"
-          className={tab === 'finance' ? 'active' : ''}
-          onClick={() => setTab('finance')}
-        >
-          Финансы
-        </button>
-        <button
-          type="button"
-          className="fab"
-          aria-label="Добавить расход"
-          onClick={() => openExpense()}
-        >
-          +
-        </button>
-        <button
-          type="button"
-          className={tab === 'stats' ? 'active' : ''}
-          onClick={() => setTab('stats')}
-        >
-          Сводка
-        </button>
-      </nav>
+      <TabBar tab={tab} onChange={setTab} onAdd={() => openExpense()} />
 
       {sheet === 'expense' && (
         <>
