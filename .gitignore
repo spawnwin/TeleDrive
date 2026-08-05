@@ -13,3 +13,5 @@ sessions/
 dump\.rdb
 *.log
 .cached/
+eye-manager/server/data/
+eye-manager/server/data-test/
