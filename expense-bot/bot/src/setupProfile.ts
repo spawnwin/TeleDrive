@@ -19,6 +19,8 @@ export const BOT_PROFILE = {
     'Имя от первой золотой монеты Древней Руси.',
     '',
     '• Быстрые траты по категориям',
+    '• Ипотеки: платёж и напоминание в день оплаты',
+    '• Вклады: банк, %, сумма к выплате, напоминание об окончании',
     '• Сводка за день, неделю и месяц',
     '• Свои категории',
     '• Тёмный Liquid Glass-интерфейс',
@@ -28,6 +30,7 @@ export const BOT_PROFILE = {
   commands: [
     { command: 'start', description: 'Запустить и открыть Златник' },
     { command: 'app', description: 'Открыть мини-приложение' },
+    { command: 'finance', description: 'Ипотеки и вклады' },
     { command: 'categories', description: 'Управление категориями' },
     { command: 'today', description: 'Сводка за сегодня' },
     { command: 'month', description: 'Сводка за месяц' },

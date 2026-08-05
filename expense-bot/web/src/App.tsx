@@ -9,8 +9,9 @@ import {
   Me,
   Stats,
 } from './api'
+import FinancePanel from './Finance'
 
-type Tab = 'home' | 'stats'
+type Tab = 'home' | 'stats' | 'finance'
 type Theme = 'dark' | 'light'
 type SheetMode = 'expense' | 'categories' | 'category-form' | null
 
@@ -460,6 +461,8 @@ export default function App() {
               )}
             </section>
           </>
+        ) : tab === 'finance' ? (
+          <FinancePanel onToast={setToast} haptic={haptic} />
         ) : (
           <section className="section rise rise-delay-2">
             <div className="section-head">
@@ -511,13 +514,20 @@ export default function App() {
         )}
       </div>
 
-      <nav className="dock glass-strong" aria-label="Навигация">
+      <nav className="dock glass-strong dock-4" aria-label="Навигация">
         <button
           type="button"
           className={tab === 'home' ? 'active' : ''}
           onClick={() => setTab('home')}
         >
           Главная
+        </button>
+        <button
+          type="button"
+          className={tab === 'finance' ? 'active' : ''}
+          onClick={() => setTab('finance')}
+        >
+          Финансы
         </button>
         <button
           type="button"

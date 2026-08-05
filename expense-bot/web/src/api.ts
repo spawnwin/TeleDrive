@@ -35,6 +35,54 @@ export type Me = {
   glyphs: string[]
 }
 
+export type Mortgage = {
+  id: number
+  user_id: string
+  person: string
+  bank: string
+  title: string
+  principal: number
+  rate: number
+  monthly_payment: number
+  payment_day: number
+  start_date: string | null
+  end_date: string | null
+  note: string
+  notify_enabled: number
+  next_payment_date: string
+  months_left: number | null
+  remaining_total: number | null
+}
+
+export type Deposit = {
+  id: number
+  user_id: string
+  person: string
+  bank: string
+  amount: number
+  rate: number
+  start_date: string
+  end_date: string
+  capitalization: 'none' | 'monthly' | 'daily'
+  note: string
+  notify_enabled: number
+  notify_days_before: number
+  payout: number
+  profit: number
+  days_left: number
+  matured: boolean
+}
+
+export type FinanceSummary = {
+  mortgages: Mortgage[]
+  deposits: Deposit[]
+  mortgageMonthly: number
+  mortgageDebt: number
+  depositTotal: number
+  depositPayout: number
+  depositProfit: number
+}
+
 declare global {
   interface Window {
     Telegram?: {
@@ -115,6 +163,31 @@ export const api = {
     }),
   deleteCategory: (id: number) =>
     request<{ ok: boolean }>(`/api/categories/${id}`, { method: 'DELETE' }),
+  finance: () => request<FinanceSummary>('/api/finance'),
+  createMortgage: (body: Record<string, unknown>) =>
+    request<{ item: Mortgage }>('/api/mortgages', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  updateMortgage: (id: number, body: Record<string, unknown>) =>
+    request<{ item: Mortgage }>(`/api/mortgages/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    }),
+  deleteMortgage: (id: number) =>
+    request<{ ok: boolean }>(`/api/mortgages/${id}`, { method: 'DELETE' }),
+  createDeposit: (body: Record<string, unknown>) =>
+    request<{ item: Deposit }>('/api/deposits', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  updateDeposit: (id: number, body: Record<string, unknown>) =>
+    request<{ item: Deposit }>(`/api/deposits/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    }),
+  deleteDeposit: (id: number) =>
+    request<{ ok: boolean }>(`/api/deposits/${id}`, { method: 'DELETE' }),
 }
 
 export function formatMoney(value: number): string {

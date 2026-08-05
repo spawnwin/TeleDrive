@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url'
 import { Bot, InlineKeyboard, Keyboard, webhookCallback } from 'grammy'
 import { createApiRouter } from './api.js'
 import { setupBotProfile } from './setupProfile.js'
+import { startNotificationScheduler } from './notify.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const PORT = Number(process.env.PORT ?? 3000)
@@ -66,6 +67,7 @@ function welcomeText(name: string) {
     '',
     'Что умею:',
     '• записывать траты за пару секунд',
+    '• ипотеки и вклады с напоминаниями',
     '• категории — свои, с редактированием',
     '• сводка за день, неделю и месяц',
     '• тёмный Liquid Glass и светлая тема',
@@ -80,11 +82,17 @@ const HELP_TEXT = [
   '1. Нажми «Открыть Златник»',
   '2. Добавь расход: сумма → категория → сохранить',
   '3. «Управление» — свои категории',
-  '4. «Сводка» — неделя и топ категорий',
-  '5. ☀ / ☾ — переключение темы',
+  '4. «Финансы» — ипотеки и вклады',
+  '5. «Сводка» — неделя и топ категорий',
+  '6. ☀ / ☾ — переключение темы',
+  '',
+  'Напоминания:',
+  '• ипотека — в день платежа',
+  '• вклад — за N дней и в день окончания',
   '',
   'Команды:',
   '/app — открыть приложение',
+  '/finance — ипотеки и вклады',
   '/categories — про категории',
   '/today — траты за сегодня',
   '/month — траты за месяц',
@@ -156,6 +164,22 @@ async function start() {
     })
   })
 
+  bot.command('finance', async (ctx) => {
+    await ctx.reply(
+      [
+        '*Ипотеки и вклады*',
+        '',
+        'В приложении открой вкладку *Финансы*.',
+        '• Ипотека — платёж, ставка, день оплаты, кто платит',
+        '• Вклад — банк, %, срок, сумма к выплате',
+        '',
+        'Напомню в день платежа по ипотеке',
+        'и перед окончанием / в день окончания вклада.',
+      ].join('\n'),
+      { parse_mode: 'Markdown', reply_markup: buildOpenKeyboard() },
+    )
+  })
+
   bot.hears('Справка', async (ctx) => {
     await ctx.reply(HELP_TEXT, {
       parse_mode: 'Markdown',
@@ -176,6 +200,8 @@ async function start() {
   } catch (err) {
     console.warn('[zlatnik] setupBotProfile:', err)
   }
+
+  startNotificationScheduler(bot)
 
   const useWebhook = process.env.USE_WEBHOOK === '1'
   if (useWebhook) {
