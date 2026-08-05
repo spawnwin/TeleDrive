@@ -115,12 +115,33 @@ describe('cups system', () => {
     assert.ok(board[0].rank === 1);
   });
 
-  it('prunes duplicate open cups per bracket and size', () => {
-    cups.adminCreateCup({ size: 4, bracketId: 'l3_4', startInMs: 180_000 });
-    cups.adminCreateCup({ size: 4, bracketId: 'l3_4', startInMs: 180_000 });
-    cups.adminCreateCup({ size: 4, bracketId: 'l3_4', startInMs: 180_000 });
-    cups.tick();
-    const open = cups.listCups({ status: 'open', bracketId: 'l3_4' }).filter((c) => c.size === 4);
-    assert.equal(open.length, 1);
+  it('blocks second open/live cup while still alive', () => {
+    users.users.alive1 = {
+      id: 'alive1', login: 'alive1', name: 'Alive', role: 'user', isBot: false,
+      level: 1, xp: 0, cupsPlayed: 0, cupsWon: 0, cupEvents: []
+    };
+    const a = cups.adminCreateCup({ size: 4, bracketId: 'l1_2', startInMs: 120_000 });
+    assert.equal(cups.joinCup(a.id, users.users.alive1, 'A FC').ok, true);
+    cups.adminForceStart(a.id);
+    const live = cups.findMyLiveCup('alive1');
+    assert.ok(live);
+    assert.equal(live.stillAlive, true);
+
+    const b = cups.adminCreateCup({ size: 4, bracketId: 'l1_2', startInMs: 120_000 });
+    const blocked = cups.joinCup(b.id, users.users.alive1, 'A FC');
+    assert.equal(blocked.ok, false);
+    assert.match(blocked.error, /уже играете/i);
+
+    // eliminate from alive — findMyLiveCup still returns cup with stillAlive false
+    const db = JSON.parse(fs.readFileSync(path.join(dir, 'cups.json'), 'utf8'));
+    const cup = db.cups[a.id];
+    cup.alive = (cup.alive || []).filter((e) => e.userId !== 'alive1');
+    fs.writeFileSync(path.join(dir, 'cups.json'), JSON.stringify(db));
+    const after = cups.findMyLiveCup('alive1');
+    assert.ok(after);
+    assert.equal(after.stillAlive, false);
+
+    const allowed = cups.joinCup(b.id, users.users.alive1, 'A FC');
+    assert.equal(allowed.ok, true, allowed.error);
   });
 });

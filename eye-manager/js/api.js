@@ -25,6 +25,11 @@ window.EYE_API = (() => {
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
+      if (res.status === 401 && token) {
+        token = '';
+        user = null;
+        persist();
+      }
       const err = new Error(data.error || ('Ошибка ' + res.status));
       err.status = res.status;
       err.data = data;

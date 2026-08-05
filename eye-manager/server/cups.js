@@ -825,10 +825,15 @@ function createCupsModule({ dataDir, usersDb, saveUsers, publicUser, store }) {
 
   function findMyLiveCup(userId) {
     const db = loadCups();
-    const cup = Object.values(db.cups).find(
-      (c) => c.status === 'live' && (c.entrants || []).some((e) => e.userId === userId && !e.isBot)
-    );
-    return cup ? publicCup(cup) : null;
+    const cup = Object.values(db.cups).find((c) => {
+      if (c.status !== 'live') return false;
+      return (c.entrants || []).some((e) => e.userId === userId && !e.isBot);
+    });
+    if (!cup) return null;
+    const pub = publicCup(cup);
+    const aliveList = cup.alive || [];
+    pub.stillAlive = !aliveList.length || aliveList.some((e) => e.userId === userId);
+    return pub;
   }
 
   function getCup(id) {
@@ -878,9 +883,18 @@ function createCupsModule({ dataDir, usersDb, saveUsers, publicUser, store }) {
       return { ok: false, error: 'Вы уже в этом кубке' };
     }
     const already = Object.values(db.cups).some(
-      (c) => c.status === 'open' && c.entrants.some((e) => e.userId === user.id && !e.isBot)
+      (c) =>
+        (c.status === 'open' || c.status === 'live') &&
+        c.entrants.some((e) => e.userId === user.id && !e.isBot) &&
+        (c.status !== 'live' || (c.alive || []).some((a) => a.userId === user.id) || !(c.alive || []).length)
     );
-    if (already) return { ok: false, error: 'Сначала выйдите из другого открытого кубка' };
+    if (already) {
+      const live = Object.values(db.cups).find(
+        (c) => c.status === 'live' && (c.alive || []).some((e) => e.userId === user.id)
+      );
+      if (live) return { ok: false, error: 'Вы уже играете в другом кубке' };
+      return { ok: false, error: 'Сначала выйдите из другого открытого кубка' };
+    }
     if (cup.entrants.length >= cup.size) return { ok: false, error: 'Мест нет' };
 
     let strength = Number(opts.strength) || 0;

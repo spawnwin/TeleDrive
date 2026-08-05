@@ -175,6 +175,10 @@ describe('eye xi server', () => {
       const staff1 = await post(port, '/api/club/staff', { role: 'scout' }, auth);
       assert.equal(staff1.status, 200, staff1.body);
 
+      // bot match cooldown (~90s)
+      const bot2 = await post(port, '/api/friendly/bot', {}, auth);
+      assert.equal(bot2.status, 429, bot2.body);
+
       const logout = await post(port, '/api/logout', {}, auth);
       assert.equal(logout.status, 200);
       const meAfter = await get(port, '/api/me', auth);

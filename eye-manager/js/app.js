@@ -13,7 +13,8 @@
     cupPoll: null,
     watchingCup: null,
     lastWageToast: null,
-    lastChallengeToast: null
+    lastChallengeToast: null,
+    seenEventIds: new Set()
   };
 
   const EVENT_LABELS = {
@@ -138,9 +139,30 @@
     $('#side-online').textContent = state.me?.online ?? '—';
   }
 
+  function showGate() {
+    stopCupPoll();
+    $('#app').hidden = true;
+    $('#gate').hidden = false;
+    state.me = null;
+    state.club = null;
+  }
+
+  function toastEvents(events) {
+    const unread = (events || []).filter((e) => e && e.id && !e.read && !state.seenEventIds.has(e.id));
+    unread.slice(0, 3).forEach((e) => {
+      state.seenEventIds.add(e.id);
+      const label = EVENT_LABELS[e.type] || e.title || e.type;
+      toast(label + (e.cupName ? ': ' + e.cupName : e.body ? ' — ' + e.body : ''));
+    });
+    (events || []).forEach((e) => { if (e?.id) state.seenEventIds.add(e.id); });
+  }
+
   async function refreshMe() {
     const data = await A().me();
-    if (!data) return null;
+    if (!data) {
+      if (!$('#app')?.hidden) showGate();
+      return null;
+    }
     state.me = data;
     state.club = data.club;
     paintSidebar();
@@ -187,6 +209,7 @@
     }
     if (state.tab === 'mail') {
       const events = state.me?.cupEvents || [];
+      const liveChals = new Set((state.me?.challenges || []).map((c) => c.id));
       try { await A().request('api/cups/events/read', { method: 'POST', body: {} }); } catch {}
       $('#view').innerHTML = `
         <section class="panel">
@@ -198,7 +221,10 @@
                 <small>${esc(e.cupName || e.body || '')}${e.xp ? ' · +' + e.xp + ' XP' : ''}${e.money ? ' · +' + money(e.money) : ''}</small>
               </div>
               <div style="display:flex;gap:6px;align-items:center">
-                ${e.challengeId && e.type === 'challenge_in' ? `<button class="btn btn-primary btn-tiny" data-chal-accept="${esc(e.challengeId)}">Принять</button>` : ''}
+                ${e.challengeId && e.type === 'challenge_in' && liveChals.has(e.challengeId) ? `
+                  <button class="btn btn-primary btn-tiny" data-chal-accept="${esc(e.challengeId)}">Принять</button>
+                  <button class="btn btn-tiny" data-chal-decline="${esc(e.challengeId)}">Отклонить</button>` : ''}
+                ${e.challengeId && e.type === 'challenge_in' && !liveChals.has(e.challengeId) ? '<small>уже неактуален</small>' : ''}
                 ${e.matchId ? `<button class="btn btn-tiny" data-match="${esc(e.matchId)}">Отчёт</button>` : ''}
                 <small>${new Date(e.at || Date.now()).toLocaleString('ru-RU')}</small>
               </div>
@@ -212,6 +238,7 @@
         <div class="club-banner" style="--club:${esc(club?.color || '#1fa65a')}">
           <h2>${esc(club?.name || 'Клуб')}</h2>
           <p>Сила состава ${club?.strength || '—'} · схема ${esc(club?.formation || '4-4-2')} · ${esc(club?.stadium || 'Стадион')}</p>
+          ${club?.understrength ? '<p class="hint" style="margin-top:10px;color:var(--warn,#eab308)">В основе меньше 11 здоровых — проверьте травмы и автосостав.</p>' : ''}
           <div style="margin-top:16px;display:flex;gap:8px;flex-wrap:wrap">
             <button class="btn btn-primary btn-tiny" data-nav="matches">К матчам</button>
             <button class="btn btn-tiny" data-nav="players">Состав</button>
@@ -225,7 +252,7 @@
             <div class="stat-card"><span>Слава</span><b>${u?.fame || 0}</b></div>
             <div class="stat-card"><span>Престиж</span><b>${u?.prestige || 0}</b></div>
           </div>
-          <p class="hint" style="margin:14px 0 0">Добро пожаловать в EYE XI. Выберите соперника в товарищеских или вступите в кубок своего уровня.</p>
+          <p class="hint" style="margin:14px 0 0">Слава растёт от побед, престиж — от кубков. Выберите соперника в товарищеских или вступите в кубок своего уровня.</p>
         </section>
       </div>
       <section class="panel">
@@ -285,6 +312,7 @@
             <button class="btn btn-primary" type="submit">Автосостав по схеме</button>
           </form>
           <p class="hint">Отметьте ровно 11 игроков, включая вратаря. Травмированных в основу нельзя.</p>
+          ${club.understrength ? '<p class="hint" style="color:var(--warn,#eab308)">Сейчас в основе меньше 11 здоровых — сохраните основу или нажмите «Автосостав».</p>' : ''}
           <div class="list" id="lineup-picker">${sorted.map((p) => `
             <label class="list-row" style="cursor:pointer">
               <div><strong>${esc(p.name)} · ${esc(p.pos)}</strong><small>эфф. ${p.effective} · физа ${p.fitness}%${p.injuredHours ? ' · травма' : ''}</small></div>
@@ -348,7 +376,9 @@
                 <small>маст. ${p.mastery} · ${p.age} лет · зарплата ${money(p.wage)}</small>
               </div>
               <button class="btn btn-primary btn-tiny" data-buy="${esc(p.id)}">${money(p.value)}</button>
-            </div>`).join('') : '<p class="hint">Рынок пуст — наймите скаута в Бонусе</p>'}</div>
+            </div>`).join('') : `<p class="hint">${scout < 1
+              ? 'Рынок закрыт — наймите скаута в «Бонусе», затем обновите список.'
+              : 'Список пуст — нажмите «Обновить» (5 000 ¤) или зайдите позже.'}</p>`}</div>
         </section>`;
       return;
     }
@@ -403,9 +433,10 @@
       const finished = (doneData.cups || []).slice(0, 8);
       const live = state.me?.liveCup;
       const inCup = (c) => (c.entrants || []).some((e) => e.userId === myId);
+      const liveTitle = live && live.stillAlive === false ? 'Вы выбыли из кубка' : 'Ваш кубок идёт';
       $('#view').innerHTML = `
-        ${live ? `<section class="panel"><div class="panel-head"><h3>Ваш кубок идёт</h3><button class="btn btn-primary btn-tiny" data-cup="${esc(live.id)}">Смотреть</button></div>
-          <p>${esc(live.name)} · ${esc(live.round || 'раунд')}${live.nextRoundAt ? ' · следующий раунд ' + new Date(live.nextRoundAt).toLocaleTimeString('ru-RU') : ''}</p></section>` : ''}
+        ${live ? `<section class="panel"><div class="panel-head"><h3>${liveTitle}</h3><button class="btn btn-primary btn-tiny" data-cup="${esc(live.id)}">Смотреть</button></div>
+          <p>${esc(live.name)} · ${esc(live.round || 'раунд')}${live.stillAlive === false ? ' · вы уже не в сетке' : ''}${live.nextRoundAt && live.stillAlive !== false ? ' · следующий раунд ' + new Date(live.nextRoundAt).toLocaleTimeString('ru-RU') : ''}</p></section>` : ''}
         <section class="panel">
           <div class="panel-head"><h3>Кубки вашего уровня</h3><span class="badge">ур. ${lvl}</span></div>
           <p class="hint">Запись ~5 минут до старта. Без живых игроков кубок уходит в архив.</p>
@@ -1065,14 +1096,17 @@
         if (!data) return;
         if (data.wageDay && data.wageDay.at !== state.lastWageToast) {
           state.lastWageToast = data.wageDay.at || Date.now();
-          toast('Суточный расчёт: ' + (data.wageDay.delta >= 0 ? '+' : '') + money(data.wageDay.delta));
+          const days = data.wageDay.days > 1 ? ` (${data.wageDay.days} дн.)` : '';
+          toast('Суточный расчёт' + days + ': ' + (data.wageDay.delta >= 0 ? '+' : '') + money(data.wageDay.delta));
         }
+        toastEvents(data.cupEvents);
         const chals = data.challenges || [];
         const chalKey = chals.map((c) => c.id).sort().join(',');
         if (chalKey && chalKey !== state.lastChallengeToast) {
           state.lastChallengeToast = chalKey;
           toast(chals.length === 1 ? 'Новый вызов на матч!' : `Новые вызовы: ${chals.length}`);
           if (state.section === 'matches' && state.tab === 'friendly') render();
+          if (state.section === 'cabinet' && state.tab === 'mail') render();
         }
         if (state.section === 'matches' && state.tab === 'cups') {
           const nowLive = state.me?.liveCup?.id;
@@ -1080,7 +1114,9 @@
         } else {
           paintSidebar();
         }
-      } catch {}
+      } catch (err) {
+        if (err?.status === 401) showGate();
+      }
     }, 20000);
     try {
       const health = await fetch(A().apiBase() + 'api/health').then((r) => r.json());
@@ -1088,7 +1124,12 @@
     } catch {}
     if (A().isLoggedIn()) {
       const me = await A().me();
-      if (me) await enterGame();
+      if (me) {
+        (me.cupEvents || []).forEach((e) => { if (e?.id) state.seenEventIds.add(e.id); });
+        await enterGame();
+      } else {
+        showGate();
+      }
     }
   }
 

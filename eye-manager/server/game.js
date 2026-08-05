@@ -168,21 +168,34 @@ function defaultClub(user, opts = {}) {
 }
 
 function ensureLineup(club, force = false) {
-  const validIds = new Set((club.players || []).map((p) => p.id));
-  const kept = (club.lineupIds || []).filter((id) => validIds.has(id));
-  if (!force && kept.length === 11) {
+  const players = club.players || [];
+  const validIds = new Set(players.map((p) => p.id));
+  const healthy = (id) => {
+    const p = players.find((x) => x.id === id);
+    return p && !(p.injuredHours > 0);
+  };
+  let kept = (club.lineupIds || []).filter((id) => validIds.has(id) && healthy(id));
+  const hasGk = kept.some((id) => players.find((p) => p.id === id)?.pos === 'Gk');
+  const needRebuild = force || kept.length !== 11 || !hasGk;
+  if (!needRebuild) {
     club.lineupIds = kept;
-    const rest = club.players.filter((p) => !kept.includes(p.id)).slice(0, 7);
+    const rest = players.filter((p) => !kept.includes(p.id)).slice(0, 7);
     club.benchIds = (club.benchIds || []).filter((id) => validIds.has(id) && !kept.includes(id));
     if (club.benchIds.length < rest.length) club.benchIds = rest.map((p) => p.id);
     return club;
   }
-  // temporary clear so resolveXi rebuilds from formation
-  if (force) club.lineupIds = [];
-  else club.lineupIds = kept;
+  club.lineupIds = [];
   const xi = resolveXi(club);
   club.lineupIds = xi.map((p) => p.id);
-  const rest = club.players.filter((p) => !club.lineupIds.includes(p.id)).slice(0, 7);
+  // ensure GK present if any healthy GK exists
+  if (!club.lineupIds.some((id) => players.find((p) => p.id === id)?.pos === 'Gk')) {
+    const gk = players.find((p) => p.pos === 'Gk' && !(p.injuredHours > 0));
+    if (gk && club.lineupIds.length) {
+      club.lineupIds[club.lineupIds.length - 1] = gk.id;
+      club.lineupIds = [...new Set(club.lineupIds)].slice(0, 11);
+    }
+  }
+  const rest = players.filter((p) => !club.lineupIds.includes(p.id)).slice(0, 7);
   club.benchIds = rest.map((p) => p.id);
   return club;
 }
@@ -190,6 +203,7 @@ function ensureLineup(club, force = false) {
 function publicClub(club, user) {
   if (!club) return null;
   ensureLineup(club);
+  const healthyXi = (club.lineupIds || []).length;
   return {
     name: club.name,
     short: club.short,
@@ -213,6 +227,7 @@ function publicClub(club, user) {
     ledger: (club.ledger || []).slice(0, 40),
     skillCap: skillCap(club, false),
     gkSkillCap: skillCap(club, true),
+    understrength: healthyXi < 11,
     manager: user ? { id: user.id, login: user.login, name: user.name, level: user.level } : null
   };
 }
@@ -411,6 +426,31 @@ function weeklyWages(club) {
   return (club.players || []).reduce((s, p) => s + (p.wage || 0), 0);
 }
 
+/** Pure wage settle: multi-day catch-up capped at 7. Mutates user.money + lastWageAt + club ledger. */
+function settleWageDay(user, club, now = Date.now()) {
+  if (!user || user.isBot || !club) return null;
+  const DAY_MS = 24 * 3600e3;
+  if (!user.lastWageAt) {
+    user.lastWageAt = now;
+    return null;
+  }
+  let days = Math.floor((now - user.lastWageAt) / DAY_MS);
+  if (days < 1) return null;
+  days = Math.min(days, 7);
+  const weekBill = weeklyWages(club);
+  const wagesPerDay = Math.round(weekBill / 7);
+  const grantPerDay = Math.round((user.fans || 10000) * (0.35 + (club.stadiumLevel || 1) * 0.12));
+  const wages = wagesPerDay * days;
+  const grant = grantPerDay * days;
+  const delta = grant - wages;
+  user.money = Math.max(0, (user.money || 0) + delta);
+  user.lastWageAt = (user.lastWageAt || now) + days * DAY_MS;
+  if (user.lastWageAt > now) user.lastWageAt = now;
+  pushLedger(club, -wages, days === 1 ? 'Зарплаты (сутки)' : `Зарплаты (${days} дн.)`);
+  pushLedger(club, grant, days === 1 ? 'Суточный доход (фанаты/стадион)' : `Доход за ${days} дн.`);
+  return { wages, grant, delta, weekBill, days, at: now };
+}
+
 function playerValue(p) {
   const m = masteryOf(p);
   return Math.round(m * 4500 + (p.talent || 5) * 8000 + Math.max(0, 32 - (p.age || 24)) * 3000);
@@ -550,6 +590,7 @@ module.exports = {
   skillCap,
   ticketIncome,
   weeklyWages,
+  settleWageDay,
   playerValue,
   generateTransferList,
   tickClubClock,
