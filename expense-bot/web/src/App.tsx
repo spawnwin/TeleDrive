@@ -35,8 +35,8 @@ function initTelegram() {
   if (!wa) return
   wa.ready()
   wa.expand()
-  wa.setHeaderColor?.('#c8d9e8')
-  wa.setBackgroundColor?.('#d5e4f2')
+  wa.setHeaderColor?.('#ebe2d0')
+  wa.setBackgroundColor?.('#f3efe6')
 }
 
 function groupByDay(items: Expense[]) {
@@ -106,7 +106,7 @@ export default function App() {
       .catch((err: Error) => {
         setError(
           err.message === 'unauthorized'
-            ? 'Откройте Ауру из Telegram-бота'
+            ? 'Откройте Златник из Telegram-бота'
             : err.message,
         )
       })
@@ -162,13 +162,13 @@ export default function App() {
   }
 
   const initial =
-    (me?.firstName?.[0] ?? me?.username?.[0] ?? 'А').toUpperCase()
+    (me?.firstName?.[0] ?? me?.username?.[0] ?? 'З').toUpperCase()
 
   if (loading) {
     return (
       <div className="app">
         <div className="liquid-bg" />
-        <div className="status">Загружаем Ауру…</div>
+        <div className="status">Загружаем Златник…</div>
       </div>
     )
   }
@@ -200,7 +200,7 @@ export default function App() {
       <div className="shell">
         <header className="brand-row rise">
           <div className="brand">
-            <div className="brand-mark">Аура</div>
+            <div className="brand-mark">Златник</div>
             <div className="brand-sub">
               {me?.firstName ? `Привет, ${me.firstName}` : 'Расходы под контролем'}
             </div>

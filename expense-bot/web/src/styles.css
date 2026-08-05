@@ -7,11 +7,13 @@
   --glass-tint: rgba(255, 255, 255, 0.28);
   --stroke: rgba(255, 255, 255, 0.72);
   --stroke-soft: rgba(255, 255, 255, 0.38);
-  --accent: #2f7cf6;
-  --accent-deep: #1a5fd4;
+  --accent: #c9922a;
+  --accent-deep: #8a6418;
   --mint: #3ecfba;
   --peach: #ff9b7a;
   --sky: #7ec8ff;
+  --gold: #e8c56b;
+  --gold-deep: #b8860b;
   --danger: #ff5a5f;
   --shadow: 0 10px 40px rgba(28, 48, 80, 0.12);
   --shadow-float: 0 18px 50px rgba(28, 48, 80, 0.18);
@@ -73,11 +75,11 @@ button {
   z-index: 0;
   pointer-events: none;
   background:
-    radial-gradient(ellipse 80% 50% at 15% 10%, rgba(126, 200, 255, 0.85), transparent 55%),
-    radial-gradient(ellipse 70% 45% at 90% 5%, rgba(255, 155, 122, 0.55), transparent 50%),
-    radial-gradient(ellipse 60% 40% at 70% 80%, rgba(62, 207, 186, 0.45), transparent 55%),
-    radial-gradient(ellipse 50% 35% at 10% 75%, rgba(47, 124, 246, 0.35), transparent 50%),
-    linear-gradient(165deg, #c8daf0 0%, #e8eef8 40%, #d4e8f0 100%);
+    radial-gradient(ellipse 80% 50% at 15% 10%, rgba(232, 197, 107, 0.75), transparent 55%),
+    radial-gradient(ellipse 70% 45% at 90% 5%, rgba(255, 155, 122, 0.45), transparent 50%),
+    radial-gradient(ellipse 60% 40% at 70% 80%, rgba(62, 207, 186, 0.35), transparent 55%),
+    radial-gradient(ellipse 50% 35% at 10% 75%, rgba(201, 146, 42, 0.3), transparent 50%),
+    linear-gradient(165deg, #ebe2d0 0%, #f3efe6 40%, #e4ebe8 100%);
 }
 
 .blob {
@@ -93,7 +95,7 @@ button {
   height: 220px;
   top: -60px;
   right: -40px;
-  background: rgba(126, 200, 255, 0.7);
+  background: rgba(232, 197, 107, 0.7);
 }
 
 .blob-b {
@@ -239,7 +241,7 @@ button {
   font-weight: 700;
   letter-spacing: -0.045em;
   line-height: 1;
-  background: linear-gradient(120deg, #1c2430 0%, #2f7cf6 55%, #3ecfba 100%);
+  background: linear-gradient(120deg, #1c2430 0%, #c9922a 50%, #e8c56b 100%);
   background-size: 200% 100%;
   -webkit-background-clip: text;
   background-clip: text;
@@ -298,10 +300,10 @@ button {
   font-weight: 700;
   font-size: 1rem;
   color: #fff;
-  background: linear-gradient(145deg, #5aa3ff, #2f7cf6 50%, #1a5fd4);
+  background: linear-gradient(145deg, #e8c56b, #c9922a 50%, #8a6418);
   border: 1.5px solid rgba(255, 255, 255, 0.7);
   box-shadow:
-    0 8px 24px rgba(47, 124, 246, 0.35),
+    0 8px 24px rgba(201, 146, 42, 0.4),
     inset 0 1px 0 rgba(255, 255, 255, 0.45);
 }
 
@@ -322,8 +324,8 @@ button {
   inset: 0;
   z-index: 0;
   background:
-    linear-gradient(145deg, rgba(255, 255, 255, 0.22), transparent 42%),
-    linear-gradient(160deg, #1a5fd4 0%, #2f7cf6 42%, #3ecfba 100%);
+    linear-gradient(145deg, rgba(255, 255, 255, 0.28), transparent 42%),
+    linear-gradient(160deg, #6b4e12 0%, #c9922a 42%, #e8c56b 78%, #3ecfba 100%);
   border-radius: inherit;
 }
 
@@ -337,7 +339,7 @@ button {
   border: 1px solid rgba(255, 255, 255, 0.35);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.45),
-    0 20px 50px rgba(26, 95, 212, 0.28);
+    0 20px 50px rgba(138, 100, 24, 0.28);
   pointer-events: none;
 }
 
@@ -458,8 +460,8 @@ button {
 }
 
 .cat.active {
-  background: rgba(47, 124, 246, 0.14);
-  border-color: rgba(47, 124, 246, 0.35);
+  background: rgba(201, 146, 42, 0.16);
+  border-color: rgba(201, 146, 42, 0.4);
 }
 
 .cat-top {
@@ -529,7 +531,7 @@ button {
   display: block;
   height: 100%;
   border-radius: inherit;
-  background: linear-gradient(90deg, var(--accent), var(--mint));
+  background: linear-gradient(90deg, var(--gold-deep), var(--gold), var(--mint));
   transform-origin: left center;
   animation: grow 0.75s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
@@ -557,9 +559,9 @@ button {
   width: 100%;
   max-width: 16px;
   border-radius: 999px;
-  background: linear-gradient(180deg, #7ec8ff, #2f7cf6 55%, #1a5fd4);
+  background: linear-gradient(180deg, #e8c56b, #c9922a 55%, #8a6418);
   min-height: 6px;
-  box-shadow: 0 4px 12px rgba(47, 124, 246, 0.3);
+  box-shadow: 0 4px 12px rgba(201, 146, 42, 0.35);
   transition: height 0.5s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
@@ -687,13 +689,13 @@ button {
   height: 56px;
   border-radius: 50% !important;
   padding: 0 !important;
-  background: linear-gradient(160deg, #5aa3ff, #2f7cf6 45%, #1a5fd4) !important;
+  background: linear-gradient(160deg, #e8c56b, #c9922a 45%, #8a6418) !important;
   color: #fff !important;
   font-size: 1.85rem;
   line-height: 1;
   border: 1.5px solid rgba(255, 255, 255, 0.55) !important;
   box-shadow:
-    0 10px 28px rgba(47, 124, 246, 0.45),
+    0 10px 28px rgba(201, 146, 42, 0.45),
     inset 0 1px 0 rgba(255, 255, 255, 0.5) !important;
   transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
 }
@@ -790,11 +792,11 @@ button {
 }
 
 .chip.active {
-  background: linear-gradient(145deg, #5aa3ff, #2f7cf6);
+  background: linear-gradient(145deg, #e8c56b, #c9922a);
   border-color: transparent;
   color: #fff;
   box-shadow:
-    0 6px 16px rgba(47, 124, 246, 0.35),
+    0 6px 16px rgba(201, 146, 42, 0.35),
     inset 0 1px 0 rgba(255, 255, 255, 0.35);
 }
 
@@ -812,21 +814,21 @@ button {
 }
 
 .note-field:focus {
-  border-color: rgba(47, 124, 246, 0.45);
+  border-color: rgba(201, 146, 42, 0.5);
 }
 
 .submit {
   width: 100%;
   padding: 16px;
   border-radius: 18px;
-  background: linear-gradient(145deg, #5aa3ff, #2f7cf6 50%, #1a5fd4);
+  background: linear-gradient(145deg, #e8c56b, #c9922a 50%, #8a6418);
   color: #fff;
   font-weight: 700;
   font-size: 1.02rem;
   letter-spacing: -0.01em;
   border: 1px solid rgba(255, 255, 255, 0.4);
   box-shadow:
-    0 12px 28px rgba(47, 124, 246, 0.35),
+    0 12px 28px rgba(201, 146, 42, 0.35),
     inset 0 1px 0 rgba(255, 255, 255, 0.4);
 }
 
