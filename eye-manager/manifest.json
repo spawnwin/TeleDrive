@@ -1,0 +1,12 @@
+{
+  "name": "EYE XI",
+  "short_name": "EYE XI",
+  "description": "Онлайн футбольный менеджер",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#0A2F22",
+  "theme_color": "#0A2F22",
+  "icons": [
+    { "src": "assets/eye.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}
