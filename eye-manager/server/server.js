@@ -88,12 +88,14 @@ function ensureClub(user, opts = {}) {
   if (!club) {
     club = G.defaultClub(user, opts);
     G.ensureLineup(club);
+    G.pickSponsor(club, user);
     db.setClub(user.id, club);
     user.teamBound = true;
     user.clubName = club.name;
     persistUser(user);
   }
   if (!club.userId) club.userId = user.id;
+  G.ensureSponsor(club, user);
   return club;
 }
 
@@ -258,7 +260,9 @@ function rewardUsers(home, away, match) {
     if (!user || user.isBot) return;
     const prize = won ? 45000 : draw ? 18000 : 8000;
     const club = db.getClub(user.id);
-    const tickets = isHome && club ? G.ticketIncome(club, user, won) : 0;
+    const tickets = isHome && club
+      ? G.ticketIncome(club, user, won, { derby: !!match.derby })
+      : 0;
     const total = prize + tickets;
     user.money = Math.max(0, (user.money || 0) + total);
     user.xp = (user.xp || 0) + (won ? 35 : draw ? 18 : 10);
@@ -299,6 +303,14 @@ function rewardUsers(home, away, match) {
         type: 'motm',
         title: 'Игрок матча',
         body: `${match.motm.name} · оценка ${match.motm.rating}`,
+        matchId: match.id
+      });
+    }
+    if (match.derby && won) {
+      pushUserEvent(user.id, {
+        type: 'derby',
+        title: 'Победа в принципиальном матче',
+        body: match.derby,
         matchId: match.id
       });
     }
@@ -353,6 +365,7 @@ function ensureBotClub(user, clubName) {
 function processWageDay(user, club) {
   if (!user || user.isBot || !club) return null;
   const hadBaseline = user.lastWageAt != null;
+  G.ensureSponsor(club, user);
   const result = G.settleWageDay(user, club);
   if (!result) {
     if (!hadBaseline && user.lastWageAt != null) persistUser(user);
@@ -365,6 +378,14 @@ function processWageDay(user, club) {
     title: result.days > 1 ? `Зарплаты за ${result.days} дн.` : 'Суточный расчёт',
     body: (result.delta >= 0 ? '+' : '') + Math.round(result.delta) + ' ¤',
     money: result.delta
+  });
+  (result.playtime?.created || []).forEach((p) => {
+    pushUserEvent(user.id, {
+      type: 'playtime',
+      title: 'Мало игрового времени',
+      body: `${p.name} хочет место в основе (матчей: ${p.seasonApps || 0})`,
+      playerId: p.id
+    });
   });
   if (result.contracts) {
     (result.contracts.asks || []).forEach((p) => {
@@ -510,7 +531,7 @@ function playCupTie(homeEnt, awayEnt, meta = {}) {
   // prize money handled at cup finalize; appearance fee + home tickets
   if (!homeUser.isBot) {
     const homeWon = match.score[0] > match.score[1];
-    const tickets = G.ticketIncome(homeClub, homeUser, homeWon);
+    const tickets = G.ticketIncome(homeClub, homeUser, homeWon, { derby: !!match.derby });
     homeUser.money = Math.max(0, (homeUser.money || 0) + 5000 + tickets);
     persistUser(homeUser);
     G.pushLedger(homeClub, 5000, `Кубок · ${meta.round || 'матч'}`);
@@ -1248,7 +1269,8 @@ const server = http.createServer(async (req, res) => {
     const match = G.simulateMatch(homeClub, awayClub, {
       competition: 'friendly',
       homeUserId: homeUser.id,
-      awayUserId: auth.user.id
+      awayUserId: auth.user.id,
+      challenge: true
     });
     db.setClub(homeUser.id, homeClub);
     db.setClub(auth.user.id, awayClub);
@@ -1682,6 +1704,89 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, {
         ok: true,
         academy: G.academyStatus(club),
+        club: G.publicClub(club, auth.user),
+        user: enrichUser(auth.user)
+      });
+    } catch (e) {
+      return json(res, 500, { error: String(e.message || e) });
+    }
+  }
+
+  if (pathname === '/api/sponsor' && req.method === 'GET') {
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    const club = ensureClub(auth.user);
+    const sponsor = G.ensureSponsor(club, auth.user);
+    db.setClub(auth.user.id, club);
+    return json(res, 200, {
+      ok: true,
+      sponsor,
+      form: G.clubFormGuide(club),
+      finance: G.financeSnapshot(auth.user, club)
+    });
+  }
+
+  if (pathname === '/api/sponsor/renegotiate' && req.method === 'POST') {
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    try {
+      const club = ensureClub(auth.user);
+      const r = G.renegotiateSponsor(club, auth.user);
+      if (!r.ok) return json(res, 400, { error: r.error });
+      db.setClub(auth.user.id, club);
+      return json(res, 200, {
+        ok: true,
+        ...r,
+        club: G.publicClub(club, auth.user),
+        user: enrichUser(auth.user)
+      });
+    } catch (e) {
+      return json(res, 500, { error: String(e.message || e) });
+    }
+  }
+
+  if (pathname === '/api/players/playtime' && req.method === 'POST') {
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    try {
+      const body = JSON.parse((await readBody(req)).toString('utf8') || '{}');
+      const club = ensureClub(auth.user);
+      const decision = body.decision || 'promise';
+      const r = G.resolvePlaytimeRequest(club, body.playerId, decision);
+      if (!r.ok) return json(res, 400, { error: r.error });
+      let listing = null;
+      if (r.decision === 'list') {
+        const listed = G.listPlayer(club, body.playerId);
+        if (!listed.ok) {
+          // restore request if listing blocked
+          const p = (club.players || []).find((x) => x.id === body.playerId);
+          if (p) p.request = 'playtime';
+          return json(res, 400, { error: listed.error });
+        }
+        listed.listing.sellerUserId = auth.user.id;
+        listed.listing.sellerClub = club.name;
+        const taken = G.takeListedPlayer(club, body.playerId);
+        if (!taken.ok) {
+          const p = (club.players || []).find((x) => x.id === body.playerId);
+          if (p) p.request = 'playtime';
+          return json(res, 400, { error: taken.error });
+        }
+        const market = db.getTransferMarket();
+        const list = (market.list || []).filter((p) => p.id !== listed.listing.id);
+        list.unshift(listed.listing);
+        db.setTransferMarket(list.slice(0, 80), Date.now());
+        listing = listed.listing;
+        pushUserEvent(auth.user.id, {
+          type: 'transfer_listed',
+          title: 'Игрок на рынке',
+          body: `${listed.listing.name} · ${listed.listing.value} ¤`
+        });
+      }
+      db.setClub(auth.user.id, club);
+      return json(res, 200, {
+        ok: true,
+        ...r,
+        listing,
         club: G.publicClub(club, auth.user),
         user: enrichUser(auth.user)
       });
@@ -2139,10 +2244,16 @@ async function main() {
         const club = db.getClub(userId);
         const u = usersDb().users[userId];
         if (!club || !u || u.isBot) return;
+        const archive = G.snapshotSeasonAwards(club, {
+          season: info.season || 1,
+          rank: info.rank || null,
+          leagueName: info.leagueName || null
+        });
         const review = G.seasonBoardReview(club, info.rank || 99, {
           user: u,
           cupReached: club.board?.cupReached || null
         });
+        G.pickSponsor(club, u, { force: true });
         db.setClub(userId, club);
         const conf = review.board?.confidence ?? '—';
         pushUserEvent(userId, {
@@ -2156,6 +2267,13 @@ async function main() {
             ? `Уверенность ${conf}%. Оформите новый контракт.`
             : `${review.ok ? 'Совет доволен' : 'Нужны результаты'} · уверенность ${conf}% · место ${info.rank}`
         });
+        if (archive?.scorers?.length) {
+          pushUserEvent(userId, {
+            type: 'season_awards',
+            title: `Итоги сезона · бомбардир ${archive.scorers[0].name}`,
+            body: `${archive.scorers[0].goals} голов` + (archive.motm?.[0] ? ` · MOTM: ${archive.motm[0].name}` : '')
+          });
+        }
         if (review.sacked) {
           u.prestige = Math.max(0, (u.prestige || 0) - 1);
           persistUser(u);

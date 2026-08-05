@@ -428,7 +428,14 @@ function createLeagueModule({ usersDb, saveUsers, store }) {
         try { store.onSeasonContracts(e.userId); } catch {}
       }
       if (store?.onBoardSeasonReview) {
-        try { store.onBoardSeasonReview(e.userId, { rank, leagueId: L.id, leagueName: L.name }); } catch {}
+        try {
+          store.onBoardSeasonReview(e.userId, {
+            rank,
+            leagueId: L.id,
+            leagueName: L.name,
+            season: L.season || state.meta.seasonCounter || 1
+          });
+        } catch {}
       }
       pushEvent(e.userId, {
         type: rank === 1 ? 'league_won' : 'league_done',

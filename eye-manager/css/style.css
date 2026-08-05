@@ -637,6 +637,32 @@ table.sheet tr.row-warn {
 .motm-banner strong { font-family: var(--display); font-size: 18px; }
 .motm-banner small { color: var(--muted); }
 
+.derby-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 10px 14px;
+  margin: 12px 0;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: linear-gradient(120deg, rgba(200,16,46,.18), rgba(0,0,0,.12));
+  border: 1px solid rgba(200,16,46,.28);
+}
+.derby-banner span {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: var(--muted);
+  font-weight: 700;
+}
+.derby-banner strong { font-family: var(--display); font-size: 17px; }
+
+.form-pills {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: .08em;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
 .board-conf {
   height: 10px;
   border-radius: 999px;

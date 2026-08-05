@@ -45,7 +45,10 @@
     contract_left: 'Свободный агент',
     suspension: 'Дисквалификация',
     release: 'Отчисление',
-    board: 'Совет директоров'
+    board: 'Совет директоров',
+    playtime: 'Игровое время',
+    derby: 'Дерби',
+    season_awards: 'Итоги сезона'
   };
 
   const TRAIT_LABELS = {
@@ -319,6 +322,8 @@
     if (state.tab === 'finance') {
       const ledger = club?.ledger || [];
       const fin = state.me?.user?.finance || {};
+      const sponsor = club?.sponsor || fin.sponsor;
+      const form = club?.form || {};
       $('#view').innerHTML = `
         <div class="grid-3">
           <div class="stat-card"><span>Баланс</span><b style="color:${(u?.money || 0) < 0 ? 'var(--danger)' : 'inherit'}">${money(u?.money)}</b></div>
@@ -327,12 +332,22 @@
           <div class="stat-card"><span>Фанаты</span><b>${money(u?.fans).replace(' ¤','')}</b></div>
           <div class="stat-card"><span>Зарплаты / сут</span><b>${money(fin.dayWages || Math.round((club?.players || []).reduce((s, p) => s + (p.wage || 0), 0) / 7))}</b></div>
           <div class="stat-card"><span>Стоимость состава</span><b>${money(fin.squadValue)}</b></div>
+          <div class="stat-card"><span>Спонсор / нед</span><b>${sponsor ? money(sponsor.weekly) : '—'}</b></div>
+          <div class="stat-card"><span>Форма</span><b class="form-pills">${esc(form.formStr || '—')}</b></div>
         </div>
         ${fin.embargo ? '<p class="hint" style="color:var(--danger)">Эмбарго: трансферы и улучшения закрыты до выхода из банкротства.</p>' : ''}
         ${fin.debt ? `<p class="hint">Долг ${money(fin.debt)} · проценты ~1%/сут при отрицательном балансе.</p>` : ''}
         <section class="panel">
+          <div class="panel-head">
+            <h3>Спонсор</h3>
+            <button class="btn btn-tiny" id="btn-sponsor-reno">Переподписать</button>
+          </div>
+          ${sponsor ? `<p><strong>${esc(sponsor.name)}</strong> · ${money(sponsor.weekly)} / нед (~${money(Math.round(sponsor.weekly / 7))} / сут)</p>
+            <p class="hint">Доход спонсора капает вместе с суточным расчётом. Переподписание раз в 5 дней.</p>` : '<p class="hint">Спонсор появится после первого входа в клуб.</p>'}
+        </section>
+        <section class="panel">
           <h3>Движение средств</h3>
-          <p class="hint">Матчи: приз + билеты только дома. Раз в сутки — 1/7 недельной зарплаты и доход от фанатов. Кубки: взнос за матч и призовые.</p>
+          <p class="hint">Матчи: приз + билеты только дома. Раз в сутки — 1/7 зарплаты, доход фанатов и спонсор. Кубки: взнос за матч и призовые.</p>
           <div class="list">${ledger.length ? ledger.map((row) => `
             <div class="list-row">
               <div><strong>${esc(row.label)}</strong><small>${new Date(row.at).toLocaleString('ru-RU')}</small></div>
@@ -391,7 +406,7 @@
         const data = await A().request('api/news?limit=40');
         items = data.items || [];
       } catch {}
-      const TAGS = { match: 'Матч', friendly: 'Тов.', cup: 'Кубок', league: 'Лига', transfer: 'Трансфер', press: 'Пресса' };
+      const TAGS = { match: 'Матч', friendly: 'Тов.', cup: 'Кубок', league: 'Лига', transfer: 'Трансфер', press: 'Пресса', derby: 'Дерби' };
       $('#view').innerHTML = `
         <section class="panel">
           <div class="panel-head"><h3>Лента новостей</h3><button class="btn btn-tiny" id="btn-news-refresh">Обновить</button></div>
@@ -457,6 +472,8 @@
             <div class="stat-card"><span>Престиж</span><b>${u?.prestige || 0}</b></div>
             ${conf != null ? `<div class="stat-card"><span>Совет</span><b>${conf}%</b></div>` : ''}
             ${board?.targetLabel ? `<div class="stat-card"><span>Цель</span><b>${esc(board.targetLabel)}</b></div>` : ''}
+            ${club?.form?.formStr ? `<div class="stat-card"><span>Форма</span><b class="form-pills">${esc(club.form.formStr)}</b></div>` : ''}
+            ${club?.sponsor ? `<div class="stat-card"><span>Спонсор</span><b>${money(club.sponsor.weekly)}/нед</b></div>` : ''}
           </div>
           ${nextFix ? `<p class="hint" style="margin:14px 0 0">Ближайший матч лиги: <strong>${esc(nextFix.home)}</strong> — <strong>${esc(nextFix.away)}</strong>${nextFix.when ? ' · ' + new Date(nextFix.when).toLocaleString('ru-RU') : ''}</p>` : `<p class="hint" style="margin:14px 0 0">Запишитесь в лигу своего уровня или сыграйте товарищеский / кубок.</p>`}
         </section>
@@ -704,13 +721,22 @@
       <section class="panel">
         <div class="panel-head"><h3>Состав</h3><span class="badge">${players.length} игроков</span></div>
         <p class="hint">Контракт истекает — продлите, иначе сильные игроки потребуют сделку, слабые могут уйти. Мораль влияет на силу в матче.</p>
+        ${(club.playtimeRequests || []).length ? `<div class="list" style="margin-bottom:12px">${club.playtimeRequests.map((p) => `
+          <div class="list-row">
+            <div><strong>${esc(p.name)}</strong><small>мало минут · матчей ${p.apps} · маст. ${p.mastery}</small></div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap">
+              <button class="btn btn-primary btn-tiny" data-playtime="${esc(p.id)}" data-decision="promise">Обещать</button>
+              <button class="btn btn-tiny" data-playtime="${esc(p.id)}" data-decision="list">На рынок</button>
+              <button class="btn btn-tiny" data-playtime="${esc(p.id)}" data-decision="dismiss">Отказать</button>
+            </div>
+          </div>`).join('')}</div>` : ''}
         <div class="table-wrap"><table class="sheet">
           <thead><tr><th>Имя</th><th>Поз</th><th>Возр</th><th>Маст</th><th>Эфф</th><th>Физа</th><th>Мор.</th><th>Контр.</th><th>Зарп.</th><th></th></tr></thead>
           <tbody>${players.map((p) => `
-            <tr class="${p.wantsRenew || (p.contractYears || 0) <= 0 ? 'row-warn' : ''}">
+            <tr class="${p.wantsRenew || (p.contractYears || 0) <= 0 || p.request === 'playtime' ? 'row-warn' : ''}">
               <td>
                 <button type="button" class="link" data-train="${esc(p.id)}"><strong>${esc(p.name)}</strong></button>
-                <div class="hint">${(p.specials||[]).map((s)=>TRAIT_LABELS[s]||s).join(' · ') || '—'}${p.yellows ? ' · ЖК ' + p.yellows : ''}${p.suspendedMatches ? ' · дискв. ' + p.suspendedMatches : ''}${p.wantsRenew ? ' · ждёт контракт' : ''}</div>
+                <div class="hint">${(p.specials||[]).map((s)=>TRAIT_LABELS[s]||s).join(' · ') || '—'}${p.yellows ? ' · ЖК ' + p.yellows : ''}${p.suspendedMatches ? ' · дискв. ' + p.suspendedMatches : ''}${p.wantsRenew ? ' · ждёт контракт' : ''}${p.request === 'playtime' ? ' · хочет минуты' : ''}${p.seasonApps ? ' · матчей ' + p.seasonApps : ''}</div>
               </td>
               <td><span class="badge">${esc(p.pos)}</span></td>
               <td>${p.age}</td>
@@ -737,14 +763,30 @@
     if (state.tab === 'history') {
       const data = await A().request('api/matches');
       const list = data.matches || [];
+      const archive = state.club?.seasonArchive || [];
+      const form = state.club?.form || {};
       $('#view').innerHTML = `
+        <section class="panel">
+          <div class="panel-head"><h3>Форма клуба</h3><b class="form-pills">${esc(form.formStr || '—')}</b></div>
+          <p class="hint">Последние результаты · очки формы ${form.pts != null ? form.pts : '—'} / 15${form.streak ? ' · серия ' + form.streak + '×' + form.streakKind : ''}</p>
+        </section>
+        ${archive.length ? `<section class="panel">
+          <h3>Архив сезонов</h3>
+          <div class="list">${archive.map((a) => `
+            <div class="list-row">
+              <div>
+                <strong>Сезон ${a.season}${a.rank ? ' · ' + a.rank + '-е' : ''}</strong>
+                <small>${esc(a.leagueName || '')}${a.scorers?.[0] ? ' · бомб. ' + a.scorers[0].name + ' (' + a.scorers[0].goals + ')' : ''}${a.motm?.[0] ? ' · MOTM ' + a.motm[0].name : ''}</small>
+              </div>
+            </div>`).join('')}</div>
+        </section>` : ''}
         <section class="panel">
           <h3>Архив матчей</h3>
           <div class="list">${list.length ? list.map((m) => `
             <div class="list-row">
               <div>
                 <strong>${esc(m.home?.name)} ${m.score?.[0]}:${m.score?.[1]} ${esc(m.away?.name)}</strong>
-                <small>${compLabel(m.competition)} · ${new Date(m.createdAt).toLocaleString('ru-RU')}</small>
+                <small>${m.derby ? esc(m.derby) + ' · ' : ''}${compLabel(m.competition)} · ${new Date(m.createdAt).toLocaleString('ru-RU')}</small>
               </div>
               <button class="btn btn-tiny" data-match="${m.id}">Отчёт</button>
             </div>`).join('') : '<p class="hint">Матчей пока нет</p>'}</div>
@@ -1236,9 +1278,10 @@
       if (e.type === 'corner') return 'Угловой';
       if (e.type === 'yellow') return 'Жёлтая';
       if (e.type === 'red') return 'Красная';
-      if (e.type === 'injury') return 'Травма';
+      if (e.type === 'injury') return e.injuryLabel ? `Травма · ${esc(e.injuryLabel)}` : 'Травма';
       if (e.type === 'sub') return 'Замена';
       if (e.type === 'pens') return 'Пенальти';
+      if (e.type === 'derby') return 'Дерби';
       return esc(e.type || 'Событие');
     };
     const xiBlock = (xi, title) => {
@@ -1253,7 +1296,7 @@
     };
     openModal(`
       <div class="panel-head">
-        <h2 style="margin:0;font-family:Syne,sans-serif">${compLabel(match.competition)}${match.cupName || match.leagueName ? ' · ' + esc(match.cupName || match.leagueName) : ''}</h2>
+        <h2 style="margin:0;font-family:Syne,sans-serif">${match.derby ? esc(match.derby) + ' · ' : ''}${compLabel(match.competition)}${match.cupName || match.leagueName ? ' · ' + esc(match.cupName || match.leagueName) : ''}</h2>
         <button class="btn btn-tiny" id="modal-close">Закрыть</button>
       </div>
       <div class="match-score">
@@ -1261,6 +1304,7 @@
         <div class="score" id="match-live-score">${match.score?.[0]}:${match.score?.[1]}</div>
         <div class="team"><strong>${esc(match.away?.name)}</strong><div class="hint">${esc(match.away?.formation || '')} · ${esc(match.away?.style || '')} · сила ${match.away?.strength}${match.away?.chemistry != null || match.chemistry?.away != null ? ' · хим. ' + (match.away?.chemistry ?? match.chemistry?.away) : ''}</div></div>
       </div>
+      ${match.derby ? `<div class="derby-banner"><span>Принципиальный матч</span><strong>${esc(match.derby)}</strong></div>` : ''}
       ${match.motm ? `<div class="motm-banner"><span>Игрок матча</span><strong>${esc(match.motm.name)}</strong><small>${esc(match.motm.clubName || '')} · ${match.motm.rating}</small></div>` : ''}
       ${st.shots ? `<div class="grid-3" style="margin:12px 0">
         <div class="stat-card"><span>Владение</span><b>${(st.possession||[])[0]||'—'}% : ${(st.possession||[])[1]||'—'}%</b></div>
@@ -1839,6 +1883,39 @@
           A().setUser(data.user);
           paintSidebar();
           toast('Состав восстановлен');
+          render();
+        } catch (err) { toast(err.message); }
+      }
+      if (e.target.id === 'btn-sponsor-reno') {
+        try {
+          const data = await A().request('api/sponsor/renegotiate', { method: 'POST' });
+          state.club = data.club;
+          if (data.user) {
+            state.me.user = data.user;
+            A().setUser(data.user);
+            paintSidebar();
+          }
+          toast(data.label || 'Спонсор обновлён');
+          render();
+        } catch (err) { toast(err.message); }
+      }
+      const playtimeBtn = e.target.closest('[data-playtime]');
+      if (playtimeBtn) {
+        try {
+          const data = await A().request('api/players/playtime', {
+            method: 'POST',
+            body: {
+              playerId: playtimeBtn.dataset.playtime,
+              decision: playtimeBtn.dataset.decision || 'promise'
+            }
+          });
+          state.club = data.club;
+          if (data.user) {
+            state.me.user = data.user;
+            A().setUser(data.user);
+            paintSidebar();
+          }
+          toast(data.label || 'Решение принято');
           render();
         } catch (err) { toast(err.message); }
       }

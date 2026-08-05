@@ -48,17 +48,19 @@ function createSocialModule({ store }) {
     const [hg, ag] = match.score;
     const upset = Math.abs(hg - ag) >= 3;
     const comp = match.competition === 'league' ? 'Лига' : match.competition === 'cup' ? 'Кубок' : 'Товарищеский';
+    const prefix = match.derby ? `${match.derby}: ` : '';
     const title = upset
-      ? `Разгром: ${match.home?.name} ${hg}:${ag} ${match.away?.name}`
-      : `${comp}: ${match.home?.name} ${hg}:${ag} ${match.away?.name}`;
+      ? `Разгром: ${prefix}${match.home?.name} ${hg}:${ag} ${match.away?.name}`
+      : `${match.derby ? match.derby : comp}: ${match.home?.name} ${hg}:${ag} ${match.away?.name}`;
     return pushNews({
-      tag: match.competition || 'match',
+      tag: match.derby ? 'derby' : (match.competition || 'match'),
       title,
-      body: match.leagueName || match.cupName || 'Матч завершён',
+      body: match.leagueName || match.cupName || (match.derby ? 'Принципиальный матч' : 'Матч завершён'),
       matchId: match.id,
       home: match.home?.name,
       away: match.away?.name,
-      score: match.score
+      score: match.score,
+      derby: match.derby || null
     });
   }
 

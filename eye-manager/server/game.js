@@ -413,6 +413,10 @@ function defaultClub(user, opts = {}) {
     academyLevel: 1,
     youth: [],
     board: null,
+    form: [],
+    rivals: [],
+    sponsor: null,
+    seasonArchive: [],
     history: [],
     ledger: [],
     createdAt: Date.now()
@@ -499,6 +503,12 @@ function publicClub(club, user) {
     youthCount: Array.isArray(club.youth) ? club.youth.length : 0,
     academyLevel: club.academyLevel || 1,
     board: boardStatus(club, user),
+    form: clubFormGuide(club),
+    sponsor: club.sponsor || null,
+    seasonArchive: (club.seasonArchive || []).slice(0, 4),
+    playtimeRequests: (club.players || []).filter((p) => p.request === 'playtime').map((p) => ({
+      id: p.id, name: p.name, pos: p.pos, apps: p.seasonApps || 0, mastery: masteryOf(p)
+    })),
     manager: user ? { id: user.id, login: user.login, name: user.name, level: user.level } : null
   };
 }
@@ -538,15 +548,16 @@ function formationChemistry(club, xi) {
   return Math.round((pts / list.length) * 10); // ~20–100
 }
 
-function teamMatchPower(club, xi, { home = false } = {}) {
+function teamMatchPower(club, xi, { home = false, derby = false } = {}) {
   const base = Math.max(40, clubStrength({ ...club, players: club.players }));
   const styleMul = { attack: 1.08, press: 1.05, balance: 1, counter: 0.98, defend: 0.9 };
   const form = FORMATION_BIAS[club.formation] || FORMATION_BIAS['4-4-2'];
   const ins = instructionMods(club.instructions);
   let power = base * (styleMul[club.style] || 1) * form.att * ins.att;
   // defensive solidity slightly reduces opponent chance via separate field
-  const solidity = form.def * ins.def;
+  const solidity = form.def * ins.def * (derby ? 0.98 : 1);
   if (home) power *= 1.05;
+  if (derby) power *= 1.05;
   if (club.pressBuff && club.pressBuff.until > Date.now()) {
     power *= Number(club.pressBuff.fitness || 1);
   }
@@ -563,7 +574,8 @@ function teamMatchPower(club, xi, { home = false } = {}) {
     power: Math.max(35, power),
     solidity,
     fitMul: styleFitnessMul(club.style) * ins.fit,
-    chemistry
+    chemistry,
+    derby: !!derby
   };
 }
 
@@ -722,6 +734,9 @@ function financeSnapshot(user, club) {
   const debt = Math.max(0, -money);
   const weekWages = weeklyWages(club);
   const dayWages = Math.round(weekWages / 7);
+  ensureSponsor(club, user);
+  const sponsorWeekly = club.sponsor?.weekly || 0;
+  const sponsorDaily = Math.round(sponsorWeekly / 7);
   let status = 'healthy';
   if (money < 0 && debt >= credit) status = 'insolvent';
   else if (money < 0 && debt >= credit * 0.55) status = 'critical';
@@ -734,6 +749,9 @@ function financeSnapshot(user, club) {
     status,
     weekWages,
     dayWages,
+    sponsorWeekly,
+    sponsorDaily,
+    sponsor: club.sponsor || null,
     squadValue: (club?.players || []).reduce((s, p) => s + playerValue(p), 0),
     embargo: status === 'insolvent',
     statusLabel: ({
@@ -744,6 +762,231 @@ function financeSnapshot(user, club) {
       insolvent: 'Банкротство'
     })[status]
   };
+}
+
+const SPONSOR_TIERS = [
+  { id: 'local', name: 'Городской банк', base: 22000 },
+  { id: 'region', name: 'Регион Спорт', base: 52000 },
+  { id: 'nation', name: 'Национальный бренд', base: 110000 },
+  { id: 'global', name: 'EYE Global', base: 260000 }
+];
+
+function sponsorTierIndex(club, user) {
+  const stadium = club?.stadiumLevel || 1;
+  const fame = user?.fame || 0;
+  const level = user?.level || 1;
+  const str = club ? clubStrength(club) : 100;
+  let idx = 0;
+  if (fame >= 20 || stadium >= 3 || level >= 3) idx = 1;
+  if (fame >= 50 || stadium >= 4 || level >= 5 || str >= 140) idx = 2;
+  if (fame >= 100 || stadium >= 6 || level >= 8) idx = 3;
+  return idx;
+}
+
+function pickSponsor(club, user, { force = false } = {}) {
+  if (!club) return null;
+  if (club.sponsor && !force) return club.sponsor;
+  const t = SPONSOR_TIERS[sponsorTierIndex(club, user)];
+  const stadium = club.stadiumLevel || 1;
+  const level = user?.level || 1;
+  const formPts = clubFormGuide(club).pts || 0;
+  const weekly = Math.round(
+    t.base * (0.85 + stadium * 0.1) * (0.9 + level * 0.04) * (1 + Math.min(0.12, formPts * 0.01))
+  );
+  club.sponsor = {
+    id: t.id,
+    name: t.name,
+    weekly,
+    signedAt: Date.now()
+  };
+  return club.sponsor;
+}
+
+function ensureSponsor(club, user) {
+  if (!club) return null;
+  if (!club.sponsor || !club.sponsor.weekly) return pickSponsor(club, user, { force: true });
+  return club.sponsor;
+}
+
+function renegotiateSponsor(club, user) {
+  if (!club) return { ok: false, error: 'Нет клуба' };
+  const now = Date.now();
+  if (club.lastSponsorAt && now - club.lastSponsorAt < 5 * 24 * 3600e3) {
+    const left = Math.ceil((5 * 24 * 3600e3 - (now - club.lastSponsorAt)) / 3600e3);
+    return { ok: false, error: `Переподписание через ~${left} ч` };
+  }
+  const prev = club.sponsor?.weekly || 0;
+  const next = pickSponsor(club, user, { force: true });
+  club.lastSponsorAt = now;
+  return {
+    ok: true,
+    sponsor: next,
+    delta: (next.weekly || 0) - prev,
+    label: `Спонсор: ${next.name}`
+  };
+}
+
+function pushForm(club, letter) {
+  if (!club || !letter) return;
+  club.form = Array.isArray(club.form) ? club.form : [];
+  club.form.unshift(letter);
+  if (club.form.length > 10) club.form.length = 10;
+}
+
+function clubFormGuide(club) {
+  const form = Array.isArray(club?.form) ? club.form.slice(0, 5) : [];
+  const pts = form.reduce((s, r) => s + (r === 'W' ? 3 : r === 'D' ? 1 : 0), 0);
+  let streak = 0;
+  let kind = null;
+  for (const r of form) {
+    if (!kind) kind = r;
+    if (r !== kind) break;
+    streak++;
+  }
+  return {
+    form,
+    formStr: form.join('') || '—',
+    pts,
+    streak,
+    streakKind: kind
+  };
+}
+
+function detectDerby(homeClub, awayClub, meta = {}) {
+  if (meta.derby === true) return { derby: true, label: meta.derbyLabel || 'Дерби' };
+  if (meta.derby === false) return { derby: false, label: null };
+  const rivalsH = homeClub?.rivals || [];
+  const rivalsA = awayClub?.rivals || [];
+  if (homeClub?.userId && rivalsA.includes(homeClub.userId)) {
+    return { derby: true, label: 'Принципиальный матч' };
+  }
+  if (awayClub?.userId && rivalsH.includes(awayClub.userId)) {
+    return { derby: true, label: 'Принципиальный матч' };
+  }
+  const hw = String(homeClub?.name || '').split(/\s+/)[0];
+  const aw = String(awayClub?.name || '').split(/\s+/)[0];
+  if (hw && aw && hw.length > 3 && hw === aw) {
+    return { derby: true, label: `Дерби · ${hw}` };
+  }
+  if (meta.competition === 'league' && meta.challenge !== false) {
+    const hs = clubStrength(homeClub);
+    const as = clubStrength(awayClub);
+    if (Math.abs(hs - as) <= 12 && (meta.round || 0) >= 1) {
+      // heated league clash between close sides — light derby
+      if (Math.random() < 0.22) return { derby: true, label: 'Горячий матч тура' };
+    }
+  }
+  if (meta.challenge && meta.competition === 'friendly') {
+    const hs = clubStrength(homeClub);
+    const as = clubStrength(awayClub);
+    if (Math.abs(hs - as) <= 18) return { derby: true, label: 'Принципиальный вызов' };
+  }
+  return { derby: false, label: null };
+}
+
+function rememberRival(club, otherUserId) {
+  if (!club || !otherUserId) return;
+  club.rivals = Array.isArray(club.rivals) ? club.rivals : [];
+  if (!club.rivals.includes(otherUserId)) club.rivals.unshift(otherUserId);
+  if (club.rivals.length > 8) club.rivals.length = 8;
+}
+
+function bumpSeasonApps(club, playerIds) {
+  const set = new Set(playerIds || []);
+  (club.players || []).forEach((p) => {
+    if (!set.has(p.id)) return;
+    p.seasonApps = (p.seasonApps || 0) + 1;
+  });
+}
+
+function processPlaytimeRequests(club) {
+  if (!club?.players?.length) return { created: [], cleared: [] };
+  const xi = new Set(club.lineupIds || []);
+  const cleared = [];
+  club.players.forEach((p) => {
+    if (p.request === 'playtime' && xi.has(p.id)) {
+      delete p.request;
+      p.morale = Math.min(25, (p.morale || 0) + 4);
+      cleared.push(p);
+    }
+  });
+  const created = [];
+  const now = Date.now();
+  if (club.lastRequestAt && now - club.lastRequestAt < 2 * 24 * 3600e3) {
+    return { created, cleared };
+  }
+  const pending = club.players.some((p) => p.request === 'playtime');
+  if (pending) return { created, cleared };
+  const appsFloor = Math.max(1, Math.floor(((club.form || []).length || 1) * 0.35));
+  const pool = club.players
+    .filter((p) =>
+      !xi.has(p.id) &&
+      !p.request &&
+      !(p.injuredHours > 0) &&
+      masteryOf(p) >= 48 &&
+      (p.seasonApps || 0) < appsFloor
+    )
+    .sort((a, b) => masteryOf(b) - masteryOf(a));
+  if (pool.length && Math.random() < 0.45) {
+    const p = pool[0];
+    p.request = 'playtime';
+    p.morale = Math.max(-20, (p.morale || 0) - 3);
+    club.lastRequestAt = now;
+    created.push(p);
+  }
+  return { created, cleared };
+}
+
+function resolvePlaytimeRequest(club, playerId, decision) {
+  const p = (club.players || []).find((x) => x.id === playerId);
+  if (!p) return { ok: false, error: 'Игрок не найден' };
+  if (p.request !== 'playtime') return { ok: false, error: 'Нет активной просьбы' };
+  if (decision === 'promise') {
+    p.morale = Math.min(25, (p.morale || 0) + 5);
+    return { ok: true, decision: 'promise', player: p, label: `Обещали минуты · ${p.name}` };
+  }
+  if (decision === 'list') {
+    p.request = null;
+    p.morale = Math.max(-20, (p.morale || 0) - 2);
+    return { ok: true, decision: 'list', player: p, label: `На рынок · ${p.name}` };
+  }
+  // dismiss
+  p.request = null;
+  p.morale = Math.max(-20, (p.morale || 0) - 8);
+  return { ok: true, decision: 'dismiss', player: p, label: `Отказ · ${p.name}` };
+}
+
+function snapshotSeasonAwards(club, { season = 1, rank = null, leagueName = null } = {}) {
+  if (!club) return null;
+  const rows = (club.players || []).map((p) => ({
+    id: p.id,
+    name: p.name,
+    pos: p.pos,
+    goals: p.seasonGoals || 0,
+    assists: p.seasonAssists || 0,
+    motm: p.seasonMotm || 0,
+    apps: p.seasonApps || 0
+  }));
+  const entry = {
+    season,
+    leagueName,
+    rank,
+    at: Date.now(),
+    scorers: rows.filter((r) => r.goals).sort((a, b) => b.goals - a.goals || b.assists - a.assists).slice(0, 5),
+    assists: rows.filter((r) => r.assists).sort((a, b) => b.assists - a.assists || b.goals - a.goals).slice(0, 5),
+    motm: rows.filter((r) => r.motm).sort((a, b) => b.motm - a.motm || b.goals - a.goals).slice(0, 5)
+  };
+  club.seasonArchive = Array.isArray(club.seasonArchive) ? club.seasonArchive : [];
+  club.seasonArchive.unshift(entry);
+  if (club.seasonArchive.length > 8) club.seasonArchive.length = 8;
+  (club.players || []).forEach((p) => {
+    p.seasonGoals = 0;
+    p.seasonAssists = 0;
+    p.seasonMotm = 0;
+    p.seasonApps = 0;
+    if (p.request === 'playtime') delete p.request;
+  });
+  return entry;
 }
 
 function trySub(liveXi, bench, outPlayer, events, minute, side, score, reason) {
@@ -808,8 +1051,9 @@ function simulateMatch(homeClub, awayClub, meta = {}) {
   let homeBench = resolveBench(homeClub, homeXi.map((p) => p.id));
   let awayBench = resolveBench(awayClub, awayXi.map((p) => p.id));
 
-  const homePow = teamMatchPower(homeClub, homeXi, { home: true });
-  const awayPow = teamMatchPower(awayClub, awayXi, { home: false });
+  const derbyInfo = detectDerby(homeClub, awayClub, meta);
+  const homePow = teamMatchPower(homeClub, homeXi, { home: true, derby: derbyInfo.derby });
+  const awayPow = teamMatchPower(awayClub, awayXi, { home: false, derby: derbyInfo.derby });
   // leaders boost
   homeXi.forEach((p) => { homePow.power *= Math.pow(traitMul(p, 'power', 1), 0.3); });
   awayXi.forEach((p) => { awayPow.power *= Math.pow(traitMul(p, 'power', 1), 0.3); });
@@ -818,6 +1062,15 @@ function simulateMatch(homeClub, awayClub, meta = {}) {
 
   let hg = 0, ag = 0, hShots = 0, aShots = 0, hOn = 0, aOn = 0, hCorners = 0, aCorners = 0, hPoss = 50;
   const events = [];
+  if (derbyInfo.derby) {
+    events.push({
+      minute: 1,
+      type: 'derby',
+      side: 'home',
+      player: derbyInfo.label || 'Дерби',
+      score: [0, 0]
+    });
+  }
   const cards = { home: 0, away: 0 };
   const matchYellows = { home: Object.create(null), away: Object.create(null) };
   const cardLog = { home: [], away: [] };
@@ -1038,6 +1291,7 @@ function simulateMatch(homeClub, awayClub, meta = {}) {
     homeXi: homeMapped,
     awayXi: awayMapped,
     motm,
+    derby: derbyInfo.derby ? (derbyInfo.label || 'Дерби') : null,
     chemistry: {
       home: homePow.chemistry || formationChemistry(homeClub, homeXi),
       away: awayPow.chemistry || formationChemistry(awayClub, awayXi)
@@ -1046,11 +1300,28 @@ function simulateMatch(homeClub, awayClub, meta = {}) {
 
   applyMatchAwards(homeClub, result, true);
   applyMatchAwards(awayClub, result, false);
+  bumpSeasonApps(homeClub, homeXi.map((p) => p.id).concat(Object.keys(ratings.home)));
+  bumpSeasonApps(awayClub, awayXi.map((p) => p.id).concat(Object.keys(ratings.away)));
+
+  const homeLetter = hg > ag ? 'W' : hg === ag ? 'D' : 'L';
+  const awayLetter = ag > hg ? 'W' : hg === ag ? 'D' : 'L';
+  pushForm(homeClub, homeLetter);
+  pushForm(awayClub, awayLetter);
+  if (derbyInfo.derby) {
+    if (awayClub.userId) rememberRival(homeClub, awayClub.userId);
+    if (homeClub.userId) rememberRival(awayClub, homeClub.userId);
+  }
 
   homeClub.history = homeClub.history || [];
   awayClub.history = awayClub.history || [];
-  homeClub.history.unshift({ id: result.id, at: result.createdAt, opp: awayClub.name, score: [hg, ag], home: true, competition: result.competition });
-  awayClub.history.unshift({ id: result.id, at: result.createdAt, opp: homeClub.name, score: [ag, hg], home: false, competition: result.competition });
+  homeClub.history.unshift({
+    id: result.id, at: result.createdAt, opp: awayClub.name, score: [hg, ag], home: true,
+    competition: result.competition, result: homeLetter, derby: result.derby || null
+  });
+  awayClub.history.unshift({
+    id: result.id, at: result.createdAt, opp: homeClub.name, score: [ag, hg], home: false,
+    competition: result.competition, result: awayLetter, derby: result.derby || null
+  });
   if (homeClub.history.length > 40) homeClub.history.length = 40;
   if (awayClub.history.length > 40) awayClub.history.length = 40;
   return result;
@@ -1206,14 +1477,15 @@ function upgradeStadium(club) {
   return { ok: true, cost: q.cost, label: `Стадион ур. ${club.stadiumLevel}`, stadiumLevel: club.stadiumLevel, capacity: club.capacity };
 }
 
-function ticketIncome(club, user, won) {
+function ticketIncome(club, user, won, opts = {}) {
   const fans = Math.max(1000, user?.fans || 10000);
   const cap = club?.capacity || 8000;
   const basePrice = club?.ticketPrice || (8 + ((club?.stadiumLevel || 1) - 1) * 3);
   const price = Math.max(5, Math.min(40, basePrice));
   // higher price → slightly lower attendance
   const priceFactor = Math.max(0.55, 1.15 - price / 50);
-  const attendance = Math.min(cap, Math.round(fans * (won ? 0.85 : 0.55) * priceFactor));
+  let attendance = Math.min(cap, Math.round(fans * (won ? 0.85 : 0.55) * priceFactor));
+  if (opts.derby) attendance = Math.min(cap, Math.round(attendance * 1.28));
   return Math.round(attendance * price);
 }
 
@@ -1244,7 +1516,10 @@ function settleWageDay(user, club, now = Date.now()) {
   const grantPerDay = Math.round((user.fans || 10000) * (0.35 + (club.stadiumLevel || 1) * 0.12));
   const wages = wagesPerDay * days;
   const grant = grantPerDay * days;
-  const delta = grant - wages;
+  ensureSponsor(club, user);
+  const sponsorDaily = Math.round((club.sponsor?.weekly || 0) / 7);
+  const sponsorPay = sponsorDaily * days;
+  const delta = grant + sponsorPay - wages;
   user.money = Math.round((user.money || 0) + delta);
   const credit = creditLimit(user, club);
   if (user.money < -credit) user.money = -credit;
@@ -1259,6 +1534,15 @@ function settleWageDay(user, club, now = Date.now()) {
   if (user.lastWageAt > now) user.lastWageAt = now;
   pushLedger(club, -wages, days === 1 ? 'Зарплаты (сутки)' : `Зарплаты (${days} дн.)`);
   pushLedger(club, grant, days === 1 ? 'Суточный доход (фанаты/стадион)' : `Доход за ${days} дн.`);
+  if (sponsorPay > 0) {
+    pushLedger(
+      club,
+      sponsorPay,
+      days === 1
+        ? `Спонсор · ${club.sponsor.name}`
+        : `Спонсор · ${club.sponsor.name} (${days} дн.)`
+    );
+  }
   club.contractDayAcc = (club.contractDayAcc || 0) + days;
   let contracts = null;
   if (club.contractDayAcc >= 5) {
@@ -1267,8 +1551,12 @@ function settleWageDay(user, club, now = Date.now()) {
     contracts = tickContracts(club, ticks);
   }
   tickYouthGrowth(club);
+  const playtime = processPlaytimeRequests(club);
   const finance = financeSnapshot(user, club);
-  return { wages, grant, delta, weekBill, days, at: now, contracts, interest, finance };
+  return {
+    wages, grant, sponsorPay, delta, weekBill, days, at: now,
+    contracts, interest, finance, playtime, sponsor: club.sponsor
+  };
 }
 
 function playerValue(p) {
@@ -1860,6 +2148,18 @@ module.exports = {
   renewContract,
   tickContracts,
   setTicketPrice,
-  playerAvailable
+  playerAvailable,
+  SPONSOR_TIERS,
+  pickSponsor,
+  ensureSponsor,
+  renegotiateSponsor,
+  pushForm,
+  clubFormGuide,
+  detectDerby,
+  rememberRival,
+  processPlaytimeRequests,
+  resolvePlaytimeRequest,
+  snapshotSeasonAwards,
+  bumpSeasonApps
 };
 

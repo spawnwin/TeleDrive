@@ -204,4 +204,34 @@ describe('game lineup guards', () => {
     assert.equal(st.academyLevel, 2);
     assert.ok(st.youth.length >= 3);
   });
+
+  it('sponsors form derby playtime and season archive', () => {
+    const home = G.defaultClub({ id: 's1', login: 's1', name: 'S1', clubName: 'Северный Шторм', level: 4 });
+    const away = G.defaultClub({ id: 's2', login: 's2', name: 'S2', clubName: 'Северный Орёл', level: 4 });
+    const user = { id: 's1', level: 4, fame: 30, fans: 12000, money: 500000 };
+    home.name = 'Северный Шторм';
+    away.name = 'Северный Орёл';
+    G.ensureLineup(home, true);
+    G.ensureLineup(away, true);
+    const sp = G.pickSponsor(home, user);
+    assert.ok(sp.weekly > 0);
+    assert.ok(sp.name);
+    const m = G.simulateMatch(home, away, { competition: 'friendly', homeUserId: 's1', awayUserId: 's2', challenge: true });
+    assert.ok(m.derby);
+    assert.ok(home.form.length >= 1);
+    assert.ok(['W', 'D', 'L'].includes(home.form[0]));
+    const guide = G.clubFormGuide(home);
+    assert.ok(guide.formStr.length >= 1);
+    const benchId = (home.players || []).find((p) => !(home.lineupIds || []).includes(p.id))?.id;
+    assert.ok(benchId);
+    const p = home.players.find((x) => x.id === benchId);
+    p.seasonApps = 0;
+    p.request = 'playtime';
+    const resolved = G.resolvePlaytimeRequest(home, benchId, 'promise');
+    assert.equal(resolved.ok, true);
+    const arch = G.snapshotSeasonAwards(home, { season: 2, rank: 3, leagueName: 'Тест' });
+    assert.ok(arch);
+    assert.equal(home.seasonArchive[0].season, 2);
+    assert.equal(home.players[0].seasonGoals || 0, 0);
+  });
 });
