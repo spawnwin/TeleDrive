@@ -9,6 +9,8 @@ type Props = {
   categoriesCount: number
   onOpenCategories: () => void
   categories: Category[]
+  isAdmin?: boolean
+  onOpenAdmin?: () => void
 }
 
 export default function SettingsPanel({
@@ -18,6 +20,8 @@ export default function SettingsPanel({
   categoriesCount,
   onOpenCategories,
   categories,
+  isAdmin,
+  onOpenAdmin,
 }: Props) {
   return (
     <section className="section rise rise-delay-2">
@@ -31,7 +35,7 @@ export default function SettingsPanel({
         </div>
       </div>
 
-      <div className="section-head" style={{ marginTop: 22 }}>
+      <div className="section-head" style={{ marginTop: 14 }}>
         <h2>Оформление</h2>
       </div>
       <div className="settings-list">
@@ -47,7 +51,7 @@ export default function SettingsPanel({
         </button>
       </div>
 
-      <div className="section-head" style={{ marginTop: 22 }}>
+      <div className="section-head" style={{ marginTop: 14 }}>
         <h2>Данные</h2>
       </div>
       <div className="settings-list">
@@ -61,13 +65,29 @@ export default function SettingsPanel({
         </button>
       </div>
 
-      <div className="section-head" style={{ marginTop: 22 }}>
+      {isAdmin && onOpenAdmin && (
+        <>
+          <div className="section-head" style={{ marginTop: 14 }}>
+            <h2>Администрирование</h2>
+          </div>
+          <div className="settings-list">
+            <button type="button" className="settings-row glass" onClick={onOpenAdmin}>
+              <span className="settings-row-icon">⬡</span>
+              <span className="settings-row-body">
+                <strong>Админ-панель</strong>
+                <span>Пользователи, траты, ипотеки, вклады</span>
+              </span>
+              <span className="settings-chevron">›</span>
+            </button>
+          </div>
+        </>
+      )}
+
+      <div className="section-head" style={{ marginTop: 14 }}>
         <h2>О приложении</h2>
       </div>
       <div className="settings-about glass">
-        <div className="brand-mark settings-brand">
-          Златник
-        </div>
+        <div className="brand-mark settings-brand">Златник</div>
         <p>
           Учёт расходов, ипотек и вкладов. Имя от золотой монеты Древней Руси.
         </p>

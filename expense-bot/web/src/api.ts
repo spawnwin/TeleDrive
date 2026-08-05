@@ -30,9 +30,55 @@ export type Me = {
   username?: string
   firstName?: string
   lastName?: string
+  isAdmin?: boolean
   categories: Category[]
   tones: string[]
   glyphs: string[]
+}
+
+export type AdminOverview = {
+  users: number
+  expenseTotal: number
+  expenseMonth: number
+  expenseToday: number
+  mortgageDebt: number
+  mortgageMonthly: number
+  depositTotal: number
+  depositPayout: number
+}
+
+export type AdminUserRow = {
+  id: string
+  username: string | null
+  firstName: string | null
+  lastName: string | null
+  createdAt: string
+  expenseCount: number
+  expenseTotal: number
+  expenseMonth: number
+  expenseToday: number
+  mortgageCount: number
+  mortgageDebt: number
+  mortgageMonthly: number
+  depositCount: number
+  depositTotal: number
+  depositPayout: number
+  depositProfit: number
+}
+
+export type AdminUserDetail = {
+  user: {
+    id: string
+    username: string | null
+    firstName: string | null
+    lastName: string | null
+    createdAt: string
+  }
+  stats: Stats
+  byCategoryAll: Array<{ category: string; total: number; count: number }>
+  expenses: Expense[]
+  mortgages: Mortgage[]
+  deposits: Deposit[]
 }
 
 export type Mortgage = {
@@ -188,6 +234,10 @@ export const api = {
     }),
   deleteDeposit: (id: number) =>
     request<{ ok: boolean }>(`/api/deposits/${id}`, { method: 'DELETE' }),
+  adminOverview: () => request<AdminOverview>('/api/admin/overview'),
+  adminUsers: () => request<{ items: AdminUserRow[] }>('/api/admin/users'),
+  adminUser: (id: string) =>
+    request<AdminUserDetail>(`/api/admin/users/${encodeURIComponent(id)}`),
 }
 
 export function formatMoney(value: number): string {

@@ -10,6 +10,7 @@ import {
   Stats,
 } from './api'
 import FinancePanel from './Finance'
+import AdminPanel from './Admin'
 import SettingsPanel from './Settings'
 import Sheet, { useSheetScrollLock } from './Sheet'
 import TabBar, { type Tab } from './TabBar'
@@ -95,6 +96,7 @@ export default function App() {
   const [expenses, setExpenses] = useState<Expense[]>([])
   const [categories, setCategories] = useState<Category[]>([])
   const [tab, setTab] = useState<Tab>('home')
+  const [showAdmin, setShowAdmin] = useState(false)
   const [sheet, setSheet] = useState<SheetMode>(null)
   const [amount, setAmount] = useState('')
   const [categoryName, setCategoryName] = useState('')
@@ -458,14 +460,23 @@ export default function App() {
         ) : tab === 'finance' ? (
           <FinancePanel onToast={setToast} haptic={haptic} />
         ) : tab === 'settings' ? (
-          <SettingsPanel
-            theme={theme}
-            onToggleTheme={toggleTheme}
-            firstName={me?.firstName}
-            categoriesCount={categories.length}
-            categories={categories}
-            onOpenCategories={openCategories}
-          />
+          showAdmin && me?.isAdmin ? (
+            <AdminPanel
+              onToast={setToast}
+              onBack={() => setShowAdmin(false)}
+            />
+          ) : (
+            <SettingsPanel
+              theme={theme}
+              onToggleTheme={toggleTheme}
+              firstName={me?.firstName}
+              categoriesCount={categories.length}
+              categories={categories}
+              onOpenCategories={openCategories}
+              isAdmin={!!me?.isAdmin}
+              onOpenAdmin={() => setShowAdmin(true)}
+            />
+          )
         ) : (
           <section className="section rise rise-delay-2">
             <div className="section-head">
@@ -517,7 +528,14 @@ export default function App() {
         )}
       </div>
 
-      <TabBar tab={tab} onChange={setTab} onAdd={() => openExpense()} />
+      <TabBar
+        tab={tab}
+        onChange={(t) => {
+          setTab(t)
+          if (t !== 'settings') setShowAdmin(false)
+        }}
+        onAdd={() => openExpense()}
+      />
 
       {sheet === 'expense' && (
         <Sheet

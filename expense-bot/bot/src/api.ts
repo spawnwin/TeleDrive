@@ -2,6 +2,12 @@ import { Router } from 'express'
 import { z } from 'zod'
 import { validateInitData } from './auth.js'
 import {
+  getAdminOverview,
+  getAdminUserDetail,
+  isAdminUserId,
+  listAdminUsers,
+} from './admin.js'
+import {
   createCategory,
   createExpense,
   deleteCategory,
@@ -59,6 +65,24 @@ function resolveUser(req: { headers: Record<string, unknown> }) {
   return null
 }
 
+type AuthUser = {
+  id: string
+  username?: string
+  first_name?: string
+  last_name?: string
+}
+
+function requireAdmin(req: { headers: Record<string, unknown> }):
+  | { user: AuthUser }
+  | { error: 'unauthorized' | 'forbidden'; status: 401 | 403 } {
+  const user = resolveUser(req)
+  if (!user) return { error: 'unauthorized', status: 401 }
+  if (!isAdminUserId(user.id)) {
+    return { error: 'forbidden', status: 403 }
+  }
+  return { user }
+}
+
 export function createApiRouter() {
   const router = Router()
 
@@ -79,10 +103,43 @@ export function createApiRouter() {
       username: user.username,
       firstName: user.first_name,
       lastName: user.last_name,
+      isAdmin: isAdminUserId(user.id),
       categories,
       tones: TONES,
       glyphs: GLYPHS,
     })
+  })
+
+  router.get('/admin/overview', (req, res) => {
+    const gate = requireAdmin(req)
+    if ('error' in gate) {
+      res.status(gate.status).json({ error: gate.error })
+      return
+    }
+    res.json(getAdminOverview())
+  })
+
+  router.get('/admin/users', (req, res) => {
+    const gate = requireAdmin(req)
+    if ('error' in gate) {
+      res.status(gate.status).json({ error: gate.error })
+      return
+    }
+    res.json({ items: listAdminUsers() })
+  })
+
+  router.get('/admin/users/:id', (req, res) => {
+    const gate = requireAdmin(req)
+    if ('error' in gate) {
+      res.status(gate.status).json({ error: gate.error })
+      return
+    }
+    const detail = getAdminUserDetail(String(req.params.id))
+    if (!detail) {
+      res.status(404).json({ error: 'not_found' })
+      return
+    }
+    res.json(detail)
   })
 
   router.get('/categories', (req, res) => {
