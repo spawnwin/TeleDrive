@@ -19,7 +19,10 @@
     cup_started: 'Кубок стартовал',
     cup_out: 'Вылет из кубка',
     cup_won: 'Победа в кубке',
-    cup_done: 'Кубок завершён'
+    cup_done: 'Кубок завершён',
+    challenge_in: 'Входящий вызов',
+    challenge_done: 'Вызов сыгран',
+    challenge_declined: 'Вызов отклонён'
   };
 
   const TABS = {
@@ -170,7 +173,7 @@
         </div>
         <section class="panel">
           <h3>Движение средств</h3>
-          <p class="hint">Матчи: приз + билеты от стадиона. Раз в сутки — зарплаты и доход от фанатов. Кубки дают призовые, очки и престиж.</p>
+          <p class="hint">Матчи: приз + билеты дома. Раз в сутки — зарплаты и доход от фанатов. Кубки: взносы за матч и призовые.</p>
           <div class="list">${ledger.length ? ledger.map((row) => `
             <div class="list-row">
               <div><strong>${esc(row.label)}</strong><small>${new Date(row.at).toLocaleString('ru-RU')}</small></div>
@@ -181,6 +184,7 @@
     }
     if (state.tab === 'mail') {
       const events = state.me?.cupEvents || [];
+      try { await A().request('api/cups/events/read', { method: 'POST', body: {} }); } catch {}
       $('#view').innerHTML = `
         <section class="panel">
           <h3>События</h3>
@@ -239,9 +243,9 @@
         <section class="panel">
           <h3>Клубные настройки</h3>
           <form class="form-grid" id="form-club">
-            <label>Название<input name="name" value="${club.name || ''}" maxlength="32" /></label>
-            <label>Аббревиатура<input name="short" value="${club.short || ''}" maxlength="4" /></label>
-            <label>Стадион<input name="stadium" value="${club.stadium || ''}" maxlength="40" /></label>
+            <label>Название<input name="name" value="${esc(club.name || '')}" maxlength="32" /></label>
+            <label>Аббревиатура<input name="short" value="${esc(club.short || '')}" maxlength="4" /></label>
+            <label>Стадион<input name="stadium" value="${esc(club.stadium || '')}" maxlength="40" /></label>
             <label>Цвет<input name="color" type="color" value="${club.color || '#1fa65a'}" /></label>
             <button class="btn btn-primary" type="submit">Сохранить</button>
           </form>
@@ -264,13 +268,14 @@
                 ${['4-4-2','4-3-3','3-5-2','4-2-3-1'].map((f) => `<option value="${f}" ${club.formation===f?'selected':''}>${f}</option>`).join('')}
               </select>
             </label>
+            <input type="hidden" name="rebuildLineup" value="1" />
             <button class="btn btn-primary" type="submit">Автосостав по схеме</button>
           </form>
           <p class="hint">Отметьте ровно 11 игроков и сохраните основу вручную.</p>
           <div class="list" id="lineup-picker">${sorted.map((p) => `
             <label class="list-row" style="cursor:pointer">
-              <div><strong>${p.name} · ${p.pos}</strong><small>эфф. ${p.effective} · физа ${p.fitness}%</small></div>
-              <input type="checkbox" data-lineup-id="${p.id}" ${xi.has(p.id) ? 'checked' : ''} />
+              <div><strong>${esc(p.name)} · ${esc(p.pos)}</strong><small>эфф. ${p.effective} · физа ${p.fitness}%</small></div>
+              <input type="checkbox" data-lineup-id="${esc(p.id)}" ${xi.has(p.id) ? 'checked' : ''} />
             </label>`).join('')}</div>
           <button class="btn btn-primary" id="btn-save-lineup" style="margin-top:12px">Сохранить основу</button>
         </section>
@@ -304,10 +309,10 @@
           <div class="list">${players.map((p) => `
             <div class="list-row">
               <div>
-                <strong>${p.name} · ${p.pos}</strong>
+                <strong>${esc(p.name)} · ${esc(p.pos)}</strong>
                 <small>Мастерство ${p.mastery} · опыт ${p.xpPool || 0} · талант ${p.talent}</small>
               </div>
-              <button class="btn btn-tiny" data-train="${p.id}">Качать</button>
+              <button class="btn btn-tiny" data-train="${esc(p.id)}">Качать</button>
             </div>`).join('')}</div>
         </section>`;
       return;
@@ -424,17 +429,33 @@
       return;
     }
     const data = await A().request('api/friendly');
-    const queue = (data.queue || []).filter((q) => q.userId !== A().getUser()?.id);
+    const queue = data.queue || [];
+    const myRequest = data.myRequest;
+    const challenges = data.challenges || [];
+    const myChallenges = data.myChallenges || [];
     $('#view').innerHTML = `
+      ${challenges.length ? `<section class="panel">
+        <h3>Входящие вызовы</h3>
+        <div class="list">${challenges.map((c) => `
+          <div class="list-row">
+            <div><strong>${esc(c.clubName)}</strong><small>@${esc(c.login)} · ур. ${c.level} · сила ${c.strength}</small></div>
+            <div style="display:flex;gap:6px">
+              <button class="btn btn-primary btn-tiny" data-chal-accept="${esc(c.id)}">Принять</button>
+              <button class="btn btn-tiny" data-chal-decline="${esc(c.id)}">Отклонить</button>
+            </div>
+          </div>`).join('')}</div>
+      </section>` : ''}
       <section class="panel">
         <div class="panel-head">
           <h3>Товарищеские</h3>
           <div style="display:flex;gap:8px;flex-wrap:wrap">
-            <button class="btn btn-primary btn-tiny" id="btn-friendly-post">Подать заявку</button>
+            <button class="btn btn-primary btn-tiny" id="btn-friendly-post">${myRequest ? 'Обновить заявку' : 'Подать заявку'}</button>
+            ${myRequest ? '<button class="btn btn-tiny" id="btn-friendly-cancel">Снять заявку</button>' : ''}
             <button class="btn btn-tiny" id="btn-friendly-bot">Играть с ботом</button>
           </div>
         </div>
-        <p class="hint">Вызовите менеджера из очереди или сыграйте быстрый матч с ботом для тренировки.</p>
+        ${myRequest ? `<p class="hint">Ваша заявка активна · ${esc(myRequest.clubName)} · сила ${myRequest.strength} · до ${new Date(myRequest.expiresAt).toLocaleTimeString('ru-RU')}</p>` : ''}
+        <p class="hint">Примите заявку из очереди, вызовите игрока онлайн или сыграйте с ботом.</p>
         <div class="list">${queue.length ? queue.map((q) => `
           <div class="list-row">
             <div>
@@ -444,6 +465,12 @@
             <button class="btn btn-primary btn-tiny" data-accept="${esc(q.id)}">Принять</button>
           </div>`).join('') : '<p class="hint">Очередь пуста — подайте заявку первым</p>'}</div>
       </section>
+      ${myChallenges.length ? `<section class="panel"><h3>Ваши исходящие вызовы</h3>
+        <div class="list">${myChallenges.map((c) => `
+          <div class="list-row">
+            <div><strong>${esc(c.clubName || c.targetName)}</strong><small>ожидает ответа</small></div>
+            <button class="btn btn-tiny" data-chal-cancel="${esc(c.id)}">Отозвать</button>
+          </div>`).join('')}</div></section>` : ''}
       <section class="panel">
         <h3>Онлайн сейчас</h3>
         <div class="list">${(data.online || []).filter((u) => u.id !== A().getUser()?.id).slice(0, 12).map((u) => `
@@ -681,12 +708,12 @@
       ? [['save','Сейвы'],['reflex','Рефлекс'],['aerial','Воздух'],['distribution','Игра ногами']]
       : [['tackle','Отбор'],['mark','Опека'],['dribble','Дриблинг'],['control','Приём'],['stamina','Выносливость'],['pass','Пас'],['shotPower','Сила удара'],['shotAcc','Точность']];
     openModal(`
-      <div class="panel-head"><h2 style="margin:0;font-family:Syne,sans-serif">${p.name}</h2><button class="btn btn-tiny" id="modal-close">Закрыть</button></div>
+      <div class="panel-head"><h2 style="margin:0;font-family:Syne,sans-serif">${esc(p.name)}</h2><button class="btn btn-tiny" id="modal-close">Закрыть</button></div>
       <p class="hint">Опыт: ${p.xpPool || 0} · мастерство ${p.mastery}</p>
       <div class="list">${skills.map(([k, label]) => `
         <div class="list-row">
           <div><strong>${label}</strong><small>${p.skills?.[k] ?? '—'}</small></div>
-          <button class="btn btn-tiny" data-skill="${k}" data-pid="${p.id}">+1 (8 опыта)</button>
+          <button class="btn btn-tiny" data-skill="${k}" data-pid="${esc(p.id)}">+1 (8 опыта)</button>
         </div>`).join('')}</div>
     `);
   }
@@ -785,13 +812,44 @@
       const challenge = e.target.closest('[data-challenge]');
       if (challenge) {
         try {
-          const data = await A().request('api/friendly/challenge', {
+          await A().request('api/friendly/challenge', {
             method: 'POST',
             body: { userId: challenge.dataset.challenge }
           });
+          toast('Вызов отправлен — ждите ответа');
+          render();
+        } catch (err) { toast(err.message); }
+      }
+      const chalAcc = e.target.closest('[data-chal-accept]');
+      if (chalAcc) {
+        try {
+          const data = await A().request('api/friendly/challenge/' + chalAcc.dataset.chalAccept + '/accept', { method: 'POST' });
           await refreshMe();
           showMatch(data.match);
-          toast('Матч сыгран');
+          toast('Вызов принят');
+        } catch (err) { toast(err.message); }
+      }
+      const chalDec = e.target.closest('[data-chal-decline]');
+      if (chalDec) {
+        try {
+          await A().request('api/friendly/challenge/' + chalDec.dataset.chalDecline + '/decline', { method: 'POST' });
+          toast('Вызов отклонён');
+          render();
+        } catch (err) { toast(err.message); }
+      }
+      const chalCancel = e.target.closest('[data-chal-cancel]');
+      if (chalCancel) {
+        try {
+          await A().request('api/friendly/cancel', { method: 'POST', body: { challengeId: chalCancel.dataset.chalCancel } });
+          toast('Вызов отозван');
+          render();
+        } catch (err) { toast(err.message); }
+      }
+      if (e.target.id === 'btn-friendly-cancel') {
+        try {
+          await A().request('api/friendly/cancel', { method: 'POST', body: {} });
+          toast('Заявка снята');
+          render();
         } catch (err) { toast(err.message); }
       }
       const buy = e.target.closest('[data-buy]');
@@ -942,10 +1000,11 @@
         e.preventDefault();
         const fd = new FormData(e.target);
         const body = Object.fromEntries(fd.entries());
+        if (body.rebuildLineup) body.rebuildLineup = true;
         try {
           const data = await A().request('api/club', { method: 'POST', body });
           state.club = data.club;
-          toast('Сохранено');
+          toast(e.target.id === 'form-formation' ? 'Автосостав обновлён' : 'Сохранено');
           await refreshMe();
           render();
         } catch (err) { toast(err.message); }
@@ -979,7 +1038,7 @@
         if (!data) return;
         if (data.wageDay && data.wageDay.at !== state.lastWageToast) {
           state.lastWageToast = data.wageDay.at || Date.now();
-          toast('Недельный расчёт: ' + (data.wageDay.delta >= 0 ? '+' : '') + money(data.wageDay.delta));
+          toast('Суточный расчёт: ' + (data.wageDay.delta >= 0 ? '+' : '') + money(data.wageDay.delta));
         }
         if (state.section === 'matches' && state.tab === 'cups') {
           const nowLive = state.me?.liveCup?.id;

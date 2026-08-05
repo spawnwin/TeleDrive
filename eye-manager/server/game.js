@@ -436,6 +436,35 @@ function generateTransferList(scoutLevel = 0, count = 6) {
   return list.sort((a, b) => b.value - a.value);
 }
 
+function tickClubClock(club) {
+  if (!club) return false;
+  const now = Date.now();
+  const last = club.lastInjuryTick || club.createdAt || now;
+  const hours = Math.floor((now - last) / 3600e3);
+  if (hours < 1) return false;
+  const medic = (club.staff && club.staff.medic) || 0;
+  club.players.forEach((p) => {
+    if (p.injuredHours > 0) {
+      p.injuredHours = Math.max(0, Math.round(p.injuredHours - hours * (1 + medic * 0.5)));
+    } else {
+      p.fitness = Math.min(100, (p.fitness || 100) + hours);
+    }
+  });
+  club.lastInjuryTick = now;
+  return true;
+}
+
+function refreshClubMarket(club, force = false) {
+  const scout = (club.staff && club.staff.scout) || 0;
+  const age = Date.now() - (club.transferRefreshedAt || 0);
+  if (!force && Array.isArray(club.transferList) && club.transferList.length && age < 60 * 60e3) {
+    return club.transferList;
+  }
+  club.transferList = generateTransferList(scout, 8);
+  club.transferRefreshedAt = Date.now();
+  return club.transferList;
+}
+
 function buyPlayer(club, listing) {
   if (!listing?.id) return { ok: false, error: 'Игрок не найден на рынке' };
   if ((club.players || []).length >= 25) return { ok: false, error: 'Состав полон (макс. 25)' };
@@ -517,6 +546,8 @@ module.exports = {
   weeklyWages,
   playerValue,
   generateTransferList,
+  tickClubClock,
+  refreshClubMarket,
   buyPlayer,
   sellPlayer
 };

@@ -301,23 +301,46 @@ function ensureBotClub(user, clubName) {
 
 function processWageDay(user, club) {
   if (!user || user.isBot || !club) return null;
-  const WEEK_MS = 24 * 3600e3;
+  const DAY_MS = 24 * 3600e3;
   const now = Date.now();
-  if (user.lastWageAt && now - user.lastWageAt < WEEK_MS) return null;
+  // first login after register: skip immediate charge, set baseline
+  if (!user.lastWageAt) {
+    user.lastWageAt = now;
+    persistUser(user);
+    return null;
+  }
+  if (now - user.lastWageAt < DAY_MS) return null;
   const wages = G.weeklyWages(club);
-  // soft income so new clubs don't go broke immediately
   const grant = Math.round((user.fans || 10000) * (2 + (club.stadiumLevel || 1)));
   const delta = grant - wages;
   user.money = (user.money || 0) + delta;
   user.lastWageAt = now;
   G.pushLedger(club, -wages, 'Зарплаты состава');
-  G.pushLedger(club, grant, 'Доход недели (фанаты/стадион)');
+  G.pushLedger(club, grant, 'Суточный доход (фанаты/стадион)');
   persistUser(user);
   db.setClub(user.id, club);
   return { wages, grant, delta, at: now };
 }
 
-function refreshTransferMarket(force = false, scoutLevel = 0) {
+function pushUserEvent(userId, ev) {
+  const u = usersDb().users[userId];
+  if (!u || u.isBot) return;
+  u.cupEvents = Array.isArray(u.cupEvents) ? u.cupEvents : [];
+  u.cupEvents.unshift({
+    id: G.uid('ev'),
+    at: Date.now(),
+    read: false,
+    ...ev
+  });
+  if (u.cupEvents.length > 40) u.cupEvents.length = 40;
+  persistUser(u);
+}
+
+function refreshTransferMarket(force = false, scoutLevel = 0, club = null) {
+  if (club) {
+    G.refreshClubMarket(club, force);
+    return { list: club.transferList || [], refreshedAt: club.transferRefreshedAt || Date.now() };
+  }
   const tm = db.getTransferMarket();
   const age = Date.now() - (tm.refreshedAt || 0);
   if (!force && tm.list?.length && age < 60 * 60e3) return tm;
@@ -342,11 +365,13 @@ function playCupTie(homeEnt, awayEnt, meta = {}) {
   db.setClub(homeUser.id, homeClub);
   db.setClub(awayUser.id, awayClub);
   db.addMatch(match);
-  // prize money handled at cup finalize; small appearance fee
+  // prize money handled at cup finalize; appearance fee + home tickets
   if (!homeUser.isBot) {
-    homeUser.money = (homeUser.money || 0) + 5000;
+    const tickets = G.ticketIncome(homeClub, homeUser, false);
+    homeUser.money = (homeUser.money || 0) + 5000 + tickets;
     persistUser(homeUser);
     G.pushLedger(homeClub, 5000, `Кубок · ${meta.round || 'матч'}`);
+    if (tickets) G.pushLedger(homeClub, tickets, 'Билеты (кубок)');
     db.setClub(homeUser.id, homeClub);
   }
   if (!awayUser.isBot) {
@@ -456,6 +481,7 @@ const server = http.createServer(async (req, res) => {
     const auth = requireAuth(req, res);
     if (!auth) return;
     const club = ensureClub(auth.user);
+    if (G.tickClubClock(club)) db.setClub(auth.user.id, club);
     const wage = processWageDay(auth.user, club);
     return json(res, 200, {
       ok: true,
@@ -464,7 +490,8 @@ const server = http.createServer(async (req, res) => {
       online: db.listOnlineUsers().length,
       liveCup: cups.findMyLiveCup(auth.user.id),
       cupEvents: cups.listCupEvents(auth.user.id, { limit: 8 }),
-      wageDay: wage
+      wageDay: wage,
+      challenges: db.friendlyList().filter((f) => f.type === 'challenge' && f.targetUserId === auth.user.id)
     });
   }
 
@@ -487,9 +514,11 @@ const server = http.createServer(async (req, res) => {
       if (body.stadium) club.stadium = String(body.stadium).slice(0, 40);
       const formationChanged = body.formation && G.FORMATIONS[body.formation] && body.formation !== club.formation;
       if (formationChanged) club.formation = body.formation;
+      else if (body.formation && G.FORMATIONS[body.formation]) club.formation = body.formation;
       if (body.style && G.STYLES.includes(body.style)) club.style = body.style;
       if (Array.isArray(body.instructions)) club.instructions = body.instructions.slice(0, 8);
-      G.ensureLineup(club, !!formationChanged);
+      const forceLineup = !!(body.rebuildLineup || body.autoLineup || formationChanged);
+      G.ensureLineup(club, forceLineup);
       db.setClub(auth.user.id, club);
       auth.user.clubName = club.name;
       persistUser(auth.user);
@@ -616,9 +645,10 @@ const server = http.createServer(async (req, res) => {
   if (pathname === '/api/friendly' && req.method === 'GET') {
     const auth = requireAuth(req, res);
     if (!auth) return;
-    return json(res, 200, {
-      ok: true,
-      queue: db.friendlyList().map((f) => ({
+    const all = db.friendlyList();
+    const queue = all
+      .filter((f) => f.type !== 'challenge' && f.userId !== auth.user.id)
+      .map((f) => ({
         id: f.id,
         userId: f.userId,
         login: f.login,
@@ -627,7 +657,35 @@ const server = http.createServer(async (req, res) => {
         level: f.level,
         strength: f.strength,
         expiresAt: f.expiresAt
-      })),
+      }));
+    const myRequest = all.find((f) => f.type !== 'challenge' && f.userId === auth.user.id) || null;
+    const challenges = all
+      .filter((f) => f.type === 'challenge' && f.targetUserId === auth.user.id)
+      .map((f) => ({
+        id: f.id,
+        userId: f.userId,
+        login: f.login,
+        name: f.name,
+        clubName: f.clubName,
+        level: f.level,
+        strength: f.strength,
+        expiresAt: f.expiresAt
+      }));
+    const myChallenges = all
+      .filter((f) => f.type === 'challenge' && f.userId === auth.user.id)
+      .map((f) => ({
+        id: f.id,
+        targetUserId: f.targetUserId,
+        targetName: f.targetName,
+        clubName: f.targetClubName,
+        expiresAt: f.expiresAt
+      }));
+    return json(res, 200, {
+      ok: true,
+      queue,
+      myRequest,
+      challenges,
+      myChallenges,
       online: db.listOnlineUsers()
     });
   }
@@ -636,10 +694,12 @@ const server = http.createServer(async (req, res) => {
     const auth = requireAuth(req, res);
     if (!auth) return;
     const club = ensureClub(auth.user);
-    // remove old own
-    db.friendlyList().filter((f) => f.userId === auth.user.id).forEach((f) => db.friendlyTake(f.id));
+    db.friendlyList()
+      .filter((f) => f.type !== 'challenge' && f.userId === auth.user.id)
+      .forEach((f) => db.friendlyTake(f.id));
     const entry = db.friendlyPost({
       id: G.uid('fr'),
+      type: 'friendly',
       userId: auth.user.id,
       login: auth.user.login,
       name: auth.user.name,
@@ -651,12 +711,45 @@ const server = http.createServer(async (req, res) => {
     return json(res, 200, { ok: true, entry });
   }
 
+  if (pathname === '/api/friendly/cancel' && req.method === 'POST') {
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    const mine = db.friendlyList().filter(
+      (f) => f.userId === auth.user.id && (f.type !== 'challenge' || true)
+    );
+    let removed = 0;
+    mine.forEach((f) => {
+      if (f.type === 'challenge') return;
+      db.friendlyTake(f.id);
+      removed++;
+    });
+    // also cancel outgoing challenges if body says so
+    try {
+      const body = JSON.parse((await readBody(req)).toString('utf8') || '{}');
+      if (body.challengeId) {
+        const c = db.friendlyTake(body.challengeId);
+        if (c && c.userId === auth.user.id) removed++;
+        else if (c) db.friendlyPost(c);
+      } else if (body.allChallenges) {
+        db.friendlyList()
+          .filter((f) => f.type === 'challenge' && f.userId === auth.user.id)
+          .forEach((f) => { db.friendlyTake(f.id); removed++; });
+      }
+    } catch {}
+    return json(res, 200, { ok: true, removed });
+  }
+
   if (pathname.match(/^\/api\/friendly\/[^/]+\/accept$/) && req.method === 'POST') {
     const auth = requireAuth(req, res);
     if (!auth) return;
     const id = pathname.split('/')[3];
+    if (id === 'bot' || id === 'cancel' || id === 'challenge') return;
     const entry = db.friendlyTake(id);
     if (!entry) return json(res, 404, { error: 'Заявка не найдена или устарела' });
+    if (entry.type === 'challenge') {
+      db.friendlyPost(entry);
+      return json(res, 400, { error: 'Это вызов — используйте принять вызов' });
+    }
     if (entry.userId === auth.user.id) {
       db.friendlyPost(entry);
       return json(res, 400, { error: 'Нельзя принять свою заявку' });
@@ -708,21 +801,89 @@ const server = http.createServer(async (req, res) => {
       if (target.id === auth.user.id) return json(res, 400, { error: 'Нельзя вызвать себя' });
       const online = db.listOnlineUsers().some((u) => u.id === target.id);
       if (!online) return json(res, 400, { error: 'Соперник не в сети' });
-      const homeClub = ensureClub(auth.user);
-      const awayClub = ensureClub(target);
-      const match = G.simulateMatch(homeClub, awayClub, {
-        competition: 'friendly',
-        homeUserId: auth.user.id,
-        awayUserId: target.id
+      // replace previous challenge to same target
+      db.friendlyList()
+        .filter((f) => f.type === 'challenge' && f.userId === auth.user.id && f.targetUserId === target.id)
+        .forEach((f) => db.friendlyTake(f.id));
+      const club = ensureClub(auth.user);
+      const targetClub = ensureClub(target);
+      const entry = db.friendlyPost({
+        id: G.uid('ch'),
+        type: 'challenge',
+        userId: auth.user.id,
+        login: auth.user.login,
+        name: auth.user.name,
+        clubName: club.name,
+        level: auth.user.level,
+        strength: G.clubStrength(club),
+        targetUserId: target.id,
+        targetName: target.name || target.login,
+        targetClubName: targetClub.name,
+        expiresAt: Date.now() + 15 * 60 * 1000
       });
-      db.setClub(auth.user.id, homeClub);
-      db.setClub(target.id, awayClub);
-      db.addMatch(match);
-      rewardUsers(auth.user, target, match);
-      return json(res, 200, { ok: true, match });
+      pushUserEvent(target.id, {
+        type: 'challenge_in',
+        title: 'Вызов на матч',
+        body: `${club.name} (@${auth.user.login}) вызывает вас на товарищеский`,
+        fromUserId: auth.user.id,
+        challengeId: entry.id
+      });
+      return json(res, 200, { ok: true, entry, message: 'Вызов отправлен' });
     } catch (e) {
       return json(res, 500, { error: String(e.message || e) });
     }
+  }
+
+  if (pathname.match(/^\/api\/friendly\/challenge\/[^/]+\/accept$/) && req.method === 'POST') {
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    const id = pathname.split('/')[4];
+    const entry = db.friendlyTake(id);
+    if (!entry || entry.type !== 'challenge') return json(res, 404, { error: 'Вызов не найден' });
+    if (entry.targetUserId !== auth.user.id) {
+      db.friendlyPost(entry);
+      return json(res, 403, { error: 'Это не ваш вызов' });
+    }
+    const homeUser = usersDb().users[entry.userId];
+    if (!homeUser) return json(res, 404, { error: 'Соперник недоступен' });
+    const homeClub = ensureClub(homeUser);
+    const awayClub = ensureClub(auth.user);
+    const match = G.simulateMatch(homeClub, awayClub, {
+      competition: 'friendly',
+      homeUserId: homeUser.id,
+      awayUserId: auth.user.id
+    });
+    db.setClub(homeUser.id, homeClub);
+    db.setClub(auth.user.id, awayClub);
+    db.addMatch(match);
+    rewardUsers(homeUser, auth.user, match);
+    pushUserEvent(homeUser.id, {
+      type: 'challenge_done',
+      title: 'Вызов принят',
+      body: `${awayClub.name} принял вызов · ${match.score[0]}:${match.score[1]}`,
+      matchId: match.id
+    });
+    return json(res, 200, { ok: true, match });
+  }
+
+  if (pathname.match(/^\/api\/friendly\/challenge\/[^/]+\/decline$/) && req.method === 'POST') {
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    const id = pathname.split('/')[4];
+    const entry = db.friendlyTake(id);
+    if (!entry || entry.type !== 'challenge') return json(res, 404, { error: 'Вызов не найден' });
+    if (entry.targetUserId !== auth.user.id && entry.userId !== auth.user.id) {
+      db.friendlyPost(entry);
+      return json(res, 403, { error: 'Это не ваш вызов' });
+    }
+    if (entry.targetUserId === auth.user.id) {
+      pushUserEvent(entry.userId, {
+        type: 'challenge_declined',
+        title: 'Вызов отклонён',
+        body: `${auth.user.clubName || auth.user.name} отклонил ваш вызов`
+      });
+    }
+    return json(res, 200, { ok: true });
   }
 
   if (pathname === '/api/matches' && req.method === 'GET') {
@@ -746,11 +907,12 @@ const server = http.createServer(async (req, res) => {
     if (!auth) return;
     const club = ensureClub(auth.user);
     const scout = club.staff?.scout || 0;
-    const tm = refreshTransferMarket(false, scout);
+    const list = G.refreshClubMarket(club, false);
+    db.setClub(auth.user.id, club);
     return json(res, 200, {
       ok: true,
-      list: tm.list,
-      refreshedAt: tm.refreshedAt,
+      list,
+      refreshedAt: club.transferRefreshedAt || Date.now(),
       scoutLevel: scout,
       squadSize: (club.players || []).length
     });
@@ -765,10 +927,16 @@ const server = http.createServer(async (req, res) => {
     if ((auth.user.money || 0) < 5000) return json(res, 400, { error: 'Нужно 5 000 ¤' });
     auth.user.money -= 5000;
     G.pushLedger(club, -5000, 'Обновление рынка');
+    const list = G.refreshClubMarket(club, true);
     persistUser(auth.user);
     db.setClub(auth.user.id, club);
-    const tm = refreshTransferMarket(true, scout);
-    return json(res, 200, { ok: true, list: tm.list, refreshedAt: tm.refreshedAt, user: enrichUser(auth.user), club: G.publicClub(club, auth.user) });
+    return json(res, 200, {
+      ok: true,
+      list,
+      refreshedAt: club.transferRefreshedAt,
+      user: enrichUser(auth.user),
+      club: G.publicClub(club, auth.user)
+    });
   }
 
   if (pathname === '/api/transfers/buy' && req.method === 'POST') {
@@ -777,15 +945,15 @@ const server = http.createServer(async (req, res) => {
     try {
       const body = JSON.parse((await readBody(req)).toString('utf8'));
       const club = ensureClub(auth.user);
-      const tm = db.getTransferMarket();
-      const listing = (tm.list || []).find((p) => p.id === body.playerId);
+      G.refreshClubMarket(club, false);
+      const listing = (club.transferList || []).find((p) => p.id === body.playerId);
       if (!listing) return json(res, 404, { error: 'Игрок уже куплен или снят с рынка' });
       if ((auth.user.money || 0) < listing.value) return json(res, 400, { error: `Нужно ${listing.value} ¤` });
       const r = G.buyPlayer(club, listing);
       if (!r.ok) return json(res, 400, r);
       auth.user.money -= r.cost;
       G.pushLedger(club, -r.cost, r.label);
-      db.removeTransferListing(listing.id);
+      club.transferList = (club.transferList || []).filter((p) => p.id !== listing.id);
       persistUser(auth.user);
       db.setClub(auth.user.id, club);
       return json(res, 200, { ok: true, club: G.publicClub(club, auth.user), user: enrichUser(auth.user), player: r.player });
@@ -945,15 +1113,10 @@ async function main() {
         const club = db.getClub(userId);
         const me = payload?.state?.clubs?.find((c) => c.id === payload.state.clubId);
         if (u && me && me.budget != null) {
-          const prev = u.money || 0;
           u.money = Math.round(me.budget);
           persistUser(u);
           if (club) {
-            const delta = u.money - prev;
-            if (delta) {
-              const last = (payload.state.ledger || [])[0];
-              G.pushLedger(club, delta, last?.label || 'Приз кубка');
-            }
+            // ledger already updated via shared reference in applyCareerMoney — do not push again
             if (Array.isArray(payload.state.ledger)) club.ledger = payload.state.ledger.slice(0, 80);
             db.setClub(userId, club);
           }
@@ -965,7 +1128,6 @@ async function main() {
   ensureBotPool(24);
   cups.ensureBotPool?.(8);
   Object.values(usersDb().users).filter((u) => u.isBot).forEach((u) => ensureBotClub(u, u.clubName));
-  refreshTransferMarket(true, 1);
 
   server.listen(PORT, '0.0.0.0', () => {
     console.log(`[EYE XI] http://0.0.0.0:${PORT}`);

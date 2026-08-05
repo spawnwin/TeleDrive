@@ -62,6 +62,7 @@ function userToRow(u) {
     fame: Number(u.fame || 0),
     prestige: Number(u.prestige || 0),
     points: Number(u.points || 0),
+    lastWageAt: u.lastWageAt != null ? BigInt(u.lastWageAt) : null,
     cupEventsJson: JSON.stringify(Array.isArray(u.cupEvents) ? u.cupEvents : [])
   };
 }
@@ -92,6 +93,7 @@ function rowToUser(row) {
     fame: row.fame,
     prestige: row.prestige,
     points: row.points,
+    lastWageAt: row.lastWageAt != null ? Number(row.lastWageAt) : undefined,
     cupEvents: parseJson(row.cupEventsJson, [])
   };
 }
@@ -209,9 +211,13 @@ async function flushArchive() {
 async function ensureSchema() {
   try {
     await prisma.$queryRawUnsafe('SELECT 1 FROM User LIMIT 1');
-    // ensure new columns/tables exist
     await prisma.$queryRawUnsafe('SELECT money FROM User LIMIT 1');
     await prisma.$queryRawUnsafe('SELECT 1 FROM Club LIMIT 1');
+    try {
+      await prisma.$queryRawUnsafe('SELECT lastWageAt FROM User LIMIT 1');
+    } catch {
+      await prisma.$executeRawUnsafe('ALTER TABLE User ADD COLUMN lastWageAt BIGINT');
+    }
     return;
   } catch {
     /* push */

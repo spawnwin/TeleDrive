@@ -98,6 +98,11 @@ describe('eye xi server', () => {
       const recover = await post(port, '/api/players/recover', { booster: true }, auth);
       assert.equal(recover.status, 200, recover.body);
 
+      // auto-lineup rebuild without formation change
+      const auto = await post(port, '/api/club', { formation: lu.club.formation, rebuildLineup: true }, auth);
+      assert.equal(auto.status, 200, auto.body);
+      assert.equal(JSON.parse(auto.body).club.lineupIds.length, 11);
+
       const openCups = await get(port, '/api/cups?status=open', auth);
       assert.equal(openCups.status, 200, openCups.body);
       const cupsBody = JSON.parse(openCups.body);
@@ -111,28 +116,38 @@ describe('eye xi server', () => {
         assert.ok((d.cup.entrants || []).some((e) => e.clubName === 'Тест FC' || !e.isBot));
       }
 
+      // challenge request → accept (not instant)
+      const reg2 = await post(port, '/api/register', {
+        login: 'tester2', password: 'test1234', name: 'Тестер2', clubName: 'Тест2 FC'
+      });
+      assert.equal(reg2.status, 200, reg2.body);
+      const reg2Data = JSON.parse(reg2.body);
+      const auth2 = { Authorization: 'Bearer ' + reg2Data.token };
+      await get(port, '/api/me', auth);
+      await get(port, '/api/me', auth2);
+      const chal = await post(port, '/api/friendly/challenge', { userId: reg2Data.user.id }, auth);
+      assert.equal(chal.status, 200, chal.body);
+      const chalBody = JSON.parse(chal.body);
+      assert.ok(chalBody.entry?.id);
+      assert.equal(chalBody.match, undefined);
+
+      const fr = JSON.parse((await get(port, '/api/friendly', auth2)).body);
+      assert.ok((fr.challenges || []).some((c) => c.id === chalBody.entry.id));
+      const acceptCh = await post(port, `/api/friendly/challenge/${chalBody.entry.id}/accept`, {}, auth2);
+      assert.equal(acceptCh.status, 200, acceptCh.body);
+      assert.ok(JSON.parse(acceptCh.body).match?.score);
+
+      await post(port, '/api/friendly', {}, auth);
+      const cancel = await post(port, '/api/friendly/cancel', {}, auth);
+      assert.equal(cancel.status, 200, cancel.body);
+
       const rating = await get(port, '/api/rating', auth);
       assert.equal(rating.status, 200);
 
       const market = await get(port, '/api/transfers', auth);
       assert.equal(market.status, 200, market.body);
-      const mkt = JSON.parse(market.body);
-      assert.ok(Array.isArray(mkt.list));
+      assert.ok(Array.isArray(JSON.parse(market.body).list));
 
-      // unpaid staff must not mutate
-      const broke = await post(port, '/api/register', {
-        login: 'broke1', password: 'test1234', name: 'Broke', clubName: 'Broke FC'
-      });
-      const brokeData = JSON.parse(broke.body);
-      const brokeAuth = { Authorization: 'Bearer ' + brokeData.token };
-      // drain money
-      await post(port, '/api/club', { name: 'Broke FC' }, brokeAuth);
-      const me2 = JSON.parse((await get(port, '/api/me', brokeAuth)).body);
-      me2.user.money = 0;
-      // force money to 0 via stadium spam isn't easy — use staff with quote check
-      // set money low by buying if list has expensive player... instead hit staff after setting via bot rewards
-      // Direct: hire coach costs 160000 for level 2; register starts with 500k so first hire ok.
-      // Second hire after draining: play shouldn't free-upgrade.
       const staff1 = await post(port, '/api/club/staff', { role: 'scout' }, auth);
       assert.equal(staff1.status, 200, staff1.body);
 
