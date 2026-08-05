@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0A2F22" />
+  <title>EYE XI — футбольный менеджер</title>
+  <meta name="description" content="EYE XI — онлайн футбольный менеджер. Создайте клуб, играйте матчи и кубки с реальными соперниками." />
+  <link rel="icon" href="assets/eye.svg" type="image/svg+xml" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Syne:wght@600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/style.css" />
+  <link rel="manifest" href="manifest.json" />
+</head>
+<body>
+  <!-- GATE / LANDING -->
+  <div id="gate" class="gate">
+    <div class="gate-bg" aria-hidden="true">
+      <img src="assets/eye-home-pitch.jpg" alt="" />
+      <div class="gate-veil"></div>
+      <div class="gate-grain"></div>
+    </div>
+    <aside class="gate-side">
+      <div class="gate-brand">
+        <img src="assets/eye.svg" alt="" width="48" height="48" />
+        <div>
+          <strong>EYE XI</strong>
+          <small>футбольный менеджер</small>
+        </div>
+      </div>
+      <form id="form-login" class="gate-form">
+        <h2>Вход в игру</h2>
+        <label>Логин<input name="login" required minlength="3" autocomplete="username" placeholder="ваш логин" /></label>
+        <label>Пароль<input name="password" type="password" required minlength="4" autocomplete="current-password" /></label>
+        <button class="btn btn-primary" type="submit">Войти</button>
+        <p class="hint" id="login-msg"></p>
+        <p class="gate-switch">Нет аккаунта? <button type="button" class="link" id="btn-show-register">Регистрация</button></p>
+      </form>
+      <form id="form-register" class="gate-form" hidden>
+        <h2>Создать клуб</h2>
+        <label>Логин<input name="login" required minlength="3" autocomplete="username" /></label>
+        <label>Имя менеджера<input name="name" maxlength="32" autocomplete="nickname" /></label>
+        <label>Название клуба<input name="clubName" maxlength="32" placeholder="Северный Шторм" /></label>
+        <label>Пароль<input name="password" type="password" required minlength="4" autocomplete="new-password" /></label>
+        <button class="btn btn-primary" type="submit">Играть</button>
+        <p class="hint" id="register-msg"></p>
+        <p class="gate-switch">Уже есть аккаунт? <button type="button" class="link" id="btn-show-login">Войти</button></p>
+      </form>
+      <div class="gate-stats">
+        <div><b id="stat-online">—</b><span>онлайн</span></div>
+        <div><b>XI</b><span>на поле</span></div>
+        <div><b>24/7</b><span>кубки</span></div>
+      </div>
+    </aside>
+    <section class="gate-hero">
+      <p class="eyebrow">онлайн · с 2026</p>
+      <h1>Управляйте клубом.<br/>Побеждайте людей.</h1>
+      <p class="lede">Товарищеские матчи и онлайн-кубки с реальными менеджерами — классическая структура, современная подача.</p>
+      <ul class="gate-points">
+        <li>Команда из 18 игроков сразу после регистрации</li>
+        <li>Тактика, тренировки, персонал и стадион</li>
+        <li>Кубки по уровню — автостарт каждые 5 минут</li>
+      </ul>
+    </section>
+  </div>
+
+  <!-- APP SHELL -->
+  <div id="app" class="app" hidden>
+    <aside class="sidebar">
+      <div class="side-brand">
+        <img src="assets/eye.svg" alt="" width="36" height="36" />
+        <div>
+          <strong>EYE XI</strong>
+          <small id="side-club">Клуб</small>
+        </div>
+      </div>
+      <div class="side-user" id="side-user"></div>
+      <div class="side-wallet" id="side-wallet"></div>
+      <nav class="side-links">
+        <button type="button" data-nav="cabinet">Кабинет</button>
+        <button type="button" data-nav="team">Команда</button>
+        <button type="button" data-nav="players">Игроки</button>
+        <button type="button" data-nav="matches">Матчи</button>
+        <button type="button" data-nav="tactics">Тактика</button>
+        <button type="button" data-nav="bonus">Бонус</button>
+        <button type="button" data-nav="rating">Рейтинг</button>
+      </nav>
+      <div class="side-foot">
+        <div class="side-live"><span class="dot"></span> <span id="side-online">0</span> онлайн</div>
+        <button type="button" class="btn btn-ghost" id="btn-logout">Выход</button>
+      </div>
+    </aside>
+
+    <div class="workspace">
+      <header class="topnav">
+        <nav class="topnav-main" id="topnav">
+          <button type="button" data-nav="cabinet" class="active">Кабинет</button>
+          <button type="button" data-nav="team">Команда</button>
+          <button type="button" data-nav="players">Игроки</button>
+          <button type="button" data-nav="matches">Матчи</button>
+          <button type="button" data-nav="tactics">Тактика</button>
+          <button type="button" data-nav="bonus">Бонус</button>
+          <button type="button" data-nav="rating">Рейтинг</button>
+        </nav>
+        <div class="topnav-clock" id="clock">--:--</div>
+      </header>
+      <div class="subnav" id="subnav"></div>
+      <main class="view" id="view"></main>
+    </div>
+  </div>
+
+  <div id="toast" class="toast" hidden></div>
+  <div id="modal" class="modal" hidden>
+    <div class="modal-card" id="modal-card"></div>
+  </div>
+
+  <script src="js/api.js"></script>
+  <script src="js/app.js"></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('sw.js').catch(() => {});
+    }
+  </script>
+</body>
+</html>
