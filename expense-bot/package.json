@@ -1,0 +1,19 @@
+{
+  "name": "expense-bot",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Telegram Mini App для учёта расходов",
+  "scripts": {
+    "dev": "concurrently -n bot,web -c teal,cyan \"npm run dev -w bot\" \"npm run dev -w web\"",
+    "build": "npm run build -w web && npm run build -w bot",
+    "start": "npm run start -w bot",
+    "setup": "npm install"
+  },
+  "workspaces": [
+    "bot",
+    "web"
+  ],
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}
