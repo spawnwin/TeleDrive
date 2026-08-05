@@ -427,6 +427,9 @@ function processWageDay(user, club) {
         body: `${p.name} покинул клуб`
       });
     });
+    if (result.contracts.freeAgents?.length) {
+      pushFreeAgents(result.contracts.freeAgents);
+    }
   }
   if (result.finance && (result.finance.status === 'critical' || result.finance.status === 'insolvent')) {
     pushUserEvent(user.id, {
@@ -450,6 +453,39 @@ function spendMoney(user, amount, club = null) {
   if (next < -credit) return false;
   user.money = next;
   return true;
+}
+
+function pushFreeAgents(listings) {
+  const items = (listings || []).filter(Boolean);
+  if (!items.length) return;
+  const market = db.getTransferMarket();
+  const now = Date.now();
+  let list = (market.list || []).filter((p) => {
+    if (p.source === 'free' && p.expiresAt && p.expiresAt < now) return false;
+    return true;
+  });
+  items.forEach((L) => {
+    list = list.filter((x) => x.id !== L.id);
+    list.unshift(L);
+  });
+  db.setTransferMarket(list.slice(0, 100), market.refreshedAt || now);
+}
+
+function applyClubClock(user, club) {
+  const tick = G.tickClubClock(club);
+  if (!tick) return null;
+  if (tick.retired?.length) {
+    pushFreeAgents(tick.retired.map((r) => r.listing));
+    tick.retired.forEach((r) => {
+      pushUserEvent(user.id, {
+        type: 'retire',
+        title: 'Завершение карьеры',
+        body: `${r.player.name} повесил бутсы на гвоздь (${r.player.age} лет)`
+      });
+    });
+  }
+  db.setClub(user.id, club);
+  return tick;
 }
 
 function assertCanSpend(user, club, amount, label = 'Покупка') {
@@ -694,7 +730,7 @@ const server = http.createServer(async (req, res) => {
     const auth = requireAuth(req, res);
     if (!auth) return;
     const club = ensureClub(auth.user);
-    if (G.tickClubClock(club)) db.setClub(auth.user.id, club);
+    applyClubClock(auth.user, club);
     const wage = processWageDay(auth.user, club);
     const myLeague = league ? league.findMyLeague(auth.user.id) : null;
     const cal = league ? league.calendarFor(auth.user.id) : null;
@@ -952,12 +988,47 @@ const server = http.createServer(async (req, res) => {
       const r = G.releasePlayer(club, body.playerId);
       if (!r.ok) return json(res, 400, r);
       G.pushLedger(club, 0, r.label);
+      if (r.listing) pushFreeAgents([r.listing]);
       db.setClub(auth.user.id, club);
       pushUserEvent(auth.user.id, { type: 'release', title: 'Отчисление', body: r.player.name });
       return json(res, 200, { ok: true, club: G.publicClub(club, auth.user) });
     } catch (e) {
       return json(res, 500, { error: String(e.message || e) });
     }
+  }
+
+  if (pathname === '/api/players/retire' && req.method === 'POST') {
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    try {
+      const body = JSON.parse((await readBody(req)).toString('utf8') || '{}');
+      const club = ensureClub(auth.user);
+      const r = G.retirePlayer(club, body.playerId);
+      if (!r.ok) return json(res, 400, { error: r.error });
+      G.pushLedger(club, 0, r.label);
+      if (r.listing) pushFreeAgents([r.listing]);
+      db.setClub(auth.user.id, club);
+      pushUserEvent(auth.user.id, {
+        type: 'retire',
+        title: 'Завершение карьеры',
+        body: r.player.name
+      });
+      return json(res, 200, { ok: true, ...r, club: G.publicClub(club, auth.user) });
+    } catch (e) {
+      return json(res, 500, { error: String(e.message || e) });
+    }
+  }
+
+  if (pathname === '/api/squad/load' && req.method === 'GET') {
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    const club = ensureClub(auth.user);
+    return json(res, 200, {
+      ok: true,
+      board: G.squadLoadBoard(club),
+      summary: G.squadLoadSummary(club),
+      staff: club.staff || {}
+    });
   }
 
   if (pathname === '/api/players/wage' && req.method === 'POST') {
@@ -1462,6 +1533,10 @@ const server = http.createServer(async (req, res) => {
     const agents = G.refreshClubMarket(club, false);
     db.setClub(auth.user.id, club);
     const market = db.getTransferMarket();
+    const now = Date.now();
+    const freeAgents = (market.list || []).filter(
+      (p) => p.source === 'free' && (!p.expiresAt || p.expiresAt > now)
+    );
     const clubListings = (market.list || []).filter(
       (p) => p.source === 'club' && p.sellerUserId && p.sellerUserId !== auth.user.id
     );
@@ -1469,6 +1544,7 @@ const server = http.createServer(async (req, res) => {
     return json(res, 200, {
       ok: true,
       list: agents,
+      freeAgents,
       clubListings,
       myListings,
       refreshedAt: club.transferRefreshedAt || Date.now(),
@@ -1565,6 +1641,35 @@ const server = http.createServer(async (req, res) => {
           });
         } catch {}
         return json(res, 200, { ok: true, club: G.publicClub(club, auth.user), user: enrichUser(auth.user), player: r.player, fromClub: true });
+      }
+
+      const freeListing = (market.list || []).find((p) => p.id === body.playerId && p.source === 'free');
+      if (freeListing) {
+        if (freeListing.expiresAt && freeListing.expiresAt < Date.now()) {
+          db.removeTransferListing(freeListing.id);
+          return json(res, 404, { error: 'Агент уже ушёл с рынка' });
+        }
+        const gateFree = assertCanSpend(auth.user, club, freeListing.value, 'Подписание');
+        if (!gateFree.ok) return json(res, 400, gateFree);
+        const r = G.buyPlayer(club, freeListing);
+        if (!r.ok) return json(res, 400, r);
+        if (!spendMoney(auth.user, r.cost, club)) return json(res, 400, { error: `Нужно ${r.cost} ¤` });
+        G.pushLedger(club, -r.cost, `Свободный агент · ${r.player.name}`);
+        db.removeTransferListing(freeListing.id);
+        persistUser(auth.user);
+        db.setClub(auth.user.id, club);
+        pushUserEvent(auth.user.id, {
+          type: 'transfer_bought',
+          title: 'Свободный агент',
+          body: `${r.player.name} · ${r.cost} ¤`
+        });
+        return json(res, 200, {
+          ok: true,
+          club: G.publicClub(club, auth.user),
+          user: enrichUser(auth.user),
+          player: r.player,
+          freeAgent: true
+        });
       }
 
       G.refreshClubMarket(club, false);
@@ -1736,8 +1841,7 @@ const server = http.createServer(async (req, res) => {
     const auth = requireAuth(req, res);
     if (!auth) return;
     const club = ensureClub(auth.user);
-    G.tickClubClock(club);
-    db.setClub(auth.user.id, club);
+    applyClubClock(auth.user, club);
     return json(res, 200, { ok: true, ...G.medicalBay(club) });
   }
 

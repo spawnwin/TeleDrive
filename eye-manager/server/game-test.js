@@ -419,4 +419,64 @@ describe('game lineup guards', () => {
     const card = G.playerCard(home, home.captainId);
     assert.equal(card.isCaptain, true);
   });
+
+  it('retirement free agents load and fitness coach', () => {
+    const club = G.defaultClub({ id: 'life1', login: 'life1', name: 'L1', clubName: 'Life FC' });
+    G.ensureLineup(club, true);
+    const spare = club.players.find((p) => !(club.lineupIds || []).includes(p.id));
+    assert.ok(spare);
+    spare.age = 35;
+    spare.wantsRetire = true;
+    const before = club.players.length;
+    const ret = G.retirePlayer(club, spare.id);
+    assert.equal(ret.ok, true);
+    assert.equal(club.players.length, before - 1);
+    assert.equal(ret.listing.source, 'free');
+    assert.equal(ret.listing.freeReason, 'retire');
+    assert.ok(ret.listing.value > 0);
+
+    const young = club.players.find((p) => !(club.lineupIds || []).includes(p.id));
+    young.age = 24;
+    assert.equal(G.retirePlayer(club, young.id).ok, false);
+
+    const band = G.playerAgeBand({ age: 34 });
+    assert.equal(band.id, 'decline');
+    const load = G.playerLoadStatus({ fitness: 50, seasonApps: 14, age: 34 });
+    assert.equal(load.level, 'rest');
+    const board = G.squadLoadBoard(club);
+    assert.ok(board.length >= 1);
+    assert.ok(G.squadLoadSummary(club));
+
+    const hire = G.hireStaff(club, 'fitCoach');
+    assert.equal(hire.ok, true);
+    assert.equal(club.staff.fitCoach, 1);
+
+    // forced retire via clock
+    const vet = club.players.find((p) => !(club.lineupIds || []).includes(p.id)) || club.players[5];
+    vet.age = 37;
+    club.lastAgeTick = Date.now() - 8 * 24 * 3600e3;
+    const tick = G.tickClubClock(club);
+    assert.ok(tick && tick.retired);
+    assert.ok(tick.retired.some((r) => r.player.id === vet.id || r.listing));
+
+    // contract leavers become free agents
+    const weak = club.players.find((p) => !(club.lineupIds || []).includes(p.id));
+    if (weak) {
+      weak.contractYears = 0;
+      // ensure leave path: not in XI — lower mastery artificially via skills
+      if (weak.skills) {
+        Object.keys(weak.skills).forEach((k) => { weak.skills[k] = 8; });
+      }
+      const left = G.tickContracts(club, 1);
+      assert.ok(Array.isArray(left.freeAgents));
+    }
+
+    const listing = G.toFreeAgentListing(G.makePlayer('Cm', 12), 'release');
+    assert.equal(listing.source, 'free');
+    const boughtClub = G.defaultClub({ id: 'life2', login: 'life2', name: 'L2', clubName: 'Buy FC' });
+    G.ensureLineup(boughtClub, true);
+    while (boughtClub.players.length >= 25) boughtClub.players.pop();
+    const buy = G.buyPlayer(boughtClub, listing);
+    assert.equal(buy.ok, true);
+  });
 });

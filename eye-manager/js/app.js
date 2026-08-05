@@ -51,7 +51,8 @@
     season_awards: 'Итоги сезона',
     loan: 'Аренда',
     transfer_offer: 'Предложение',
-    transfer_sold: 'Продажа'
+    transfer_sold: 'Продажа',
+    retire: 'Карьера'
   };
 
   const TRAIT_LABELS = {
@@ -85,6 +86,7 @@
       ['squad', 'Состав'],
       ['train', 'Тренировки'],
       ['recover', 'Восстановление'],
+      ['load', 'Нагрузка'],
       ['market', 'Трансферы'],
       ['academy', 'Академия'],
       ['loans', 'Аренда']
@@ -653,6 +655,35 @@
         </section>`;
       return;
     }
+    if (state.tab === 'load') {
+      let load = { board: [], summary: {}, staff: {} };
+      try { load = await A().request('api/squad/load'); } catch {}
+      const sum = load.summary || {};
+      $('#view').innerHTML = `
+        <section class="panel">
+          <h3>Нагрузка состава</h3>
+          <p class="hint">Учитываются физа, число матчей и возраст. Тренер по физе ускоряет естественное восстановление.</p>
+          <div class="grid-3">
+            <div class="stat-card"><span>Нужен отдых</span><b>${sum.rest || 0}</b></div>
+            <div class="stat-card"><span>Высокая нагрузка</span><b>${sum.warn || 0}</b></div>
+            <div class="stat-card"><span>К пенсии</span><b>${sum.retire || 0}</b></div>
+          </div>
+        </section>
+        <section class="panel">
+          <div class="list">${(load.board || []).map((p) => `
+            <div class="list-row">
+              <div>
+                <strong>${esc(p.name)} · ${esc(p.pos)}</strong>
+                <small>${p.age} лет · ${esc(p.ageBand?.label || '')} · физа ${p.load?.fitness}% · матчей ${p.load?.apps || 0}${p.inXi ? ' · основа' : ''}${p.wantsRetire ? ' · хочет уйти' : ''}</small>
+              </div>
+              <div style="display:flex;gap:6px;align-items:center">
+                <span class="badge ${p.load?.level === 'rest' ? 'danger' : p.load?.level === 'warn' ? 'warn' : ''}">${esc(p.load?.label || '')}</span>
+                ${p.wantsRetire ? `<button class="btn btn-tiny" data-retire="${esc(p.id)}">Отпустить</button>` : ''}
+              </div>
+            </div>`).join('') || '<p class="hint">Нет данных</p>'}</div>
+        </section>`;
+      return;
+    }
     if (state.tab === 'train') {
       const now = Date.now();
       $('#view').innerHTML = `
@@ -690,6 +721,7 @@
     if (state.tab === 'market') {
       const data = await A().request('api/transfers');
       const list = data.list || [];
+      const freeAgents = data.freeAgents || [];
       const clubListings = data.clubListings || [];
       const myListings = data.myListings || [];
       const scout = data.scoutLevel || 0;
@@ -698,13 +730,14 @@
         const od = await A().request('api/transfers/offers');
         offers = od.offers || offers;
       } catch {}
+      const FREE_REASON = { retire: 'после карьеры', contract: 'конец контракта', release: 'отчисление' };
       $('#view').innerHTML = `
         <section class="panel">
           <div class="panel-head">
             <h3>Трансферный рынок</h3>
             <button class="btn btn-tiny" id="btn-market-refresh" ${scout < 1 ? 'disabled' : ''}>Обновить агентов · 5 000 ¤</button>
           </div>
-          <p class="hint">Скаут ур. ${scout}. Состав ${data.squadSize || 0}/25. Можно купить у других клубов или у агентов; своего игрока — выставить или продать агентам.</p>
+          <p class="hint">Скаут ур. ${scout}. Состав ${data.squadSize || 0}/25. Свободные агенты — подписной бонус без продавца-клуба.</p>
           ${offers.length ? `<h4 style="margin:12px 0 8px;font-family:Syne,sans-serif">Входящие предложения</h4>
             <div class="list">${offers.map((o) => `
               <div class="list-row">
@@ -716,6 +749,15 @@
                   <button class="btn btn-primary btn-tiny" data-offer="${esc(o.id)}" data-decision="accept">${money(o.bid)}</button>
                   <button class="btn btn-tiny" data-offer="${esc(o.id)}" data-decision="reject">Отказать</button>
                 </div>
+              </div>`).join('')}</div>` : ''}
+          ${freeAgents.length ? `<h4 style="margin:12px 0 8px;font-family:Syne,sans-serif">Свободные агенты</h4>
+            <div class="list">${freeAgents.map((p) => `
+              <div class="list-row">
+                <div>
+                  <strong>${esc(p.name)} · ${esc(p.pos)}</strong>
+                  <small>${esc(FREE_REASON[p.freeReason] || 'агент')} · маст. ${p.mastery} · ${p.age} лет · з/п ${money(p.wage)}</small>
+                </div>
+                <button class="btn btn-primary btn-tiny" data-buy="${esc(p.id)}">${money(p.value)}</button>
               </div>`).join('')}</div>` : ''}
           ${myListings.length ? `<h4 style="margin:12px 0 8px;font-family:Syne,sans-serif">Ваши лоты</h4>
             <div class="list">${myListings.map((p) => `
@@ -825,13 +867,19 @@
               <button class="btn btn-tiny" data-playtime="${esc(p.id)}" data-decision="dismiss">Отказать</button>
             </div>
           </div>`).join('')}</div>` : ''}
+        ${(club.retireRequests || []).length ? `<div class="list" style="margin-bottom:12px">${club.retireRequests.map((p) => `
+          <div class="list-row">
+            <div><strong>${esc(p.name)}</strong><small>хочет завершить карьеру · ${p.age} лет · маст. ${p.mastery}</small></div>
+            <button class="btn btn-tiny" data-retire="${esc(p.id)}">Отпустить</button>
+          </div>`).join('')}</div>` : ''}
+        ${club.loadSummary && (club.loadSummary.rest || club.loadSummary.warn) ? `<p class="hint">Нагрузка: отдых ${club.loadSummary.rest || 0}, высокая ${club.loadSummary.warn || 0}${club.loadSummary.veterans ? ' · спад/ветераны ' + club.loadSummary.veterans : ''}</p>` : ''}
         <div class="table-wrap"><table class="sheet">
           <thead><tr><th>Имя</th><th>Поз</th><th>Возр</th><th>Маст</th><th>Эфф</th><th>Физа</th><th>Мор.</th><th>Контр.</th><th>Зарп.</th><th></th></tr></thead>
           <tbody>${players.map((p) => `
-            <tr class="${p.wantsRenew || (p.contractYears || 0) <= 0 || p.request === 'playtime' ? 'row-warn' : ''}">
+            <tr class="${p.wantsRenew || (p.contractYears || 0) <= 0 || p.request === 'playtime' || p.wantsRetire || (p.age || 0) >= 33 ? 'row-warn' : ''}">
               <td>
                 <button type="button" class="link" data-card="${esc(p.id)}"><strong>${esc(p.name)}</strong></button>
-                <div class="hint">${(p.specials||[]).map((s)=>TRAIT_LABELS[s]||s).join(' · ') || '—'}${club.captain?.id === p.id || club.captainId === p.id ? ' · капитан' : ''}${p.yellows ? ' · ЖК ' + p.yellows : ''}${p.suspendedMatches ? ' · дискв. ' + p.suspendedMatches : ''}${p.wantsRenew ? ' · ждёт контракт' : ''}${p.request === 'playtime' ? ' · хочет минуты' : ''}${p.seasonApps ? ' · матчей ' + p.seasonApps : ''}${p.form != null ? ' · форма ' + Math.round(p.form) : ''}${p.loanUntil ? ' · в аренде' : ''}</div>
+                <div class="hint">${(p.specials||[]).map((s)=>TRAIT_LABELS[s]||s).join(' · ') || '—'}${club.captain?.id === p.id || club.captainId === p.id ? ' · капитан' : ''}${(p.age||0) >= 33 ? ' · спад' : ''}${p.wantsRetire ? ' · пенсия' : ''}${p.yellows ? ' · ЖК ' + p.yellows : ''}${p.suspendedMatches ? ' · дискв. ' + p.suspendedMatches : ''}${p.wantsRenew ? ' · ждёт контракт' : ''}${p.request === 'playtime' ? ' · хочет минуты' : ''}${p.seasonApps ? ' · матчей ' + p.seasonApps : ''}${p.form != null ? ' · форма ' + Math.round(p.form) : ''}${p.loanUntil ? ' · в аренде' : ''}</div>
               </td>
               <td><span class="badge">${esc(p.pos)}</span></td>
               <td>${p.age}</td>
@@ -1344,7 +1392,8 @@
       ['coach', 'Тренер', staff.coach || 0, 5, 80000],
       ['gkCoach', 'Тренер вратарей', staff.gkCoach || 0, 5, 60000],
       ['scout', 'Скаут', staff.scout || 0, 3, 50000],
-      ['medic', 'Врач', staff.medic || 0, 3, 45000]
+      ['medic', 'Врач', staff.medic || 0, 3, 45000],
+      ['fitCoach', 'Тренер по физе', staff.fitCoach || 0, 3, 40000]
     ];
     $('#view').innerHTML = `
       <section class="panel">
@@ -1359,7 +1408,7 @@
       </section>
       <section class="panel">
         <h3>Персонал</h3>
-        <p class="hint">Тренер — потолок умений полевых; тренер вратарей — голкиперов; скаут — трансферный рынок; врач — меньше травм и быстрее восстановление.</p>
+        <p class="hint">Тренер — потолок умений; скаут — рынок; врач — травмы; тренер по физе — восстановление между матчами.</p>
         <div class="list">${staffRows.map(([role, label, cur, max, base]) => {
           const cost = base * (cur + 1);
           return `<div class="list-row">
@@ -1796,6 +1845,9 @@
         </div>
         ${p.isCaptain ? '<p class="hint" style="color:var(--grass-bright)">Капитан команды</p>' : ''}
         ${p.setPieceRoles?.length ? `<p class="hint">Стандарты: ${p.setPieceRoles.map((r) => r === 'corner' ? 'угловые' : r === 'freeKick' ? 'штрафные' : 'пенальти').join(' · ')}</p>` : ''}
+        ${p.ageBand ? `<p class="hint">Возраст: ${esc(p.ageBand.label)}${p.ageBand.risk !== 'low' ? ' · риск спада' : ''}</p>` : ''}
+        ${p.load ? `<p class="hint">Нагрузка: ${esc(p.load.label)} · физа ${p.load.fitness}% · матчей ${p.load.apps || 0}</p>` : ''}
+        ${p.wantsRetire ? '<p class="hint" style="color:var(--warn,#eab308)">Хочет завершить карьеру</p>' : ''}
         ${traits.length ? `<p class="hint" style="margin-top:12px">Черты: ${traits.map((t) => esc(t.label || t.id)).join(' · ')}</p>` : ''}
         ${p.onLoan || p.loanUntil ? `<p class="hint">В аренде${p.loanDaysLeft != null ? ' · ещё ~' + p.loanDaysLeft + ' дн.' : ''}</p>` : ''}
         ${ratings.length ? `<div class="rating-bars" style="margin-top:12px"><span class="hint">Оценки матчей</span><div class="rating-row">${ratings.map((r) =>
@@ -1803,6 +1855,7 @@
         ).join('')}</div></div>` : '<p class="hint" style="margin-top:12px">Пока нет оценок матчей</p>'}
         <div style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap">
           <button class="btn btn-primary btn-tiny" data-train="${esc(p.id)}" id="card-train">Умения</button>
+          ${p.wantsRetire ? `<button class="btn btn-tiny" data-retire="${esc(p.id)}" id="card-retire">Завершить карьеру</button>` : ''}
         </div>
       </div>
     `);
@@ -2320,6 +2373,20 @@
             paintSidebar();
           }
           toast(data.label || ('Аренда +' + money(data.fee)));
+          render();
+        } catch (err) { toast(err.message); }
+      }
+      const retireBtn = e.target.closest('[data-retire]');
+      if (retireBtn) {
+        try {
+          if (!confirm('Отпустить игрока завершать карьеру? Он попадёт в пул свободных агентов.')) return;
+          const data = await A().request('api/players/retire', {
+            method: 'POST',
+            body: { playerId: retireBtn.dataset.retire }
+          });
+          state.club = data.club;
+          closeModal();
+          toast(data.label || 'Карьера завершена');
           render();
         } catch (err) { toast(err.message); }
       }

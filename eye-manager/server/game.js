@@ -628,7 +628,7 @@ function defaultClub(user, opts = {}) {
     benchIds: [],
     userId: user?.id || null,
     players,
-    staff: { coach: 1, gkCoach: 1, scout: 0, medic: 0 },
+    staff: { coach: 1, gkCoach: 1, scout: 0, medic: 0, fitCoach: 0 },
     academyLevel: 1,
     trainingLevel: 1,
     youth: [],
@@ -746,6 +746,10 @@ function publicClub(club, user) {
     })),
     transferOffers: (club.transferOffers || []).filter((o) => !o.resolved).slice(0, 8),
     rivals: (club.rivals || []).slice(0, 8),
+    retireRequests: (club.players || []).filter((p) => p.wantsRetire).map((p) => ({
+      id: p.id, name: p.name, pos: p.pos, age: p.age, mastery: masteryOf(p)
+    })),
+    loadSummary: squadLoadSummary(club),
     loans: loansStatus(club),
     lineupFit: lineupFitMap(club),
     manager: user ? { id: user.id, login: user.login, name: user.name, level: user.level } : null
@@ -1207,7 +1211,10 @@ function playerCard(club, playerId) {
     isCaptain: club.captainId === p.id,
     setPieceRoles: Object.entries(club.setPieces || {})
       .filter(([, id]) => id === p.id)
-      .map(([role]) => role)
+      .map(([role]) => role),
+    ageBand: playerAgeBand(p),
+    load: playerLoadStatus(p),
+    wantsRetire: !!p.wantsRetire
   };
 }
 
@@ -2091,8 +2098,9 @@ function trainSession(club, playerId, session = 'technical', { spendUserMoney } 
 
 function recoverSquad(club) {
   const medic = (club.staff && club.staff.medic) || 0;
+  const fit = (club.staff && club.staff.fitCoach) || 0;
   club.players.forEach((p) => {
-    p.fitness = Math.min(100, (p.fitness || 100) + rnd(8, 16) + medic * 3);
+    p.fitness = Math.min(100, (p.fitness || 100) + rnd(8, 16) + medic * 3 + fit * 4);
     if (p.injuredHours > 0) {
       p.injuredHours = Math.max(0, p.injuredHours - (12 + medic * 6));
       if (p.injuredHours <= 0) clearInjury(p);
@@ -2111,13 +2119,14 @@ const STAFF_ROLES = {
   coach: { key: 'coach', label: 'Тренер', max: 5, cost: 80000 },
   gkCoach: { key: 'gkCoach', label: 'Тренер вратарей', max: 5, cost: 60000 },
   scout: { key: 'scout', label: 'Скаут', max: 3, cost: 50000 },
-  medic: { key: 'medic', label: 'Врач', max: 3, cost: 45000 }
+  medic: { key: 'medic', label: 'Врач', max: 3, cost: 45000 },
+  fitCoach: { key: 'fitCoach', label: 'Тренер по физе', max: 3, cost: 40000 }
 };
 
 function quoteStaff(club, role) {
   const conf = STAFF_ROLES[role];
   if (!conf) return { ok: false, error: 'Неизвестная роль' };
-  const staff = club.staff || { coach: 1, gkCoach: 1, scout: 0, medic: 0 };
+  const staff = club.staff || { coach: 1, gkCoach: 1, scout: 0, medic: 0, fitCoach: 0 };
   const cur = staff[conf.key] || 0;
   if (cur >= conf.max) return { ok: false, error: `${conf.label}: максимум ур. ${conf.max}` };
   const cost = conf.cost * (cur + 1);
@@ -2127,7 +2136,7 @@ function quoteStaff(club, role) {
 function hireStaff(club, role) {
   const q = quoteStaff(club, role);
   if (!q.ok) return q;
-  club.staff = club.staff || { coach: 1, gkCoach: 1, scout: 0, medic: 0 };
+  club.staff = club.staff || { coach: 1, gkCoach: 1, scout: 0, medic: 0, fitCoach: 0 };
   club.staff[q.key] = q.next;
   return { ok: true, cost: q.cost, label: q.label, staff: club.staff };
 }
@@ -2270,14 +2279,16 @@ function tickClubClock(club) {
   const last = club.lastInjuryTick || club.createdAt || now;
   const hours = Math.floor((now - last) / 3600e3);
   let changed = false;
+  const retired = [];
   if (hours >= 1) {
     const medic = (club.staff && club.staff.medic) || 0;
+    const fit = (club.staff && club.staff.fitCoach) || 0;
     club.players.forEach((p) => {
       if (p.injuredHours > 0) {
         p.injuredHours = Math.max(0, Math.round(p.injuredHours - hours * (1 + medic * 0.5)));
         if (p.injuredHours <= 0) clearInjury(p);
       } else {
-        p.fitness = Math.min(100, (p.fitness || 100) + hours);
+        p.fitness = Math.min(100, (p.fitness || 100) + hours * (1 + fit * 0.35));
       }
     });
     club.lastInjuryTick = now;
@@ -2288,6 +2299,7 @@ function tickClubClock(club) {
   const ageDays = Math.floor((now - lastAge) / (24 * 3600e3));
   if (ageDays >= 7) {
     const steps = Math.min(4, Math.floor(ageDays / 7));
+    const keep = [];
     club.players.forEach((p) => {
       p.age = (p.age || 20) + steps;
       if (p.age >= 31 && p.skills) {
@@ -2298,13 +2310,147 @@ function tickClubClock(club) {
         });
       }
       if (p.age >= 36) p.wage = Math.max(500, Math.round((p.wage || 1000) * 0.92));
+      if (p.age >= 34 && !p.wantsRetire && Math.random() < 0.22 * steps) {
+        p.wantsRetire = true;
+      }
+      // forced retirement
+      if (p.age >= 37) {
+        retired.push(p);
+        return;
+      }
+      keep.push(p);
     });
+    if (retired.length) {
+      const ids = new Set(retired.map((p) => p.id));
+      club.players = keep;
+      club.lineupIds = (club.lineupIds || []).filter((id) => !ids.has(id));
+      club.benchIds = (club.benchIds || []).filter((id) => !ids.has(id));
+      if (club.captainId && ids.has(club.captainId)) club.captainId = null;
+      ensureLineup(club, true);
+      ensureCaptain(club);
+    } else {
+      club.players = keep;
+    }
     club.lastAgeTick = now;
     changed = true;
   }
   if (tickYouthGrowth(club)) changed = true;
   if (tickLoans(club).returned?.length) changed = true;
-  return changed;
+  if (!changed && !retired.length) return false;
+  return {
+    changed: true,
+    retired: retired.map((p) => ({
+      player: p,
+      listing: toFreeAgentListing(p, 'retire')
+    }))
+  };
+}
+
+function playerAgeBand(p) {
+  const a = p?.age || 20;
+  if (a >= 36) return { id: 'veteran', label: 'Ветеран', risk: 'high' };
+  if (a >= 33) return { id: 'decline', label: 'Спад', risk: 'med' };
+  if (a <= 21) return { id: 'youth', label: 'Молодой', risk: 'low' };
+  if (a >= 28) return { id: 'peak', label: 'Пик', risk: 'low' };
+  return { id: 'prime', label: 'Расцвет', risk: 'low' };
+}
+
+function playerLoadStatus(p) {
+  const fit = p?.fitness ?? 100;
+  const apps = p?.seasonApps || 0;
+  const age = p?.age || 24;
+  let score = 0;
+  if (fit < 55) score += 3;
+  else if (fit < 70) score += 2;
+  else if (fit < 82) score += 1;
+  if (apps >= 12) score += 2;
+  else if (apps >= 8) score += 1;
+  if (age >= 33) score += 1;
+  if ((p?.injuredHours || 0) > 0) score += 2;
+  const level = score >= 5 ? 'rest' : score >= 3 ? 'warn' : 'ok';
+  const labels = { rest: 'Нужен отдых', warn: 'Высокая нагрузка', ok: 'В норме' };
+  return { level, label: labels[level], score, fitness: fit, apps };
+}
+
+function squadLoadBoard(club) {
+  return (club.players || [])
+    .map((p) => ({
+      id: p.id,
+      name: p.name,
+      pos: p.pos,
+      age: p.age,
+      mastery: masteryOf(p),
+      effective: effectiveMastery(p),
+      ageBand: playerAgeBand(p),
+      load: playerLoadStatus(p),
+      wantsRetire: !!p.wantsRetire,
+      inXi: (club.lineupIds || []).includes(p.id)
+    }))
+    .sort((a, b) => b.load.score - a.load.score || b.age - a.age);
+}
+
+function squadLoadSummary(club) {
+  const board = squadLoadBoard(club);
+  return {
+    rest: board.filter((r) => r.load.level === 'rest').length,
+    warn: board.filter((r) => r.load.level === 'warn').length,
+    retire: board.filter((r) => r.wantsRetire).length,
+    veterans: board.filter((r) => r.ageBand.risk !== 'low').length
+  };
+}
+
+function toFreeAgentListing(p, reason = 'release') {
+  const fair = playerValue(p);
+  const mul = reason === 'retire' ? 0.22 : reason === 'contract' ? 0.38 : 0.32;
+  return {
+    id: p.id,
+    name: p.name,
+    pos: p.pos,
+    age: p.age,
+    talent: p.talent,
+    fitness: Math.min(100, p.fitness || 90),
+    morale: p.morale || 0,
+    wage: Math.max(400, Math.round((p.wage || 1500) * 0.85)),
+    contractYears: reason === 'retire' ? 1 : rnd(1, 3),
+    skills: p.skills,
+    specials: p.specials || [],
+    xpPool: p.xpPool || 0,
+    mastery: masteryOf(p),
+    value: Math.max(8000, Math.round(fair * mul)),
+    fair,
+    source: 'free',
+    freeReason: reason,
+    listedAt: Date.now(),
+    expiresAt: Date.now() + 14 * 24 * 3600e3
+  };
+}
+
+function retirePlayer(club, playerId) {
+  if (!club) return { ok: false, error: 'Нет клуба' };
+  const p = (club.players || []).find((x) => x.id === playerId);
+  if (!p) return { ok: false, error: 'Игрок не найден' };
+  if ((club.lineupIds || []).includes(playerId)) {
+    return { ok: false, error: 'Сначала уберите игрока из основы' };
+  }
+  if ((club.players || []).length <= 16) {
+    return { ok: false, error: 'Минимум 16 игроков в составе' };
+  }
+  if (!p.wantsRetire && (p.age || 0) < 35) {
+    return { ok: false, error: 'Игрок ещё не готов завершать карьеру' };
+  }
+  const taken = takeListedPlayer(club, playerId);
+  if (!taken.ok) return taken;
+  if (club.captainId === playerId) {
+    club.captainId = null;
+    ensureCaptain(club);
+  }
+  const listing = toFreeAgentListing(taken.player, 'retire');
+  return {
+    ok: true,
+    player: taken.player,
+    listing,
+    label: `Завершил карьеру · ${taken.player.name}`
+  };
 }
 
 function refreshClubMarket(club, force = false) {
@@ -2629,7 +2775,12 @@ function releasePlayer(club, playerId) {
   const p = club.players[idx];
   club.players.splice(idx, 1);
   club.benchIds = (club.benchIds || []).filter((id) => id !== playerId);
-  return { ok: true, player: p, label: `Отчислен · ${p.name}` };
+  if (club.captainId === playerId) {
+    club.captainId = null;
+    ensureCaptain(club);
+  }
+  const listing = toFreeAgentListing(p, 'release');
+  return { ok: true, player: p, listing, label: `Отчислен · ${p.name}` };
 }
 
 function renegotiateWage(club, playerId, direction) {
@@ -2719,11 +2870,20 @@ function tickContracts(club, years = 1) {
     club.players = keep;
     club.lineupIds = (club.lineupIds || []).filter((id) => !leftIds.has(id));
     club.benchIds = (club.benchIds || []).filter((id) => !leftIds.has(id));
+    if (club.captainId && leftIds.has(club.captainId)) {
+      club.captainId = null;
+    }
     ensureLineup(club, true);
+    ensureCaptain(club);
   } else {
     club.players = keep;
   }
-  return { left, asks, years: y };
+  return {
+    left,
+    asks,
+    years: y,
+    freeAgents: left.map((p) => toFreeAgentListing(p, 'contract'))
+  };
 }
 
 function setLineup(club, lineupIds, benchIds) {
@@ -2869,6 +3029,12 @@ module.exports = {
   TEAM_TALKS,
   rivalsStatus,
   resolveTaker,
-  maybeFitnessSubs
+  maybeFitnessSubs,
+  playerAgeBand,
+  playerLoadStatus,
+  squadLoadBoard,
+  squadLoadSummary,
+  toFreeAgentListing,
+  retirePlayer
 };
 
