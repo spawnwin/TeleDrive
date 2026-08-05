@@ -635,6 +635,11 @@ function defaultClub(user, opts = {}) {
     board: null,
     form: [],
     rivals: [],
+    captainId: null,
+    setPieces: { corner: null, freeKick: null, penalty: null },
+    subPolicy: { enabled: true, fitnessBelow: 62, maxSubs: 3 },
+    teamTalk: null,
+    lastTeamTalkAt: null,
     sponsor: null,
     transferOffers: [],
     seasonArchive: [],
@@ -728,11 +733,19 @@ function publicClub(club, user) {
     form: clubFormGuide(club),
     sponsor: club.sponsor || null,
     tvWeekly: weeklyTvIncome(club, user),
+    captain: (() => {
+      const c = ensureCaptain(club);
+      return c ? { id: c.id, name: c.name, pos: c.pos, leader: (c.specials || []).includes('leader') } : null;
+    })(),
+    setPieces: publicSetPieces(club),
+    subPolicy: ensureSubPolicy(club),
+    teamTalk: club.teamTalk && club.teamTalk.until > Date.now() ? club.teamTalk : null,
     seasonArchive: (club.seasonArchive || []).slice(0, 4),
     playtimeRequests: (club.players || []).filter((p) => p.request === 'playtime').map((p) => ({
       id: p.id, name: p.name, pos: p.pos, apps: p.seasonApps || 0, mastery: masteryOf(p)
     })),
     transferOffers: (club.transferOffers || []).filter((o) => !o.resolved).slice(0, 8),
+    rivals: (club.rivals || []).slice(0, 8),
     loans: loansStatus(club),
     lineupFit: lineupFitMap(club),
     manager: user ? { id: user.id, login: user.login, name: user.name, level: user.level } : null
@@ -771,7 +784,13 @@ function formationChemistry(club, xi) {
     else if (POS_GROUP[p.pos] === POS_GROUP[slot]) pts += 6;
     else pts += 2;
   });
-  return Math.round((pts / list.length) * 10); // ~20–100
+  let chem = Math.round((pts / list.length) * 10); // ~20–100
+  const capId = club?.captainId;
+  if (capId && list.some((p) => p.id === capId)) {
+    const cap = list.find((p) => p.id === capId);
+    chem = Math.min(100, chem + ((cap?.specials || []).includes('leader') ? 6 : 3));
+  }
+  return chem;
 }
 
 function teamMatchPower(club, xi, { home = false, derby = false } = {}) {
@@ -781,11 +800,15 @@ function teamMatchPower(club, xi, { home = false, derby = false } = {}) {
   const ins = instructionMods(club.instructions);
   let power = base * (styleMul[club.style] || 1) * form.att * ins.att;
   // defensive solidity slightly reduces opponent chance via separate field
-  const solidity = form.def * ins.def * (derby ? 0.98 : 1);
+  let solidity = form.def * ins.def * (derby ? 0.98 : 1);
   if (home) power *= 1.05;
   if (derby) power *= 1.05;
   if (club.pressBuff && club.pressBuff.until > Date.now()) {
     power *= Number(club.pressBuff.fitness || 1);
+  }
+  if (club.teamTalk && club.teamTalk.until > Date.now()) {
+    power *= Number(club.teamTalk.power || 1);
+    solidity *= Number(club.teamTalk.solidity || 1);
   }
   // XI quality vs full squad
   if (xi?.length) {
@@ -796,10 +819,14 @@ function teamMatchPower(club, xi, { home = false, derby = false } = {}) {
   const chemistry = formationChemistry(club, xi);
   const chemMod = 0.92 + Math.min(0.12, (chemistry / 100) * 0.12);
   power *= chemMod;
+  const cap = xi?.find((p) => p.id === club.captainId);
+  if (cap) {
+    power *= (cap.specials || []).includes('leader') ? 1.035 : 1.015;
+  }
   return {
     power: Math.max(35, power),
     solidity,
-    fitMul: styleFitnessMul(club.style) * ins.fit,
+    fitMul: styleFitnessMul(club.style) * ins.fit * (club.teamTalk?.fit || 1),
     chemistry,
     derby: !!derby
   };
@@ -879,8 +906,12 @@ const STYLE_LABELS = {
 function prematchBoard(club) {
   if (!club) return null;
   ensureLineup(club);
+  ensureCaptain(club);
+  ensureSetPieces(club);
+  ensureSubPolicy(club);
   const xi = resolveXi(club);
   const bench = resolveBench(club, xi.map((p) => p.id));
+  const talk = club.teamTalk && club.teamTalk.until > Date.now() ? club.teamTalk : null;
   return {
     formation: club.formation || '4-4-2',
     style: club.style || 'balance',
@@ -891,7 +922,12 @@ function prematchBoard(club) {
     benchStrength: groupStrength(bench),
     chemistry: formationChemistry(club, xi),
     understrength: xi.length < 11,
-    unavailable: (club.players || []).filter((p) => !playerAvailable(p)).map(playerBoardRow)
+    unavailable: (club.players || []).filter((p) => !playerAvailable(p)).map(playerBoardRow),
+    captain: club.captainId ? playerBoardRow((club.players || []).find((p) => p.id === club.captainId)) : null,
+    setPieces: publicSetPieces(club),
+    subPolicy: ensureSubPolicy(club),
+    teamTalk: talk,
+    teamTalkOptions: TEAM_TALKS.map((t) => ({ id: t.id, label: t.label, hint: t.hint }))
   };
 }
 
@@ -1167,7 +1203,186 @@ function playerCard(club, playerId) {
     ratingLog: ratings,
     traits: (p.specials || []).map((id) => ({ id, label: TRAITS[id]?.label || id })),
     onLoan: !!p.loanUntil,
-    loanDaysLeft: p.loanUntil ? Math.max(0, Math.ceil((p.loanUntil - Date.now()) / (24 * 3600e3))) : 0
+    loanDaysLeft: p.loanUntil ? Math.max(0, Math.ceil((p.loanUntil - Date.now()) / (24 * 3600e3))) : 0,
+    isCaptain: club.captainId === p.id,
+    setPieceRoles: Object.entries(club.setPieces || {})
+      .filter(([, id]) => id === p.id)
+      .map(([role]) => role)
+  };
+}
+
+const TEAM_TALKS = [
+  { id: 'motivate', label: 'Вдохновить', hint: '+сила, мораль', power: 1.04, solidity: 1, morale: 3, fit: 1 },
+  { id: 'calm', label: 'Успокоить', hint: '+оборона', power: 1.02, solidity: 1.05, morale: 1, fit: 0.97 },
+  { id: 'demand', label: 'Потребовать', hint: 'максимум атаки', power: 1.06, solidity: 0.98, morale: -1, fit: 1.08 }
+];
+
+function ensureCaptain(club) {
+  if (!club) return null;
+  const players = club.players || [];
+  const xi = new Set(club.lineupIds || []);
+  const cur = players.find((p) => p.id === club.captainId && playerAvailable(p) && xi.has(p.id));
+  if (cur) return cur;
+  const pool = players.filter((p) => xi.has(p.id) && playerAvailable(p));
+  const leader = pool.find((p) => (p.specials || []).includes('leader'));
+  const pickCap = leader || pool.slice().sort((a, b) => effectiveMastery(b) - effectiveMastery(a))[0];
+  club.captainId = pickCap?.id || null;
+  return pickCap || null;
+}
+
+function setCaptain(club, playerId) {
+  if (!club) return { ok: false, error: 'Нет клуба' };
+  const p = (club.players || []).find((x) => x.id === playerId);
+  if (!p) return { ok: false, error: 'Игрок не найден' };
+  if (!playerAvailable(p)) return { ok: false, error: 'Игрок недоступен' };
+  if (!(club.lineupIds || []).includes(playerId)) {
+    return { ok: false, error: 'Капитан должен быть в основе' };
+  }
+  club.captainId = playerId;
+  return {
+    ok: true,
+    captain: { id: p.id, name: p.name, pos: p.pos, leader: (p.specials || []).includes('leader') },
+    label: `Капитан · ${p.name}`
+  };
+}
+
+function ensureSubPolicy(club) {
+  if (!club) return { enabled: true, fitnessBelow: 62, maxSubs: 3 };
+  const cur = club.subPolicy || {};
+  club.subPolicy = {
+    enabled: cur.enabled !== false,
+    fitnessBelow: Math.max(45, Math.min(80, Number(cur.fitnessBelow) || 62)),
+    maxSubs: Math.max(1, Math.min(5, Number(cur.maxSubs) || 3))
+  };
+  return club.subPolicy;
+}
+
+function setSubPolicy(club, policy = {}) {
+  if (!club) return { ok: false, error: 'Нет клуба' };
+  const next = {
+    enabled: policy.enabled !== false && policy.enabled !== 'false',
+    fitnessBelow: Math.max(45, Math.min(80, Number(policy.fitnessBelow) || 62)),
+    maxSubs: Math.max(1, Math.min(5, Number(policy.maxSubs) || 3))
+  };
+  club.subPolicy = next;
+  return { ok: true, subPolicy: next, label: `Автозамены: физа < ${next.fitnessBelow}% · до ${next.maxSubs}` };
+}
+
+function pickSetPieceCandidate(xi, role) {
+  const pool = (xi || []).filter((p) => p.pos !== 'Gk' && playerAvailable(p));
+  if (!pool.length) return null;
+  if (role === 'corner') {
+    return pool.slice().sort((a, b) => traitMul(b, 'assist', 1) - traitMul(a, 'assist', 1) || effectiveMastery(b) - effectiveMastery(a))[0];
+  }
+  return pool.slice().sort((a, b) => traitMul(b, 'shot', 1) - traitMul(a, 'shot', 1) || effectiveMastery(b) - effectiveMastery(a))[0];
+}
+
+function ensureSetPieces(club) {
+  if (!club) return { corner: null, freeKick: null, penalty: null };
+  club.setPieces = club.setPieces || { corner: null, freeKick: null, penalty: null };
+  const xi = resolveXi(club);
+  const xiIds = new Set(xi.map((p) => p.id));
+  ['corner', 'freeKick', 'penalty'].forEach((role) => {
+    const id = club.setPieces[role];
+    if (!id || !xiIds.has(id)) {
+      const cand = pickSetPieceCandidate(xi, role);
+      club.setPieces[role] = cand?.id || null;
+    }
+  });
+  return club.setPieces;
+}
+
+function publicSetPieces(club) {
+  ensureSetPieces(club);
+  const byId = new Map((club.players || []).map((p) => [p.id, p]));
+  const mapRole = (role) => {
+    const p = byId.get(club.setPieces?.[role]);
+    return p ? { id: p.id, name: p.name, pos: p.pos } : null;
+  };
+  return {
+    corner: mapRole('corner'),
+    freeKick: mapRole('freeKick'),
+    penalty: mapRole('penalty')
+  };
+}
+
+function setSetPieces(club, pieces = {}) {
+  if (!club) return { ok: false, error: 'Нет клуба' };
+  ensureLineup(club);
+  const xi = new Set(club.lineupIds || []);
+  const next = { ...(club.setPieces || {}) };
+  for (const role of ['corner', 'freeKick', 'penalty']) {
+    if (pieces[role] === undefined) continue;
+    const id = pieces[role] || null;
+    if (id && !xi.has(id)) return { ok: false, error: 'Исполнитель должен быть в основе' };
+    if (id && !(club.players || []).some((p) => p.id === id)) return { ok: false, error: 'Игрок не найден' };
+    next[role] = id;
+  }
+  club.setPieces = next;
+  ensureSetPieces(club);
+  return { ok: true, setPieces: publicSetPieces(club), label: 'Стандарты обновлены' };
+}
+
+function resolveTaker(club, xi, role) {
+  ensureSetPieces(club);
+  const id = club.setPieces?.[role];
+  const named = (xi || []).find((p) => p.id === id);
+  if (named) return named;
+  return pickSetPieceCandidate(xi, role);
+}
+
+function applyTeamTalk(club, talkId) {
+  if (!club) return { ok: false, error: 'Нет клуба' };
+  const cfg = TEAM_TALKS.find((t) => t.id === talkId);
+  if (!cfg) return { ok: false, error: 'Неизвестный разговор' };
+  const now = Date.now();
+  if (club.lastTeamTalkAt && now - club.lastTeamTalkAt < 90 * 60 * 1000) {
+    const left = Math.ceil((90 * 60 * 1000 - (now - club.lastTeamTalkAt)) / 60000);
+    return { ok: false, error: `Следующий разговор через ~${left} мин` };
+  }
+  club.teamTalk = {
+    id: cfg.id,
+    label: cfg.label,
+    power: cfg.power,
+    solidity: cfg.solidity,
+    fit: cfg.fit,
+    until: now + 3 * 3600e3,
+    at: now
+  };
+  club.lastTeamTalkAt = now;
+  (club.players || []).forEach((p) => {
+    if ((club.lineupIds || []).includes(p.id)) {
+      p.morale = Math.max(-20, Math.min(25, (p.morale || 0) + (cfg.morale || 0)));
+    }
+  });
+  return { ok: true, teamTalk: club.teamTalk, label: `Раздевалка · ${cfg.label}` };
+}
+
+function rivalsStatus(club) {
+  if (!club) return { rivalIds: [], recentDerbies: [], h2h: [] };
+  club.rivals = Array.isArray(club.rivals) ? club.rivals : [];
+  const hist = club.history || [];
+  const byOpp = Object.create(null);
+  hist.forEach((h) => {
+    const key = h.oppUserId || h.opp || '?';
+    if (!byOpp[key]) byOpp[key] = { opp: h.opp, oppUserId: h.oppUserId || null, played: 0, w: 0, d: 0, l: 0, gf: 0, ga: 0, derbies: 0 };
+    const row = byOpp[key];
+    row.played++;
+    if (h.result === 'W') row.w++;
+    else if (h.result === 'D') row.d++;
+    else row.l++;
+    row.gf += (h.score || [0, 0])[0] || 0;
+    row.ga += (h.score || [0, 0])[1] || 0;
+    if (h.derby) row.derbies++;
+  });
+  const h2h = Object.values(byOpp)
+    .filter((r) => r.played >= 1)
+    .sort((a, b) => b.played - a.played || b.derbies - a.derbies)
+    .slice(0, 12);
+  return {
+    rivalIds: club.rivals.slice(0, 8),
+    recentDerbies: hist.filter((h) => h.derby).slice(0, 8),
+    h2h
   };
 }
 
@@ -1356,7 +1571,11 @@ function trySub(liveXi, bench, outPlayer, events, minute, side, score, reason) {
   if (!outPlayer) return null;
   const idx = liveXi.findIndex((p) => p.id === outPlayer.id);
   if (idx < 0) return null;
-  const sub = bench.find((p) => playerAvailable(p) && !liveXi.some((x) => x.id === p.id));
+  const group = POS_GROUP[outPlayer.pos];
+  const candidates = bench.filter((p) => playerAvailable(p) && !liveXi.some((x) => x.id === p.id));
+  const same = candidates.filter((p) => POS_GROUP[p.pos] === group);
+  const pool = same.length ? same : candidates;
+  const sub = pool.slice().sort((a, b) => effectiveMastery(b) - effectiveMastery(a))[0];
   if (!sub) {
     liveXi.splice(idx, 1);
     return null;
@@ -1371,9 +1590,23 @@ function trySub(liveXi, bench, outPlayer, events, minute, side, score, reason) {
     player: `${outPlayer.name} → ${sub.name}`,
     score: [...score],
     out: outPlayer.name,
-    inn: sub.name
+    inn: sub.name,
+    reason: reason || null
   });
   return sub;
+}
+
+function maybeFitnessSubs(club, liveXi, bench, events, minute, side, score, used) {
+  const pol = ensureSubPolicy(club);
+  if (!pol.enabled || used.count >= pol.maxSubs || minute < 55) return;
+  const tired = liveXi
+    .filter((p) => p.pos !== 'Gk' && (p.fitness || 100) < pol.fitnessBelow)
+    .sort((a, b) => (a.fitness || 0) - (b.fitness || 0))[0];
+  if (!tired) return;
+  const fresh = bench.find((p) => playerAvailable(p) && (p.fitness || 100) >= pol.fitnessBelow + 8);
+  if (!fresh && !bench.length) return;
+  const sub = trySub(liveXi, bench, tired, events, minute, side, score, 'усталость');
+  if (sub) used.count += 1;
 }
 
 function applyDiscipline(club, cardLog) {
@@ -1409,10 +1642,19 @@ function simulateMatch(homeClub, awayClub, meta = {}) {
   const homeBanned = new Set((homeClub.players || []).filter((p) => (p.suspendedMatches || 0) > 0).map((p) => p.id));
   const awayBanned = new Set((awayClub.players || []).filter((p) => (p.suspendedMatches || 0) > 0).map((p) => p.id));
 
+  ensureCaptain(homeClub);
+  ensureCaptain(awayClub);
+  ensureSetPieces(homeClub);
+  ensureSetPieces(awayClub);
+  ensureSubPolicy(homeClub);
+  ensureSubPolicy(awayClub);
+
   let homeXi = resolveXi(homeClub).slice();
   let awayXi = resolveXi(awayClub).slice();
   let homeBench = resolveBench(homeClub, homeXi.map((p) => p.id));
   let awayBench = resolveBench(awayClub, awayXi.map((p) => p.id));
+  const homeSubsUsed = { count: 0 };
+  const awaySubsUsed = { count: 0 };
 
   const derbyInfo = detectDerby(homeClub, awayClub, meta);
   const homePow = teamMatchPower(homeClub, homeXi, { home: true, derby: derbyInfo.derby });
@@ -1434,6 +1676,12 @@ function simulateMatch(homeClub, awayClub, meta = {}) {
       score: [0, 0]
     });
   }
+  if (homeClub.teamTalk && homeClub.teamTalk.until > Date.now()) {
+    events.push({ minute: 1, type: 'talk', side: 'home', player: homeClub.teamTalk.label, score: [0, 0] });
+  }
+  if (awayClub.teamTalk && awayClub.teamTalk.until > Date.now()) {
+    events.push({ minute: 1, type: 'talk', side: 'away', player: awayClub.teamTalk.label, score: [0, 0] });
+  }
   const cards = { home: 0, away: 0 };
   const matchYellows = { home: Object.create(null), away: Object.create(null) };
   const cardLog = { home: [], away: [] };
@@ -1444,11 +1692,17 @@ function simulateMatch(homeClub, awayClub, meta = {}) {
   };
   homeXi.forEach((p) => { ratings.home[p.id] = 6.5; });
   awayXi.forEach((p) => { ratings.away[p.id] = 6.5; });
+  if (homeClub.captainId) bumpRating('home', homeClub.captainId, 0.15);
+  if (awayClub.captainId) bumpRating('away', awayClub.captainId, 0.15);
 
   for (let m = 1; m <= 90; m++) {
     if (m % 9 === 0) {
       const bias = hs / (hs + as);
       hPoss = Math.max(35, Math.min(65, Math.round(bias * 100 + rnd(-4, 4))));
+    }
+    if (m === 55 || m === 65 || m === 75 || m === 84) {
+      maybeFitnessSubs(homeClub, homeXi, homeBench, events, m, 'home', [hg, ag], homeSubsUsed);
+      maybeFitnessSubs(awayClub, awayXi, awayBench, events, m, 'away', [hg, ag], awaySubsUsed);
     }
     // mid-match injury → auto sub
     if (Math.random() < 0.004) {
@@ -1471,7 +1725,13 @@ function simulateMatch(homeClub, awayClub, meta = {}) {
             score: [hg, ag]
           });
           trySub(live, bench, victim, events, m, homeSide ? 'home' : 'away', [hg, ag], inj?.label || 'травма');
-          if (homeSide) hs *= 0.97; else as *= 0.97;
+          if (homeSide) {
+            homeSubsUsed.count += 1;
+            hs *= 0.97;
+          } else {
+            awaySubsUsed.count += 1;
+            as *= 0.97;
+          }
         }
       }
     }
@@ -1481,6 +1741,7 @@ function simulateMatch(homeClub, awayClub, meta = {}) {
       if (homeAtt) hShots++; else aShots++;
       const attXi = homeAtt ? homeXi : awayXi;
       const defXi = homeAtt ? awayXi : homeXi;
+      const attClub = homeAtt ? homeClub : awayClub;
       const scorerPool = attXi.filter((p) => p.pos !== 'Gk');
       const shooter = pick(scorerPool.length ? scorerPool : attXi);
       const shotChance = 0.42 + (homeAtt ? hs : as) / ((hs + as) * 4);
@@ -1518,7 +1779,17 @@ function simulateMatch(homeClub, awayClub, meta = {}) {
         }
       } else if (Math.random() < 0.25) {
         if (homeAtt) hCorners++; else aCorners++;
-        events.push({ minute: m, type: 'corner', side: homeAtt ? 'home' : 'away', player: 'Угловой', score: [hg, ag] });
+        const taker = resolveTaker(attClub, attXi, 'corner');
+        const side = homeAtt ? 'home' : 'away';
+        if (taker) bumpRating(side, taker.id, 0.05);
+        events.push({
+          minute: m,
+          type: 'corner',
+          side,
+          player: taker?.name || 'Угловой',
+          playerId: taker?.id || null,
+          score: [hg, ag]
+        });
       }
     }
     if (Math.random() < 0.012) {
@@ -1537,7 +1808,13 @@ function simulateMatch(homeClub, awayClub, meta = {}) {
         events.push({ minute: m, type: 'red', side, player: pl.name, score: [hg, ag] });
         cardLog[side].push({ type: 'red', playerId: pl.id });
         trySub(live, bench, pl, events, m, side, [hg, ag], 'удаление');
-        if (homeSide) hs *= 0.9; else as *= 0.9;
+        if (homeSide) {
+          homeSubsUsed.count += 1;
+          hs *= 0.9;
+        } else {
+          awaySubsUsed.count += 1;
+          as *= 0.9;
+        }
         bumpRating(side, pl.id, -1.2);
       } else {
         events.push({ minute: m, type: 'yellow', side, player: pl.name, score: [hg, ag] });
@@ -1549,8 +1826,23 @@ function simulateMatch(homeClub, awayClub, meta = {}) {
 
   if (hg + ag === 0 && Math.random() < 0.75) {
     const homeAtt = Math.random() < hs / (hs + as);
+    const attClub = homeAtt ? homeClub : awayClub;
+    const attXi = homeAtt ? homeXi : awayXi;
+    const role = Math.random() < 0.55 ? 'penalty' : 'freeKick';
+    const taker = resolveTaker(attClub, attXi, role);
     if (homeAtt) { hg = 1; hShots++; hOn++; } else { ag = 1; aShots++; aOn++; }
-    events.push({ minute: rnd(55, 88), type: 'goal', side: homeAtt ? 'home' : 'away', player: 'Стандарт', assist: null, score: [hg, ag] });
+    const side = homeAtt ? 'home' : 'away';
+    if (taker) bumpRating(side, taker.id, 0.85);
+    events.push({
+      minute: rnd(55, 88),
+      type: 'goal',
+      side,
+      player: taker?.name || 'Стандарт',
+      playerId: taker?.id || null,
+      assist: null,
+      setPiece: role,
+      score: [hg, ag]
+    });
   }
   events.sort((a, b) => a.minute - b.minute);
 
@@ -1592,6 +1884,10 @@ function simulateMatch(homeClub, awayClub, meta = {}) {
   });
   events.sort((a, b) => a.minute - b.minute);
 
+  // one-shot team talk consumed after match
+  if (homeClub.teamTalk) homeClub.teamTalk = null;
+  if (awayClub.teamTalk) awayClub.teamTalk = null;
+
   const mapXi = (club, side) => {
     const ids = Object.keys(ratings[side]);
     const byId = new Map((club.players || []).map((p) => [p.id, p]));
@@ -1606,7 +1902,8 @@ function simulateMatch(homeClub, awayClub, meta = {}) {
         slot: slotIdx >= 0 ? slots[slotIdx] : p.pos,
         effective: effectiveMastery(p),
         rating: Math.max(4, Math.min(9.8, Math.round((ratings[side][id] || 6.5) * 10) / 10)),
-        specials: p.specials || []
+        specials: p.specials || [],
+        captain: club.captainId === p.id
       };
     }).filter(Boolean).sort((a, b) => b.rating - a.rating);
   };
@@ -1633,12 +1930,14 @@ function simulateMatch(homeClub, awayClub, meta = {}) {
     home: {
       userId: meta.homeUserId, name: homeClub.name, short: homeClub.short, color: homeClub.color,
       strength: Math.round(hs), formation: homeClub.formation, style: homeClub.style,
-      chemistry: homePow.chemistry || formationChemistry(homeClub, homeXi)
+      chemistry: homePow.chemistry || formationChemistry(homeClub, homeXi),
+      captain: homeClub.captainId
     },
     away: {
       userId: meta.awayUserId, name: awayClub.name, short: awayClub.short, color: awayClub.color,
       strength: Math.round(as), formation: awayClub.formation, style: awayClub.style,
-      chemistry: awayPow.chemistry || formationChemistry(awayClub, awayXi)
+      chemistry: awayPow.chemistry || formationChemistry(awayClub, awayXi),
+      captain: awayClub.captainId
     },
     score: [hg, ag],
     events,
@@ -1647,7 +1946,8 @@ function simulateMatch(homeClub, awayClub, meta = {}) {
       shots: [hShots, aShots],
       shotsOn: [hOn, aOn],
       corners: [hCorners, aCorners],
-      cards: [cards.home, cards.away]
+      cards: [cards.home, cards.away],
+      subs: [homeSubsUsed.count, awaySubsUsed.count]
     },
     injuries: { home: homeInj, away: awayInj },
     suspensions: { home: homeBans, away: awayBans },
@@ -1680,11 +1980,13 @@ function simulateMatch(homeClub, awayClub, meta = {}) {
   homeClub.history = homeClub.history || [];
   awayClub.history = awayClub.history || [];
   homeClub.history.unshift({
-    id: result.id, at: result.createdAt, opp: awayClub.name, score: [hg, ag], home: true,
+    id: result.id, at: result.createdAt, opp: awayClub.name, oppUserId: awayClub.userId || meta.awayUserId || null,
+    score: [hg, ag], home: true,
     competition: result.competition, result: homeLetter, derby: result.derby || null
   });
   awayClub.history.unshift({
-    id: result.id, at: result.createdAt, opp: homeClub.name, score: [ag, hg], home: false,
+    id: result.id, at: result.createdAt, opp: homeClub.name, oppUserId: homeClub.userId || meta.homeUserId || null,
+    score: [ag, hg], home: false,
     competition: result.competition, result: awayLetter, derby: result.derby || null
   });
   if (homeClub.history.length > 40) homeClub.history.length = 40;
@@ -2555,6 +2857,18 @@ module.exports = {
   upgradeTraining,
   maybeGenerateTransferOffers,
   resolveTransferOffer,
-  playerCard
+  playerCard,
+  ensureCaptain,
+  setCaptain,
+  ensureSetPieces,
+  setSetPieces,
+  publicSetPieces,
+  ensureSubPolicy,
+  setSubPolicy,
+  applyTeamTalk,
+  TEAM_TALKS,
+  rivalsStatus,
+  resolveTaker,
+  maybeFitnessSubs
 };
 

@@ -1020,11 +1020,118 @@ const server = http.createServer(async (req, res) => {
       const club = ensureClub(auth.user);
       const r = G.setLineup(club, body.lineupIds, body.benchIds);
       if (!r.ok) return json(res, 400, r);
+      G.ensureCaptain(club);
+      G.ensureSetPieces(club);
       db.setClub(auth.user.id, club);
       return json(res, 200, { ok: true, club: G.publicClub(club, auth.user) });
     } catch (e) {
       return json(res, 500, { error: String(e.message || e) });
     }
+  }
+
+  if (pathname === '/api/club/captain' && req.method === 'POST') {
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    try {
+      const body = JSON.parse((await readBody(req)).toString('utf8') || '{}');
+      const club = ensureClub(auth.user);
+      const r = G.setCaptain(club, body.playerId);
+      if (!r.ok) return json(res, 400, { error: r.error });
+      db.setClub(auth.user.id, club);
+      return json(res, 200, { ok: true, ...r, club: G.publicClub(club, auth.user) });
+    } catch (e) {
+      return json(res, 500, { error: String(e.message || e) });
+    }
+  }
+
+  if (pathname === '/api/club/setpieces' && req.method === 'GET') {
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    const club = ensureClub(auth.user);
+    G.ensureSetPieces(club);
+    db.setClub(auth.user.id, club);
+    return json(res, 200, {
+      ok: true,
+      setPieces: G.publicSetPieces(club),
+      captainId: club.captainId || null
+    });
+  }
+
+  if (pathname === '/api/club/setpieces' && req.method === 'POST') {
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    try {
+      const body = JSON.parse((await readBody(req)).toString('utf8') || '{}');
+      const club = ensureClub(auth.user);
+      const r = G.setSetPieces(club, body);
+      if (!r.ok) return json(res, 400, { error: r.error });
+      db.setClub(auth.user.id, club);
+      return json(res, 200, { ok: true, ...r, club: G.publicClub(club, auth.user) });
+    } catch (e) {
+      return json(res, 500, { error: String(e.message || e) });
+    }
+  }
+
+  if (pathname === '/api/club/subpolicy' && req.method === 'POST') {
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    try {
+      const body = JSON.parse((await readBody(req)).toString('utf8') || '{}');
+      const club = ensureClub(auth.user);
+      const r = G.setSubPolicy(club, body);
+      if (!r.ok) return json(res, 400, { error: r.error });
+      db.setClub(auth.user.id, club);
+      return json(res, 200, { ok: true, ...r, club: G.publicClub(club, auth.user) });
+    } catch (e) {
+      return json(res, 500, { error: String(e.message || e) });
+    }
+  }
+
+  if (pathname === '/api/prematch/talk' && req.method === 'POST') {
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    try {
+      const body = JSON.parse((await readBody(req)).toString('utf8') || '{}');
+      const club = ensureClub(auth.user);
+      const r = G.applyTeamTalk(club, body.talkId || body.id);
+      if (!r.ok) return json(res, 400, { error: r.error });
+      db.setClub(auth.user.id, club);
+      return json(res, 200, {
+        ok: true,
+        ...r,
+        club: G.publicClub(club, auth.user),
+        board: G.prematchBoard(club)
+      });
+    } catch (e) {
+      return json(res, 500, { error: String(e.message || e) });
+    }
+  }
+
+  if (pathname === '/api/rivals' && req.method === 'GET') {
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    const club = ensureClub(auth.user);
+    const status = G.rivalsStatus(club);
+    const users = usersDb().users;
+    const rivals = (status.rivalIds || []).map((uid) => {
+      const u = users[uid];
+      if (!u) return { userId: uid, name: 'Неизвестный', clubName: '—' };
+      const c = db.getClub(uid);
+      return {
+        userId: uid,
+        login: u.login,
+        name: u.name || u.login,
+        clubName: c?.name || u.clubName || '—',
+        color: c?.color || '#1fa65a',
+        strength: c ? G.clubStrength(c) : null
+      };
+    });
+    return json(res, 200, {
+      ok: true,
+      rivals,
+      recentDerbies: status.recentDerbies,
+      h2h: status.h2h
+    });
   }
 
   if (pathname === '/api/bonus/xp' && req.method === 'POST') {

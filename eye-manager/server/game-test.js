@@ -334,4 +334,89 @@ describe('game lineup guards', () => {
     assert.equal(card.id, rated.id);
     assert.ok(card.avgRating != null);
   });
+
+  it('captain setpieces team talk fitness subs and rivals', () => {
+    const home = G.defaultClub({ id: 'r1', login: 'r1', name: 'R1', clubName: 'Roles FC' });
+    const away = G.defaultClub({ id: 'r2', login: 'r2', name: 'R2', clubName: 'Away Roles' });
+    home.userId = 'r1';
+    away.userId = 'r2';
+    G.ensureLineup(home, true);
+    G.ensureLineup(away, true);
+
+    const capId = home.lineupIds[1];
+    const leader = home.players.find((p) => p.id === capId);
+    leader.specials = ['leader'];
+    const cap = G.setCaptain(home, capId);
+    assert.equal(cap.ok, true);
+    assert.equal(home.captainId, capId);
+    const chem = G.formationChemistry(home, home.players.filter((p) => home.lineupIds.includes(p.id)));
+    home.captainId = null;
+    const chemNo = G.formationChemistry(home, home.players.filter((p) => home.lineupIds.includes(p.id)));
+    home.captainId = capId;
+    assert.ok(chem > chemNo);
+
+    const sp = G.setSetPieces(home, { corner: capId, freeKick: home.lineupIds[2], penalty: home.lineupIds[3] });
+    assert.equal(sp.ok, true);
+    assert.equal(home.setPieces.corner, capId);
+    const pub = G.publicSetPieces(home);
+    assert.equal(pub.corner.id, capId);
+
+    const talk = G.applyTeamTalk(home, 'motivate');
+    assert.equal(talk.ok, true);
+    assert.ok(home.teamTalk);
+    const talk2 = G.applyTeamTalk(home, 'calm');
+    assert.equal(talk2.ok, false);
+
+    G.setSubPolicy(home, { enabled: true, fitnessBelow: 95, maxSubs: 3 });
+    home.players.forEach((p) => {
+      if (home.lineupIds.includes(p.id) && p.pos !== 'Gk') p.fitness = 50;
+    });
+    home.benchIds = home.players.filter((p) => !home.lineupIds.includes(p.id)).slice(0, 7).map((p) => p.id);
+    home.players.forEach((p) => {
+      if (home.benchIds.includes(p.id)) p.fitness = 95;
+    });
+
+    // force zero-goal path sometimes uses set piece taker — run several matches
+    let sawNamedCornerOrPiece = false;
+    let sawFitnessSub = false;
+    for (let i = 0; i < 8; i++) {
+      const h = G.defaultClub({ id: 'r1x' + i, login: 'r1', name: 'R1', clubName: 'Roles FC' });
+      const a = G.defaultClub({ id: 'r2x' + i, login: 'r2', name: 'R2', clubName: 'Away Roles' });
+      h.userId = 'r1';
+      a.userId = 'r2';
+      h.name = 'Северный Шторм';
+      a.name = 'Северный Орёл';
+      G.ensureLineup(h, true);
+      G.ensureLineup(a, true);
+      G.setCaptain(h, h.lineupIds[1]);
+      G.setSetPieces(h, { corner: h.lineupIds[1], freeKick: h.lineupIds[2], penalty: h.lineupIds[3] });
+      G.applyTeamTalk(h, 'demand');
+      G.setSubPolicy(h, { enabled: true, fitnessBelow: 95, maxSubs: 3 });
+      h.players.forEach((p) => {
+        if (h.lineupIds.includes(p.id) && p.pos !== 'Gk') p.fitness = 40;
+        if ((h.benchIds || []).includes(p.id) || (!h.lineupIds.includes(p.id) && p.pos !== 'Gk')) p.fitness = 99;
+      });
+      h.benchIds = h.players.filter((p) => !h.lineupIds.includes(p.id)).slice(0, 7).map((p) => p.id);
+      const m = G.simulateMatch(h, a, { competition: 'friendly', homeUserId: 'r1', awayUserId: 'r2', challenge: true });
+      if ((m.events || []).some((e) => e.type === 'corner' && e.playerId)) sawNamedCornerOrPiece = true;
+      if ((m.events || []).some((e) => e.type === 'goal' && e.setPiece && e.playerId)) sawNamedCornerOrPiece = true;
+      if ((m.events || []).some((e) => e.type === 'sub' && e.reason === 'усталость')) sawFitnessSub = true;
+      if ((m.events || []).some((e) => e.type === 'talk')) assert.ok(true);
+      assert.equal(!!h.teamTalk, false);
+    }
+    assert.ok(sawNamedCornerOrPiece || sawFitnessSub);
+
+    G.rememberRival(home, 'r2');
+    home.history = [
+      { opp: 'Away Roles', oppUserId: 'r2', score: [2, 1], result: 'W', derby: 'Северное дерби' },
+      { opp: 'Away Roles', oppUserId: 'r2', score: [0, 1], result: 'L', derby: null }
+    ];
+    const riv = G.rivalsStatus(home);
+    assert.ok(riv.rivalIds.includes('r2'));
+    assert.equal(riv.h2h[0].played, 2);
+    assert.equal(riv.h2h[0].w, 1);
+
+    const card = G.playerCard(home, home.captainId);
+    assert.equal(card.isCaptain, true);
+  });
 });

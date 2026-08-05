@@ -89,15 +89,18 @@
       ['academy', 'Академия'],
       ['loans', 'Аренда']
     ],
+    tactics: [
+      ['setup', 'Настройки'],
+      ['roles', 'Роли'],
+      ['talk', 'Раздевалка']
+    ],
     matches: [
       ['friendly', 'Товарищеские'],
       ['league', 'Лига'],
       ['calendar', 'Календарь'],
       ['cups', 'Кубки'],
+      ['rivals', 'Соперники'],
       ['history', 'Архив']
-    ],
-    tactics: [
-      ['setup', 'Настройки']
     ],
     bonus: [
       ['shop', 'Бустеры']
@@ -160,6 +163,11 @@
         </div>
         ${board.understrength ? '<p class="hint" style="color:var(--warn,#eab308)">В основе меньше 11 здоровых</p>' : ''}
         ${board.unavailable?.length ? `<p class="hint">Недоступны: ${board.unavailable.map((p) => esc(p.name)).join(', ')}</p>` : ''}
+        ${board.captain ? `<p class="hint">Капитан: <strong>${esc(board.captain.name)}</strong></p>` : ''}
+        ${board.teamTalk ? `<p class="hint" style="color:var(--grass-bright)">Раздевалка: «${esc(board.teamTalk.label)}»</p>` : ''}
+        ${board.teamTalkOptions?.length && !board.teamTalk ? `<div class="talk-row">${board.teamTalkOptions.map((t) =>
+          `<button class="btn btn-tiny" data-talk="${esc(t.id)}">${esc(t.label)}</button>`
+        ).join('')}</div>` : ''}
         ${oppHtml}
       </div>`;
   }
@@ -823,7 +831,7 @@
             <tr class="${p.wantsRenew || (p.contractYears || 0) <= 0 || p.request === 'playtime' ? 'row-warn' : ''}">
               <td>
                 <button type="button" class="link" data-card="${esc(p.id)}"><strong>${esc(p.name)}</strong></button>
-                <div class="hint">${(p.specials||[]).map((s)=>TRAIT_LABELS[s]||s).join(' · ') || '—'}${p.yellows ? ' · ЖК ' + p.yellows : ''}${p.suspendedMatches ? ' · дискв. ' + p.suspendedMatches : ''}${p.wantsRenew ? ' · ждёт контракт' : ''}${p.request === 'playtime' ? ' · хочет минуты' : ''}${p.seasonApps ? ' · матчей ' + p.seasonApps : ''}${p.form != null ? ' · форма ' + Math.round(p.form) : ''}${p.loanUntil ? ' · в аренде' : ''}</div>
+                <div class="hint">${(p.specials||[]).map((s)=>TRAIT_LABELS[s]||s).join(' · ') || '—'}${club.captain?.id === p.id || club.captainId === p.id ? ' · капитан' : ''}${p.yellows ? ' · ЖК ' + p.yellows : ''}${p.suspendedMatches ? ' · дискв. ' + p.suspendedMatches : ''}${p.wantsRenew ? ' · ждёт контракт' : ''}${p.request === 'playtime' ? ' · хочет минуты' : ''}${p.seasonApps ? ' · матчей ' + p.seasonApps : ''}${p.form != null ? ' · форма ' + Math.round(p.form) : ''}${p.loanUntil ? ' · в аренде' : ''}</div>
               </td>
               <td><span class="badge">${esc(p.pos)}</span></td>
               <td>${p.age}</td>
@@ -848,6 +856,42 @@
   }
 
   async function renderMatches() {
+    if (state.tab === 'rivals') {
+      let data = { rivals: [], h2h: [], recentDerbies: [] };
+      try { data = await A().request('api/rivals'); } catch {}
+      $('#view').innerHTML = `
+        <section class="panel">
+          <h3>Принципиальные соперники</h3>
+          <p class="hint">Дерби и повторные встречи запоминаются. Чем чаще играете — тем острее матч.</p>
+          <div class="list">${data.rivals?.length ? data.rivals.map((r) => `
+            <div class="list-row">
+              <div>
+                <strong>${esc(r.clubName)}</strong>
+                <small>${esc(r.name)} · @${esc(r.login || '')}${r.strength != null ? ' · сила ' + r.strength : ''}</small>
+              </div>
+              <button type="button" class="link" data-profile="${esc(r.login)}">Профиль</button>
+            </div>`).join('') : '<p class="hint">Пока нет соперников — сыграйте дерби или челлендж.</p>'}</div>
+        </section>
+        <section class="panel">
+          <h3>Личные встречи</h3>
+          <div class="list">${data.h2h?.length ? data.h2h.map((h) => `
+            <div class="list-row">
+              <div>
+                <strong>${esc(h.opp)}</strong>
+                <small>${h.played} матч. · ${h.w}П ${h.d}Н ${h.l}П · ${h.gf}:${h.ga}${h.derbies ? ' · дерби ' + h.derbies : ''}</small>
+              </div>
+            </div>`).join('') : '<p class="hint">История пуста</p>'}</div>
+        </section>
+        ${data.recentDerbies?.length ? `<section class="panel">
+          <h3>Недавние дерби</h3>
+          <div class="list">${data.recentDerbies.map((h) => `
+            <div class="list-row">
+              <div><strong>${esc(h.opp)} ${h.score?.[0]}:${h.score?.[1]}</strong><small>${esc(h.derby || 'Дерби')} · ${h.result || ''}</small></div>
+              ${h.id ? `<button class="btn btn-tiny" data-match="${esc(h.id)}">Отчёт</button>` : ''}
+            </div>`).join('')}</div>
+        </section>` : ''}`;
+      return;
+    }
     if (state.tab === 'history') {
       const data = await A().request('api/matches');
       const list = data.matches || [];
@@ -1111,6 +1155,78 @@
 
   async function renderTactics() {
     const club = state.club;
+    const xi = (club.players || []).filter((p) => (club.lineupIds || []).includes(p.id));
+
+    if (state.tab === 'roles') {
+      const sp = club.setPieces || {};
+      const pol = club.subPolicy || { enabled: true, fitnessBelow: 62, maxSubs: 3 };
+      const capId = club.captain?.id || club.captainId || '';
+      $('#view').innerHTML = `
+        <section class="panel">
+          <h3>Капитан и стандарты</h3>
+          <p class="hint">Капитан поднимает химию; лидер — сильнее. Исполнители стандартов получают имена в протоколе матча.</p>
+          <form class="form-grid" id="form-roles">
+            <label>Капитан
+              <select name="captainId">
+                <option value="">— авто —</option>
+                ${xi.map((p) => `<option value="${esc(p.id)}" ${p.id === capId ? 'selected' : ''}>${esc(p.pos)} · ${esc(p.name)}${(p.specials||[]).includes('leader') ? ' ★' : ''}</option>`).join('')}
+              </select>
+            </label>
+            <label>Угловые
+              <select name="corner"><option value="">— авто —</option>${xi.map((p) =>
+                `<option value="${esc(p.id)}" ${(sp.corner?.id || sp.corner) === p.id ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}</select>
+            </label>
+            <label>Штрафные
+              <select name="freeKick"><option value="">— авто —</option>${xi.map((p) =>
+                `<option value="${esc(p.id)}" ${(sp.freeKick?.id || sp.freeKick) === p.id ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}</select>
+            </label>
+            <label>Пенальти
+              <select name="penalty"><option value="">— авто —</option>${xi.map((p) =>
+                `<option value="${esc(p.id)}" ${(sp.penalty?.id || sp.penalty) === p.id ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}</select>
+            </label>
+            <button class="btn btn-primary" type="submit">Сохранить роли</button>
+          </form>
+        </section>
+        <section class="panel">
+          <h3>Автозамены по физе</h3>
+          <form class="form-grid" id="form-subpolicy">
+            <label class="list-row" style="cursor:pointer">
+              <div><strong>Включить</strong><small>после 55′ менять уставших</small></div>
+              <input type="checkbox" name="enabled" ${pol.enabled !== false ? 'checked' : ''} />
+            </label>
+            <label>Порог физы (%)
+              <input name="fitnessBelow" type="number" min="45" max="80" value="${pol.fitnessBelow || 62}" />
+            </label>
+            <label>Макс. замен за матч
+              <input name="maxSubs" type="number" min="1" max="5" value="${pol.maxSubs || 3}" />
+            </label>
+            <button class="btn btn-primary" type="submit">Сохранить политику</button>
+          </form>
+        </section>`;
+      return;
+    }
+
+    if (state.tab === 'talk') {
+      const talks = [
+        { id: 'motivate', label: 'Вдохновить', hint: '+сила, мораль' },
+        { id: 'calm', label: 'Успокоить', hint: '+оборона' },
+        { id: 'demand', label: 'Потребовать', hint: 'максимум атаки, жжёт физу' }
+      ];
+      const active = club.teamTalk;
+      $('#view').innerHTML = `
+        <section class="panel">
+          <h3>Разговор в раздевалке</h3>
+          <p class="hint">Краткий бафф на ближайший матч (кулдаун 90 мин). Не путать с пресс-конференцией.</p>
+          ${active ? `<p class="hint" style="color:var(--grass-bright)">Активно: «${esc(active.label)}» до ${new Date(active.until).toLocaleTimeString('ru-RU')}</p>` : ''}
+          <div class="list">${talks.map((t) => `
+            <div class="list-row">
+              <div><strong>${esc(t.label)}</strong><small>${esc(t.hint)}</small></div>
+              <button class="btn btn-primary btn-tiny" data-talk="${esc(t.id)}" ${active ? 'disabled' : ''}>Сказать</button>
+            </div>`).join('')}</div>
+        </section>`;
+      return;
+    }
+
     const chosen = new Set(club.instructions || []);
     const INS = [
       ['high_press', 'Высокий прессинг'],
@@ -1126,7 +1242,7 @@
       <div class="grid-2">
         <section class="panel">
           <h3>Тактика на матч</h3>
-          <p class="hint">Химия схемы: <strong>${club.chemistry != null ? club.chemistry : '—'}</strong> — совпадение позиций в основе.</p>
+          <p class="hint">Химия схемы: <strong>${club.chemistry != null ? club.chemistry : '—'}</strong>${club.captain ? ' · капитан ' + esc(club.captain.name) : ''} — совпадение позиций в основе.</p>
           <form class="form-grid" id="form-tactics">
             <label>Стиль
               <select name="style">
@@ -1149,11 +1265,12 @@
             </div>
             <button class="btn btn-primary" type="submit">Сохранить тактику</button>
           </form>
-          <p class="hint">Стиль, схема и указания влияют на моменты, владение и расход сил. Атака/прессинг жгут физу сильнее.</p>
+          <p class="hint">Стиль, схема и указания влияют на моменты, владение и расход сил. Роли и автозамены — во вкладке «Роли».</p>
         </section>
         <section class="panel">
           <h3>Превью</h3>
           ${pitchHtml(club)}
+          ${club.captain ? `<p class="hint" style="margin-top:10px">Капитан: <strong>${esc(club.captain.name)}</strong></p>` : ''}
         </section>
       </div>`;
   }
@@ -1402,6 +1519,7 @@
       if (e.type === 'sub') return 'Замена';
       if (e.type === 'pens') return 'Пенальти';
       if (e.type === 'derby') return 'Дерби';
+      if (e.type === 'talk') return 'Раздевалка';
       return esc(e.type || 'Событие');
     };
     const xiBlock = (xi, title) => {
@@ -1676,6 +1794,8 @@
           <div class="stat-card"><span>Мораль</span><b>${(p.morale || 0) > 0 ? '+' : ''}${p.morale || 0}</b></div>
           <div class="stat-card"><span>Контракт</span><b>${p.contractYears == null ? '—' : p.contractYears + ' г.'}</b></div>
         </div>
+        ${p.isCaptain ? '<p class="hint" style="color:var(--grass-bright)">Капитан команды</p>' : ''}
+        ${p.setPieceRoles?.length ? `<p class="hint">Стандарты: ${p.setPieceRoles.map((r) => r === 'corner' ? 'угловые' : r === 'freeKick' ? 'штрафные' : 'пенальти').join(' · ')}</p>` : ''}
         ${traits.length ? `<p class="hint" style="margin-top:12px">Черты: ${traits.map((t) => esc(t.label || t.id)).join(' · ')}</p>` : ''}
         ${p.onLoan || p.loanUntil ? `<p class="hint">В аренде${p.loanDaysLeft != null ? ' · ещё ~' + p.loanDaysLeft + ' дн.' : ''}</p>` : ''}
         ${ratings.length ? `<div class="rating-bars" style="margin-top:12px"><span class="hint">Оценки матчей</span><div class="rating-row">${ratings.map((r) =>
@@ -2124,6 +2244,18 @@
           render();
         } catch (err) { toast(err.message); }
       }
+      const talkBtn = e.target.closest('[data-talk]');
+      if (talkBtn) {
+        try {
+          const data = await A().request('api/prematch/talk', {
+            method: 'POST',
+            body: { talkId: talkBtn.dataset.talk }
+          });
+          state.club = data.club;
+          toast(data.label || 'Разговор проведён');
+          render();
+        } catch (err) { toast(err.message); }
+      }
       if (e.target.id === 'btn-training-up') {
         try {
           const data = await A().request('api/training/upgrade', { method: 'POST' });
@@ -2403,6 +2535,45 @@
           state.club = data.club;
           toast(e.target.id === 'form-formation' ? 'Автосостав обновлён' : 'Сохранено');
           await refreshMe();
+          render();
+        } catch (err) { toast(err.message); }
+      }
+      if (e.target.id === 'form-roles') {
+        e.preventDefault();
+        const fd = new FormData(e.target);
+        try {
+          const capId = fd.get('captainId');
+          if (capId) {
+            const cap = await A().request('api/club/captain', { method: 'POST', body: { playerId: capId } });
+            state.club = cap.club;
+          }
+          const pieces = await A().request('api/club/setpieces', {
+            method: 'POST',
+            body: {
+              corner: fd.get('corner') || null,
+              freeKick: fd.get('freeKick') || null,
+              penalty: fd.get('penalty') || null
+            }
+          });
+          state.club = pieces.club;
+          toast('Роли сохранены');
+          render();
+        } catch (err) { toast(err.message); }
+      }
+      if (e.target.id === 'form-subpolicy') {
+        e.preventDefault();
+        const fd = new FormData(e.target);
+        try {
+          const data = await A().request('api/club/subpolicy', {
+            method: 'POST',
+            body: {
+              enabled: !!fd.get('enabled'),
+              fitnessBelow: Number(fd.get('fitnessBelow') || 62),
+              maxSubs: Number(fd.get('maxSubs') || 3)
+            }
+          });
+          state.club = data.club;
+          toast(data.label || 'Политика сохранена');
           render();
         } catch (err) { toast(err.message); }
       }
