@@ -65,7 +65,7 @@ export default function SettingsPanel({
         <h2>О приложении</h2>
       </div>
       <div className="settings-about glass">
-        <div className="brand-mark" style={{ fontSize: '1.6rem' }}>
+        <div className="brand-mark settings-brand">
           Златник
         </div>
         <p>

@@ -6,6 +6,8 @@ import {
   formatMoney,
   Mortgage,
 } from './api'
+import { BankIcon } from './BankIcon'
+import BankSelect from './BankSelect'
 
 type Props = {
   onToast: (msg: string) => void
@@ -296,7 +298,11 @@ export default function FinancePanel({ onToast, haptic }: Props) {
               key={m.id}
               onClick={() => openMortgage(m)}
             >
-              <div className="item-icon tone-home">⌂</div>
+              {m.bank ? (
+                <BankIcon name={m.bank} size="md" className="item-bank-icon" />
+              ) : (
+                <div className="item-icon tone-home">⌂</div>
+              )}
               <div className="item-body">
                 <div className="item-title">
                   {m.title}
@@ -331,7 +337,7 @@ export default function FinancePanel({ onToast, haptic }: Props) {
               key={d.id}
               onClick={() => openDeposit(d)}
             >
-              <div className="item-icon tone-fun">₽</div>
+              <BankIcon name={d.bank} size="md" className="item-bank-icon" />
               <div className="item-body">
                 <div className="item-title">
                   {d.bank}
@@ -372,12 +378,7 @@ export default function FinancePanel({ onToast, haptic }: Props) {
               value={mPerson}
               onChange={(e) => setMPerson(e.target.value)}
             />
-            <input
-              className="note-field glass"
-              placeholder="Банк"
-              value={mBank}
-              onChange={(e) => setMBank(e.target.value)}
-            />
+            <BankSelect value={mBank} onChange={setMBank} placeholder="Банк" />
             <label className="text-field glass">
               <input
                 inputMode="decimal"
@@ -454,11 +455,10 @@ export default function FinancePanel({ onToast, haptic }: Props) {
           <form className="sheet glass-strong" onSubmit={submitDeposit}>
             <div className="sheet-handle" />
             <h3>{editDeposit ? 'Вклад' : 'Новый вклад'}</h3>
-            <input
-              className="note-field glass"
-              placeholder="Банк"
+            <BankSelect
               value={dBank}
-              onChange={(e) => setDBank(e.target.value)}
+              onChange={setDBank}
+              placeholder="Банк"
               autoFocus
             />
             <input

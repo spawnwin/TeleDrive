@@ -474,7 +474,7 @@ export default function App() {
                 <div className="day-col" key={d.day}>
                   <div
                     className="day-bar"
-                    style={{ height: `${Math.max(8, (d.total / maxWeek) * 72)}px` }}
+                    style={{ height: `${Math.max(6, (d.total / maxWeek) * 48)}px` }}
                     title={formatMoney(d.total)}
                   />
                   <div className="day-label">{d.label}</div>
