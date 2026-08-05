@@ -388,6 +388,142 @@ function resolveBench(club, xiIds) {
   return bench.slice(0, 7);
 }
 
+function groupStrength(players) {
+  if (!players?.length) return 0;
+  return Math.round(players.reduce((s, p) => s + effectiveMastery(p), 0) / players.length);
+}
+
+function playerBoardRow(p) {
+  if (!p) return null;
+  return {
+    id: p.id,
+    name: p.name,
+    pos: p.pos,
+    mastery: masteryOf(p),
+    effective: effectiveMastery(p),
+    fitness: p.fitness || 100,
+    morale: p.morale || 0,
+    injuredHours: p.injuredHours || 0,
+    suspendedMatches: p.suspendedMatches || 0,
+    available: playerAvailable(p)
+  };
+}
+
+const STYLE_LABELS = {
+  balance: 'Баланс',
+  attack: 'Атака',
+  defend: 'Оборона',
+  press: 'Прессинг',
+  counter: 'Контратака'
+};
+
+function prematchBoard(club) {
+  if (!club) return null;
+  ensureLineup(club);
+  const xi = resolveXi(club);
+  const bench = resolveBench(club, xi.map((p) => p.id));
+  return {
+    formation: club.formation || '4-4-2',
+    style: club.style || 'balance',
+    styleLabel: STYLE_LABELS[club.style] || club.style || 'Баланс',
+    xi: xi.map(playerBoardRow),
+    bench: bench.map(playerBoardRow),
+    xiStrength: groupStrength(xi),
+    benchStrength: groupStrength(bench),
+    understrength: xi.length < 11,
+    unavailable: (club.players || []).filter((p) => !playerAvailable(p)).map(playerBoardRow)
+  };
+}
+
+function opponentBrief(oppClub, { scoutLevel = 0 } = {}) {
+  if (!oppClub) return null;
+  ensureLineup(oppClub);
+  const lvl = Math.max(0, Math.min(3, Number(scoutLevel) || 0));
+  const strength = clubStrength(oppClub);
+  const threats = [...(oppClub.players || [])]
+    .filter((p) => playerAvailable(p))
+    .sort((a, b) => effectiveMastery(b) - effectiveMastery(a))
+    .slice(0, lvl >= 2 ? 3 : 1)
+    .map((p) => ({
+      name: p.name,
+      pos: p.pos,
+      effective: effectiveMastery(p),
+      mastery: masteryOf(p)
+    }));
+  const out = [...(oppClub.players || [])]
+    .filter((p) => !playerAvailable(p))
+    .sort((a, b) => masteryOf(b) - masteryOf(a))
+    .slice(0, 4)
+    .map((p) => ({
+      name: p.name,
+      reason: (p.injuredHours || 0) > 0
+        ? `травма ${p.injuredHours}ч`
+        : `дискв. ${p.suspendedMatches || 1}`,
+      mastery: masteryOf(p)
+    }));
+  const recent = (oppClub.history || []).slice(0, 3).map((h) => ({
+    opp: h.opp,
+    score: h.score,
+    competition: h.competition,
+    home: !!h.home
+  }));
+  return {
+    name: oppClub.name,
+    scoutLevel: lvl,
+    locked: lvl < 1,
+    strength: lvl >= 1 ? strength : Math.round(strength / 10) * 10,
+    formation: lvl >= 1 ? (oppClub.formation || '4-4-2') : '?',
+    style: lvl >= 2 ? (oppClub.style || 'balance') : null,
+    styleLabel: lvl >= 2 ? (STYLE_LABELS[oppClub.style] || oppClub.style) : null,
+    threats: lvl >= 1 ? threats : [],
+    out: lvl >= 2 ? out : (lvl >= 1 ? out.slice(0, 1) : []),
+    recent: lvl >= 3 ? recent : [],
+    instructions: lvl >= 3 ? (oppClub.instructions || []).slice(0, 4) : [],
+    hint: lvl < 1
+      ? 'Наймите скаута в «Бонусе», чтобы открыть досье соперника'
+      : null
+  };
+}
+
+function creditLimit(user, club) {
+  const squadVal = (club?.players || []).reduce((s, p) => s + playerValue(p), 0);
+  const fans = user?.fans || 10000;
+  const stadium = club?.stadiumLevel || 1;
+  const fame = user?.fame || 0;
+  const limit = squadVal * 0.07 + fans * 45 + stadium * 180000 + fame * 8000;
+  return Math.round(Math.max(120000, Math.min(6e6, limit)));
+}
+
+function financeSnapshot(user, club) {
+  const money = Math.round(user?.money || 0);
+  const credit = creditLimit(user, club);
+  const debt = Math.max(0, -money);
+  const weekWages = weeklyWages(club);
+  const dayWages = Math.round(weekWages / 7);
+  let status = 'healthy';
+  if (money < 0 && debt >= credit) status = 'insolvent';
+  else if (money < 0 && debt >= credit * 0.55) status = 'critical';
+  else if (money < 0) status = 'debt';
+  else if (money < dayWages * 3) status = 'tight';
+  return {
+    money,
+    credit,
+    debt,
+    status,
+    weekWages,
+    dayWages,
+    squadValue: (club?.players || []).reduce((s, p) => s + playerValue(p), 0),
+    embargo: status === 'insolvent',
+    statusLabel: ({
+      healthy: 'Стабильно',
+      tight: 'Напряжённо',
+      debt: 'Долг',
+      critical: 'Кризис',
+      insolvent: 'Банкротство'
+    })[status]
+  };
+}
+
 function trySub(liveXi, bench, outPlayer, events, minute, side, score, reason) {
   if (!outPlayer) return null;
   const idx = liveXi.findIndex((p) => p.id === outPlayer.id);
@@ -821,7 +957,16 @@ function settleWageDay(user, club, now = Date.now()) {
   const wages = wagesPerDay * days;
   const grant = grantPerDay * days;
   const delta = grant - wages;
-  user.money = Math.max(0, (user.money || 0) + delta);
+  user.money = Math.round((user.money || 0) + delta);
+  const credit = creditLimit(user, club);
+  if (user.money < -credit) user.money = -credit;
+  let interest = 0;
+  if (user.money < 0) {
+    interest = Math.max(1500, Math.round((-user.money) * 0.01 * days));
+    user.money -= interest;
+    if (user.money < -credit) user.money = -credit;
+    pushLedger(club, -interest, days === 1 ? 'Проценты по долгу' : `Проценты (${days} дн.)`);
+  }
   user.lastWageAt = (user.lastWageAt || now) + days * DAY_MS;
   if (user.lastWageAt > now) user.lastWageAt = now;
   pushLedger(club, -wages, days === 1 ? 'Зарплаты (сутки)' : `Зарплаты (${days} дн.)`);
@@ -833,7 +978,8 @@ function settleWageDay(user, club, now = Date.now()) {
     club.contractDayAcc -= ticks * 5;
     contracts = tickContracts(club, ticks);
   }
-  return { wages, grant, delta, weekBill, days, at: now, contracts };
+  const finance = financeSnapshot(user, club);
+  return { wages, grant, delta, weekBill, days, at: now, contracts, interest, finance };
 }
 
 function playerValue(p) {
@@ -1173,6 +1319,12 @@ module.exports = {
   effectiveMastery,
   clubStrength,
   resolveXi,
+  resolveBench,
+  prematchBoard,
+  opponentBrief,
+  financeSnapshot,
+  creditLimit,
+  groupStrength,
   defaultClub,
   ensureLineup,
   normalizeContracts,

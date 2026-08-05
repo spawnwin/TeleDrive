@@ -54,6 +54,7 @@ function publicUser(u) {
 
 function enrichUser(u) {
   const club = db.getClub(u.id);
+  const finance = club ? G.financeSnapshot(u, club) : null;
   return {
     ...publicUser(u),
     level: u.level || 1,
@@ -71,7 +72,8 @@ function enrichUser(u) {
     cupsWon: u.cupsWon || 0,
     clubName: club?.name || u.clubName || null,
     strength: club ? G.clubStrength(club) : (u.strength || 0),
-    teamBound: !!(u.teamBound || club)
+    teamBound: !!(u.teamBound || club),
+    finance
   };
 }
 
@@ -358,14 +360,40 @@ function processWageDay(user, club) {
       });
     });
   }
+  if (result.finance && (result.finance.status === 'critical' || result.finance.status === 'insolvent')) {
+    pushUserEvent(user.id, {
+      type: 'finance',
+      title: result.finance.status === 'insolvent' ? 'Банкротство клуба' : 'Финансовый кризис',
+      body: result.finance.status === 'insolvent'
+        ? 'Эмбарго на трансферы и улучшения. Продайте игроков или выиграйте призы.'
+        : `Долг ${Math.round(result.finance.debt)} ¤ · лимит кредита ${result.finance.credit} ¤`
+    });
+  }
   return result;
 }
 
-function spendMoney(user, amount) {
+function spendMoney(user, amount, club = null) {
   const cost = Math.max(0, Math.round(amount || 0));
-  if ((user.money || 0) < cost) return false;
-  user.money = Math.max(0, (user.money || 0) - cost);
+  const clubObj = club || db.getClub(user.id);
+  const fin = clubObj ? G.financeSnapshot(user, clubObj) : null;
+  if (fin?.embargo && cost > 0) return false;
+  const credit = fin?.credit || 0;
+  const next = (user.money || 0) - cost;
+  if (next < -credit) return false;
+  user.money = next;
   return true;
+}
+
+function assertCanSpend(user, club, amount, label = 'Покупка') {
+  const fin = G.financeSnapshot(user, club);
+  if (fin.embargo) {
+    return { ok: false, error: `Эмбарго при банкротстве — ${label} недоступна` };
+  }
+  const cost = Math.max(0, Math.round(amount || 0));
+  if ((user.money || 0) - cost < -fin.credit) {
+    return { ok: false, error: `Недостаточно средств (кредит ${fin.credit} ¤)` };
+  }
+  return { ok: true, finance: fin };
 }
 
 function matchCooldownOk(user, kind = 'match') {
@@ -775,10 +803,11 @@ const server = http.createServer(async (req, res) => {
       const club = ensureClub(auth.user);
       const quote = G.quoteStaff(club, body.role);
       if (!quote.ok) return json(res, 400, quote);
-      if ((auth.user.money || 0) < quote.cost) return json(res, 400, { error: `Нужно ${quote.cost} ¤` });
+      const gate = assertCanSpend(auth.user, club, quote.cost, 'Найм персонала');
+      if (!gate.ok) return json(res, 400, gate);
       const r = G.hireStaff(club, body.role);
       if (!r.ok) return json(res, 400, r);
-      if (!spendMoney(auth.user, r.cost)) return json(res, 400, { error: `Нужно ${r.cost} ¤` });
+      if (!spendMoney(auth.user, r.cost, club)) return json(res, 400, { error: `Нужно ${r.cost} ¤` });
       G.pushLedger(club, -r.cost, r.label);
       persistUser(auth.user);
       db.setClub(auth.user.id, club);
@@ -794,10 +823,11 @@ const server = http.createServer(async (req, res) => {
     const club = ensureClub(auth.user);
     const quote = G.quoteStadium(club);
     if (!quote.ok) return json(res, 400, quote);
-    if ((auth.user.money || 0) < quote.cost) return json(res, 400, { error: `Нужно ${quote.cost} ¤` });
+    const gate = assertCanSpend(auth.user, club, quote.cost, 'Улучшение стадиона');
+    if (!gate.ok) return json(res, 400, gate);
     const r = G.upgradeStadium(club);
     if (!r.ok) return json(res, 400, r);
-    if (!spendMoney(auth.user, r.cost)) return json(res, 400, { error: `Нужно ${r.cost} ¤` });
+    if (!spendMoney(auth.user, r.cost, club)) return json(res, 400, { error: `Нужно ${r.cost} ¤` });
     auth.user.fans = (auth.user.fans || 0) + 800;
     G.pushLedger(club, -r.cost, r.label);
     persistUser(auth.user);
@@ -1275,15 +1305,18 @@ const server = http.createServer(async (req, res) => {
     try {
       const body = JSON.parse((await readBody(req)).toString('utf8'));
       const club = ensureClub(auth.user);
+      const embargo = assertCanSpend(auth.user, club, 0, 'Трансферы');
+      if (!embargo.ok && G.financeSnapshot(auth.user, club).embargo) {
+        return json(res, 400, { error: 'Эмбарго при банкротстве — трансферы закрыты' });
+      }
       const market = db.getTransferMarket();
       const clubListing = (market.list || []).find((p) => p.id === body.playerId && p.source === 'club');
       if (clubListing) {
         if (clubListing.sellerUserId === auth.user.id) {
           return json(res, 400, { error: 'Нельзя купить своего игрока' });
         }
-        if ((auth.user.money || 0) < clubListing.value) {
-          return json(res, 400, { error: `Нужно ${clubListing.value} ¤` });
-        }
+        const gate = assertCanSpend(auth.user, club, clubListing.value, 'Трансфер');
+        if (!gate.ok) return json(res, 400, gate);
         const seller = usersDb().users[clubListing.sellerUserId];
         const sellerClub = seller ? ensureClub(seller) : null;
         if (!seller || !sellerClub) {
@@ -1302,8 +1335,8 @@ const server = http.createServer(async (req, res) => {
           db.setClub(seller.id, sellerClub);
           return json(res, 400, r);
         }
-        if (!spendMoney(auth.user, r.cost)) return json(res, 400, { error: `Нужно ${r.cost} ¤` });
-        seller.money = Math.max(0, (seller.money || 0) + r.cost);
+        if (!spendMoney(auth.user, r.cost, club)) return json(res, 400, { error: `Нужно ${r.cost} ¤` });
+        seller.money = (seller.money || 0) + r.cost;
         G.pushLedger(club, -r.cost, `Трансфер у ${sellerClub.name} · ${r.player.name}`);
         G.pushLedger(sellerClub, r.cost, `Продажа клубу · ${r.player.name}`);
         db.removeTransferListing(clubListing.id);
@@ -1336,10 +1369,11 @@ const server = http.createServer(async (req, res) => {
       G.refreshClubMarket(club, false);
       const listing = (club.transferList || []).find((p) => p.id === body.playerId);
       if (!listing) return json(res, 404, { error: 'Игрок уже куплен или снят с рынка' });
-      if ((auth.user.money || 0) < listing.value) return json(res, 400, { error: `Нужно ${listing.value} ¤` });
+      const gateAgents = assertCanSpend(auth.user, club, listing.value, 'Трансфер');
+      if (!gateAgents.ok) return json(res, 400, gateAgents);
       const r = G.buyPlayer(club, listing);
       if (!r.ok) return json(res, 400, r);
-      if (!spendMoney(auth.user, r.cost)) return json(res, 400, { error: `Нужно ${r.cost} ¤` });
+      if (!spendMoney(auth.user, r.cost, club)) return json(res, 400, { error: `Нужно ${r.cost} ¤` });
       G.pushLedger(club, -r.cost, r.label);
       club.transferList = (club.transferList || []).filter((p) => p.id !== listing.id);
       persistUser(auth.user);
@@ -1482,10 +1516,35 @@ const server = http.createServer(async (req, res) => {
     if (mine) {
       if (!auth) return json(res, 401, { error: 'Нужен вход' });
       const my = league.findMyLeague(auth.user.id);
+      const pub = my ? league.publicLeague(my, auth.user.id) : null;
+      let prematch = null;
+      if (pub && pub.status === 'live') {
+        const club = ensureClub(auth.user);
+        const myId = auth.user.id;
+        const nextMine = (pub.fixtures || []).find(
+          (f) => f.round === pub.currentRound && !f.playedAt && (f.homeUserId === myId || f.awayUserId === myId)
+        );
+        if (nextMine) {
+          const oppId = nextMine.homeUserId === myId ? nextMine.awayUserId : nextMine.homeUserId;
+          const oppUser = usersDb().users[oppId];
+          const scoutLevel = (club.staff && club.staff.scout) || 0;
+          prematch = {
+            board: G.prematchBoard(club),
+            opponent: oppUser ? {
+              ...G.opponentBrief(ensureClub(oppUser), { scoutLevel }),
+              userId: oppId,
+              home: nextMine.homeUserId === myId
+            } : null,
+            fixture: nextMine,
+            scoutLevel
+          };
+        }
+      }
       return json(res, 200, {
         ok: true,
-        league: my ? league.publicLeague(my, auth.user.id) : null,
+        league: pub,
         calendar: league.calendarFor(auth.user.id),
+        prematch,
         open: league.listLeagues({ status: 'open' }).filter((L) => {
           const lvl = auth.user.level || 1;
           return lvl >= (L.minLevel || 1) && lvl <= (L.maxLevel || 10);
@@ -1521,6 +1580,40 @@ const server = http.createServer(async (req, res) => {
     const auth = requireAuth(req, res);
     if (!auth) return;
     return json(res, 200, { ok: true, ...league.calendarFor(auth.user.id) });
+  }
+
+  if (pathname === '/api/prematch' && req.method === 'GET') {
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    const club = ensureClub(auth.user);
+    const board = G.prematchBoard(club);
+    const scoutLevel = (club.staff && club.staff.scout) || 0;
+    let opponent = null;
+    const oppId = url.searchParams.get('opponent') || url.searchParams.get('userId');
+    if (oppId) {
+      const oppUser = usersDb().users[oppId];
+      if (oppUser) {
+        const oppClub = ensureClub(oppUser);
+        opponent = G.opponentBrief(oppClub, { scoutLevel });
+        opponent.userId = oppId;
+        opponent.login = oppUser.login;
+        opponent.level = oppUser.level || 1;
+      }
+    }
+    return json(res, 200, {
+      ok: true,
+      board,
+      opponent,
+      scoutLevel,
+      finance: G.financeSnapshot(auth.user, club)
+    });
+  }
+
+  if (pathname === '/api/finance' && req.method === 'GET') {
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    const club = ensureClub(auth.user);
+    return json(res, 200, { ok: true, finance: G.financeSnapshot(auth.user, club), ledger: (club.ledger || []).slice(0, 40) });
   }
 
   if (pathname.match(/^\/api\/league\/[^/]+$/) && req.method === 'GET') {

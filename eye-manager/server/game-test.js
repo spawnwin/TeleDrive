@@ -104,4 +104,37 @@ describe('game lineup guards', () => {
     const tick = G.tickContracts(club, 1);
     assert.ok(tick.asks.length + tick.left.length >= 1);
   });
+
+  it('prematch board and scout brief', () => {
+    const club = G.defaultClub({ id: 'h', login: 'h', name: 'H', clubName: 'Home' });
+    const opp = G.defaultClub({ id: 'a', login: 'a', name: 'A', clubName: 'Away' });
+    G.ensureLineup(club, true);
+    G.ensureLineup(opp, true);
+    opp.players[2].injuredHours = 24;
+    const board = G.prematchBoard(club);
+    assert.equal(board.xi.length, 11);
+    assert.ok(board.xiStrength > 0);
+    assert.ok(board.benchStrength >= 0);
+    const locked = G.opponentBrief(opp, { scoutLevel: 0 });
+    assert.equal(locked.locked, true);
+    assert.equal(locked.threats.length, 0);
+    const brief = G.opponentBrief(opp, { scoutLevel: 2 });
+    assert.equal(brief.locked, false);
+    assert.ok(brief.threats.length >= 1);
+    assert.ok(brief.out.length >= 1);
+    assert.ok(brief.styleLabel);
+  });
+
+  it('finance allows debt within credit and embargo', () => {
+    const club = G.defaultClub({ id: 'f', login: 'f', name: 'F', clubName: 'Fin FC' });
+    const user = { id: 'f', money: -50000, fans: 12000, fame: 0 };
+    const snap = G.financeSnapshot(user, club);
+    assert.ok(snap.credit > 0);
+    assert.equal(snap.debt, 50000);
+    assert.ok(['debt', 'critical', 'insolvent'].includes(snap.status));
+    user.money = -snap.credit - 1000;
+    const insol = G.financeSnapshot(user, club);
+    assert.equal(insol.status, 'insolvent');
+    assert.equal(insol.embargo, true);
+  });
 });

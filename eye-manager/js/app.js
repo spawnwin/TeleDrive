@@ -39,6 +39,7 @@
     league_done: 'Лига завершена',
     league_promote: 'Повышение',
     league_relegate: 'Вылет',
+    finance: 'Финансы',
     contract_ask: 'Контракт',
     contract_left: 'Свободный агент',
     suspension: 'Дисквалификация',
@@ -106,6 +107,49 @@
     return new Intl.NumberFormat('ru-RU').format(Math.round(n || 0)) + ' ¤';
   }
 
+  function prematchBoardHtml(board, opponent) {
+    if (!board) return '';
+    const row = (p) => `<div class="pm-player ${p.available === false ? 'is-out' : ''}">
+      <span class="pm-pos">${esc(p.pos)}</span>
+      <span class="pm-name">${esc(p.name)}</span>
+      <span class="pm-ovr">${p.effective}</span>
+      <span class="pm-fit">${p.fitness}%</span>
+    </div>`;
+    let oppHtml = '';
+    if (opponent) {
+      if (opponent.locked) {
+        oppHtml = `<p class="hint">${esc(opponent.hint || 'Нужен скаут для досье')}</p>`;
+      } else {
+        oppHtml = `
+          <div class="pm-opp">
+            <div class="pm-str"><span>Соперник</span><b>${esc(opponent.name)}</b></div>
+            <p class="hint">Сила ${opponent.strength} · схема ${esc(opponent.formation)}${opponent.styleLabel ? ' · ' + esc(opponent.styleLabel) : ''}</p>
+            ${opponent.threats?.length ? `<div class="pm-threats"><strong>Угрозы</strong>${opponent.threats.map((t) =>
+              `<div class="pm-player"><span class="pm-pos">${esc(t.pos)}</span><span class="pm-name">${esc(t.name)}</span><span class="pm-ovr">${t.effective}</span></div>`
+            ).join('')}</div>` : ''}
+            ${opponent.out?.length ? `<p class="hint">Вне строя: ${opponent.out.map((o) => esc(o.name) + ' (' + esc(o.reason) + ')').join(', ')}</p>` : ''}
+            ${opponent.recent?.length ? `<p class="hint">Недавние: ${opponent.recent.map((h) => esc(h.opp) + ' ' + (h.score ? h.score[0] + ':' + h.score[1] : '')).join(' · ')}</p>` : ''}
+          </div>`;
+      }
+    }
+    return `
+      <div class="pm-board">
+        <div class="pm-cols">
+          <div>
+            <div class="pm-str"><span>Основа · ${esc(board.formation)}</span><b>${board.xiStrength}</b></div>
+            <div class="pm-list">${(board.xi || []).map(row).join('')}</div>
+          </div>
+          <div>
+            <div class="pm-str"><span>Скамейка</span><b>${board.benchStrength}</b></div>
+            <div class="pm-list">${(board.bench || []).map(row).join('') || '<p class="hint">Пусто</p>'}</div>
+          </div>
+        </div>
+        ${board.understrength ? '<p class="hint" style="color:var(--warn,#eab308)">В основе меньше 11 здоровых</p>' : ''}
+        ${board.unavailable?.length ? `<p class="hint">Недоступны: ${board.unavailable.map((p) => esc(p.name)).join(', ')}</p>` : ''}
+        ${oppHtml}
+      </div>`;
+  }
+
   function esc(s) {
     return String(s ?? '')
       .replace(/&/g, '&amp;')
@@ -168,7 +212,8 @@
       <small>@${esc(u?.login || '—')} · ур. ${lvl}</small>
       <div class="level-bar"><i style="width:${pct}%"></i></div>`;
     $('#side-wallet').innerHTML = `
-      <div class="row"><span>Деньги</span><b>${money(u?.money)}</b></div>
+      <div class="row"><span>Деньги</span><b style="color:${(u?.money || 0) < 0 ? 'var(--danger)' : 'inherit'}">${money(u?.money)}</b></div>
+      ${u?.finance && u.finance.status !== 'healthy' ? `<div class="row"><span>Финансы</span><b style="color:var(--warn,#eab308)">${esc(u.finance.statusLabel)}</b></div>` : ''}
       <div class="row"><span>Опыт</span><b>${money(u?.xp).replace(' ¤','')}</b></div>
       <div class="row"><span>Фанаты</span><b>${money(u?.fans).replace(' ¤','')}</b></div>
       <div class="row"><span>Очки</span><b>${u?.points || 0}</b></div>
@@ -228,12 +273,18 @@
     const u = state.me?.user;
     if (state.tab === 'finance') {
       const ledger = club?.ledger || [];
+      const fin = state.me?.user?.finance || {};
       $('#view').innerHTML = `
         <div class="grid-3">
-          <div class="stat-card"><span>Баланс</span><b>${money(u?.money)}</b></div>
+          <div class="stat-card"><span>Баланс</span><b style="color:${(u?.money || 0) < 0 ? 'var(--danger)' : 'inherit'}">${money(u?.money)}</b></div>
+          <div class="stat-card"><span>Статус</span><b>${esc(fin.statusLabel || '—')}</b></div>
+          <div class="stat-card"><span>Кредит</span><b>${money(fin.credit)}</b></div>
           <div class="stat-card"><span>Фанаты</span><b>${money(u?.fans).replace(' ¤','')}</b></div>
-          <div class="stat-card"><span>Зарплаты / сут</span><b>${money(Math.round((club?.players || []).reduce((s, p) => s + (p.wage || 0), 0) / 7))}</b></div>
+          <div class="stat-card"><span>Зарплаты / сут</span><b>${money(fin.dayWages || Math.round((club?.players || []).reduce((s, p) => s + (p.wage || 0), 0) / 7))}</b></div>
+          <div class="stat-card"><span>Стоимость состава</span><b>${money(fin.squadValue)}</b></div>
         </div>
+        ${fin.embargo ? '<p class="hint" style="color:var(--danger)">Эмбарго: трансферы и улучшения закрыты до выхода из банкротства.</p>' : ''}
+        ${fin.debt ? `<p class="hint">Долг ${money(fin.debt)} · проценты ~1%/сут при отрицательном балансе.</p>` : ''}
         <section class="panel">
           <h3>Движение средств</h3>
           <p class="hint">Матчи: приз + билеты только дома. Раз в сутки — 1/7 недельной зарплаты и доход от фанатов. Кубки: взнос за матч и призовые.</p>
@@ -611,6 +662,7 @@
       const L = data.league;
       const open = data.open || [];
       const cal = data.calendar || {};
+      const pm = data.prematch;
       if (!L) {
         $('#view').innerHTML = `
           <section class="panel">
@@ -654,7 +706,7 @@
             </div>
           </div>
           <p><strong>${esc(nextMine.homeName || nextMine.home)}</strong> — <strong>${esc(nextMine.awayName || nextMine.away)}</strong></p>
-          <p class="hint">Сила вашей основы: ${xiStr}. ${unavailable.length ? 'Недоступны: ' + unavailable.map((p) => p.name).join(', ') : 'Все в строю.'}</p>
+          ${pm ? prematchBoardHtml(pm.board, pm.opponent) : `<p class="hint">Сила вашей основы: ${xiStr}. ${unavailable.length ? 'Недоступны: ' + unavailable.map((p) => p.name).join(', ') : 'Все в строю.'}</p>`}
           ${L.nextRoundAt ? `<p class="hint">Автостарт: ${new Date(L.nextRoundAt).toLocaleString('ru-RU')}</p>` : ''}
         </section>` : ''}
         <section class="panel">
@@ -767,7 +819,21 @@
     const myRequest = data.myRequest;
     const challenges = data.challenges || [];
     const myChallenges = data.myChallenges || [];
+    let board = null;
+    try {
+      const pm = await A().request('api/prematch');
+      board = pm.board;
+    } catch {}
     $('#view').innerHTML = `
+      ${board ? `<section class="panel">
+        <div class="panel-head"><h3>Готовность к матчу</h3>
+          <div style="display:flex;gap:6px">
+            <button class="btn btn-tiny" data-nav="team" data-goto-tab="formation">Основа</button>
+            <button class="btn btn-tiny" data-nav="tactics">Тактика</button>
+          </div>
+        </div>
+        ${prematchBoardHtml(board, null)}
+      </section>` : ''}
       ${challenges.length ? `<section class="panel">
         <h3>Входящие вызовы</h3>
         <div class="list">${challenges.map((c) => `
@@ -776,8 +842,10 @@
             <div style="display:flex;gap:6px">
               <button class="btn btn-primary btn-tiny" data-chal-accept="${esc(c.id)}">Принять</button>
               <button class="btn btn-tiny" data-chal-decline="${esc(c.id)}">Отклонить</button>
+              <button class="btn btn-tiny" data-scout-opp="${esc(c.userId)}">Досье</button>
             </div>
-          </div>`).join('')}</div>
+          </div>
+        `).join('')}</div>
       </section>` : ''}
       <section class="panel">
         <div class="panel-head">
@@ -797,6 +865,7 @@
               <small>@${esc(q.login)} · ур. ${q.level} · сила ${q.strength}</small>
             </div>
             <button class="btn btn-primary btn-tiny" data-accept="${esc(q.id)}">Принять</button>
+            <button class="btn btn-tiny" data-scout-opp="${esc(q.userId)}">Досье</button>
           </div>`).join('') : '<p class="hint">Очередь пуста — подайте заявку первым</p>'}</div>
       </section>
       ${myChallenges.length ? `<section class="panel"><h3>Ваши исходящие вызовы</h3>
@@ -1271,6 +1340,17 @@
           await refreshMe();
           showMatch(data.match);
           toast('Матч сыгран');
+        } catch (err) { toast(err.message); }
+      }
+      const scoutOpp = e.target.closest('[data-scout-opp]');
+      if (scoutOpp) {
+        try {
+          const data = await A().request('api/prematch?opponent=' + encodeURIComponent(scoutOpp.dataset.scoutOpp));
+          openModal(`
+            <div class="panel-head"><h2 style="margin:0;font-family:Syne,sans-serif">Досье</h2><button class="btn btn-tiny" id="modal-close">Закрыть</button></div>
+            ${prematchBoardHtml(data.board, data.opponent)}
+            <p class="hint">Скаут ур. ${data.scoutLevel || 0}. Ур.1+ сила/угрозы, 2+ стиль/травмы, 3 форма.</p>
+          `);
         } catch (err) { toast(err.message); }
       }
       if (e.target.id === 'btn-league-join') {
