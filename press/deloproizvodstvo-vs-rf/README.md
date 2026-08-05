@@ -36,11 +36,32 @@
 | [`images/03_shema_rekvizitov.png`](images/03_shema_rekvizitov.png) | Порядок реквизитов сверху вниз |
 | [`images/04_chek_list.png`](images/04_chek_list.png) | Чек-лист перед подписанием |
 | [`images/05_prilozhenie.png`](images/05_prilozhenie.png) | Оформление отметки «Приложение» |
+| [`images/06_desyat_obrazcov_montage.png`](images/06_desyat_obrazcov_montage.png) | Монтаж 10 образцов |
+
+### 10 учебных образцов приказов
+
+Папка [`docx/obrazcy_10/`](docx/obrazcy_10/) — Word + превью в [`images/obrazcy_10/`](images/obrazcy_10/):
+
+1. Суточный наряд (`…/НР`)
+2. Зачисление в списки личного состава
+3. Служебная командировка
+4. Предоставление отпуска
+5. Поощрение личного состава
+6. Назначение на воинскую должность
+7. Организация боевой подготовки
+8. Инвентаризация материальных средств
+9. Сохранность оружия и боеприпасов
+10. Пожарная безопасность
+
+## Архив для скачивания
+
+[`../deloproizvodstvo-vs-rf.zip`](../deloproizvodstvo-vs-rf.zip) — весь комплект.
 
 ## Как пересобрать
 
 ```bash
 python3 press/deloproizvodstvo-vs-rf/build_materials.py
+python3 press/deloproizvodstvo-vs-rf/build_10_prikazov.py
 ```
 
 Требуется: `python-docx`, `Pillow`.
