@@ -12,7 +12,8 @@
     cache: {},
     cupPoll: null,
     watchingCup: null,
-    lastWageToast: null
+    lastWageToast: null,
+    lastChallengeToast: null
   };
 
   const EVENT_LABELS = {
@@ -22,7 +23,8 @@
     cup_done: 'Кубок завершён',
     challenge_in: 'Входящий вызов',
     challenge_done: 'Вызов сыгран',
-    challenge_declined: 'Вызов отклонён'
+    challenge_declined: 'Вызов отклонён',
+    friendly_done: 'Товарищеский сыгран'
   };
 
   const TABS = {
@@ -131,7 +133,8 @@
       <div class="row"><span>Опыт</span><b>${money(u?.xp).replace(' ¤','')}</b></div>
       <div class="row"><span>Фанаты</span><b>${money(u?.fans).replace(' ¤','')}</b></div>
       <div class="row"><span>Очки</span><b>${u?.points || 0}</b></div>
-      <div class="row"><span>Бустеры</span><b>${u?.boosters || 0}</b></div>`;
+      <div class="row"><span>Бустеры</span><b>${u?.boosters || 0}</b></div>
+      ${(state.me?.challenges || []).length ? `<div class="row"><span>Вызовы</span><b style="color:var(--warn,#eab308)">${state.me.challenges.length}</b></div>` : ''}`;
     $('#side-online').textContent = state.me?.online ?? '—';
   }
 
@@ -169,11 +172,11 @@
         <div class="grid-3">
           <div class="stat-card"><span>Баланс</span><b>${money(u?.money)}</b></div>
           <div class="stat-card"><span>Фанаты</span><b>${money(u?.fans).replace(' ¤','')}</b></div>
-          <div class="stat-card"><span>Зарплаты / нед</span><b>${money((club?.players || []).reduce((s, p) => s + (p.wage || 0), 0))}</b></div>
+          <div class="stat-card"><span>Зарплаты / сут</span><b>${money(Math.round((club?.players || []).reduce((s, p) => s + (p.wage || 0), 0) / 7))}</b></div>
         </div>
         <section class="panel">
           <h3>Движение средств</h3>
-          <p class="hint">Матчи: приз + билеты дома. Раз в сутки — зарплаты и доход от фанатов. Кубки: взносы за матч и призовые.</p>
+          <p class="hint">Матчи: приз + билеты только дома. Раз в сутки — 1/7 недельной зарплаты и доход от фанатов. Кубки: взнос за матч и призовые.</p>
           <div class="list">${ledger.length ? ledger.map((row) => `
             <div class="list-row">
               <div><strong>${esc(row.label)}</strong><small>${new Date(row.at).toLocaleString('ru-RU')}</small></div>
@@ -189,7 +192,17 @@
         <section class="panel">
           <h3>События</h3>
           <div class="list">${events.length ? events.map((e) => `
-            <div class="list-row"><div><strong>${esc(e.title || EVENT_LABELS[e.type] || e.type)}</strong><small>${esc(e.cupName || e.body || '')}${e.xp ? ' · +' + e.xp + ' XP' : ''}${e.money ? ' · +' + money(e.money) : ''}</small></div><small>${new Date(e.at || Date.now()).toLocaleString('ru-RU')}</small></div>
+            <div class="list-row">
+              <div>
+                <strong>${esc(e.title || EVENT_LABELS[e.type] || e.type)}</strong>
+                <small>${esc(e.cupName || e.body || '')}${e.xp ? ' · +' + e.xp + ' XP' : ''}${e.money ? ' · +' + money(e.money) : ''}</small>
+              </div>
+              <div style="display:flex;gap:6px;align-items:center">
+                ${e.challengeId && e.type === 'challenge_in' ? `<button class="btn btn-primary btn-tiny" data-chal-accept="${esc(e.challengeId)}">Принять</button>` : ''}
+                ${e.matchId ? `<button class="btn btn-tiny" data-match="${esc(e.matchId)}">Отчёт</button>` : ''}
+                <small>${new Date(e.at || Date.now()).toLocaleString('ru-RU')}</small>
+              </div>
+            </div>
           `).join('') : '<p class="hint">Пока тихо — сыграйте матч или вступите в кубок.</p>'}</div>
         </section>`;
       return;
@@ -271,11 +284,11 @@
             <input type="hidden" name="rebuildLineup" value="1" />
             <button class="btn btn-primary" type="submit">Автосостав по схеме</button>
           </form>
-          <p class="hint">Отметьте ровно 11 игроков и сохраните основу вручную.</p>
+          <p class="hint">Отметьте ровно 11 игроков, включая вратаря. Травмированных в основу нельзя.</p>
           <div class="list" id="lineup-picker">${sorted.map((p) => `
             <label class="list-row" style="cursor:pointer">
-              <div><strong>${esc(p.name)} · ${esc(p.pos)}</strong><small>эфф. ${p.effective} · физа ${p.fitness}%</small></div>
-              <input type="checkbox" data-lineup-id="${esc(p.id)}" ${xi.has(p.id) ? 'checked' : ''} />
+              <div><strong>${esc(p.name)} · ${esc(p.pos)}</strong><small>эфф. ${p.effective} · физа ${p.fitness}%${p.injuredHours ? ' · травма' : ''}</small></div>
+              <input type="checkbox" data-lineup-id="${esc(p.id)}" ${xi.has(p.id) ? 'checked' : ''} ${p.injuredHours ? 'disabled' : ''} />
             </label>`).join('')}</div>
           <button class="btn btn-primary" id="btn-save-lineup" style="margin-top:12px">Сохранить основу</button>
         </section>
@@ -297,7 +310,7 @@
         </section>
         <section class="panel">
           <div class="table-wrap"><table class="sheet"><thead><tr><th>Игрок</th><th>Физа</th><th>Травма</th></tr></thead>
-          <tbody>${players.map((p) => `<tr><td>${p.name}</td><td>${p.fitness}%</td><td>${p.injuredHours ? p.injuredHours + 'ч' : '—'}</td></tr>`).join('')}</tbody></table></div>
+          <tbody>${players.map((p) => `<tr><td>${esc(p.name)}</td><td>${p.fitness}%</td><td>${p.injuredHours ? p.injuredHours + 'ч' : '—'}</td></tr>`).join('')}</tbody></table></div>
         </section>`;
       return;
     }
@@ -524,9 +537,11 @@
     $('#view').innerHTML = `
       <section class="panel">
         <div class="panel-head"><h3>Бустеры</h3><span class="badge">${boosters} шт.</span></div>
-        <p class="hint">Бустеры ускоряют развитие, но не покупают победы в кубках.</p>
+        <p class="hint">Бустеры ускоряют развитие, но не покупают победы в кубках. Цена: 25 000 ¤ за штуку.</p>
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
-          <button class="btn btn-primary" id="btn-recover-boost">Восстановить состав · 1 бустер</button>
+          <button class="btn btn-primary" id="btn-buy-booster">Купить 1 · 25 000 ¤</button>
+          <button class="btn" id="btn-buy-booster-5">Купить 5 · 125 000 ¤</button>
+          <button class="btn" id="btn-recover-boost">Восстановить состав · 1 бустер</button>
           <button class="btn" id="btn-xp-boost">+40 опыта лучшему игроку · 1 бустер</button>
         </div>
       </section>
@@ -957,6 +972,18 @@
           render();
         } catch (err) { toast(err.message); }
       }
+      if (e.target.id === 'btn-buy-booster' || e.target.id === 'btn-buy-booster-5') {
+        const qty = e.target.id === 'btn-buy-booster-5' ? 5 : 1;
+        try {
+          const data = await A().request('api/bonus/buy', { method: 'POST', body: { qty } });
+          state.club = data.club;
+          state.me.user = data.user;
+          A().setUser(data.user);
+          paintSidebar();
+          toast(`Куплено бустеров: ${qty}`);
+          render();
+        } catch (err) { toast(err.message); }
+      }
       if (e.target.id === 'btn-stadium') {
         try {
           const data = await A().request('api/club/stadium', { method: 'POST' });
@@ -1039,6 +1066,13 @@
         if (data.wageDay && data.wageDay.at !== state.lastWageToast) {
           state.lastWageToast = data.wageDay.at || Date.now();
           toast('Суточный расчёт: ' + (data.wageDay.delta >= 0 ? '+' : '') + money(data.wageDay.delta));
+        }
+        const chals = data.challenges || [];
+        const chalKey = chals.map((c) => c.id).sort().join(',');
+        if (chalKey && chalKey !== state.lastChallengeToast) {
+          state.lastChallengeToast = chalKey;
+          toast(chals.length === 1 ? 'Новый вызов на матч!' : `Новые вызовы: ${chals.length}`);
+          if (state.section === 'matches' && state.tab === 'friendly') render();
         }
         if (state.section === 'matches' && state.tab === 'cups') {
           const nowLive = state.me?.liveCup?.id;

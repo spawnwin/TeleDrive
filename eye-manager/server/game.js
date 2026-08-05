@@ -502,10 +502,16 @@ function sellPlayer(club, playerId) {
 }
 
 function setLineup(club, lineupIds, benchIds) {
-  const ids = new Set(club.players.map((p) => p.id));
-  const xi = (lineupIds || []).filter((id) => ids.has(id)).slice(0, 11);
+  const byId = new Map((club.players || []).map((p) => [p.id, p]));
+  const xi = (lineupIds || []).filter((id) => byId.has(id)).slice(0, 11);
   if (xi.length !== 11) return { ok: false, error: 'Нужно ровно 11 игроков в основе' };
-  const bench = (benchIds || []).filter((id) => ids.has(id) && !xi.includes(id)).slice(0, 7);
+  const players = xi.map((id) => byId.get(id));
+  if (!players.some((p) => p.pos === 'Gk')) return { ok: false, error: 'В основе должен быть вратарь' };
+  const injured = players.filter((p) => p.injuredHours > 0);
+  if (injured.length) {
+    return { ok: false, error: `Травмированы: ${injured.map((p) => p.name).join(', ')}` };
+  }
+  const bench = (benchIds || []).filter((id) => byId.has(id) && !xi.includes(id)).slice(0, 7);
   club.lineupIds = xi;
   club.benchIds = bench;
   return { ok: true, club };

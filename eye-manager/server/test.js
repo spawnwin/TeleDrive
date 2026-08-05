@@ -74,6 +74,10 @@ describe('eye xi server', () => {
       const m = JSON.parse(match.body);
       assert.ok(m.match?.score);
 
+      const recover0 = await post(port, '/api/players/recover', { booster: true }, auth);
+      assert.equal(recover0.status, 200, recover0.body);
+      const healthyClub = JSON.parse(recover0.body).club;
+
       const staff = await post(port, '/api/club/staff', { role: 'coach' }, auth);
       assert.equal(staff.status, 200, staff.body);
       const staffData = JSON.parse(staff.body);
@@ -84,7 +88,14 @@ describe('eye xi server', () => {
       const st = JSON.parse(stadium.body);
       assert.equal(st.club.stadiumLevel, 2);
 
-      const rotated = [...lineupBefore.slice(1), regData.club.players.find((p) => !lineupBefore.includes(p.id)).id];
+      const baseLineup = healthyClub.lineupIds || lineupBefore;
+      const spare = healthyClub.players.find((p) => !baseLineup.includes(p.id) && p.pos !== 'Gk' && !(p.injuredHours > 0));
+      const dropIdx = baseLineup.findIndex((id) => {
+        const pl = healthyClub.players.find((x) => x.id === id);
+        return pl && pl.pos !== 'Gk' && !(pl.injuredHours > 0);
+      });
+      const rotated = [...baseLineup];
+      if (spare && dropIdx >= 0) rotated[dropIdx] = spare.id;
       const lineup = await post(port, '/api/club/lineup', { lineupIds: rotated }, auth);
       assert.equal(lineup.status, 200, lineup.body);
       const lu = JSON.parse(lineup.body);
@@ -95,7 +106,7 @@ describe('eye xi server', () => {
       const meData = JSON.parse(me.body);
       assert.deepEqual(meData.club.lineupIds, rotated, 'lineup persists after /api/me');
 
-      const recover = await post(port, '/api/players/recover', { booster: true }, auth);
+      const recover = await post(port, '/api/players/recover', {}, auth);
       assert.equal(recover.status, 200, recover.body);
 
       // auto-lineup rebuild without formation change
@@ -147,6 +158,19 @@ describe('eye xi server', () => {
       const market = await get(port, '/api/transfers', auth);
       assert.equal(market.status, 200, market.body);
       assert.ok(Array.isArray(JSON.parse(market.body).list));
+
+      // also clamp money after staff hire path is already checked
+      const buyBoost = await post(port, '/api/bonus/buy', { qty: 1 }, auth);
+      assert.equal(buyBoost.status, 200, buyBoost.body);
+      const bb = JSON.parse(buyBoost.body);
+      assert.ok((bb.user.boosters || 0) >= 1);
+
+      // lineup requires GK
+      const noGk = lu.club.players.filter((p) => p.pos !== 'Gk').slice(0, 11).map((p) => p.id);
+      if (noGk.length === 11) {
+        const badLu = await post(port, '/api/club/lineup', { lineupIds: noGk }, auth);
+        assert.equal(badLu.status, 400);
+      }
 
       const staff1 = await post(port, '/api/club/staff', { role: 'scout' }, auth);
       assert.equal(staff1.status, 200, staff1.body);

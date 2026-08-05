@@ -247,13 +247,13 @@ function readBody(req) {
 
 function rewardUsers(home, away, match) {
   const [hg, ag] = match.score;
-  const apply = (user, won, draw, oppName) => {
+  const apply = (user, won, draw, oppName, isHome) => {
     if (!user || user.isBot) return;
     const prize = won ? 45000 : draw ? 18000 : 8000;
     const club = db.getClub(user.id);
-    const tickets = club ? G.ticketIncome(club, user, won) : 0;
+    const tickets = isHome && club ? G.ticketIncome(club, user, won) : 0;
     const total = prize + tickets;
-    user.money = (user.money || 0) + total;
+    user.money = Math.max(0, (user.money || 0) + total);
     user.xp = (user.xp || 0) + (won ? 35 : draw ? 18 : 10);
     user.level = G.levelFromXp(user.xp);
     user.fans = Math.max(1000, (user.fans || 10000) + (won ? 120 : draw ? 20 : -40));
@@ -262,12 +262,12 @@ function rewardUsers(home, away, match) {
     persistUser(user);
     if (club) {
       G.pushLedger(club, prize, won ? `Победа vs ${oppName}` : draw ? `Ничья vs ${oppName}` : `Поражение vs ${oppName}`);
-      if (tickets) G.pushLedger(club, tickets, 'Билеты');
+      if (tickets) G.pushLedger(club, tickets, 'Билеты (дома)');
       db.setClub(user.id, club);
     }
   };
-  apply(home, hg > ag, hg === ag, match.away?.name || 'соперник');
-  apply(away, ag > hg, hg === ag, match.home?.name || 'соперник');
+  apply(home, hg > ag, hg === ag, match.away?.name || 'соперник', true);
+  apply(away, ag > hg, hg === ag, match.home?.name || 'соперник', false);
 }
 
 function annotateCupPens(matchId, score) {
@@ -310,16 +310,17 @@ function processWageDay(user, club) {
     return null;
   }
   if (now - user.lastWageAt < DAY_MS) return null;
-  const wages = G.weeklyWages(club);
-  const grant = Math.round((user.fans || 10000) * (2 + (club.stadiumLevel || 1)));
+  const weekBill = G.weeklyWages(club);
+  const wages = Math.round(weekBill / 7);
+  const grant = Math.round((user.fans || 10000) * (0.35 + (club.stadiumLevel || 1) * 0.12));
   const delta = grant - wages;
-  user.money = (user.money || 0) + delta;
+  user.money = Math.max(0, (user.money || 0) + delta);
   user.lastWageAt = now;
-  G.pushLedger(club, -wages, 'Зарплаты состава');
+  G.pushLedger(club, -wages, 'Зарплаты (сутки)');
   G.pushLedger(club, grant, 'Суточный доход (фанаты/стадион)');
   persistUser(user);
   db.setClub(user.id, club);
-  return { wages, grant, delta, at: now };
+  return { wages, grant, delta, weekBill, at: now };
 }
 
 function pushUserEvent(userId, ev) {
@@ -367,15 +368,16 @@ function playCupTie(homeEnt, awayEnt, meta = {}) {
   db.addMatch(match);
   // prize money handled at cup finalize; appearance fee + home tickets
   if (!homeUser.isBot) {
-    const tickets = G.ticketIncome(homeClub, homeUser, false);
-    homeUser.money = (homeUser.money || 0) + 5000 + tickets;
+    const homeWon = match.score[0] > match.score[1];
+    const tickets = G.ticketIncome(homeClub, homeUser, homeWon);
+    homeUser.money = Math.max(0, (homeUser.money || 0) + 5000 + tickets);
     persistUser(homeUser);
     G.pushLedger(homeClub, 5000, `Кубок · ${meta.round || 'матч'}`);
     if (tickets) G.pushLedger(homeClub, tickets, 'Билеты (кубок)');
     db.setClub(homeUser.id, homeClub);
   }
   if (!awayUser.isBot) {
-    awayUser.money = (awayUser.money || 0) + 5000;
+    awayUser.money = Math.max(0, (awayUser.money || 0) + 5000);
     persistUser(awayUser);
     G.pushLedger(awayClub, 5000, `Кубок · ${meta.round || 'матч'}`);
     db.setClub(awayUser.id, awayClub);
@@ -642,6 +644,27 @@ const server = http.createServer(async (req, res) => {
     }
   }
 
+  if (pathname === '/api/bonus/buy' && req.method === 'POST') {
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    try {
+      const body = JSON.parse((await readBody(req)).toString('utf8') || '{}');
+      const qty = Math.max(1, Math.min(20, Number(body.qty) || 1));
+      const unit = 25000;
+      const cost = unit * qty;
+      if ((auth.user.money || 0) < cost) return json(res, 400, { error: `Нужно ${cost} ¤` });
+      const club = ensureClub(auth.user);
+      auth.user.money -= cost;
+      auth.user.boosters = (auth.user.boosters || 0) + qty;
+      G.pushLedger(club, -cost, qty === 1 ? 'Покупка бустера' : `Покупка бустеров ×${qty}`);
+      persistUser(auth.user);
+      db.setClub(auth.user.id, club);
+      return json(res, 200, { ok: true, user: enrichUser(auth.user), club: G.publicClub(club, auth.user), qty, cost });
+    } catch (e) {
+      return json(res, 500, { error: String(e.message || e) });
+    }
+  }
+
   if (pathname === '/api/friendly' && req.method === 'GET') {
     const auth = requireAuth(req, res);
     if (!auth) return;
@@ -714,12 +737,9 @@ const server = http.createServer(async (req, res) => {
   if (pathname === '/api/friendly/cancel' && req.method === 'POST') {
     const auth = requireAuth(req, res);
     if (!auth) return;
-    const mine = db.friendlyList().filter(
-      (f) => f.userId === auth.user.id && (f.type !== 'challenge' || true)
-    );
+    const mine = db.friendlyList().filter((f) => f.userId === auth.user.id && f.type !== 'challenge');
     let removed = 0;
     mine.forEach((f) => {
-      if (f.type === 'challenge') return;
       db.friendlyTake(f.id);
       removed++;
     });
@@ -743,7 +763,9 @@ const server = http.createServer(async (req, res) => {
     const auth = requireAuth(req, res);
     if (!auth) return;
     const id = pathname.split('/')[3];
-    if (id === 'bot' || id === 'cancel' || id === 'challenge') return;
+    if (id === 'bot' || id === 'cancel' || id === 'challenge') {
+      return json(res, 404, { error: 'Неверный id заявки' });
+    }
     const entry = db.friendlyTake(id);
     if (!entry) return json(res, 404, { error: 'Заявка не найдена или устарела' });
     if (entry.type === 'challenge') {
@@ -768,6 +790,12 @@ const server = http.createServer(async (req, res) => {
     db.setClub(awayUser.id, awayClub);
     db.addMatch(match);
     rewardUsers(homeUser, awayUser, match);
+    pushUserEvent(homeUser.id, {
+      type: 'friendly_done',
+      title: 'Заявку приняли',
+      body: `${awayClub.name} принял вашу заявку · ${match.score[0]}:${match.score[1]}`,
+      matchId: match.id
+    });
     return json(res, 200, { ok: true, match });
   }
 
