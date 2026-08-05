@@ -11,6 +11,7 @@ import {
 } from './api'
 import FinancePanel from './Finance'
 import SettingsPanel from './Settings'
+import Sheet, { useSheetScrollLock } from './Sheet'
 import TabBar, { type Tab } from './TabBar'
 
 type Theme = 'dark' | 'light'
@@ -114,6 +115,8 @@ export default function App() {
   const maxWeek = Math.max(...week.map((d) => d.total), 1)
   const maxCat = Math.max(...(stats?.byCategory.map((c) => c.total) ?? [1]), 1)
   const grouped = useMemo(() => groupByDay(expenses), [expenses])
+
+  useSheetScrollLock(sheet !== null)
 
   async function refresh() {
     const [meRes, statsRes, expensesRes] = await Promise.all([
@@ -482,7 +485,7 @@ export default function App() {
               ))}
             </div>
 
-            <div className="section-head" style={{ marginTop: 22 }}>
+            <div className="section-head" style={{ marginTop: 14 }}>
               <h2>Топ категорий</h2>
             </div>
             {stats?.byCategory.length ? (
@@ -517,140 +520,105 @@ export default function App() {
       <TabBar tab={tab} onChange={setTab} onAdd={() => openExpense()} />
 
       {sheet === 'expense' && (
-        <>
-          <div className="sheet-backdrop" onClick={() => setSheet(null)} aria-hidden />
-          <form className="sheet glass-strong" onSubmit={onSubmitExpense}>
-            <div className="sheet-handle" />
-            <h3>Новый расход</h3>
-            <label className="amount-field glass">
-              <span>₽</span>
-              <input
-                inputMode="decimal"
-                placeholder="0"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                autoFocus
-              />
-            </label>
-            <div className="chip-row">
-              {categories.map((cat) => (
-                <button
-                  key={cat.id}
-                  type="button"
-                  className={`chip glass${categoryName === cat.name ? ' active' : ''}`}
-                  onClick={() => setCategoryName(cat.name)}
-                >
-                  {cat.name}
-                </button>
-              ))}
-            </div>
-            <input
-              className="note-field glass"
-              placeholder="Комментарий (необязательно)"
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              maxLength={200}
-            />
+        <Sheet
+          asForm
+          title="Новый расход"
+          onClose={() => setSheet(null)}
+          onSubmit={onSubmitExpense}
+          footer={
             <button className="submit" type="submit" disabled={saving}>
               {saving ? 'Сохраняем…' : 'Сохранить'}
             </button>
-          </form>
-        </>
+          }
+        >
+          <label className="amount-field glass">
+            <span>₽</span>
+            <input
+              inputMode="decimal"
+              placeholder="0"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              autoFocus
+            />
+          </label>
+          <div className="chip-row">
+            {categories.map((cat) => (
+              <button
+                key={cat.id}
+                type="button"
+                className={`chip glass${categoryName === cat.name ? ' active' : ''}`}
+                onClick={() => setCategoryName(cat.name)}
+              >
+                {cat.name}
+              </button>
+            ))}
+          </div>
+          <input
+            className="note-field glass"
+            placeholder="Комментарий (необязательно)"
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            maxLength={200}
+          />
+        </Sheet>
       )}
 
       {sheet === 'categories' && (
-        <>
-          <div className="sheet-backdrop" onClick={() => setSheet(null)} aria-hidden />
-          <div className="sheet glass-strong">
-            <div className="sheet-handle" />
-            <div className="section-head" style={{ marginBottom: 14 }}>
-              <h3 style={{ margin: 0 }}>Категории</h3>
-              <button type="button" className="section-link" onClick={() => openCategoryForm()}>
-                + Добавить
-              </button>
-            </div>
-            <div className="list">
-              {categories.map((cat) => (
-                <div className="item glass" key={cat.id}>
-                  <div className={`item-icon ${cat.tone}`}>{cat.glyph}</div>
-                  <div className="item-body">
-                    <div className="item-title">{cat.name}</div>
-                    <div className="item-sub">нажмите ✎ чтобы изменить</div>
-                  </div>
-                  <div className="item-actions">
-                    <button
-                      type="button"
-                      className="item-edit"
-                      aria-label="Изменить"
-                      onClick={() => openCategoryForm(cat)}
-                    >
-                      ✎
-                    </button>
-                    <button
-                      type="button"
-                      className="item-del"
-                      aria-label="Удалить"
-                      onClick={() => onDeleteCategory(cat)}
-                    >
-                      ×
-                    </button>
-                  </div>
+        <Sheet
+          tall
+          title="Категории"
+          onClose={() => setSheet(null)}
+          footer={
+            <button
+              type="button"
+              className="submit"
+              onClick={() => openCategoryForm()}
+            >
+              + Добавить категорию
+            </button>
+          }
+        >
+          <div className="list">
+            {categories.map((cat) => (
+              <div className="item glass" key={cat.id}>
+                <div className={`item-icon ${cat.tone}`}>{cat.glyph}</div>
+                <div className="item-body">
+                  <div className="item-title">{cat.name}</div>
+                  <div className="item-sub">нажмите ✎ чтобы изменить</div>
                 </div>
-              ))}
-            </div>
+                <div className="item-actions">
+                  <button
+                    type="button"
+                    className="item-edit"
+                    aria-label="Изменить"
+                    onClick={() => openCategoryForm(cat)}
+                  >
+                    ✎
+                  </button>
+                  <button
+                    type="button"
+                    className="item-del"
+                    aria-label="Удалить"
+                    onClick={() => onDeleteCategory(cat)}
+                  >
+                    ×
+                  </button>
+                </div>
+              </div>
+            ))}
           </div>
-        </>
+        </Sheet>
       )}
 
       {sheet === 'category-form' && (
-        <>
-          <div
-            className="sheet-backdrop"
-            onClick={() => setSheet('categories')}
-            aria-hidden
-          />
-          <form className="sheet glass-strong" onSubmit={onSubmitCategory}>
-            <div className="sheet-handle" />
-            <h3>{editCat ? 'Изменить категорию' : 'Новая категория'}</h3>
-            <label className="text-field glass">
-              <input
-                placeholder="Название"
-                value={catName}
-                onChange={(e) => setCatName(e.target.value)}
-                maxLength={40}
-                autoFocus
-              />
-            </label>
-            <div className="section-head">
-              <h2 style={{ fontSize: '0.95rem' }}>Значок</h2>
-            </div>
-            <div className="glyph-grid">
-              {glyphs.map((g) => (
-                <button
-                  key={g}
-                  type="button"
-                  className={`glyph-pick glass${catGlyph === g ? ' active' : ''}`}
-                  onClick={() => setCatGlyph(g)}
-                >
-                  {g}
-                </button>
-              ))}
-            </div>
-            <div className="section-head">
-              <h2 style={{ fontSize: '0.95rem' }}>Цвет</h2>
-            </div>
-            <div className="tone-grid">
-              {tones.map((t) => (
-                <button
-                  key={t}
-                  type="button"
-                  className={`tone-pick ${t}${catTone === t ? ' active' : ''}`}
-                  onClick={() => setCatTone(t)}
-                  aria-label={t}
-                />
-              ))}
-            </div>
-            {editCat ? (
+        <Sheet
+          tall
+          asForm
+          title={editCat ? 'Изменить категорию' : 'Новая категория'}
+          onClose={() => setSheet('categories')}
+          onSubmit={onSubmitCategory}
+          footer={
+            editCat ? (
               <div className="row-actions">
                 <button
                   type="button"
@@ -668,9 +636,48 @@ export default function App() {
               <button className="submit" type="submit" disabled={saving}>
                 {saving ? 'Сохраняем…' : 'Добавить'}
               </button>
-            )}
-          </form>
-        </>
+            )
+          }
+        >
+          <label className="text-field glass">
+            <input
+              placeholder="Название"
+              value={catName}
+              onChange={(e) => setCatName(e.target.value)}
+              maxLength={40}
+              autoFocus
+            />
+          </label>
+          <div className="section-head">
+            <h2 style={{ fontSize: '0.95rem' }}>Значок</h2>
+          </div>
+          <div className="glyph-grid">
+            {glyphs.map((g) => (
+              <button
+                key={g}
+                type="button"
+                className={`glyph-pick glass${catGlyph === g ? ' active' : ''}`}
+                onClick={() => setCatGlyph(g)}
+              >
+                {g}
+              </button>
+            ))}
+          </div>
+          <div className="section-head">
+            <h2 style={{ fontSize: '0.95rem' }}>Цвет</h2>
+          </div>
+          <div className="tone-grid">
+            {tones.map((t) => (
+              <button
+                key={t}
+                type="button"
+                className={`tone-pick ${t}${catTone === t ? ' active' : ''}`}
+                onClick={() => setCatTone(t)}
+                aria-label={t}
+              />
+            ))}
+          </div>
+        </Sheet>
       )}
     </div>
   )

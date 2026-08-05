@@ -8,6 +8,7 @@ import {
 } from './api'
 import { BankIcon } from './BankIcon'
 import BankSelect from './BankSelect'
+import Sheet, { useSheetScrollLock } from './Sheet'
 
 type Props = {
   onToast: (msg: string) => void
@@ -32,6 +33,38 @@ function formatDateShort(iso: string) {
     month: 'short',
     year: 'numeric',
   }).format(new Date(iso.includes('T') ? iso : `${iso}T12:00:00`))
+}
+
+function daysBetween(from: string, to: string): number {
+  const a = new Date(`${from}T12:00:00`)
+  const b = new Date(`${to}T12:00:00`)
+  if (Number.isNaN(a.getTime()) || Number.isNaN(b.getTime()) || b <= a) return 0
+  return Math.round((b.getTime() - a.getTime()) / 86400000)
+}
+
+function previewDepositPayout(
+  amount: number,
+  ratePct: number,
+  start: string,
+  end: string,
+  cap: 'none' | 'monthly' | 'daily',
+): { payout: number; profit: number } | null {
+  if (!Number.isFinite(amount) || amount <= 0) return null
+  if (!Number.isFinite(ratePct) || ratePct < 0) return null
+  const days = daysBetween(start, end)
+  if (days <= 0) return null
+  const rate = ratePct / 100
+  let payout = amount
+  if (cap === 'monthly') {
+    const months = Math.max(1, Math.round(days / 30.4375))
+    payout = amount * Math.pow(1 + rate / 12, months)
+  } else if (cap === 'daily') {
+    payout = amount * Math.pow(1 + rate / 365, days)
+  } else {
+    payout = amount * (1 + rate * (days / 365))
+  }
+  payout = Math.round(payout * 100) / 100
+  return { payout, profit: Math.round((payout - amount) * 100) / 100 }
 }
 
 export default function FinancePanel({ onToast, haptic }: Props) {
@@ -74,6 +107,8 @@ export default function FinancePanel({ onToast, haptic }: Props) {
       .catch((err: Error) => onToast(err.message))
       .finally(() => setLoading(false))
   }, [])
+
+  useSheetScrollLock(form !== null)
 
   function openMortgage(m?: Mortgage) {
     setEditDeposit(null)
@@ -259,6 +294,13 @@ export default function FinancePanel({ onToast, haptic }: Props) {
 
   const mortgages = data?.mortgages ?? []
   const deposits = data?.deposits ?? []
+  const depositPreview = previewDepositPayout(
+    Number(dAmount.replace(',', '.')),
+    Number(dRate.replace(',', '.')),
+    dStart,
+    dEnd,
+    dCap,
+  )
 
   return (
     <section className="section rise rise-delay-2">
@@ -281,7 +323,7 @@ export default function FinancePanel({ onToast, haptic }: Props) {
         </div>
       </div>
 
-      <div className="section-head" style={{ marginTop: 22 }}>
+      <div className="section-head" style={{ marginTop: 14 }}>
         <h2>Ипотеки</h2>
         <button type="button" className="section-link" onClick={() => openMortgage()}>
           + Добавить
@@ -320,7 +362,7 @@ export default function FinancePanel({ onToast, haptic }: Props) {
         </div>
       )}
 
-      <div className="section-head" style={{ marginTop: 22 }}>
+      <div className="section-head" style={{ marginTop: 14 }}>
         <h2>Вклады</h2>
         <button type="button" className="section-link" onClick={() => openDeposit()}>
           + Добавить
@@ -361,73 +403,14 @@ export default function FinancePanel({ onToast, haptic }: Props) {
       )}
 
       {form === 'mortgage' && (
-        <>
-          <div className="sheet-backdrop" onClick={() => setForm(null)} aria-hidden />
-          <form className="sheet glass-strong" onSubmit={submitMortgage}>
-            <div className="sheet-handle" />
-            <h3>{editMortgage ? 'Ипотека' : 'Новая ипотека'}</h3>
-            <input
-              className="note-field glass"
-              placeholder="Название (Ипотека / квартира)"
-              value={mTitle}
-              onChange={(e) => setMTitle(e.target.value)}
-            />
-            <input
-              className="note-field glass"
-              placeholder="Кто платит (имя)"
-              value={mPerson}
-              onChange={(e) => setMPerson(e.target.value)}
-            />
-            <BankSelect value={mBank} onChange={setMBank} placeholder="Банк" />
-            <label className="text-field glass">
-              <input
-                inputMode="decimal"
-                placeholder="Остаток долга, ₽"
-                value={mPrincipal}
-                onChange={(e) => setMPrincipal(e.target.value)}
-              />
-            </label>
-            <label className="text-field glass">
-              <input
-                inputMode="decimal"
-                placeholder="Ежемесячный платёж, ₽"
-                value={mPayment}
-                onChange={(e) => setMPayment(e.target.value)}
-              />
-            </label>
-            <label className="text-field glass">
-              <input
-                inputMode="decimal"
-                placeholder="Ставка, % годовых"
-                value={mRate}
-                onChange={(e) => setMRate(e.target.value)}
-              />
-            </label>
-            <label className="text-field glass">
-              <input
-                inputMode="numeric"
-                placeholder="День платежа (1–31)"
-                value={mDay}
-                onChange={(e) => setMDay(e.target.value)}
-              />
-            </label>
-            <label className="text-field glass">
-              <input
-                type="date"
-                placeholder="Дата окончания"
-                value={mEnd}
-                onChange={(e) => setMEnd(e.target.value)}
-              />
-            </label>
-            <label className="check-row">
-              <input
-                type="checkbox"
-                checked={mNotify}
-                onChange={(e) => setMNotify(e.target.checked)}
-              />
-              Напоминать в день платежа
-            </label>
-            {editMortgage ? (
+        <Sheet
+          tall
+          asForm
+          title={editMortgage ? 'Ипотека' : 'Новая ипотека'}
+          onClose={() => setForm(null)}
+          onSubmit={submitMortgage}
+          footer={
+            editMortgage ? (
               <div className="row-actions">
                 <button
                   type="button"
@@ -444,104 +427,82 @@ export default function FinancePanel({ onToast, haptic }: Props) {
               <button className="submit" type="submit" disabled={saving}>
                 {saving ? 'Сохраняем…' : 'Добавить'}
               </button>
-            )}
-          </form>
-        </>
+            )
+          }
+        >
+          <input
+            className="note-field glass"
+            placeholder="Название (Ипотека / квартира)"
+            value={mTitle}
+            onChange={(e) => setMTitle(e.target.value)}
+          />
+          <input
+            className="note-field glass"
+            placeholder="Кто платит (имя)"
+            value={mPerson}
+            onChange={(e) => setMPerson(e.target.value)}
+          />
+          <BankSelect value={mBank} onChange={setMBank} placeholder="Банк" />
+          <label className="text-field glass">
+            <input
+              inputMode="decimal"
+              placeholder="Остаток долга, ₽"
+              value={mPrincipal}
+              onChange={(e) => setMPrincipal(e.target.value)}
+            />
+          </label>
+          <label className="text-field glass">
+            <input
+              inputMode="decimal"
+              placeholder="Ежемесячный платёж, ₽"
+              value={mPayment}
+              onChange={(e) => setMPayment(e.target.value)}
+            />
+          </label>
+          <label className="text-field glass">
+            <input
+              inputMode="decimal"
+              placeholder="Ставка, % годовых"
+              value={mRate}
+              onChange={(e) => setMRate(e.target.value)}
+            />
+          </label>
+          <label className="text-field glass">
+            <input
+              inputMode="numeric"
+              placeholder="День платежа (1–31)"
+              value={mDay}
+              onChange={(e) => setMDay(e.target.value)}
+            />
+          </label>
+          <label className="text-field glass">
+            <input
+              type="date"
+              placeholder="Дата окончания"
+              value={mEnd}
+              onChange={(e) => setMEnd(e.target.value)}
+            />
+          </label>
+          <label className="check-row">
+            <input
+              type="checkbox"
+              checked={mNotify}
+              onChange={(e) => setMNotify(e.target.checked)}
+            />
+            Напоминать в день платежа
+          </label>
+        </Sheet>
       )}
 
       {form === 'deposit' && (
-        <>
-          <div className="sheet-backdrop" onClick={() => setForm(null)} aria-hidden />
-          <form className="sheet glass-strong" onSubmit={submitDeposit}>
-            <div className="sheet-handle" />
-            <h3>{editDeposit ? 'Вклад' : 'Новый вклад'}</h3>
-            <BankSelect
-              value={dBank}
-              onChange={setDBank}
-              placeholder="Банк"
-              autoFocus
-            />
-            <input
-              className="note-field glass"
-              placeholder="Чей вклад (имя)"
-              value={dPerson}
-              onChange={(e) => setDPerson(e.target.value)}
-            />
-            <label className="text-field glass">
-              <input
-                inputMode="decimal"
-                placeholder="Сумма, ₽"
-                value={dAmount}
-                onChange={(e) => setDAmount(e.target.value)}
-              />
-            </label>
-            <label className="text-field glass">
-              <input
-                inputMode="decimal"
-                placeholder="Ставка, % годовых"
-                value={dRate}
-                onChange={(e) => setDRate(e.target.value)}
-              />
-            </label>
-            <div className="date-row">
-              <label className="text-field glass">
-                <span className="field-hint">Открытие</span>
-                <input
-                  type="date"
-                  value={dStart}
-                  onChange={(e) => setDStart(e.target.value)}
-                />
-              </label>
-              <label className="text-field glass">
-                <span className="field-hint">Окончание</span>
-                <input
-                  type="date"
-                  value={dEnd}
-                  onChange={(e) => setDEnd(e.target.value)}
-                />
-              </label>
-            </div>
-            <div className="chip-row">
-              {(
-                [
-                  ['none', 'Простые %'],
-                  ['monthly', 'Ежемес.'],
-                  ['daily', 'Ежедн.'],
-                ] as const
-              ).map(([val, label]) => (
-                <button
-                  key={val}
-                  type="button"
-                  className={`chip glass${dCap === val ? ' active' : ''}`}
-                  onClick={() => setDCap(val)}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-            <label className="text-field glass">
-              <input
-                inputMode="numeric"
-                placeholder="Напомнить за N дней"
-                value={dNotifyBefore}
-                onChange={(e) => setDNotifyBefore(e.target.value)}
-              />
-            </label>
-            <label className="check-row">
-              <input
-                type="checkbox"
-                checked={dNotify}
-                onChange={(e) => setDNotify(e.target.checked)}
-              />
-              Напоминать об окончании
-            </label>
-            {editDeposit && (
-              <div className="payout-preview glass">
-                К выплате ≈ <strong>{formatMoney(editDeposit.payout)}</strong>
-                <span> (+{formatMoney(editDeposit.profit)})</span>
-              </div>
-            )}
-            {editDeposit ? (
+        <Sheet
+          tall
+          asForm
+          title={editDeposit ? 'Вклад' : 'Новый вклад'}
+          onClose={() => setForm(null)}
+          onSubmit={submitDeposit}
+          footer={
+            editDeposit ? (
               <div className="row-actions">
                 <button
                   type="button"
@@ -558,9 +519,91 @@ export default function FinancePanel({ onToast, haptic }: Props) {
               <button className="submit" type="submit" disabled={saving}>
                 {saving ? 'Сохраняем…' : 'Добавить'}
               </button>
-            )}
-          </form>
-        </>
+            )
+          }
+        >
+          <BankSelect value={dBank} onChange={setDBank} placeholder="Банк" />
+          <input
+            className="note-field glass"
+            placeholder="Чей вклад (имя)"
+            value={dPerson}
+            onChange={(e) => setDPerson(e.target.value)}
+          />
+          <label className="text-field glass">
+            <input
+              inputMode="decimal"
+              placeholder="Сумма, ₽"
+              value={dAmount}
+              onChange={(e) => setDAmount(e.target.value)}
+            />
+          </label>
+          <label className="text-field glass">
+            <input
+              inputMode="decimal"
+              placeholder="Ставка, % годовых"
+              value={dRate}
+              onChange={(e) => setDRate(e.target.value)}
+            />
+          </label>
+          <div className="date-row">
+            <label className="text-field glass">
+              <span className="field-hint">Открытие</span>
+              <input
+                type="date"
+                value={dStart}
+                onChange={(e) => setDStart(e.target.value)}
+              />
+            </label>
+            <label className="text-field glass">
+              <span className="field-hint">Окончание</span>
+              <input
+                type="date"
+                value={dEnd}
+                onChange={(e) => setDEnd(e.target.value)}
+              />
+            </label>
+          </div>
+          <div className="chip-row">
+            {(
+              [
+                ['none', 'Простые %'],
+                ['monthly', 'Ежемес.'],
+                ['daily', 'Ежедн.'],
+              ] as const
+            ).map(([val, label]) => (
+              <button
+                key={val}
+                type="button"
+                className={`chip glass${dCap === val ? ' active' : ''}`}
+                onClick={() => setDCap(val)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <label className="text-field glass">
+            <input
+              inputMode="numeric"
+              placeholder="Напомнить за N дней"
+              value={dNotifyBefore}
+              onChange={(e) => setDNotifyBefore(e.target.value)}
+            />
+          </label>
+          <label className="check-row">
+            <input
+              type="checkbox"
+              checked={dNotify}
+              onChange={(e) => setDNotify(e.target.checked)}
+            />
+            Напоминать об окончании
+          </label>
+          {depositPreview && (
+            <div className="payout-preview glass">
+              К выплате ≈ <strong>{formatMoney(depositPreview.payout)}</strong>
+              <span> (+{formatMoney(depositPreview.profit)})</span>
+            </div>
+          )}
+        </Sheet>
       )}
     </section>
   )

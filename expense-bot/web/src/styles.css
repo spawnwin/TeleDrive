@@ -108,7 +108,7 @@ button {
   margin: 0 auto;
   padding: 12px 14px 100px;
   min-height: 100dvh;
-  overflow: hidden;
+  overflow-x: hidden;
 }
 
 .liquid-bg {
@@ -946,7 +946,7 @@ button {
 .sheet-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.45);
+  background: rgba(0, 0, 0, 0.5);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
   z-index: 30;
@@ -960,11 +960,25 @@ button {
   transform: translateX(-50%);
   width: min(430px, 100%);
   z-index: 31;
-  padding: 8px 14px calc(16px + env(safe-area-inset-bottom));
-  border-radius: 22px 22px 0 0;
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  border-radius: 20px 20px 0 0;
   animation: sheetIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
-  max-height: min(88dvh, 720px);
-  overflow: auto;
+  max-height: calc(100dvh - env(safe-area-inset-top, 0px) - 10px);
+  overflow: hidden;
+  overscroll-behavior: contain;
+}
+
+.sheet-tall {
+  height: calc(100dvh - env(safe-area-inset-top, 0px) - 10px);
+  max-height: calc(100dvh - env(safe-area-inset-top, 0px) - 10px);
+}
+
+.sheet-header {
+  flex: 0 0 auto;
+  padding: 6px 12px 8px;
+  border-bottom: 1px solid color-mix(in srgb, var(--stroke) 80%, transparent);
 }
 
 .sheet-handle {
@@ -972,14 +986,70 @@ button {
   height: 4px;
   border-radius: 999px;
   background: color-mix(in srgb, var(--ink) 18%, transparent);
-  margin: 2px auto 10px;
+  margin: 2px auto 8px;
 }
 
-.sheet h3 {
-  margin: 0 0 10px;
-  font-size: 1.05rem;
+.sheet-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 28px;
+}
+
+.sheet h3,
+.sheet-title-row h3 {
+  margin: 0;
+  font-size: 1.02rem;
   font-weight: 700;
   letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+
+.sheet-close {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  font-size: 1.25rem;
+  line-height: 1;
+  color: var(--muted);
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+}
+
+.sheet-close:active {
+  transform: scale(0.94);
+}
+
+.sheet-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  padding: 10px 14px 8px;
+}
+
+.sheet-footer {
+  flex: 0 0 auto;
+  padding: 10px 14px calc(12px + env(safe-area-inset-bottom, 0px));
+  border-top: 1px solid color-mix(in srgb, var(--stroke) 80%, transparent);
+  background: color-mix(in srgb, var(--glass-strong) 92%, transparent);
+}
+
+html.sheet-open .tabbar {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+}
+
+html.sheet-open,
+html.sheet-open body {
+  overflow: hidden !important;
+  overscroll-behavior: none;
 }
 
 .amount-field,
@@ -1192,8 +1262,8 @@ button {
   display: flex;
   align-items: center;
   gap: 10px;
-  margin: 4px 0 16px;
-  font-size: 0.9rem;
+  margin: 4px 0 8px;
+  font-size: 0.86rem;
   font-weight: 500;
   color: var(--ink-soft);
 }
@@ -1204,10 +1274,33 @@ button {
   accent-color: var(--accent);
 }
 
-.date-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
+.date-row input[type='date'],
+.text-field input[type='date'] {
+  color-scheme: dark;
+}
+
+[data-theme='light'] .date-row input[type='date'],
+[data-theme='light'] .text-field input[type='date'] {
+  color-scheme: light;
+}
+
+.sheet-body .note-field,
+.sheet-body .text-field,
+.sheet-body .amount-field {
+  margin-bottom: 8px;
+}
+
+.sheet-body .chip-row {
+  margin-bottom: 10px;
+}
+
+.sheet-body .bank-select {
+  margin-bottom: 8px;
+}
+
+.sheet-root {
+  position: relative;
+  z-index: 30;
 }
 
 .field-hint {
@@ -1284,7 +1377,7 @@ button {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  max-height: min(42dvh, 320px);
+  max-height: min(38dvh, 260px);
 }
 
 .bank-select-search {

@@ -6,14 +6,12 @@ type Props = {
   value: string
   onChange: (name: string) => void
   placeholder?: string
-  autoFocus?: boolean
 }
 
 export default function BankSelect({
   value,
   onChange,
   placeholder = 'Выберите банк',
-  autoFocus,
 }: Props) {
   const rootRef = useRef<HTMLDivElement>(null)
   const searchRef = useRef<HTMLInputElement>(null)
@@ -37,10 +35,6 @@ export default function BankSelect({
     if (matched) setOtherMode(false)
     else if (value.trim()) setOtherMode(true)
   }, [value, matched])
-
-  useEffect(() => {
-    if (autoFocus) setOpen(true)
-  }, [autoFocus])
 
   useEffect(() => {
     if (!open) return
