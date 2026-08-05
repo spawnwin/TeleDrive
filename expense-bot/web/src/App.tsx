@@ -35,8 +35,8 @@ function initTelegram() {
   if (!wa) return
   wa.ready()
   wa.expand()
-  wa.setHeaderColor?.('#0b3d42')
-  wa.setBackgroundColor?.('#eef6f4')
+  wa.setHeaderColor?.('#c8d9e8')
+  wa.setBackgroundColor?.('#d5e4f2')
 }
 
 function groupByDay(items: Expense[]) {
@@ -78,6 +78,7 @@ export default function App() {
   const [note, setNote] = useState('')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [synced, setSynced] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [toast, setToast] = useState<string | null>(null)
 
@@ -96,6 +97,7 @@ export default function App() {
     setMe(meRes)
     setStats(statsRes)
     setExpenses(expensesRes.items)
+    setSynced(true)
   }
 
   useEffect(() => {
@@ -104,7 +106,7 @@ export default function App() {
       .catch((err: Error) => {
         setError(
           err.message === 'unauthorized'
-            ? 'Откройте приложение из Telegram-бота «Кошелёк»'
+            ? 'Откройте Ауру из Telegram-бота'
             : err.message,
         )
       })
@@ -137,7 +139,7 @@ export default function App() {
       setAmount('')
       setNote('')
       setSheetOpen(false)
-      setToast('Расход добавлен')
+      setToast('Сохранено на сервере')
       haptic(true)
     } catch (err) {
       setToast(err instanceof Error ? err.message : 'Ошибка')
@@ -151,7 +153,7 @@ export default function App() {
     try {
       await api.deleteExpense(id)
       await refresh()
-      setToast('Удалено')
+      setToast('Удалено на сервере')
       haptic(true)
     } catch {
       setToast('Не удалось удалить')
@@ -160,37 +162,54 @@ export default function App() {
   }
 
   const initial =
-    (me?.firstName?.[0] ?? me?.username?.[0] ?? 'К').toUpperCase()
+    (me?.firstName?.[0] ?? me?.username?.[0] ?? 'А').toUpperCase()
 
   if (loading) {
-    return <div className="status">Загружаем Кошелёк…</div>
+    return (
+      <div className="app">
+        <div className="liquid-bg" />
+        <div className="status">Загружаем Ауру…</div>
+      </div>
+    )
   }
 
   if (error) {
     return (
-      <div className="status error">
-        <p>{error}</p>
-        <p style={{ marginTop: 12, color: 'var(--muted)', fontSize: '0.9rem' }}>
-          Для локального демо задайте <code>ALLOW_DEV_AUTH=1</code>
-        </p>
+      <div className="app">
+        <div className="liquid-bg" />
+        <div className="status error">
+          <p>{error}</p>
+          <p style={{ marginTop: 12, color: 'var(--muted)', fontSize: '0.9rem' }}>
+            Для локального демо задайте <code>ALLOW_DEV_AUTH=1</code>
+          </p>
+        </div>
       </div>
     )
   }
 
   return (
     <div className="app">
-      <div className="orb orb-a" />
-      <div className="orb orb-b" />
+      <div className="liquid-bg">
+        <div className="blob blob-a" />
+        <div className="blob blob-b" />
+        <div className="blob blob-c" />
+      </div>
 
-      {toast && <div className="toast">{toast}</div>}
+      {toast && <div className="toast glass-strong">{toast}</div>}
 
       <div className="shell">
         <header className="brand-row rise">
           <div className="brand">
-            <div className="brand-mark">Кошелёк</div>
+            <div className="brand-mark">Аура</div>
             <div className="brand-sub">
-              {me?.firstName ? `Привет, ${me.firstName}` : 'Учёт расходов'}
+              {me?.firstName ? `Привет, ${me.firstName}` : 'Расходы под контролем'}
             </div>
+            {synced && (
+              <div className="sync-pill" title="Данные хранятся на сервере">
+                <span className="sync-dot" />
+                На сервере
+              </div>
+            )}
           </div>
           <div className="avatar" aria-hidden>
             {initial}
@@ -198,14 +217,17 @@ export default function App() {
         </header>
 
         <section className="hero rise rise-delay-1">
+          <div className="hero-fill" />
+          <div className="hero-glass" />
+          <div className="hero-sheen" />
           <div className="hero-label">Этот месяц</div>
           <div className="hero-amount">{formatMoney(stats?.monthTotal ?? 0)}</div>
           <div className="hero-meta">
-            <div className="meta-item">
+            <div className="meta-chip">
               <span>Сегодня</span>
               <strong>{formatMoney(stats?.todayTotal ?? 0)}</strong>
             </div>
-            <div className="meta-item">
+            <div className="meta-chip">
               <span>Записей</span>
               <strong>{expenses.length}</strong>
             </div>
@@ -228,7 +250,7 @@ export default function App() {
                     <button
                       key={cat}
                       type="button"
-                      className={`cat${category === cat ? ' active' : ''}`}
+                      className={`cat glass${category === cat ? ' active' : ''}`}
                       onClick={() => {
                         setCategory(cat)
                         setSheetOpen(true)
@@ -255,7 +277,7 @@ export default function App() {
                 <span>{expenses.length ? 'история' : 'пока пусто'}</span>
               </div>
               {expenses.length === 0 ? (
-                <div className="empty">
+                <div className="empty glass">
                   Нажмите «+», чтобы добавить первую трату
                 </div>
               ) : (
@@ -269,7 +291,7 @@ export default function App() {
                         const meta =
                           CATEGORY_META[item.category] ?? CATEGORY_META.другое
                         return (
-                          <div className="item" key={item.id}>
+                          <div className="item glass" key={item.id}>
                             <div className={`item-icon ${meta.tone}`}>{meta.glyph}</div>
                             <div className="item-body">
                               <div className="item-title">
@@ -305,7 +327,7 @@ export default function App() {
               <h2>Неделя</h2>
               <span>7 дней</span>
             </div>
-            <div className="week">
+            <div className="week glass">
               {week.map((d) => (
                 <div className="day-col" key={d.day}>
                   <div
@@ -326,7 +348,7 @@ export default function App() {
                 {stats.byCategory.map((row) => {
                   const meta = CATEGORY_META[row.category] ?? CATEGORY_META.другое
                   return (
-                    <div className="item" key={row.category}>
+                    <div className="item glass" key={row.category}>
                       <div className={`item-icon ${meta.tone}`}>{meta.glyph}</div>
                       <div className="item-body">
                         <div className="item-title">{meta.label}</div>
@@ -338,13 +360,13 @@ export default function App() {
                 })}
               </div>
             ) : (
-              <div className="empty">Пока нет данных за месяц</div>
+              <div className="empty glass">Пока нет данных за месяц</div>
             )}
           </section>
         )}
       </div>
 
-      <nav className="dock" aria-label="Навигация">
+      <nav className="dock glass-strong" aria-label="Навигация">
         <button
           type="button"
           className={tab === 'home' ? 'active' : ''}
@@ -379,10 +401,10 @@ export default function App() {
             onClick={() => setSheetOpen(false)}
             aria-hidden
           />
-          <form className="sheet" onSubmit={onSubmit}>
+          <form className="sheet glass-strong" onSubmit={onSubmit}>
             <div className="sheet-handle" />
             <h3>Новый расход</h3>
-            <label className="amount-field">
+            <label className="amount-field glass">
               <span>₽</span>
               <input
                 inputMode="decimal"
@@ -399,7 +421,7 @@ export default function App() {
                   <button
                     key={cat}
                     type="button"
-                    className={`chip${category === cat ? ' active' : ''}`}
+                    className={`chip glass${category === cat ? ' active' : ''}`}
                     onClick={() => setCategory(cat)}
                   >
                     {meta.label}
@@ -408,14 +430,14 @@ export default function App() {
               })}
             </div>
             <input
-              className="note-field"
+              className="note-field glass"
               placeholder="Комментарий (необязательно)"
               value={note}
               onChange={(e) => setNote(e.target.value)}
               maxLength={200}
             />
             <button className="submit" type="submit" disabled={saving}>
-              {saving ? 'Сохраняем…' : 'Сохранить'}
+              {saving ? 'Сохраняем на сервер…' : 'Сохранить на сервер'}
             </button>
           </form>
         </>

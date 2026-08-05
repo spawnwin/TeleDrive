@@ -29,18 +29,18 @@ app.get('*', (req, res, next) => {
 })
 
 function buildOpenKeyboard() {
-  return new InlineKeyboard().webApp('Открыть Кошелёк', WEBAPP_URL)
+  return new InlineKeyboard().webApp('Открыть Ауру', WEBAPP_URL)
 }
 
 async function start() {
   if (!BOT_TOKEN || BOT_TOKEN.includes('ABC-DEF')) {
     console.warn(
-      '[expense-bot] BOT_TOKEN не задан — API и статика работают, бот отключён. Укажите токен в .env',
+      '[aura] BOT_TOKEN не задан — API и статика работают, бот отключён. Укажите токен в .env',
     )
     app.listen(PORT, () => {
-      console.log(`[expense-bot] http://localhost:${PORT} (без бота)`)
-      console.log(`[expense-bot] Mini App: ${WEBAPP_URL}`)
-      console.log('[expense-bot] Для локальной разработки: ALLOW_DEV_AUTH=1')
+      console.log(`[aura] http://localhost:${PORT} (без бота)`)
+      console.log(`[aura] Mini App: ${WEBAPP_URL}`)
+      console.log('[aura] Для локальной разработки: ALLOW_DEV_AUTH=1')
     })
     return
   }
@@ -53,11 +53,13 @@ async function start() {
       [
         `Привет, ${name}!`,
         '',
-        'Я *Кошелёк* — мини-приложение для учёта расходов.',
-        'Нажми кнопку ниже, чтобы открыть приложение прямо в Telegram.',
+        'Я *Аура* — мини-приложение для учёта расходов.',
+        'Все данные хранятся на сервере и доступны с любого устройства.',
+        '',
+        'Нажми кнопку ниже — приложение откроется прямо в Telegram.',
         '',
         'Команды:',
-        '/app — открыть приложение',
+        '/app — открыть Ауру',
         '/today — траты за сегодня',
         '/month — траты за месяц',
         '/help — справка',
@@ -70,7 +72,7 @@ async function start() {
   })
 
   bot.command('app', async (ctx) => {
-    await ctx.reply('Открой приложение и добавь трату за пару секунд ✨', {
+    await ctx.reply('Открой Ауру и добавь трату за пару секунд.', {
       reply_markup: buildOpenKeyboard(),
     })
   })
@@ -78,32 +80,32 @@ async function start() {
   bot.command('help', async (ctx) => {
     await ctx.reply(
       [
-        '*Кошелёк* — учёт расходов в Telegram Mini App.',
+        '*Аура* — учёт расходов в Telegram Mini App.',
         '',
-        '1. Нажми «Открыть Кошелёк»',
+        '1. Нажми «Открыть Ауру»',
         '2. Выбери категорию и сумму',
         '3. Смотри сводку за день и месяц',
         '',
-        'Данные привязаны к твоему Telegram-аккаунту.',
+        'Данные сохраняются на сервере и привязаны к твоему Telegram-аккаунту.',
       ].join('\n'),
       { parse_mode: 'Markdown', reply_markup: buildOpenKeyboard() },
     )
   })
 
   bot.command('today', async (ctx) => {
-    await ctx.reply('Открой приложение — там актуальная сводка за сегодня.', {
+    await ctx.reply('Открой Ауру — там актуальная сводка за сегодня.', {
       reply_markup: buildOpenKeyboard(),
     })
   })
 
   bot.command('month', async (ctx) => {
-    await ctx.reply('Месячная статистика и категории — в приложении.', {
+    await ctx.reply('Месячная статистика и категории — в Ауре.', {
       reply_markup: buildOpenKeyboard(),
     })
   })
 
   bot.on('message', async (ctx) => {
-    await ctx.reply('Открой *Кошелёк*, чтобы вести расходы:', {
+    await ctx.reply('Открой *Ауру*, чтобы вести расходы:', {
       parse_mode: 'Markdown',
       reply_markup: buildOpenKeyboard(),
     })
@@ -115,16 +117,16 @@ async function start() {
     app.listen(PORT, async () => {
       const webhookUrl = `${WEBAPP_URL}/bot/webhook`
       await bot.api.setWebhook(webhookUrl)
-      console.log(`[expense-bot] webhook → ${webhookUrl}`)
-      console.log(`[expense-bot] listening on :${PORT}`)
+      console.log(`[aura] webhook → ${webhookUrl}`)
+      console.log(`[aura] listening on :${PORT}`)
     })
   } else {
     app.listen(PORT, () => {
-      console.log(`[expense-bot] http://localhost:${PORT}`)
-      console.log(`[expense-bot] Mini App URL: ${WEBAPP_URL}`)
+      console.log(`[aura] http://localhost:${PORT}`)
+      console.log(`[aura] Mini App URL: ${WEBAPP_URL}`)
     })
     bot.start({
-      onStart: (info) => console.log(`[expense-bot] бот @${info.username} запущен (long polling)`),
+      onStart: (info) => console.log(`[aura] бот @${info.username} запущен (long polling)`),
     })
   }
 }

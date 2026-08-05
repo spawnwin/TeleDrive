@@ -56,7 +56,7 @@ export function createApiRouter() {
   const router = Router()
 
   router.get('/health', (_req, res) => {
-    res.json({ ok: true, service: 'expense-bot' })
+    res.json({ ok: true, service: 'aura', storage: 'server-sqlite' })
   })
 
   router.get('/me', (req, res) => {
