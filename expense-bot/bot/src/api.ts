@@ -2,23 +2,19 @@ import { Router } from 'express'
 import { z } from 'zod'
 import { validateInitData } from './auth.js'
 import {
+  createCategory,
   createExpense,
+  deleteCategory,
   deleteExpense,
+  getCategoryByName,
   getStats,
+  listCategories,
   listExpenses,
+  updateCategory,
   upsertUser,
+  GLYPHS,
+  TONES,
 } from './db.js'
-
-const CATEGORIES = [
-  'еда',
-  'транспорт',
-  'дом',
-  'покупки',
-  'здоровье',
-  'развлечения',
-  'связь',
-  'другое',
-] as const
 
 function getBotToken() {
   return process.env.BOT_TOKEN ?? ''
@@ -56,7 +52,7 @@ export function createApiRouter() {
   const router = Router()
 
   router.get('/health', (_req, res) => {
-    res.json({ ok: true, service: 'zlatnik', storage: 'server-sqlite' })
+    res.json({ ok: true, service: 'zlatnik' })
   })
 
   router.get('/me', (req, res) => {
@@ -66,13 +62,142 @@ export function createApiRouter() {
       return
     }
     upsertUser(user)
+    const categories = listCategories(user.id)
     res.json({
       id: user.id,
       username: user.username,
       firstName: user.first_name,
       lastName: user.last_name,
-      categories: CATEGORIES,
+      categories,
+      tones: TONES,
+      glyphs: GLYPHS,
     })
+  })
+
+  router.get('/categories', (req, res) => {
+    const user = resolveUser(req)
+    if (!user) {
+      res.status(401).json({ error: 'unauthorized' })
+      return
+    }
+    upsertUser(user)
+    res.json({ items: listCategories(user.id), tones: TONES, glyphs: GLYPHS })
+  })
+
+  router.post('/categories', (req, res) => {
+    const user = resolveUser(req)
+    if (!user) {
+      res.status(401).json({ error: 'unauthorized' })
+      return
+    }
+    upsertUser(user)
+
+    const schema = z.object({
+      name: z.string().trim().min(1).max(40),
+      glyph: z.string().min(1).max(4).optional(),
+      tone: z.enum(TONES as [string, ...string[]]).optional(),
+    })
+    const parsed = schema.safeParse(req.body)
+    if (!parsed.success) {
+      res.status(400).json({ error: 'invalid_body', details: parsed.error.flatten() })
+      return
+    }
+
+    try {
+      const item = createCategory({
+        userId: user.id,
+        name: parsed.data.name,
+        glyph: parsed.data.glyph,
+        tone: parsed.data.tone,
+      })
+      res.status(201).json({ item })
+    } catch (err) {
+      const code = err instanceof Error ? err.message : 'error'
+      if (code === 'duplicate_name') {
+        res.status(409).json({ error: 'duplicate_name' })
+        return
+      }
+      res.status(400).json({ error: code })
+    }
+  })
+
+  router.patch('/categories/:id', (req, res) => {
+    const user = resolveUser(req)
+    if (!user) {
+      res.status(401).json({ error: 'unauthorized' })
+      return
+    }
+    upsertUser(user)
+
+    const id = Number(req.params.id)
+    if (!Number.isInteger(id) || id <= 0) {
+      res.status(400).json({ error: 'invalid_id' })
+      return
+    }
+
+    const schema = z.object({
+      name: z.string().trim().min(1).max(40).optional(),
+      glyph: z.string().min(1).max(4).optional(),
+      tone: z.enum(TONES as [string, ...string[]]).optional(),
+    })
+    const parsed = schema.safeParse(req.body)
+    if (!parsed.success) {
+      res.status(400).json({ error: 'invalid_body', details: parsed.error.flatten() })
+      return
+    }
+
+    try {
+      const item = updateCategory({
+        userId: user.id,
+        id,
+        name: parsed.data.name,
+        glyph: parsed.data.glyph,
+        tone: parsed.data.tone,
+      })
+      if (!item) {
+        res.status(404).json({ error: 'not_found' })
+        return
+      }
+      res.json({ item })
+    } catch (err) {
+      const code = err instanceof Error ? err.message : 'error'
+      if (code === 'duplicate_name') {
+        res.status(409).json({ error: 'duplicate_name' })
+        return
+      }
+      res.status(400).json({ error: code })
+    }
+  })
+
+  router.delete('/categories/:id', (req, res) => {
+    const user = resolveUser(req)
+    if (!user) {
+      res.status(401).json({ error: 'unauthorized' })
+      return
+    }
+    upsertUser(user)
+
+    const id = Number(req.params.id)
+    if (!Number.isInteger(id) || id <= 0) {
+      res.status(400).json({ error: 'invalid_id' })
+      return
+    }
+
+    try {
+      const ok = deleteCategory(user.id, id)
+      if (!ok) {
+        res.status(404).json({ error: 'not_found' })
+        return
+      }
+      res.json({ ok: true })
+    } catch (err) {
+      const code = err instanceof Error ? err.message : 'error'
+      if (code === 'last_category') {
+        res.status(400).json({ error: 'last_category' })
+        return
+      }
+      res.status(400).json({ error: code })
+    }
   })
 
   router.get('/expenses', (req, res) => {
@@ -104,7 +229,7 @@ export function createApiRouter() {
 
     const schema = z.object({
       amount: z.number().positive().max(1_000_000_000),
-      category: z.enum(CATEGORIES),
+      category: z.string().trim().min(1).max(40),
       note: z.string().max(200).optional().default(''),
       spentAt: z.string().datetime().optional(),
     })
@@ -116,10 +241,16 @@ export function createApiRouter() {
     }
 
     upsertUser(user)
+    const cat = getCategoryByName(user.id, parsed.data.category)
+    if (!cat) {
+      res.status(400).json({ error: 'unknown_category' })
+      return
+    }
+
     const expense = createExpense({
       userId: user.id,
       amount: parsed.data.amount,
-      category: parsed.data.category,
+      category: cat.name,
       note: parsed.data.note,
       spentAt: parsed.data.spentAt,
     })
@@ -149,5 +280,3 @@ export function createApiRouter() {
 
   return router
 }
-
-export { CATEGORIES }

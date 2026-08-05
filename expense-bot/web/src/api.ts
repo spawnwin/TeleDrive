@@ -8,6 +8,16 @@ export type Expense = {
   created_at: string
 }
 
+export type Category = {
+  id: number
+  user_id: string
+  name: string
+  glyph: string
+  tone: string
+  sort_order: number
+  created_at: string
+}
+
 export type Stats = {
   monthTotal: number
   todayTotal: number
@@ -20,7 +30,9 @@ export type Me = {
   username?: string
   firstName?: string
   lastName?: string
-  categories: string[]
+  categories: Category[]
+  tones: string[]
+  glyphs: string[]
 }
 
 declare global {
@@ -44,13 +56,6 @@ declare global {
             last_name?: string
             username?: string
           }
-        }
-        MainButton?: {
-          setText: (text: string) => void
-          show: () => void
-          hide: () => void
-          onClick: (cb: () => void) => void
-          offClick: (cb: () => void) => void
         }
         setHeaderColor?: (color: string) => void
         setBackgroundColor?: (color: string) => void
@@ -95,6 +100,21 @@ export const api = {
     }),
   deleteExpense: (id: number) =>
     request<{ ok: boolean }>(`/api/expenses/${id}`, { method: 'DELETE' }),
+  createCategory: (body: { name: string; glyph?: string; tone?: string }) =>
+    request<{ item: Category }>('/api/categories', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  updateCategory: (
+    id: number,
+    body: { name?: string; glyph?: string; tone?: string },
+  ) =>
+    request<{ item: Category }>(`/api/categories/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    }),
+  deleteCategory: (id: number) =>
+    request<{ ok: boolean }>(`/api/categories/${id}`, { method: 'DELETE' }),
 }
 
 export function formatMoney(value: number): string {
@@ -120,16 +140,9 @@ export function formatDay(iso: string): string {
   }).format(d)
 }
 
-export const CATEGORY_META: Record<
-  string,
-  { label: string; tone: string; glyph: string }
-> = {
-  еда: { label: 'Еда', tone: 'tone-food', glyph: '◉' },
-  транспорт: { label: 'Транспорт', tone: 'tone-transport', glyph: '◈' },
-  дом: { label: 'Дом', tone: 'tone-home', glyph: '▣' },
-  покупки: { label: 'Покупки', tone: 'tone-shop', glyph: '◇' },
-  здоровье: { label: 'Здоровье', tone: 'tone-health', glyph: '✚' },
-  развлечения: { label: 'Развлечения', tone: 'tone-fun', glyph: '✦' },
-  связь: { label: 'Связь', tone: 'tone-comm', glyph: '◎' },
-  другое: { label: 'Другое', tone: 'tone-other', glyph: '○' },
+export function findCategory(
+  categories: Category[],
+  name: string,
+): Category | undefined {
+  return categories.find((c) => c.name.toLowerCase() === name.toLowerCase())
 }

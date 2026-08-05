@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import {
   api,
-  CATEGORY_META,
+  Category,
   Expense,
+  findCategory,
   formatDay,
   formatMoney,
   Me,
@@ -10,8 +11,11 @@ import {
 } from './api'
 
 type Tab = 'home' | 'stats'
+type Theme = 'dark' | 'light'
+type SheetMode = 'expense' | 'categories' | 'category-form' | null
 
 const WEEKDAYS = ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб']
+const THEME_KEY = 'zlatnik-theme'
 
 function pluralRecords(n: number): string {
   const mod10 = n % 10
@@ -30,13 +34,21 @@ function haptic(success = true) {
   else h.impactOccurred('light')
 }
 
-function initTelegram() {
+function applyTheme(theme: Theme) {
+  document.documentElement.setAttribute('data-theme', theme)
+  const wa = window.Telegram?.WebApp
+  if (!wa) return
+  const dark = theme === 'dark'
+  wa.setHeaderColor?.(dark ? '#0a0c12' : '#ebe2d0')
+  wa.setBackgroundColor?.(dark ? '#0a0c12' : '#f3efe6')
+}
+
+function initTelegram(theme: Theme) {
   const wa = window.Telegram?.WebApp
   if (!wa) return
   wa.ready()
   wa.expand()
-  wa.setHeaderColor?.('#ebe2d0')
-  wa.setBackgroundColor?.('#f3efe6')
+  applyTheme(theme)
 }
 
 function groupByDay(items: Expense[]) {
@@ -67,22 +79,35 @@ function last7Series(stats: Stats | null) {
   return result
 }
 
+function loadTheme(): Theme {
+  const saved = localStorage.getItem(THEME_KEY)
+  if (saved === 'light' || saved === 'dark') return saved
+  return 'dark'
+}
+
 export default function App() {
+  const [theme, setTheme] = useState<Theme>(() => loadTheme())
   const [me, setMe] = useState<Me | null>(null)
   const [stats, setStats] = useState<Stats | null>(null)
   const [expenses, setExpenses] = useState<Expense[]>([])
+  const [categories, setCategories] = useState<Category[]>([])
   const [tab, setTab] = useState<Tab>('home')
-  const [sheetOpen, setSheetOpen] = useState(false)
+  const [sheet, setSheet] = useState<SheetMode>(null)
   const [amount, setAmount] = useState('')
-  const [category, setCategory] = useState('еда')
+  const [categoryName, setCategoryName] = useState('')
   const [note, setNote] = useState('')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
-  const [synced, setSynced] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [toast, setToast] = useState<string | null>(null)
 
-  const categories = me?.categories ?? Object.keys(CATEGORY_META)
+  const [editCat, setEditCat] = useState<Category | null>(null)
+  const [catName, setCatName] = useState('')
+  const [catGlyph, setCatGlyph] = useState('○')
+  const [catTone, setCatTone] = useState('tone-other')
+
+  const tones = me?.tones ?? []
+  const glyphs = me?.glyphs ?? []
   const week = useMemo(() => last7Series(stats), [stats])
   const maxWeek = Math.max(...week.map((d) => d.total), 1)
   const maxCat = Math.max(...(stats?.byCategory.map((c) => c.total) ?? [1]), 1)
@@ -97,11 +122,24 @@ export default function App() {
     setMe(meRes)
     setStats(statsRes)
     setExpenses(expensesRes.items)
-    setSynced(true)
+    setCategories(meRes.categories)
+    if (!categoryName && meRes.categories[0]) {
+      setCategoryName(meRes.categories[0].name)
+    } else if (
+      categoryName &&
+      !meRes.categories.some((c) => c.name === categoryName)
+    ) {
+      setCategoryName(meRes.categories[0]?.name ?? '')
+    }
   }
 
   useEffect(() => {
-    initTelegram()
+    applyTheme(theme)
+    localStorage.setItem(THEME_KEY, theme)
+  }, [theme])
+
+  useEffect(() => {
+    initTelegram(theme)
     refresh()
       .catch((err: Error) => {
         setError(
@@ -111,6 +149,7 @@ export default function App() {
         )
       })
       .finally(() => setLoading(false))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => {
@@ -119,11 +158,49 @@ export default function App() {
     return () => window.clearTimeout(t)
   }, [toast])
 
-  async function onSubmit(e: FormEvent) {
+  function toggleTheme() {
+    setTheme((t) => (t === 'dark' ? 'light' : 'dark'))
+    haptic(false)
+  }
+
+  function openExpense(cat?: string) {
+    if (cat) setCategoryName(cat)
+    else if (!categoryName && categories[0]) setCategoryName(categories[0].name)
+    setSheet('expense')
+    haptic(false)
+  }
+
+  function openCategories() {
+    setSheet('categories')
+    haptic(false)
+  }
+
+  function openCategoryForm(cat?: Category) {
+    if (cat) {
+      setEditCat(cat)
+      setCatName(cat.name)
+      setCatGlyph(cat.glyph)
+      setCatTone(cat.tone)
+    } else {
+      setEditCat(null)
+      setCatName('')
+      setCatGlyph(glyphs[categories.length % Math.max(glyphs.length, 1)] ?? '○')
+      setCatTone(tones[categories.length % Math.max(tones.length, 1)] ?? 'tone-other')
+    }
+    setSheet('category-form')
+    haptic(false)
+  }
+
+  async function onSubmitExpense(e: FormEvent) {
     e.preventDefault()
     const value = Number(amount.replace(',', '.'))
     if (!Number.isFinite(value) || value <= 0) {
       setToast('Введите сумму')
+      haptic(false)
+      return
+    }
+    if (!categoryName) {
+      setToast('Выберите категорию')
       haptic(false)
       return
     }
@@ -132,14 +209,14 @@ export default function App() {
     try {
       await api.createExpense({
         amount: value,
-        category,
+        category: categoryName,
         note: note.trim(),
       })
       await refresh()
       setAmount('')
       setNote('')
-      setSheetOpen(false)
-      setToast('Сохранено на сервере')
+      setSheet(null)
+      setToast('Сохранено')
       haptic(true)
     } catch (err) {
       setToast(err instanceof Error ? err.message : 'Ошибка')
@@ -149,14 +226,73 @@ export default function App() {
     }
   }
 
-  async function onDelete(id: number) {
+  async function onDeleteExpense(id: number) {
     try {
       await api.deleteExpense(id)
       await refresh()
-      setToast('Удалено на сервере')
+      setToast('Удалено')
       haptic(true)
     } catch {
       setToast('Не удалось удалить')
+      haptic(false)
+    }
+  }
+
+  async function onSubmitCategory(e: FormEvent) {
+    e.preventDefault()
+    const name = catName.trim()
+    if (!name) {
+      setToast('Введите название')
+      haptic(false)
+      return
+    }
+
+    setSaving(true)
+    try {
+      if (editCat) {
+        await api.updateCategory(editCat.id, {
+          name,
+          glyph: catGlyph,
+          tone: catTone,
+        })
+        setToast('Категория обновлена')
+      } else {
+        await api.createCategory({ name, glyph: catGlyph, tone: catTone })
+        setToast('Категория добавлена')
+      }
+      await refresh()
+      setSheet('categories')
+      haptic(true)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Ошибка'
+      setToast(
+        msg === 'duplicate_name'
+          ? 'Такая категория уже есть'
+          : msg === 'last_category'
+            ? 'Нельзя удалить последнюю'
+            : msg,
+      )
+      haptic(false)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function onDeleteCategory(cat: Category) {
+    if (categories.length <= 1) {
+      setToast('Нужна хотя бы одна категория')
+      haptic(false)
+      return
+    }
+    try {
+      await api.deleteCategory(cat.id)
+      await refresh()
+      setToast('Категория удалена')
+      if (editCat?.id === cat.id) setSheet('categories')
+      haptic(true)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Ошибка'
+      setToast(msg === 'last_category' ? 'Нужна хотя бы одна категория' : msg)
       haptic(false)
     }
   }
@@ -166,7 +302,7 @@ export default function App() {
 
   if (loading) {
     return (
-      <div className="app">
+      <div className="app" data-theme={theme}>
         <div className="liquid-bg" />
         <div className="status">Загружаем Златник…</div>
       </div>
@@ -179,9 +315,6 @@ export default function App() {
         <div className="liquid-bg" />
         <div className="status error">
           <p>{error}</p>
-          <p style={{ marginTop: 12, color: 'var(--muted)', fontSize: '0.9rem' }}>
-            Для локального демо задайте <code>ALLOW_DEV_AUTH=1</code>
-          </p>
         </div>
       </div>
     )
@@ -202,17 +335,21 @@ export default function App() {
           <div className="brand">
             <div className="brand-mark">Златник</div>
             <div className="brand-sub">
-              {me?.firstName ? `Привет, ${me.firstName}` : 'Расходы под контролем'}
+              {me?.firstName ? `Привет, ${me.firstName}` : 'Учёт расходов'}
             </div>
-            {synced && (
-              <div className="sync-pill" title="Данные хранятся на сервере">
-                <span className="sync-dot" />
-                На сервере
-              </div>
-            )}
           </div>
-          <div className="avatar" aria-hidden>
-            {initial}
+          <div className="header-actions">
+            <button
+              type="button"
+              className="theme-toggle glass"
+              aria-label={theme === 'dark' ? 'Светлая тема' : 'Тёмная тема'}
+              onClick={toggleTheme}
+            >
+              {theme === 'dark' ? '☀' : '☾'}
+            </button>
+            <div className="avatar" aria-hidden>
+              {initial}
+            </div>
           </div>
         </header>
 
@@ -239,27 +376,24 @@ export default function App() {
             <section className="section rise rise-delay-2">
               <div className="section-head">
                 <h2>Категории</h2>
-                <span>месяц</span>
+                <button type="button" className="section-link" onClick={openCategories}>
+                  Управление
+                </button>
               </div>
               <div className="cats">
                 {categories.map((cat) => {
-                  const meta = CATEGORY_META[cat] ?? CATEGORY_META.другое
-                  const row = stats?.byCategory.find((c) => c.category === cat)
+                  const row = stats?.byCategory.find((c) => c.category === cat.name)
                   const total = row?.total ?? 0
                   return (
                     <button
-                      key={cat}
+                      key={cat.id}
                       type="button"
-                      className={`cat glass${category === cat ? ' active' : ''}`}
-                      onClick={() => {
-                        setCategory(cat)
-                        setSheetOpen(true)
-                        haptic(false)
-                      }}
+                      className={`cat glass${categoryName === cat.name ? ' active' : ''}`}
+                      onClick={() => openExpense(cat.name)}
                     >
                       <div className="cat-top">
-                        <span className={`cat-glyph ${meta.tone}`}>{meta.glyph}</span>
-                        <span className="cat-name">{meta.label}</span>
+                        <span className={`cat-glyph ${cat.tone}`}>{cat.glyph}</span>
+                        <span className="cat-name">{cat.name}</span>
                       </div>
                       <div className="cat-sum">{formatMoney(total)}</div>
                       <div className="bar">
@@ -288,18 +422,23 @@ export default function App() {
                         <h2 style={{ fontSize: '1rem' }}>{formatDay(items[0].spent_at)}</h2>
                       </div>
                       {items.map((item) => {
-                        const meta =
-                          CATEGORY_META[item.category] ?? CATEGORY_META.другое
+                        const cat =
+                          findCategory(categories, item.category) ??
+                          ({
+                            name: item.category,
+                            glyph: '○',
+                            tone: 'tone-other',
+                          } as Category)
                         return (
                           <div className="item glass" key={item.id}>
-                            <div className={`item-icon ${meta.tone}`}>{meta.glyph}</div>
+                            <div className={`item-icon ${cat.tone}`}>{cat.glyph}</div>
                             <div className="item-body">
                               <div className="item-title">
-                                {item.note || meta.label}
+                                {item.note || cat.name}
                               </div>
-                              <div className="item-sub">{meta.label}</div>
+                              <div className="item-sub">{cat.name}</div>
                             </div>
-                            <div style={{ display: 'flex', alignItems: 'center' }}>
+                            <div className="item-actions">
                               <div className="item-amount">
                                 −{formatMoney(item.amount)}
                               </div>
@@ -307,7 +446,7 @@ export default function App() {
                                 type="button"
                                 className="item-del"
                                 aria-label="Удалить"
-                                onClick={() => onDelete(item.id)}
+                                onClick={() => onDeleteExpense(item.id)}
                               >
                                 ×
                               </button>
@@ -346,12 +485,18 @@ export default function App() {
             {stats?.byCategory.length ? (
               <div className="list">
                 {stats.byCategory.map((row) => {
-                  const meta = CATEGORY_META[row.category] ?? CATEGORY_META.другое
+                  const cat =
+                    findCategory(categories, row.category) ??
+                    ({
+                      name: row.category,
+                      glyph: '○',
+                      tone: 'tone-other',
+                    } as Category)
                   return (
                     <div className="item glass" key={row.category}>
-                      <div className={`item-icon ${meta.tone}`}>{meta.glyph}</div>
+                      <div className={`item-icon ${cat.tone}`}>{cat.glyph}</div>
                       <div className="item-body">
-                        <div className="item-title">{meta.label}</div>
+                        <div className="item-title">{cat.name}</div>
                         <div className="item-sub">{pluralRecords(row.count)}</div>
                       </div>
                       <div className="item-amount">{formatMoney(row.total)}</div>
@@ -378,10 +523,7 @@ export default function App() {
           type="button"
           className="fab"
           aria-label="Добавить расход"
-          onClick={() => {
-            setSheetOpen(true)
-            haptic(false)
-          }}
+          onClick={() => openExpense()}
         >
           +
         </button>
@@ -394,14 +536,10 @@ export default function App() {
         </button>
       </nav>
 
-      {sheetOpen && (
+      {sheet === 'expense' && (
         <>
-          <div
-            className="sheet-backdrop"
-            onClick={() => setSheetOpen(false)}
-            aria-hidden
-          />
-          <form className="sheet glass-strong" onSubmit={onSubmit}>
+          <div className="sheet-backdrop" onClick={() => setSheet(null)} aria-hidden />
+          <form className="sheet glass-strong" onSubmit={onSubmitExpense}>
             <div className="sheet-handle" />
             <h3>Новый расход</h3>
             <label className="amount-field glass">
@@ -415,19 +553,16 @@ export default function App() {
               />
             </label>
             <div className="chip-row">
-              {categories.map((cat) => {
-                const meta = CATEGORY_META[cat] ?? CATEGORY_META.другое
-                return (
-                  <button
-                    key={cat}
-                    type="button"
-                    className={`chip glass${category === cat ? ' active' : ''}`}
-                    onClick={() => setCategory(cat)}
-                  >
-                    {meta.label}
-                  </button>
-                )
-              })}
+              {categories.map((cat) => (
+                <button
+                  key={cat.id}
+                  type="button"
+                  className={`chip glass${categoryName === cat.name ? ' active' : ''}`}
+                  onClick={() => setCategoryName(cat.name)}
+                >
+                  {cat.name}
+                </button>
+              ))}
             </div>
             <input
               className="note-field glass"
@@ -437,8 +572,123 @@ export default function App() {
               maxLength={200}
             />
             <button className="submit" type="submit" disabled={saving}>
-              {saving ? 'Сохраняем на сервер…' : 'Сохранить на сервер'}
+              {saving ? 'Сохраняем…' : 'Сохранить'}
             </button>
+          </form>
+        </>
+      )}
+
+      {sheet === 'categories' && (
+        <>
+          <div className="sheet-backdrop" onClick={() => setSheet(null)} aria-hidden />
+          <div className="sheet glass-strong">
+            <div className="sheet-handle" />
+            <div className="section-head" style={{ marginBottom: 14 }}>
+              <h3 style={{ margin: 0 }}>Категории</h3>
+              <button type="button" className="section-link" onClick={() => openCategoryForm()}>
+                + Добавить
+              </button>
+            </div>
+            <div className="list">
+              {categories.map((cat) => (
+                <div className="item glass" key={cat.id}>
+                  <div className={`item-icon ${cat.tone}`}>{cat.glyph}</div>
+                  <div className="item-body">
+                    <div className="item-title">{cat.name}</div>
+                    <div className="item-sub">нажмите ✎ чтобы изменить</div>
+                  </div>
+                  <div className="item-actions">
+                    <button
+                      type="button"
+                      className="item-edit"
+                      aria-label="Изменить"
+                      onClick={() => openCategoryForm(cat)}
+                    >
+                      ✎
+                    </button>
+                    <button
+                      type="button"
+                      className="item-del"
+                      aria-label="Удалить"
+                      onClick={() => onDeleteCategory(cat)}
+                    >
+                      ×
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+
+      {sheet === 'category-form' && (
+        <>
+          <div
+            className="sheet-backdrop"
+            onClick={() => setSheet('categories')}
+            aria-hidden
+          />
+          <form className="sheet glass-strong" onSubmit={onSubmitCategory}>
+            <div className="sheet-handle" />
+            <h3>{editCat ? 'Изменить категорию' : 'Новая категория'}</h3>
+            <label className="text-field glass">
+              <input
+                placeholder="Название"
+                value={catName}
+                onChange={(e) => setCatName(e.target.value)}
+                maxLength={40}
+                autoFocus
+              />
+            </label>
+            <div className="section-head">
+              <h2 style={{ fontSize: '0.95rem' }}>Значок</h2>
+            </div>
+            <div className="glyph-grid">
+              {glyphs.map((g) => (
+                <button
+                  key={g}
+                  type="button"
+                  className={`glyph-pick glass${catGlyph === g ? ' active' : ''}`}
+                  onClick={() => setCatGlyph(g)}
+                >
+                  {g}
+                </button>
+              ))}
+            </div>
+            <div className="section-head">
+              <h2 style={{ fontSize: '0.95rem' }}>Цвет</h2>
+            </div>
+            <div className="tone-grid">
+              {tones.map((t) => (
+                <button
+                  key={t}
+                  type="button"
+                  className={`tone-pick ${t}${catTone === t ? ' active' : ''}`}
+                  onClick={() => setCatTone(t)}
+                  aria-label={t}
+                />
+              ))}
+            </div>
+            {editCat ? (
+              <div className="row-actions">
+                <button
+                  type="button"
+                  className="submit danger"
+                  disabled={saving}
+                  onClick={() => onDeleteCategory(editCat)}
+                >
+                  Удалить
+                </button>
+                <button className="submit" type="submit" disabled={saving}>
+                  {saving ? '…' : 'Сохранить'}
+                </button>
+              </div>
+            ) : (
+              <button className="submit" type="submit" disabled={saving}>
+                {saving ? 'Сохраняем…' : 'Добавить'}
+              </button>
+            )}
           </form>
         </>
       )}
