@@ -630,6 +630,19 @@ function createCupsModule({ dataDir, usersDb, saveUsers, publicUser, store }) {
       });
     });
     if (dirty) saveUsers(udb);
+    if (typeof store?.onCupFinish === 'function') {
+      try {
+        store.onCupFinish({
+          id: cup.id,
+          name: cup.name,
+          champion: cup.champion,
+          size: cup.size,
+          bracketId: cup.bracketId
+        });
+      } catch (err) {
+        console.warn('[cups] onCupFinish', err.message || err);
+      }
+    }
   }
 
   function beginTournament(cup) {

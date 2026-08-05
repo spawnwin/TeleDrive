@@ -88,7 +88,10 @@ function createLeagueModule({ usersDb, saveUsers, store }) {
         };
       })
       .sort((a, b) => (b.pts - a.pts) || (b.gd - a.gd) || (b.gf - a.gf));
-    standings.forEach((r, i) => { r.rank = i + 1; });
+    standings.forEach((r, i) => {
+      r.rank = i + 1;
+      r.zone = standingZone(L, r.rank);
+    });
 
     const fixtures = (L.fixtures || []).map((f) => {
       const home = (L.entrants || []).find((e) => e.userId === f.homeUserId);
@@ -119,10 +122,58 @@ function createLeagueModule({ usersDb, saveUsers, store }) {
       standings,
       fixtures,
       champion: L.champion || null,
+      movements: L.movements || null,
+      zones: zoneMeta(L),
       createdAt: L.createdAt,
       finishedAt: L.finishedAt || null,
       myUserId: viewerId || null
     };
+  }
+
+  function zoneMeta(L) {
+    const size = (L.entrants || []).length || L.size || LEAGUE_SIZE;
+    const brIdx = LEVEL_BRACKETS.findIndex((b) => b.id === L.bracketId);
+    return {
+      promoteSlots: brIdx >= 0 && brIdx < LEVEL_BRACKETS.length - 1 ? Math.min(2, Math.floor(size / 4) || 1) : 0,
+      relegateSlots: brIdx > 0 ? Math.min(2, Math.floor(size / 4) || 1) : 0,
+      size
+    };
+  }
+
+  function standingZone(L, rank) {
+    const z = zoneMeta(L);
+    if (z.promoteSlots && rank <= z.promoteSlots) return 'up';
+    if (z.relegateSlots && rank > z.size - z.relegateSlots) return 'down';
+    return 'mid';
+  }
+
+  function nextBracket(bracketId) {
+    const i = LEVEL_BRACKETS.findIndex((b) => b.id === bracketId);
+    return i >= 0 && i < LEVEL_BRACKETS.length - 1 ? LEVEL_BRACKETS[i + 1] : null;
+  }
+
+  function prevBracket(bracketId) {
+    const i = LEVEL_BRACKETS.findIndex((b) => b.id === bracketId);
+    return i > 0 ? LEVEL_BRACKETS[i - 1] : null;
+  }
+
+  function seedIntoBracket(user, clubName, bracket, strength) {
+    if (!user || user.isBot || !bracket) return null;
+    if (findMyLeague(user.id)) return null;
+    let L = findOpenForBracket(bracket.id);
+    if (!L) L = createOpenLeague(bracket);
+    if (L.entrants.length >= L.size) L = createOpenLeague(bracket);
+    if (L.entrants.some((e) => e.userId === user.id)) return publicLeague(L, user.id);
+    L.entrants.push({
+      userId: user.id,
+      clubName: clubName || user.clubName || 'Клуб',
+      login: user.login,
+      isBot: false,
+      strength: strength || 100,
+      seeded: true
+    });
+    L.table[user.id] = emptyRow();
+    return publicLeague(L, user.id);
   }
 
   function findOpenForBracket(bracketId) {
@@ -322,18 +373,35 @@ function createLeagueModule({ usersDb, saveUsers, store }) {
     const pub = publicLeague(L);
     const champ = pub.standings[0];
     L.champion = champ ? { userId: champ.userId, clubName: champ.clubName, pts: champ.pts } : null;
+    const z = zoneMeta(L);
+    const upBracket = nextBracket(L.bracketId);
+    const downBracket = prevBracket(L.bracketId);
+    const movements = [];
+    (pub.standings || []).forEach((row) => {
+      if (row.zone === 'up' && upBracket) {
+        movements.push({ userId: row.userId, clubName: row.clubName, kind: 'promote', to: upBracket.id, toLabel: upBracket.label, rank: row.rank });
+      } else if (row.zone === 'down' && downBracket) {
+        movements.push({ userId: row.userId, clubName: row.clubName, kind: 'relegate', to: downBracket.id, toLabel: downBracket.label, rank: row.rank });
+      }
+    });
+    L.movements = movements;
+    state.meta.seasonCounter = Math.max(state.meta.seasonCounter || 1, (L.season || 1) + 1);
+
     if (typeof store?.onLeagueFinish === 'function') {
       try {
         store.onLeagueFinish({
           id: L.id,
           name: L.name,
           champion: L.champion,
-          standings: pub.standings.slice(0, 3)
+          standings: pub.standings.slice(0, 3),
+          movements,
+          zones: z
         });
       } catch (e) {
         console.warn('[league] onLeagueFinish', e.message || e);
       }
     }
+
     (L.entrants || []).filter((e) => !e.isBot).forEach((e) => {
       const row = pub.standings.find((s) => s.userId === e.userId);
       const rank = row?.rank || 99;
@@ -341,7 +409,10 @@ function createLeagueModule({ usersDb, saveUsers, store }) {
       if (!u) return;
       const prize = rank === 1 ? 120000 : rank === 2 ? 70000 : rank === 3 ? 40000 : 15000;
       u.money = Math.max(0, (u.money || 0) + prize);
-      u.xp = (u.xp || 0) + (rank === 1 ? 80 : rank <= 3 ? 45 : 20);
+      let xpGain = rank === 1 ? 80 : rank <= 3 ? 45 : 20;
+      if (row?.zone === 'up') xpGain += 35;
+      if (row?.zone === 'down') xpGain = Math.max(10, xpGain - 5);
+      u.xp = (u.xp || 0) + xpGain;
       u.level = levelFromXp(u.xp);
       if (rank === 1) {
         u.prestige = (u.prestige || 0) + 3;
@@ -353,13 +424,45 @@ function createLeagueModule({ usersDb, saveUsers, store }) {
       }
       saveUsers(usersDb());
       if (store?.pushLedger) store.pushLedger(e.userId, prize, `Лига · место ${rank}`);
+      if (store?.onSeasonContracts) {
+        try { store.onSeasonContracts(e.userId); } catch {}
+      }
       pushEvent(e.userId, {
         type: rank === 1 ? 'league_won' : 'league_done',
         title: rank === 1 ? 'Чемпион лиги!' : `Лига завершена · ${rank} место`,
         body: L.name,
         money: prize,
-        leagueId: L.id
+        xp: xpGain,
+        leagueId: L.id,
+        zone: row?.zone || 'mid'
       });
+
+      const move = movements.find((m) => m.userId === e.userId);
+      if (move?.kind === 'promote') {
+        const strength = store?.clubStrength ? store.clubStrength(e.userId) : (e.strength || 100);
+        const seeded = seedIntoBracket(u, e.clubName, upBracket, strength);
+        pushEvent(e.userId, {
+          type: 'league_promote',
+          title: 'Повышение в дивизион',
+          body: seeded
+            ? `Вы записаны в ${seeded.name}`
+            : `Право на ${upBracket.label}`,
+          leagueId: seeded?.id || null,
+          toBracket: upBracket.id
+        });
+      } else if (move?.kind === 'relegate') {
+        const strength = store?.clubStrength ? store.clubStrength(e.userId) : (e.strength || 100);
+        const seeded = seedIntoBracket(u, e.clubName, downBracket, strength);
+        pushEvent(e.userId, {
+          type: 'league_relegate',
+          title: 'Вылет в дивизион ниже',
+          body: seeded
+            ? `Запись в ${seeded.name}`
+            : `Следующий сезон: ${downBracket.label}`,
+          leagueId: seeded?.id || null,
+          toBracket: downBracket.id
+        });
+      }
     });
   }
 

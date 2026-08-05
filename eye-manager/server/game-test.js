@@ -82,4 +82,26 @@ describe('game lineup guards', () => {
     const tickets = G.ticketIncome(club, { fans: 12000 }, true);
     assert.ok(tickets > 0);
   });
+
+  it('contracts renew and tick', () => {
+    const club = G.defaultClub({ id: 'u8', login: 't8', name: 'T8', clubName: 'T8 FC' });
+    G.ensureLineup(club, true);
+    assert.ok(club.players.every((p) => p.contractYears >= 1));
+    const p = club.players[0];
+    p.contractYears = 1;
+    let paid = 0;
+    const ren = G.renewContract(club, p.id, 2, {
+      spendUserMoney: (c) => { paid = c; return true; }
+    });
+    assert.equal(ren.ok, true);
+    assert.ok(paid > 0);
+    assert.equal(p.contractYears, 3);
+    club.players.forEach((x) => { x.contractYears = 1; });
+    const weak = club.players.find((x) => !club.lineupIds.includes(x.id));
+    weak.contractYears = 0;
+    // force leave path: not in XI, low mastery
+    Object.keys(weak.skills).forEach((k) => { weak.skills[k] = 8; });
+    const tick = G.tickContracts(club, 1);
+    assert.ok(tick.asks.length + tick.left.length >= 1);
+  });
 });

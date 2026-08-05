@@ -146,6 +146,7 @@ function makePlayer(pos, quality = 14) {
     fitness: rnd(88, 100),
     morale: rnd(-5, 12),
     wage: rnd(800, 4000) * Math.max(1, Math.round(base / 10)),
+    contractYears: rnd(1, 4),
     skills: skillForPos(pos, base),
     specials: rollTraits(pos, talent),
     xpPool: 0,
@@ -813,7 +814,14 @@ function settleWageDay(user, club, now = Date.now()) {
   if (user.lastWageAt > now) user.lastWageAt = now;
   pushLedger(club, -wages, days === 1 ? 'Зарплаты (сутки)' : `Зарплаты (${days} дн.)`);
   pushLedger(club, grant, days === 1 ? 'Суточный доход (фанаты/стадион)' : `Доход за ${days} дн.`);
-  return { wages, grant, delta, weekBill, days, at: now };
+  club.contractDayAcc = (club.contractDayAcc || 0) + days;
+  let contracts = null;
+  if (club.contractDayAcc >= 5) {
+    const ticks = Math.floor(club.contractDayAcc / 5);
+    club.contractDayAcc -= ticks * 5;
+    contracts = tickContracts(club, ticks);
+  }
+  return { wages, grant, delta, weekBill, days, at: now, contracts };
 }
 
 function playerValue(p) {
@@ -905,6 +913,7 @@ function buyPlayer(club, listing) {
     fitness: listing.fitness || 95,
     morale: listing.morale || 5,
     wage: listing.wage || 2000,
+    contractYears: listing.contractYears || rnd(2, 4),
     skills: listing.skills,
     specials: listing.specials || [],
     xpPool: listing.xpPool || 0,
@@ -950,6 +959,7 @@ function listPlayer(club, playerId, askingPrice) {
       fitness: p.fitness,
       morale: p.morale,
       wage: p.wage,
+      contractYears: p.contractYears || 1,
       skills: p.skills,
       specials: p.specials || [],
       xpPool: p.xpPool || 0,
@@ -1021,15 +1031,95 @@ function releasePlayer(club, playerId) {
 function renegotiateWage(club, playerId, direction) {
   const p = (club.players || []).find((x) => x.id === playerId);
   if (!p) return { ok: false, error: 'Игрок не найден' };
+  if (p.contractYears == null) p.contractYears = 2;
   const dir = direction === 'cut' ? 'cut' : 'raise';
   if (dir === 'raise') {
     p.wage = Math.round((p.wage || 1000) * 1.12);
     p.morale = Math.min(25, (p.morale || 0) + 6);
     return { ok: true, player: p, label: `Повышение · ${p.name}`, wage: p.wage };
   }
+  // Strong players refuse deep cuts near expiry
+  const mastery = masteryOf(p);
+  if (mastery >= 55 && (p.contractYears || 0) <= 1 && Math.random() < 0.45) {
+    p.morale = Math.max(-20, (p.morale || 0) - 4);
+    return { ok: false, error: `${p.name} отказался снижать зарплату` };
+  }
   p.wage = Math.max(400, Math.round((p.wage || 1000) * 0.9));
   p.morale = Math.max(-20, (p.morale || 0) - 8);
   return { ok: true, player: p, label: `Снижение · ${p.name}`, wage: p.wage };
+}
+
+function quoteRenew(club, playerId, years = 2) {
+  const p = (club.players || []).find((x) => x.id === playerId);
+  if (!p) return { ok: false, error: 'Игрок не найден' };
+  const y = Math.max(1, Math.min(4, Math.round(Number(years) || 2)));
+  const cur = p.contractYears == null ? 1 : p.contractYears;
+  if (cur + y > 5) return { ok: false, error: 'Максимум контракта — 5 лет' };
+  const bonus = Math.round((p.wage || 1000) * 3.5 * y);
+  const wageBump = Math.round((p.wage || 1000) * (1 + 0.04 * y));
+  return { ok: true, years: y, bonus, wage: wageBump, player: p, currentYears: cur };
+}
+
+function renewContract(club, playerId, years = 2, { spendUserMoney } = {}) {
+  const q = quoteRenew(club, playerId, years);
+  if (!q.ok) return q;
+  if (typeof spendUserMoney === 'function') {
+    if (!spendUserMoney(q.bonus)) return { ok: false, error: `Нужно ${q.bonus} ¤ на подписной бонус` };
+  }
+  const p = q.player;
+  p.contractYears = (p.contractYears == null ? 1 : p.contractYears) + q.years;
+  p.wage = q.wage;
+  p.morale = Math.min(25, (p.morale || 0) + 4 + q.years);
+  p.wantsRenew = false;
+  pushLedger(club, -q.bonus, `Контракт · ${p.name} (+${q.years} г.)`);
+  return {
+    ok: true,
+    player: { ...p, mastery: masteryOf(p), effective: effectiveMastery(p) },
+    bonus: q.bonus,
+    years: q.years,
+    label: `Контракт · ${p.name}`
+  };
+}
+
+/**
+ * Advance contract clocks. Returns { renewedAsks, left }.
+ */
+function tickContracts(club, years = 1) {
+  const y = Math.max(1, Math.round(years || 1));
+  const left = [];
+  const asks = [];
+  const keep = [];
+  (club.players || []).forEach((p) => {
+    if (p.contractYears == null) p.contractYears = rnd(1, 3);
+    p.contractYears = Math.max(0, (p.contractYears || 0) - y);
+    if (p.contractYears > 0) {
+      keep.push(p);
+      return;
+    }
+    // Expired
+    const inXi = (club.lineupIds || []).includes(p.id);
+    const mastery = masteryOf(p);
+    if (inXi || mastery >= 50) {
+      p.wantsRenew = true;
+      p.morale = Math.max(-20, (p.morale || 0) - 6);
+      p.contractYears = 0;
+      keep.push(p);
+      asks.push(p);
+      return;
+    }
+    // Free agent leave
+    left.push(p);
+  });
+  if (left.length) {
+    const leftIds = new Set(left.map((p) => p.id));
+    club.players = keep;
+    club.lineupIds = (club.lineupIds || []).filter((id) => !leftIds.has(id));
+    club.benchIds = (club.benchIds || []).filter((id) => !leftIds.has(id));
+    ensureLineup(club, true);
+  } else {
+    club.players = keep;
+  }
+  return { left, asks, years: y };
 }
 
 function setLineup(club, lineupIds, benchIds) {
@@ -1102,6 +1192,9 @@ module.exports = {
   quoteYouth,
   releasePlayer,
   renegotiateWage,
+  quoteRenew,
+  renewContract,
+  tickContracts,
   setTicketPrice,
   playerAvailable
 };

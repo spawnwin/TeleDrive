@@ -342,6 +342,22 @@ function processWageDay(user, club) {
     body: (result.delta >= 0 ? '+' : '') + Math.round(result.delta) + ' ¤',
     money: result.delta
   });
+  if (result.contracts) {
+    (result.contracts.asks || []).forEach((p) => {
+      pushUserEvent(user.id, {
+        type: 'contract_ask',
+        title: 'Контракт истёк',
+        body: `${p.name} ждёт продления`
+      });
+    });
+    (result.contracts.left || []).forEach((p) => {
+      pushUserEvent(user.id, {
+        type: 'contract_left',
+        title: 'Свободный агент',
+        body: `${p.name} покинул клуб`
+      });
+    });
+  }
   return result;
 }
 
@@ -832,6 +848,42 @@ const server = http.createServer(async (req, res) => {
       G.pushLedger(club, 0, r.label);
       db.setClub(auth.user.id, club);
       return json(res, 200, { ok: true, club: G.publicClub(club, auth.user), player: r.player });
+    } catch (e) {
+      return json(res, 500, { error: String(e.message || e) });
+    }
+  }
+
+  if (pathname === '/api/players/contract' && req.method === 'POST') {
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    try {
+      const body = JSON.parse((await readBody(req)).toString('utf8') || '{}');
+      const club = ensureClub(auth.user);
+      if (body.quote) {
+        const q = G.quoteRenew(club, body.playerId, body.years);
+        if (!q.ok) return json(res, 400, q);
+        return json(res, 200, {
+          ok: true,
+          years: q.years,
+          bonus: q.bonus,
+          wage: q.wage,
+          currentYears: q.currentYears
+        });
+      }
+      const r = G.renewContract(club, body.playerId, body.years, {
+        spendUserMoney: (cost) => spendMoney(auth.user, cost)
+      });
+      if (!r.ok) return json(res, 400, r);
+      persistUser(auth.user);
+      db.setClub(auth.user.id, club);
+      return json(res, 200, {
+        ok: true,
+        player: r.player,
+        bonus: r.bonus,
+        years: r.years,
+        club: G.publicClub(club, auth.user),
+        user: enrichUser(auth.user)
+      });
     } catch (e) {
       return json(res, 500, { error: String(e.message || e) });
     }
@@ -1707,6 +1759,14 @@ async function main() {
             db.setClub(userId, club);
           }
         }
+      },
+      onCupFinish: (info) => {
+        const champ = info.champion?.clubName || info.champion?.name || '—';
+        social?.newsCup({
+          title: `Кубок: чемпион ${champ}`,
+          body: info.name || 'Онлайн-кубок завершён',
+          cupId: info.id
+        });
       }
     }
   });
@@ -1730,12 +1790,37 @@ async function main() {
         G.pushLedger(club, amount, label);
         db.setClub(userId, club);
       },
+      onSeasonContracts: (userId) => {
+        const club = db.getClub(userId);
+        if (!club) return;
+        const r = G.tickContracts(club, 1);
+        db.setClub(userId, club);
+        (r.asks || []).forEach((p) => {
+          pushUserEvent(userId, {
+            type: 'contract_ask',
+            title: 'Конец сезона · контракт',
+            body: `${p.name} требует продления`
+          });
+        });
+        (r.left || []).forEach((p) => {
+          pushUserEvent(userId, {
+            type: 'contract_left',
+            title: 'Ушёл как свободный агент',
+            body: p.name
+          });
+        });
+      },
       onLeagueFinish: (info) => {
+        const moves = (info.movements || []).filter((m) => m.kind === 'promote').slice(0, 2);
+        const bodyParts = [
+          info.name,
+          moves.length ? `Повышение: ${moves.map((m) => m.clubName).join(', ')}` : null
+        ].filter(Boolean);
         social?.newsLeague({
           title: info.champion
             ? `Чемпион: ${info.champion.clubName}`
             : `Лига завершена: ${info.name}`,
-          body: info.name,
+          body: bodyParts.join(' · '),
           leagueId: info.id,
           tag: 'league'
         });

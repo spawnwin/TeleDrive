@@ -37,6 +37,10 @@
     league_match: 'Матч лиги',
     league_won: 'Чемпион лиги',
     league_done: 'Лига завершена',
+    league_promote: 'Повышение',
+    league_relegate: 'Вылет',
+    contract_ask: 'Контракт',
+    contract_left: 'Свободный агент',
     suspension: 'Дисквалификация',
     release: 'Отчисление'
   };
@@ -76,6 +80,7 @@
     matches: [
       ['friendly', 'Товарищеские'],
       ['league', 'Лига'],
+      ['calendar', 'Календарь'],
       ['cups', 'Кубки'],
       ['history', 'Архив']
     ],
@@ -553,23 +558,27 @@
     $('#view').innerHTML = `
       <section class="panel">
         <div class="panel-head"><h3>Состав</h3><span class="badge">${players.length} игроков</span></div>
+        <p class="hint">Контракт истекает — продлите, иначе сильные игроки потребуют сделку, слабые могут уйти. Мораль влияет на силу в матче.</p>
         <div class="table-wrap"><table class="sheet">
-          <thead><tr><th>Имя</th><th>Поз</th><th>Возр</th><th>Маст</th><th>Эфф</th><th>Физа</th><th>Зарп.</th><th></th></tr></thead>
+          <thead><tr><th>Имя</th><th>Поз</th><th>Возр</th><th>Маст</th><th>Эфф</th><th>Физа</th><th>Мор.</th><th>Контр.</th><th>Зарп.</th><th></th></tr></thead>
           <tbody>${players.map((p) => `
-            <tr>
+            <tr class="${p.wantsRenew || (p.contractYears || 0) <= 0 ? 'row-warn' : ''}">
               <td>
                 <button type="button" class="link" data-train="${esc(p.id)}"><strong>${esc(p.name)}</strong></button>
-                <div class="hint">${(p.specials||[]).map((s)=>TRAIT_LABELS[s]||s).join(' · ') || '—'}${p.yellows ? ' · ЖК ' + p.yellows : ''}${p.suspendedMatches ? ' · дискв. ' + p.suspendedMatches : ''}</div>
+                <div class="hint">${(p.specials||[]).map((s)=>TRAIT_LABELS[s]||s).join(' · ') || '—'}${p.yellows ? ' · ЖК ' + p.yellows : ''}${p.suspendedMatches ? ' · дискв. ' + p.suspendedMatches : ''}${p.wantsRenew ? ' · ждёт контракт' : ''}</div>
               </td>
               <td><span class="badge">${esc(p.pos)}</span></td>
               <td>${p.age}</td>
               <td>${p.mastery}</td>
               <td><b>${p.effective}</b></td>
               <td>${p.fitness}%${p.injuredHours ? ' <span class="badge danger">травма</span>' : ''}${p.suspendedMatches ? ' <span class="badge danger">дискв.</span>' : ''}</td>
+              <td>${p.morale > 0 ? '+' : ''}${p.morale || 0}</td>
+              <td>${p.contractYears == null ? '—' : (p.contractYears <= 0 ? '0!' : p.contractYears + ' г.')}</td>
               <td>${money(p.wage)}</td>
               <td style="white-space:nowrap">
                 <button class="btn btn-tiny" data-wage-up="${esc(p.id)}">+</button>
                 <button class="btn btn-tiny" data-wage-down="${esc(p.id)}">−</button>
+                <button class="btn btn-primary btn-tiny" data-renew="${esc(p.id)}" title="Продлить контракт">Контр.</button>
                 <button class="btn btn-tiny" data-list="${esc(p.id)}">Рынок</button>
                 <button class="btn btn-tiny" data-sell="${esc(p.id)}">Агенты</button>
                 <button class="btn btn-tiny" data-release="${esc(p.id)}">Отчисл.</button>
@@ -634,6 +643,8 @@
             <button class="btn btn-tiny" id="btn-league-leave">Выйти из набора</button>` : ''}
           ${L.nextRoundAt && L.status === 'live' ? `<p class="hint">Следующий тур: ${new Date(L.nextRoundAt).toLocaleString('ru-RU')}</p>` : ''}
           ${L.champion ? `<div class="stat-card" style="margin:10px 0"><span>Чемпион</span><b>${esc(L.champion.clubName)}</b></div>` : ''}
+          ${L.zones ? `<p class="hint">Зоны: ${L.zones.promoteSlots ? '↑ топ-' + L.zones.promoteSlots + ' повышение' : '↑ нет'} · ${L.zones.relegateSlots ? '↓ низ-' + L.zones.relegateSlots + ' вылет' : '↓ нет'}</p>` : ''}
+          ${(L.movements || []).length ? `<p class="hint">${L.movements.map((m) => (m.kind === 'promote' ? '↑ ' : '↓ ') + esc(m.clubName) + ' → ' + esc(m.toLabel)).join(' · ')}</p>` : ''}
         </section>
         ${L.status === 'live' && nextMine ? `<section class="panel">
           <div class="panel-head"><h3>Подготовка к туру ${L.currentRound}</h3>
@@ -651,9 +662,9 @@
           <div class="table-wrap"><table class="sheet">
             <thead><tr><th>#</th><th>Клуб</th><th>И</th><th>В</th><th>Н</th><th>П</th><th>Мячи</th><th>О</th></tr></thead>
             <tbody>${standings.map((r) => `
-              <tr style="${r.userId === myId ? 'font-weight:700' : ''}">
+              <tr class="${r.zone === 'up' ? 'zone-up' : r.zone === 'down' ? 'zone-down' : ''}" style="${r.userId === myId ? 'font-weight:700' : ''}">
                 <td>${r.rank}</td>
-                <td>${esc(r.clubName)}${r.isBot ? ' <small>AI</small>' : ''}</td>
+                <td>${esc(r.clubName)}${r.isBot ? ' <small>AI</small>' : ''}${r.zone === 'up' ? ' <small>↑</small>' : r.zone === 'down' ? ' <small>↓</small>' : ''}</td>
                 <td>${r.played}</td><td>${r.won}</td><td>${r.drawn}</td><td>${r.lost}</td>
                 <td>${r.gf}:${r.ga}</td>
                 <td><b>${r.pts}</b></td>
@@ -670,6 +681,32 @@
               </div>
               ${f.matchId ? `<button class="btn btn-tiny" data-match="${esc(f.matchId)}">Отчёт</button>` : ''}
             </div>`).join('') || '<p class="hint">Календарь появится после старта</p>'}</div>
+        </section>`;
+      return;
+    }
+    if (state.tab === 'calendar') {
+      let cal = state.me?.calendar || { items: [] };
+      try {
+        const data = await A().request('api/calendar');
+        cal = data.calendar || data || cal;
+      } catch {}
+      const items = cal.items || [];
+      $('#view').innerHTML = `
+        <section class="panel">
+          <div class="panel-head">
+            <h3>Календарь сезона</h3>
+            <span class="badge">сезон ${cal.season || '—'} · тур ${cal.week || '—'}</span>
+          </div>
+          <p class="hint">${cal.leagueName ? esc(cal.leagueName) : 'Запишитесь в лигу, чтобы увидеть расписание туров.'}
+            ${cal.nextRoundAt ? ' Следующий тур: ' + new Date(cal.nextRoundAt).toLocaleString('ru-RU') : ''}</p>
+          <div class="list">${items.length ? items.map((f) => `
+            <div class="list-row">
+              <div>
+                <strong>Тур ${f.round || f.week}: ${esc(f.home)} ${f.score ? f.score[0] + ':' + f.score[1] : 'vs'} ${esc(f.away)}</strong>
+                <small>${f.status === 'done' ? 'сыгран' : f.status === 'next' ? 'следующий' : f.status === 'planned' ? 'в плане' : (f.status || '')}${f.when ? ' · ' + new Date(f.when).toLocaleString('ru-RU') : ''}</small>
+              </div>
+              ${f.matchId ? `<button class="btn btn-tiny" data-match="${esc(f.matchId)}">Отчёт</button>` : ''}
+            </div>`).join('') : '<p class="hint">Нет матчей в календаре</p>'}</div>
         </section>`;
       return;
     }
@@ -1618,6 +1655,28 @@
           const data = await A().request('api/players/wage', { method: 'POST', body: { playerId: wageDown.dataset.wageDown, direction: 'cut' } });
           state.club = data.club;
           toast('Зарплата снижена');
+          render();
+        } catch (err) { toast(err.message); }
+      }
+      const renew = e.target.closest('[data-renew]');
+      if (renew) {
+        try {
+          const q = await A().request('api/players/contract', {
+            method: 'POST',
+            body: { playerId: renew.dataset.renew, years: 2, quote: true }
+          });
+          if (!confirm(`Продлить на ${q.years} г.? Бонус ${money(q.bonus)}, зарплата → ${money(q.wage)}`)) return;
+          const data = await A().request('api/players/contract', {
+            method: 'POST',
+            body: { playerId: renew.dataset.renew, years: q.years }
+          });
+          state.club = data.club;
+          if (data.user) {
+            state.me.user = data.user;
+            A().setUser(data.user);
+            paintSidebar();
+          }
+          toast('Контракт продлён');
           render();
         } catch (err) { toast(err.message); }
       }

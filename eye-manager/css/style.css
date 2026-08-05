@@ -560,6 +560,20 @@ table.sheet tr:hover td { background: rgba(61,220,132,.05); }
   margin: 10px 0 14px;
 }
 
+table.sheet tr.zone-up td:first-child,
+table.sheet tr.zone-up {
+  box-shadow: inset 3px 0 0 #3ddc84;
+  background: rgba(61, 220, 132, 0.06);
+}
+table.sheet tr.zone-down td:first-child,
+table.sheet tr.zone-down {
+  box-shadow: inset 3px 0 0 #eab308;
+  background: rgba(234, 179, 8, 0.06);
+}
+table.sheet tr.row-warn {
+  background: rgba(234, 179, 8, 0.08);
+}
+
 @media (max-width: 960px) {
   .gate { grid-template-columns: 1fr; }
   .gate-hero { order: -1; min-height: 42vh; justify-content: flex-end; padding-bottom: 24px; }

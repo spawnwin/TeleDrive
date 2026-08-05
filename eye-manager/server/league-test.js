@@ -62,8 +62,18 @@ describe('league system', () => {
     assert.equal(fin.league.status, 'finished');
     assert.ok(fin.league.champion);
     assert.ok((users.users.u1.cupEvents || []).some((e) => e.type === 'league_done' || e.type === 'league_won'));
+    assert.ok(fin.league.standings.every((r) => r.zone));
+    assert.ok(Array.isArray(fin.league.movements));
+    // u1 won all matches → rank 1 → promote zone in l1_2 bracket
+    const myRow = fin.league.standings.find((r) => r.userId === 'u1');
+    assert.equal(myRow.zone, 'up');
+    assert.ok((users.users.u1.cupEvents || []).some((e) => e.type === 'league_promote'));
+    // seeded into next bracket open league
+    const next = league.findMyLeague('u1');
+    assert.ok(next, 'should be seeded into higher bracket');
+    assert.equal(next.bracketId, 'l3_4');
+    assert.ok((saved.meta.seasonCounter || 1) >= 2);
     const cal = league.calendarFor('u1');
-    // after finish findMyLeague returns null — calendar empty season ok
     assert.ok(cal.season >= 1);
   });
 });
