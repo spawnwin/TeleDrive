@@ -24,6 +24,8 @@ const archiveCache = { entries: [] };
 const friendlyQueue = [];
 const transferMarket = { list: [], refreshedAt: 0 };
 const leaguesCache = { leagues: {}, meta: { lastTick: 0, seasonCounter: 1 } };
+const newsCache = { items: [] };
+const chatCache = { messages: [] };
 
 let writeChain = Promise.resolve();
 
@@ -278,6 +280,10 @@ async function hydrateFromDb() {
   const lgData = lg ? parseJson(lg.valueJson, { leagues: {}, meta: { lastTick: 0, seasonCounter: 1 } }) : null;
   leaguesCache.leagues = lgData?.leagues || {};
   leaguesCache.meta = lgData?.meta || { lastTick: 0, seasonCounter: 1 };
+  const newsRow = await prisma.meta.findUnique({ where: { key: 'news_feed' } });
+  newsCache.items = newsRow ? (parseJson(newsRow.valueJson, { items: [] }).items || []) : [];
+  const chatRow = await prisma.meta.findUnique({ where: { key: 'lobby_chat' } });
+  chatCache.messages = chatRow ? (parseJson(chatRow.valueJson, { messages: [] }).messages || []) : [];
 }
 
 async function init() {
@@ -520,6 +526,42 @@ function saveLeagues(obj) {
   return leaguesCache;
 }
 
+async function flushNews() {
+  await prisma.meta.upsert({
+    where: { key: 'news_feed' },
+    create: { key: 'news_feed', valueJson: JSON.stringify({ items: newsCache.items || [] }) },
+    update: { valueJson: JSON.stringify({ items: newsCache.items || [] }) }
+  });
+}
+
+async function flushChat() {
+  await prisma.meta.upsert({
+    where: { key: 'lobby_chat' },
+    create: { key: 'lobby_chat', valueJson: JSON.stringify({ messages: chatCache.messages || [] }) },
+    update: { valueJson: JSON.stringify({ messages: chatCache.messages || [] }) }
+  });
+}
+
+function loadNews() {
+  return newsCache;
+}
+
+function saveNews(data) {
+  if (data) newsCache.items = Array.isArray(data.items) ? data.items : (Array.isArray(data) ? data : newsCache.items);
+  enqueue('news', flushNews);
+  return newsCache;
+}
+
+function loadChat() {
+  return chatCache;
+}
+
+function saveChat(data) {
+  if (data) chatCache.messages = Array.isArray(data.messages) ? data.messages : (Array.isArray(data) ? data : chatCache.messages);
+  enqueue('chat', flushChat);
+  return chatCache;
+}
+
 async function flushAll() {
   await writeChain;
   await flushUsers();
@@ -530,6 +572,8 @@ async function flushAll() {
   await flushFriendly();
   await flushTransfers();
   await flushLeagues();
+  await flushNews();
+  await flushChat();
 }
 
 async function disconnect() {
@@ -569,5 +613,9 @@ module.exports = {
   setTransferMarket,
   removeTransferListing,
   loadLeagues,
-  saveLeagues
+  saveLeagues,
+  loadNews,
+  saveNews,
+  loadChat,
+  saveChat
 };

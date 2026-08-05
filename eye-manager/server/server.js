@@ -10,6 +10,7 @@ const db = require('./db');
 const G = require('./game');
 const { createCupsModule } = require('./cups');
 const { createLeagueModule } = require('./league');
+const { createSocialModule } = require('./social');
 
 const PORT = Number(process.env.EYE_PORT || 9140);
 const ROOT = path.resolve(__dirname, '..');
@@ -96,6 +97,7 @@ function ensureClub(user, opts = {}) {
 
 let cups;
 let league;
+let social;
 
 function createSession(userId) {
   const sess = sessionsDb();
@@ -414,6 +416,7 @@ function playCupTie(homeEnt, awayEnt, meta = {}) {
   db.setClub(homeUser.id, homeClub);
   db.setClub(awayUser.id, awayClub);
   db.addMatch(match);
+  try { social?.newsFromMatch(match); } catch {}
   // prize money handled at cup finalize; appearance fee + home tickets
   if (!homeUser.isBot) {
     const homeWon = match.score[0] > match.score[1];
@@ -456,6 +459,7 @@ function playLeagueTie(homeUserId, awayUserId, meta = {}) {
   db.setClub(awayUser.id, awayClub);
   db.addMatch(match);
   rewardUsers(homeUser, awayUser, match);
+  try { social?.newsFromMatch(match); } catch {}
   return match;
 }
 
@@ -610,10 +614,111 @@ const server = http.createServer(async (req, res) => {
     try {
       const body = JSON.parse((await readBody(req)).toString('utf8'));
       const club = ensureClub(auth.user);
+      if (body.session) {
+        const r = G.trainSession(club, body.playerId, body.session, {
+          spendUserMoney: (cost) => spendMoney(auth.user, cost)
+        });
+        if (!r.ok) return json(res, 400, r);
+        persistUser(auth.user);
+        db.setClub(auth.user.id, club);
+        return json(res, 200, {
+          ok: true,
+          session: r.session,
+          sessionLabel: r.sessionLabel,
+          xpGain: r.xpGain,
+          cost: r.cost,
+          player: r.player,
+          club: G.publicClub(club, auth.user),
+          user: enrichUser(auth.user)
+        });
+      }
       const r = G.trainPlayer(club, body.playerId, body.skill, Number(body.amount) || 1);
       if (!r.ok) return json(res, 400, r);
       db.setClub(auth.user.id, club);
       return json(res, 200, { ok: true, player: r.player, club: G.publicClub(club, auth.user) });
+    } catch (e) {
+      return json(res, 500, { error: String(e.message || e) });
+    }
+  }
+
+  if (pathname === '/api/train/sessions' && req.method === 'GET') {
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    const sessions = Object.entries(G.TRAIN_SESSIONS || {}).map(([id, s]) => ({
+      id,
+      label: s.label,
+      xp: [s.xpMin, s.xpMax],
+      fitnessCost: s.fitnessCost,
+      money: s.money || 0
+    }));
+    return json(res, 200, { ok: true, sessions });
+  }
+
+  if (pathname === '/api/news' && req.method === 'GET') {
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    const tag = url.searchParams.get('tag') || undefined;
+    const limit = Math.min(80, Math.max(1, Number(url.searchParams.get('limit')) || 40));
+    return json(res, 200, { ok: true, items: social ? social.listNews({ limit, tag }) : [] });
+  }
+
+  if (pathname === '/api/chat' && req.method === 'GET') {
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    const limit = Math.min(80, Math.max(1, Number(url.searchParams.get('limit')) || 40));
+    const after = url.searchParams.get('after') || undefined;
+    return json(res, 200, { ok: true, messages: social ? social.listChat({ limit, after }) : [] });
+  }
+
+  if (pathname === '/api/chat' && req.method === 'POST') {
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    try {
+      const body = JSON.parse((await readBody(req)).toString('utf8') || '{}');
+      const club = ensureClub(auth.user);
+      const r = social.postChat({
+        userId: auth.user.id,
+        login: auth.user.login,
+        name: auth.user.name,
+        clubName: club?.name,
+        text: body.text
+      });
+      if (!r.ok) return json(res, 400, r);
+      return json(res, 200, r);
+    } catch (e) {
+      return json(res, 500, { error: String(e.message || e) });
+    }
+  }
+
+  if (pathname === '/api/press' && req.method === 'GET') {
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    const club = ensureClub(auth.user);
+    const cdLeft = club.lastPressAt ? Math.max(0, 30 * 60e3 - (Date.now() - club.lastPressAt)) : 0;
+    return json(res, 200, {
+      ok: true,
+      options: social.pressOptions(),
+      cooldownMs: cdLeft,
+      buff: club.pressBuff && club.pressBuff.until > Date.now() ? club.pressBuff : null
+    });
+  }
+
+  if (pathname === '/api/press' && req.method === 'POST') {
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    try {
+      const body = JSON.parse((await readBody(req)).toString('utf8') || '{}');
+      const club = ensureClub(auth.user);
+      const r = social.applyPress(club, auth.user, body.optionId || body.id);
+      if (!r.ok) return json(res, 400, r);
+      persistUser(auth.user);
+      db.setClub(auth.user.id, club);
+      return json(res, 200, {
+        ok: true,
+        option: { id: r.option.id, label: r.option.label },
+        club: G.publicClub(club, auth.user),
+        user: enrichUser(auth.user)
+      });
     } catch (e) {
       return json(res, 500, { error: String(e.message || e) });
     }
@@ -920,6 +1025,7 @@ const server = http.createServer(async (req, res) => {
     rewardUsers(homeUser, awayUser, match);
     markMatchPlayed(homeUser, 'match');
     markMatchPlayed(awayUser, 'match');
+    try { social?.newsFromMatch(match); } catch {}
     pushUserEvent(homeUser.id, {
       type: 'friendly_done',
       title: 'Заявку приняли',
@@ -949,6 +1055,7 @@ const server = http.createServer(async (req, res) => {
     db.addMatch(match);
     rewardUsers(auth.user, bot, match);
     markMatchPlayed(auth.user, 'bot');
+    try { social?.newsFromMatch(match); } catch {}
     return json(res, 200, { ok: true, match });
   }
 
@@ -1018,6 +1125,7 @@ const server = http.createServer(async (req, res) => {
     db.setClub(auth.user.id, awayClub);
     db.addMatch(match);
     rewardUsers(homeUser, auth.user, match);
+    try { social?.newsFromMatch(match); } catch {}
     pushUserEvent(homeUser.id, {
       type: 'challenge_done',
       title: 'Вызов принят',
@@ -1162,6 +1270,14 @@ const server = http.createServer(async (req, res) => {
           title: 'Игрок куплен',
           body: `${r.player.name} из ${sellerClub.name}`
         });
+        try {
+          social?.newsTransfer({
+            player: r.player.name,
+            buyer: club.name,
+            seller: sellerClub.name,
+            value: r.cost
+          });
+        } catch {}
         return json(res, 200, { ok: true, club: G.publicClub(club, auth.user), user: enrichUser(auth.user), player: r.player, fromClub: true });
       }
 
@@ -1181,6 +1297,14 @@ const server = http.createServer(async (req, res) => {
         title: 'Игрок куплен',
         body: `${r.player.name} (агенты)`
       });
+      try {
+        social?.newsTransfer({
+          player: r.player.name,
+          buyer: club.name,
+          seller: null,
+          value: r.cost
+        });
+      } catch {}
       return json(res, 200, { ok: true, club: G.publicClub(club, auth.user), user: enrichUser(auth.user), player: r.player });
     } catch (e) {
       return json(res, 500, { error: String(e.message || e) });
@@ -1520,6 +1644,14 @@ const server = http.createServer(async (req, res) => {
 
 async function main() {
   await db.init();
+  social = createSocialModule({
+    store: {
+      loadNews: () => db.loadNews(),
+      saveNews: (x) => db.saveNews(x),
+      loadChat: () => db.loadChat(),
+      saveChat: (x) => db.saveChat(x)
+    }
+  });
   cups = createCupsModule({
     dataDir: DATA_DIR,
     usersDb,
@@ -1597,6 +1729,16 @@ async function main() {
         if (!club) return;
         G.pushLedger(club, amount, label);
         db.setClub(userId, club);
+      },
+      onLeagueFinish: (info) => {
+        social?.newsLeague({
+          title: info.champion
+            ? `Чемпион: ${info.champion.clubName}`
+            : `Лига завершена: ${info.name}`,
+          body: info.name,
+          leagueId: info.id,
+          tag: 'league'
+        });
       }
     }
   });

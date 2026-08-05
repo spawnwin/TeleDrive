@@ -521,6 +521,45 @@ table.sheet tr:hover td { background: rgba(61,220,132,.05); }
 }
 .club-banner p { margin: 8px 0 0; color: rgba(255,255,255,.82); max-width: 36ch; }
 
+.news-tag {
+  display: inline-block;
+  margin-right: 6px;
+  padding: 2px 7px;
+  border-radius: 6px;
+  font-size: 10px;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  background: rgba(31,166,90,.2);
+  color: var(--grass-bright, #3ddc84);
+  vertical-align: middle;
+}
+.chat-form {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.chat-form input {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: rgba(0,0,0,.25);
+  color: inherit;
+  font: inherit;
+}
+.chat-text {
+  margin: 6px 0 0;
+  color: rgba(255,255,255,.88);
+  line-height: 1.4;
+}
+.train-sessions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 10px 0 14px;
+}
+
 @media (max-width: 960px) {
   .gate { grid-template-columns: 1fr; }
   .gate-hero { order: -1; min-height: 42vh; justify-content: flex-end; padding-bottom: 24px; }

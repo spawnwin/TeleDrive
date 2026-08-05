@@ -322,6 +322,18 @@ function createLeagueModule({ usersDb, saveUsers, store }) {
     const pub = publicLeague(L);
     const champ = pub.standings[0];
     L.champion = champ ? { userId: champ.userId, clubName: champ.clubName, pts: champ.pts } : null;
+    if (typeof store?.onLeagueFinish === 'function') {
+      try {
+        store.onLeagueFinish({
+          id: L.id,
+          name: L.name,
+          champion: L.champion,
+          standings: pub.standings.slice(0, 3)
+        });
+      } catch (e) {
+        console.warn('[league] onLeagueFinish', e.message || e);
+      }
+    }
     (L.entrants || []).filter((e) => !e.isBot).forEach((e) => {
       const row = pub.standings.find((s) => s.userId === e.userId);
       const rank = row?.rank || 99;

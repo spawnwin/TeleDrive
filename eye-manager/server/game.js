@@ -288,6 +288,8 @@ function publicClub(club, user) {
     skillCap: skillCap(club, false),
     gkSkillCap: skillCap(club, true),
     understrength: healthyXi < 11,
+    lastPressAt: club.lastPressAt || null,
+    pressBuff: club.pressBuff && club.pressBuff.until > Date.now() ? club.pressBuff : null,
     manager: user ? { id: user.id, login: user.login, name: user.name, level: user.level } : null
   };
 }
@@ -322,6 +324,9 @@ function teamMatchPower(club, xi, { home = false } = {}) {
   // defensive solidity slightly reduces opponent chance via separate field
   const solidity = form.def * ins.def;
   if (home) power *= 1.05;
+  if (club.pressBuff && club.pressBuff.until > Date.now()) {
+    power *= Number(club.pressBuff.fitness || 1);
+  }
   // XI quality vs full squad
   if (xi?.length) {
     const xiStr = xi.reduce((s, p) => s + effectiveMastery(p), 0);
@@ -659,6 +664,55 @@ function trainPlayer(club, playerId, skillKey, amount = 1) {
   p.skills[skillKey] = Math.min(cap, cur + amount);
   p.xpPool -= cost;
   return { ok: true, player: { ...p, mastery: masteryOf(p), effective: effectiveMastery(p) } };
+}
+
+const TRAIN_SESSIONS = {
+  technical: { label: 'Техника', xpMin: 8, xpMax: 14, fitnessCost: 10, morale: 1, money: 0 },
+  physical: { label: 'Физика', xpMin: 5, xpMax: 10, fitnessCost: 18, morale: 0, money: 2000 },
+  tactics: { label: 'Тактика', xpMin: 6, xpMax: 12, fitnessCost: 8, morale: 2, money: 1500 },
+  recovery: { label: 'Восстановление', xpMin: 0, xpMax: 3, fitnessCost: -22, morale: 2, money: 4000 }
+};
+
+function trainSession(club, playerId, session = 'technical', { spendUserMoney } = {}) {
+  const p = (club.players || []).find((x) => x.id === playerId);
+  if (!p) return { ok: false, error: 'Игрок не найден' };
+  if ((p.injuredHours || 0) > 0) return { ok: false, error: 'Игрок травмирован' };
+  if ((p.suspendedMatches || 0) > 0) return { ok: false, error: 'Игрок дисквалифицирован' };
+  const kind = TRAIN_SESSIONS[session] ? session : 'technical';
+  const cfg = TRAIN_SESSIONS[kind];
+  const now = Date.now();
+  if ((p.trainCdUntil || 0) > now) {
+    return { ok: false, error: `Пауза до ${new Date(p.trainCdUntil).toLocaleTimeString('ru-RU')}`, until: p.trainCdUntil };
+  }
+  if (kind !== 'recovery' && (p.fitness || 100) < 35) {
+    return { ok: false, error: 'Слишком устал — нужна сессия «Восстановление»' };
+  }
+  const coach = (club.staff && club.staff.coach) || 1;
+  const cost = cfg.money || 0;
+  if (cost > 0 && typeof spendUserMoney === 'function') {
+    const spent = spendUserMoney(cost);
+    if (!spent) return { ok: false, error: `Нужно ${cost} ¤` };
+  }
+  const xpGain = rnd(cfg.xpMin, cfg.xpMax) + Math.max(0, coach - 1);
+  p.xpPool = (p.xpPool || 0) + xpGain;
+  if (cfg.fitnessCost < 0) {
+    p.fitness = Math.min(100, (p.fitness || 100) - cfg.fitnessCost + rnd(0, 4));
+  } else {
+    p.fitness = Math.max(18, (p.fitness || 100) - (cfg.fitnessCost + rnd(0, 4)));
+  }
+  p.morale = Math.max(-20, Math.min(25, (p.morale || 0) + (cfg.morale || 0)));
+  p.trainCdUntil = now + 40 * 60 * 1000;
+  p.lastTrain = { at: now, session: kind, xp: xpGain };
+  if (cost > 0) pushLedger(club, -cost, `Тренировка · ${cfg.label} · ${p.name}`);
+  return {
+    ok: true,
+    session: kind,
+    sessionLabel: cfg.label,
+    xpGain,
+    cost,
+    player: { ...p, mastery: masteryOf(p), effective: effectiveMastery(p) },
+    cooldownMs: 40 * 60 * 1000
+  };
 }
 
 function recoverSquad(club) {
@@ -1022,6 +1076,8 @@ module.exports = {
   publicClub,
   simulateMatch,
   trainPlayer,
+  trainSession,
+  TRAIN_SESSIONS,
   recoverSquad,
   makePlayer,
   pushLedger,

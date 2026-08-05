@@ -56,7 +56,10 @@
     cabinet: [
       ['main', 'Главная'],
       ['finance', 'Финансы'],
-      ['mail', 'События']
+      ['mail', 'События'],
+      ['press', 'Пресса'],
+      ['news', 'Лента'],
+      ['chat', 'Чат']
     ],
     team: [
       ['formation', 'Построение'],
@@ -263,6 +266,69 @@
         </section>`;
       return;
     }
+    if (state.tab === 'press') {
+      let press = { options: [], cooldownMs: 0, buff: null };
+      try { press = await A().request('api/press'); } catch {}
+      const mins = Math.ceil((press.cooldownMs || 0) / 60000);
+      $('#view').innerHTML = `
+        <section class="panel">
+          <h3>Пресс-конференция</h3>
+          <p class="hint">Ответ поднимает мораль состава и даёт краткий бафф силы на ~2 часа. Кулдаун 30 минут.</p>
+          ${press.buff ? `<p class="hint" style="color:var(--grass-bright)">Активно: «${esc(press.buff.label)}» до ${new Date(press.buff.until).toLocaleTimeString('ru-RU')}</p>` : ''}
+          ${mins > 0 ? `<p class="hint">Следующая конференция через ~${mins} мин</p>` : ''}
+          <div class="list">${(press.options || []).map((o) => `
+            <div class="list-row">
+              <div><strong>${esc(o.label)}</strong></div>
+              <button class="btn btn-primary btn-tiny" data-press="${esc(o.id)}" ${mins > 0 ? 'disabled' : ''}>Сказать</button>
+            </div>`).join('')}</div>
+        </section>`;
+      return;
+    }
+    if (state.tab === 'news') {
+      let items = [];
+      try {
+        const data = await A().request('api/news?limit=40');
+        items = data.items || [];
+      } catch {}
+      const TAGS = { match: 'Матч', friendly: 'Тов.', cup: 'Кубок', league: 'Лига', transfer: 'Трансфер', press: 'Пресса' };
+      $('#view').innerHTML = `
+        <section class="panel">
+          <div class="panel-head"><h3>Лента новостей</h3><button class="btn btn-tiny" id="btn-news-refresh">Обновить</button></div>
+          <div class="list news-feed">${items.length ? items.map((n) => `
+            <div class="list-row">
+              <div>
+                <strong><span class="news-tag">${esc(TAGS[n.tag] || n.tag || 'Новость')}</span> ${esc(n.title)}</strong>
+                <small>${esc(n.body || '')} · ${new Date(n.at || Date.now()).toLocaleString('ru-RU')}</small>
+              </div>
+              ${n.matchId ? `<button class="btn btn-tiny" data-match="${esc(n.matchId)}">Отчёт</button>` : ''}
+            </div>`).join('') : '<p class="hint">Лента пуста — сыграйте матч или проведите пресс-конференцию.</p>'}</div>
+        </section>`;
+      return;
+    }
+    if (state.tab === 'chat') {
+      let messages = [];
+      try {
+        const data = await A().request('api/chat?limit=50');
+        messages = data.messages || [];
+      } catch {}
+      $('#view').innerHTML = `
+        <section class="panel">
+          <div class="panel-head"><h3>Лобби-чат</h3><button class="btn btn-tiny" id="btn-chat-refresh">Обновить</button></div>
+          <form id="form-chat" class="chat-form">
+            <input name="text" maxlength="200" placeholder="Сообщение менеджерам…" required autocomplete="off" />
+            <button class="btn btn-primary" type="submit">Отправить</button>
+          </form>
+          <div class="list chat-list" id="chat-list">${messages.length ? messages.map((m) => `
+            <div class="list-row">
+              <div>
+                <strong>${esc(m.clubName || m.name || m.login)}</strong>
+                <small>@${esc(m.login)} · ${new Date(m.at || Date.now()).toLocaleTimeString('ru-RU')}</small>
+                <p class="chat-text">${esc(m.text)}</p>
+              </div>
+            </div>`).join('') : '<p class="hint">Пока тихо — напишите первым.</p>'}</div>
+        </section>`;
+      return;
+    }
     const cal = state.me?.calendar;
     const nextFix = (cal?.items || []).find((x) => x.status === 'next' || x.status === 'planned');
     $('#view').innerHTML = `
@@ -392,18 +458,36 @@
       return;
     }
     if (state.tab === 'train') {
+      const now = Date.now();
       $('#view').innerHTML = `
         <section class="panel">
           <h3>Тренировки</h3>
-          <p class="hint">Опыт копится в матчах. Потолок умений: полевые ${club.skillCap || 20}, вратари ${club.gkSkillCap || 20}. Поднимите персонал в Бонусе.</p>
-          <div class="list">${players.map((p) => `
+          <p class="hint">Сессия даёт опыт игроку (кулдаун 40 мин). Затем опыт тратится на умения (+1 = 8 опыта). Потолок: полевые ${club.skillCap || 20}, вратари ${club.gkSkillCap || 20}.</p>
+          <div class="train-sessions">
+            <button class="btn btn-tiny" data-session-hint="technical">Техника</button>
+            <button class="btn btn-tiny" data-session-hint="physical">Физика · 2 000</button>
+            <button class="btn btn-tiny" data-session-hint="tactics">Тактика · 1 500</button>
+            <button class="btn btn-tiny" data-session-hint="recovery">Восстановление · 4 000</button>
+          </div>
+          <p class="hint" id="session-hint">Выберите игрока и тип сессии.</p>
+          <div class="list">${players.map((p) => {
+            const cd = (p.trainCdUntil || 0) > now;
+            const left = cd ? Math.ceil((p.trainCdUntil - now) / 60000) : 0;
+            return `
             <div class="list-row">
               <div>
                 <strong>${esc(p.name)} · ${esc(p.pos)}</strong>
-                <small>Мастерство ${p.mastery} · опыт ${p.xpPool || 0} · талант ${p.talent}</small>
+                <small>Мастерство ${p.mastery} · опыт ${p.xpPool || 0} · физа ${p.fitness || 100}%${cd ? ' · пауза ' + left + 'м' : ''}</small>
               </div>
-              <button class="btn btn-tiny" data-train="${esc(p.id)}">Качать</button>
-            </div>`).join('')}</div>
+              <div style="display:flex;gap:6px;flex-wrap:wrap">
+                <button class="btn btn-tiny" data-session="technical" data-pid="${esc(p.id)}" ${cd || (p.injuredHours || 0) > 0 ? 'disabled' : ''}>Техника</button>
+                <button class="btn btn-tiny" data-session="physical" data-pid="${esc(p.id)}" ${cd || (p.injuredHours || 0) > 0 ? 'disabled' : ''}>Физика</button>
+                <button class="btn btn-tiny" data-session="tactics" data-pid="${esc(p.id)}" ${cd || (p.injuredHours || 0) > 0 ? 'disabled' : ''}>Тактика</button>
+                <button class="btn btn-tiny" data-session="recovery" data-pid="${esc(p.id)}" ${cd ? 'disabled' : ''}>Восст.</button>
+                <button class="btn btn-primary btn-tiny" data-train="${esc(p.id)}">Умения</button>
+              </div>
+            </div>`;
+          }).join('')}</div>
         </section>`;
       return;
     }
@@ -1403,6 +1487,41 @@
           showTrain(skill.dataset.pid);
         } catch (err) { toast(err.message); }
       }
+      const sessionBtn = e.target.closest('[data-session]');
+      if (sessionBtn && sessionBtn.dataset.pid) {
+        try {
+          const data = await A().request('api/players/train', {
+            method: 'POST',
+            body: { playerId: sessionBtn.dataset.pid, session: sessionBtn.dataset.session }
+          });
+          state.club = data.club;
+          if (data.user) {
+            state.me.user = data.user;
+            A().setUser(data.user);
+            paintSidebar();
+          }
+          toast(`${data.sessionLabel || 'Сессия'}: +${data.xpGain || 0} опыта`);
+          render();
+        } catch (err) { toast(err.message); }
+      }
+      const pressBtn = e.target.closest('[data-press]');
+      if (pressBtn) {
+        try {
+          const data = await A().request('api/press', { method: 'POST', body: { optionId: pressBtn.dataset.press } });
+          state.club = data.club;
+          if (data.user) {
+            state.me.user = data.user;
+            A().setUser(data.user);
+            paintSidebar();
+          }
+          toast('Пресс-конференция проведена');
+          render();
+        } catch (err) { toast(err.message); }
+      }
+      if (e.target.id === 'btn-news-refresh' || e.target.id === 'btn-chat-refresh') {
+        render();
+        return;
+      }
       if (e.target.id === 'btn-recover') {
         try {
           const data = await A().request('api/players/recover', { method: 'POST' });
@@ -1524,6 +1643,19 @@
           const data = await A().request('api/club/tickets', { method: 'POST', body: { price: Number(fd.get('price')) } });
           state.club = data.club;
           toast('Цена билета сохранена');
+          render();
+        } catch (err) { toast(err.message); }
+        return;
+      }
+      if (e.target.id === 'form-chat') {
+        e.preventDefault();
+        const fd = new FormData(e.target);
+        const text = String(fd.get('text') || '').trim();
+        if (!text) return;
+        try {
+          await A().request('api/chat', { method: 'POST', body: { text } });
+          e.target.reset();
+          toast('Отправлено');
           render();
         } catch (err) { toast(err.message); }
         return;
