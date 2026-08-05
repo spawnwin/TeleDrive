@@ -179,6 +179,21 @@ describe('eye xi server', () => {
       const bot2 = await post(port, '/api/friendly/bot', {}, auth);
       assert.equal(bot2.status, 429, bot2.body);
 
+      // list player on club market
+      const meNow = JSON.parse((await get(port, '/api/me', auth)).body);
+      const spare2 = (meNow.club.players || []).find((p) => !(meNow.club.lineupIds || []).includes(p.id));
+      if (spare2) {
+        const listed = await post(port, '/api/transfers/sell', { playerId: spare2.id, mode: 'list' }, auth);
+        assert.equal(listed.status, 200, listed.body);
+        assert.equal(JSON.parse(listed.body).listed, true);
+      }
+
+      // upgrade stadium then academy (need lvl 2)
+      await post(port, '/api/club/stadium', {}, auth);
+      const youth = await post(port, '/api/academy/promote', {}, auth);
+      assert.equal(youth.status, 200, youth.body);
+      assert.ok(JSON.parse(youth.body).player?.name);
+
       const logout = await post(port, '/api/logout', {}, auth);
       assert.equal(logout.status, 200);
       const meAfter = await get(port, '/api/me', auth);

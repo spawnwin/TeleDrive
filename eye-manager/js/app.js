@@ -25,7 +25,13 @@
     challenge_in: 'Входящий вызов',
     challenge_done: 'Вызов сыгран',
     challenge_declined: 'Вызов отклонён',
-    friendly_done: 'Товарищеский сыгран'
+    friendly_done: 'Товарищеский сыгран',
+    injury: 'Травма',
+    wage: 'Зарплаты',
+    transfer_bought: 'Трансфер',
+    transfer_sold: 'Продажа',
+    transfer_listed: 'На рынке',
+    youth: 'Академия'
   };
 
   const TABS = {
@@ -43,7 +49,8 @@
       ['squad', 'Состав'],
       ['train', 'Тренировки'],
       ['recover', 'Восстановление'],
-      ['market', 'Трансферы']
+      ['market', 'Трансферы'],
+      ['academy', 'Академия']
     ],
     matches: [
       ['friendly', 'Товарищеские'],
@@ -59,6 +66,10 @@
     rating: [
       ['board', 'Очки'],
       ['cups', 'Кубки']
+    ],
+    admin: [
+      ['cups', 'Кубки'],
+      ['stats', 'Статистика']
     ]
   };
 
@@ -361,14 +372,32 @@
     if (state.tab === 'market') {
       const data = await A().request('api/transfers');
       const list = data.list || [];
+      const clubListings = data.clubListings || [];
+      const myListings = data.myListings || [];
       const scout = data.scoutLevel || 0;
       $('#view').innerHTML = `
         <section class="panel">
           <div class="panel-head">
             <h3>Трансферный рынок</h3>
-            <button class="btn btn-tiny" id="btn-market-refresh" ${scout < 1 ? 'disabled' : ''}>Обновить · 5 000 ¤</button>
+            <button class="btn btn-tiny" id="btn-market-refresh" ${scout < 1 ? 'disabled' : ''}>Обновить агентов · 5 000 ¤</button>
           </div>
-          <p class="hint">Скаут ур. ${scout}: выше уровень — лучше кандидаты. Состав ${data.squadSize || 0}/25. Продажа — из вкладки «Состав».</p>
+          <p class="hint">Скаут ур. ${scout}. Состав ${data.squadSize || 0}/25. Можно купить у других клубов или у агентов; своего игрока — выставить или продать агентам.</p>
+          ${myListings.length ? `<h4 style="margin:12px 0 8px;font-family:Syne,sans-serif">Ваши лоты</h4>
+            <div class="list">${myListings.map((p) => `
+              <div class="list-row">
+                <div><strong>${esc(p.name)} · ${esc(p.pos)}</strong><small>${money(p.value)}</small></div>
+                <button class="btn btn-tiny" data-unlist="${esc(p.id)}">Снять</button>
+              </div>`).join('')}</div>` : ''}
+          ${clubListings.length ? `<h4 style="margin:16px 0 8px;font-family:Syne,sans-serif">Клубы</h4>
+            <div class="list">${clubListings.map((p) => `
+              <div class="list-row">
+                <div>
+                  <strong>${esc(p.name)} · ${esc(p.pos)}</strong>
+                  <small>${esc(p.sellerClub || 'клуб')} · маст. ${p.mastery} · ${p.age} лет</small>
+                </div>
+                <button class="btn btn-primary btn-tiny" data-buy="${esc(p.id)}">${money(p.value)}</button>
+              </div>`).join('')}</div>` : ''}
+          <h4 style="margin:16px 0 8px;font-family:Syne,sans-serif">Агенты</h4>
           <div class="list">${list.length ? list.map((p) => `
             <div class="list-row">
               <div>
@@ -377,8 +406,25 @@
               </div>
               <button class="btn btn-primary btn-tiny" data-buy="${esc(p.id)}">${money(p.value)}</button>
             </div>`).join('') : `<p class="hint">${scout < 1
-              ? 'Рынок закрыт — наймите скаута в «Бонусе», затем обновите список.'
-              : 'Список пуст — нажмите «Обновить» (5 000 ¤) или зайдите позже.'}</p>`}</div>
+              ? 'Рынок агентов закрыт — наймите скаута в «Бонусе».'
+              : 'Список пуст — нажмите «Обновить».'}</p>`}</div>
+        </section>`;
+      return;
+    }
+    if (state.tab === 'academy') {
+      const lvl = club.stadiumLevel || 1;
+      const cost = 20000 + Math.max(0, lvl - 2) * 5000;
+      $('#view').innerHTML = `
+        <section class="panel">
+          <h3>Молодёжная академия</h3>
+          <p class="hint">Раз в сутки выпускает игрока 16–19 лет. Нужен стадион ур. 2+. Выше уровень стадиона — сильнее выпускники.</p>
+          <div class="grid-3">
+            <div class="stat-card"><span>Стадион</span><b>${lvl} / 8</b></div>
+            <div class="stat-card"><span>Состав</span><b>${(club.players || []).length}/25</b></div>
+            <div class="stat-card"><span>Выпуск</span><b>${money(cost)}</b></div>
+          </div>
+          <button class="btn btn-primary" id="btn-youth" style="margin-top:14px" ${lvl < 2 ? 'disabled' : ''}>Выпустить воспитанника</button>
+          ${lvl < 2 ? '<p class="hint" style="margin-top:10px">Сначала улучшите стадион во вкладке «Команда».</p>' : ''}
         </section>`;
       return;
     }
@@ -396,7 +442,10 @@
               <td><b>${p.effective}</b></td>
               <td>${p.fitness}%${p.injuredHours ? ' <span class="badge danger">травма</span>' : ''}</td>
               <td>${p.morale > 0 ? '+' : ''}${p.morale}</td>
-              <td><button class="btn btn-tiny" data-sell="${esc(p.id)}">Продать</button></td>
+              <td style="white-space:nowrap">
+                <button class="btn btn-tiny" data-list="${esc(p.id)}">На рынок</button>
+                <button class="btn btn-tiny" data-sell="${esc(p.id)}">Агентам</button>
+              </td>
             </tr>`).join('')}</tbody>
         </table></div>
       </section>`;
@@ -528,6 +577,17 @@
 
   async function renderTactics() {
     const club = state.club;
+    const chosen = new Set(club.instructions || []);
+    const INS = [
+      ['high_press', 'Высокий прессинг'],
+      ['low_block', 'Низкий блок'],
+      ['wide_play', 'Игра в ширину'],
+      ['through_balls', 'Передачи вразрез'],
+      ['long_balls', 'Длинные передачи'],
+      ['keep_ball', 'Контроль мяча'],
+      ['man_mark', 'Персональная опека'],
+      ['counter_fast', 'Быстрый отрыв']
+    ];
     $('#view').innerHTML = `
       <div class="grid-2">
         <section class="panel">
@@ -544,15 +604,63 @@
                 ${['4-4-2','4-3-3','3-5-2','4-2-3-1'].map((f) => `<option value="${f}" ${club.formation===f?'selected':''}>${f}</option>`).join('')}
               </select>
             </label>
+            <div>
+              <strong style="display:block;margin-bottom:8px">Указания (до 4)</strong>
+              <div class="list">${INS.map(([id, label]) => `
+                <label class="list-row" style="cursor:pointer">
+                  <div><strong>${label}</strong></div>
+                  <input type="checkbox" name="instruction" value="${id}" ${chosen.has(id) ? 'checked' : ''} />
+                </label>`).join('')}</div>
+            </div>
             <button class="btn btn-primary" type="submit">Сохранить тактику</button>
           </form>
-          <p class="hint">Атака и прессинг дают больше моментов, но сильнее жгут физическую готовность.</p>
+          <p class="hint">Стиль, схема и указания влияют на моменты, владение и расход сил. Атака/прессинг жгут физу сильнее.</p>
         </section>
         <section class="panel">
           <h3>Превью</h3>
           ${pitchHtml(club)}
         </section>
       </div>`;
+  }
+
+  async function renderAdmin() {
+    if (state.tab === 'stats') {
+      const data = await A().request('api/admin/stats');
+      $('#view').innerHTML = `
+        <section class="panel">
+          <h3>Админ · статистика</h3>
+          <div class="grid-3">
+            <div class="stat-card"><span>Люди</span><b>${data.humans || 0}</b></div>
+            <div class="stat-card"><span>Боты</span><b>${data.bots || 0}</b></div>
+            <div class="stat-card"><span>Открытых кубков</span><b>${data.cupsOpen || 0}</b></div>
+            <div class="stat-card"><span>Live</span><b>${data.cupsLive || 0}</b></div>
+            <div class="stat-card"><span>Архив</span><b>${data.archive || 0}</b></div>
+          </div>
+          <button class="btn btn-primary" id="btn-admin-tick" style="margin-top:14px">Tick кубков</button>
+        </section>`;
+      return;
+    }
+    const data = await A().request('api/admin/cups');
+    const rows = [...(data.live || []), ...(data.open || [])].slice(0, 40);
+    $('#view').innerHTML = `
+      <section class="panel">
+        <div class="panel-head"><h3>Админ · кубки</h3>
+          <button class="btn btn-primary btn-tiny" id="btn-admin-create">Создать 8</button>
+        </div>
+        <div class="list">${rows.length ? rows.map((c) => `
+          <div class="list-row">
+            <div>
+              <strong>${esc(c.name)}</strong>
+              <small>${esc(c.status)} · ${c.slotsFilled || c.entrantsCount || 0}/${c.size} · ${esc(c.round || c.bracketLabel || '')}</small>
+            </div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap">
+              ${c.status === 'open' ? `<button class="btn btn-tiny" data-admin-start="${esc(c.id)}">Старт</button>` : ''}
+              ${c.status === 'live' ? `<button class="btn btn-tiny" data-admin-adv="${esc(c.id)}">Раунд</button>
+                <button class="btn btn-tiny" data-admin-fin="${esc(c.id)}">Финиш</button>` : ''}
+              <button class="btn btn-tiny" data-admin-del="${esc(c.id)}">Удалить</button>
+            </div>
+          </div>`).join('') : '<p class="hint">Нет кубков</p>'}</div>
+      </section>`;
   }
 
   async function renderBonus() {
@@ -645,27 +753,43 @@
       else if (state.section === 'tactics') await renderTactics();
       else if (state.section === 'bonus') await renderBonus();
       else if (state.section === 'rating') await renderRating();
+      else if (state.section === 'admin') await renderAdmin();
     } catch (e) {
-      view.innerHTML = `<section class="panel"><p class="hint">${e.message || 'Ошибка загрузки'}</p></section>`;
+      view.innerHTML = `<section class="panel"><p class="hint">${esc(e.message || 'Ошибка загрузки')}</p></section>`;
     }
   }
 
   function showMatch(match) {
+    const st = match.stats || {};
+    const evLabel = (e) => {
+      if (e.type === 'goal') return 'Гол' + (e.assist ? ` (п. ${esc(e.assist)})` : '');
+      if (e.type === 'shot') return 'Удар';
+      if (e.type === 'corner') return 'Угловой';
+      if (e.type === 'yellow') return 'Жёлтая';
+      if (e.type === 'red') return 'Красная';
+      if (e.type === 'injury') return 'Травма';
+      if (e.type === 'pens') return 'Пенальти';
+      return esc(e.type || 'Событие');
+    };
     openModal(`
       <div class="panel-head">
         <h2 style="margin:0;font-family:Syne,sans-serif">${compLabel(match.competition)}${match.cupName ? ' · ' + esc(match.cupName) : ''}</h2>
         <button class="btn btn-tiny" id="modal-close">Закрыть</button>
       </div>
       <div class="match-score">
-        <div class="team"><strong>${esc(match.home?.name)}</strong><div class="hint">сила ${match.home?.strength}</div></div>
+        <div class="team"><strong>${esc(match.home?.name)}</strong><div class="hint">${esc(match.home?.formation || '')} · ${esc(match.home?.style || '')} · сила ${match.home?.strength}</div></div>
         <div class="score">${match.score?.[0]}:${match.score?.[1]}</div>
-        <div class="team"><strong>${esc(match.away?.name)}</strong><div class="hint">сила ${match.away?.strength}</div></div>
+        <div class="team"><strong>${esc(match.away?.name)}</strong><div class="hint">${esc(match.away?.formation || '')} · ${esc(match.away?.style || '')} · сила ${match.away?.strength}</div></div>
       </div>
+      ${st.shots ? `<div class="grid-3" style="margin:12px 0">
+        <div class="stat-card"><span>Владение</span><b>${(st.possession||[])[0]||'—'}% : ${(st.possession||[])[1]||'—'}%</b></div>
+        <div class="stat-card"><span>Удары (в створ)</span><b>${(st.shots||[])[0]||0}(${(st.shotsOn||[])[0]||0}) : ${(st.shots||[])[1]||0}(${(st.shotsOn||[])[1]||0})</b></div>
+        <div class="stat-card"><span>Угловые / карт.</span><b>${(st.corners||[])[0]||0}:${(st.corners||[])[1]||0} / ${(st.cards||[])[0]||0}:${(st.cards||[])[1]||0}</b></div>
+      </div>` : ''}
       <h3>События</h3>
       <div class="events">${(match.events || []).map((e) => {
-        const kind = e.type === 'pens' ? 'Пенальти' : 'Гол';
-        return `<div class="event"><span class="min">${e.minute}'</span><span>${kind}: ${esc(e.side === 'home' ? match.home?.name : match.away?.name)} — ${esc(e.player)} (${e.score?.[0]}:${e.score?.[1]})</span></div>`;
-      }).join('') || '<p class="hint">Без голов</p>'}</div>
+        return `<div class="event"><span class="min">${e.minute}'</span><span>${evLabel(e)}: ${esc(e.side === 'home' ? match.home?.name : match.away?.name)} — ${esc(e.player)} (${e.score?.[0]}:${e.score?.[1]})</span></div>`;
+      }).join('') || '<p class="hint">Без событий</p>'}</div>
     `);
   }
 
@@ -912,7 +1036,7 @@
       }
       const sell = e.target.closest('[data-sell]');
       if (sell) {
-        if (!confirm('Продать игрока?')) return;
+        if (!confirm('Продать агентам за ~70% стоимости?')) return;
         try {
           const data = await A().request('api/transfers/sell', { method: 'POST', body: { playerId: sell.dataset.sell } });
           state.club = data.club;
@@ -920,6 +1044,89 @@
           A().setUser(data.user);
           paintSidebar();
           toast('Продано за ' + money(data.value));
+          render();
+        } catch (err) { toast(err.message); }
+      }
+      const listPl = e.target.closest('[data-list]');
+      if (listPl) {
+        try {
+          const data = await A().request('api/transfers/sell', {
+            method: 'POST',
+            body: { playerId: listPl.dataset.list, mode: 'list' }
+          });
+          state.club = data.club;
+          state.me.user = data.user;
+          A().setUser(data.user);
+          paintSidebar();
+          toast('Выставлен за ' + money(data.listing?.value));
+          render();
+        } catch (err) { toast(err.message); }
+      }
+      const unlist = e.target.closest('[data-unlist]');
+      if (unlist) {
+        try {
+          const data = await A().request('api/transfers/unlist', { method: 'POST', body: { playerId: unlist.dataset.unlist } });
+          state.club = data.club;
+          toast('Лот снят, игрок вернулся');
+          await refreshMe();
+          render();
+        } catch (err) { toast(err.message); }
+      }
+      if (e.target.id === 'btn-youth') {
+        try {
+          const data = await A().request('api/academy/promote', { method: 'POST' });
+          state.club = data.club;
+          state.me.user = data.user;
+          A().setUser(data.user);
+          paintSidebar();
+          toast('Воспитанник: ' + (data.player?.name || ''));
+          render();
+        } catch (err) { toast(err.message); }
+      }
+      if (e.target.id === 'btn-admin-tick') {
+        try {
+          await A().request('api/admin/tick', { method: 'POST' });
+          toast('Tick выполнен');
+          render();
+        } catch (err) { toast(err.message); }
+      }
+      if (e.target.id === 'btn-admin-create') {
+        try {
+          await A().request('api/admin/cups', { method: 'POST', body: { size: 8, bracketId: 'l1_2', startInMs: 120000 } });
+          toast('Кубок создан');
+          render();
+        } catch (err) { toast(err.message); }
+      }
+      const admStart = e.target.closest('[data-admin-start]');
+      if (admStart) {
+        try {
+          await A().request('api/admin/cups/' + admStart.dataset.adminStart + '/force-start', { method: 'POST' });
+          toast('Старт');
+          render();
+        } catch (err) { toast(err.message); }
+      }
+      const admAdv = e.target.closest('[data-admin-adv]');
+      if (admAdv) {
+        try {
+          await A().request('api/admin/cups/' + admAdv.dataset.adminAdv + '/advance', { method: 'POST' });
+          toast('Раунд');
+          render();
+        } catch (err) { toast(err.message); }
+      }
+      const admFin = e.target.closest('[data-admin-fin]');
+      if (admFin) {
+        try {
+          await A().request('api/admin/cups/' + admFin.dataset.adminFin + '/finish', { method: 'POST' });
+          toast('Финиш');
+          render();
+        } catch (err) { toast(err.message); }
+      }
+      const admDel = e.target.closest('[data-admin-del]');
+      if (admDel) {
+        if (!confirm('Удалить кубок?')) return;
+        try {
+          await A().request('api/admin/cups/' + admDel.dataset.adminDel, { method: 'DELETE' });
+          toast('Удалён');
           render();
         } catch (err) { toast(err.message); }
       }
@@ -1059,6 +1266,11 @@
         const fd = new FormData(e.target);
         const body = Object.fromEntries(fd.entries());
         if (body.rebuildLineup) body.rebuildLineup = true;
+        if (e.target.id === 'form-tactics') {
+          const instructions = [...e.target.querySelectorAll('input[name="instruction"]:checked')].map((el) => el.value).slice(0, 4);
+          body.instructions = instructions;
+          delete body.instruction;
+        }
         try {
           const data = await A().request('api/club', { method: 'POST', body });
           state.club = data.club;
@@ -1078,6 +1290,13 @@
     $('#gate').hidden = true;
     $('#app').hidden = false;
     await refreshMe();
+    // show admin nav for admins
+    const isAdmin = state.me?.user?.role === 'admin' || state.me?.user?.login === 'admin';
+    $$('.side-links button[data-nav="admin"], .topnav-main button[data-nav="admin"]').forEach((b) => b.remove());
+    if (isAdmin) {
+      $('.side-links')?.insertAdjacentHTML('beforeend', '<button type="button" data-nav="admin">Админ</button>');
+      $('.topnav-main')?.insertAdjacentHTML('beforeend', '<button type="button" data-nav="admin">Админ</button>');
+    }
     state.section = 'cabinet';
     state.tab = 'main';
     render();

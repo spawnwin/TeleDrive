@@ -89,6 +89,7 @@ function ensureClub(user, opts = {}) {
     user.clubName = club.name;
     persistUser(user);
   }
+  if (!club.userId) club.userId = user.id;
   return club;
 }
 
@@ -247,7 +248,7 @@ function readBody(req) {
 
 function rewardUsers(home, away, match) {
   const [hg, ag] = match.score;
-  const apply = (user, won, draw, oppName, isHome) => {
+  const apply = (user, won, draw, oppName, isHome, sideInjuries) => {
     if (!user || user.isBot) return;
     const prize = won ? 45000 : draw ? 18000 : 8000;
     const club = db.getClub(user.id);
@@ -257,17 +258,32 @@ function rewardUsers(home, away, match) {
     user.xp = (user.xp || 0) + (won ? 35 : draw ? 18 : 10);
     user.level = G.levelFromXp(user.xp);
     user.fans = Math.max(1000, (user.fans || 10000) + (won ? 120 : draw ? 20 : -40));
-    if (won) user.points = (user.points || 0) + 3;
-    else if (draw) user.points = (user.points || 0) + 1;
+    if (won) {
+      user.points = (user.points || 0) + 3;
+      user.fame = (user.fame || 0) + 2;
+    } else if (draw) {
+      user.points = (user.points || 0) + 1;
+      user.fame = (user.fame || 0) + 1;
+    } else {
+      user.fame = Math.max(0, (user.fame || 0) - 1);
+    }
+    if (match.competition === 'cup' && won) user.prestige = (user.prestige || 0) + 1;
     persistUser(user);
     if (club) {
       G.pushLedger(club, prize, won ? `Победа vs ${oppName}` : draw ? `Ничья vs ${oppName}` : `Поражение vs ${oppName}`);
       if (tickets) G.pushLedger(club, tickets, 'Билеты (дома)');
       db.setClub(user.id, club);
     }
+    (sideInjuries || []).forEach((inj) => {
+      pushUserEvent(user.id, {
+        type: 'injury',
+        title: 'Травма',
+        body: `${inj.name} выбыл примерно на ${inj.hours} ч`
+      });
+    });
   };
-  apply(home, hg > ag, hg === ag, match.away?.name || 'соперник', true);
-  apply(away, ag > hg, hg === ag, match.home?.name || 'соперник', false);
+  apply(home, hg > ag, hg === ag, match.away?.name || 'соперник', true, match.injuries?.home);
+  apply(away, ag > hg, hg === ag, match.home?.name || 'соперник', false, match.injuries?.away);
 }
 
 function annotateCupPens(matchId, score) {
@@ -309,6 +325,12 @@ function processWageDay(user, club) {
   }
   persistUser(user);
   db.setClub(user.id, club);
+  pushUserEvent(user.id, {
+    type: 'wage',
+    title: result.days > 1 ? `Зарплаты за ${result.days} дн.` : 'Суточный расчёт',
+    body: (result.delta >= 0 ? '+' : '') + Math.round(result.delta) + ' ¤',
+    money: result.delta
+  });
   return result;
 }
 
@@ -963,14 +985,23 @@ const server = http.createServer(async (req, res) => {
     if (!auth) return;
     const club = ensureClub(auth.user);
     const scout = club.staff?.scout || 0;
-    const list = G.refreshClubMarket(club, false);
+    const agents = G.refreshClubMarket(club, false);
     db.setClub(auth.user.id, club);
+    const market = db.getTransferMarket();
+    const clubListings = (market.list || []).filter(
+      (p) => p.source === 'club' && p.sellerUserId && p.sellerUserId !== auth.user.id
+    );
+    const myListings = (market.list || []).filter((p) => p.sellerUserId === auth.user.id);
     return json(res, 200, {
       ok: true,
-      list,
+      list: agents,
+      clubListings,
+      myListings,
       refreshedAt: club.transferRefreshedAt || Date.now(),
       scoutLevel: scout,
-      squadSize: (club.players || []).length
+      squadSize: (club.players || []).length,
+      youthReadyAt: club.lastYouthAt ? club.lastYouthAt + 24 * 3600e3 : null,
+      stadiumLevel: club.stadiumLevel || 1
     });
   }
 
@@ -1001,6 +1032,56 @@ const server = http.createServer(async (req, res) => {
     try {
       const body = JSON.parse((await readBody(req)).toString('utf8'));
       const club = ensureClub(auth.user);
+      const market = db.getTransferMarket();
+      const clubListing = (market.list || []).find((p) => p.id === body.playerId && p.source === 'club');
+      if (clubListing) {
+        if (clubListing.sellerUserId === auth.user.id) {
+          return json(res, 400, { error: 'Нельзя купить своего игрока' });
+        }
+        if ((auth.user.money || 0) < clubListing.value) {
+          return json(res, 400, { error: `Нужно ${clubListing.value} ¤` });
+        }
+        const seller = usersDb().users[clubListing.sellerUserId];
+        const sellerClub = seller ? ensureClub(seller) : null;
+        if (!seller || !sellerClub) {
+          db.removeTransferListing(clubListing.id);
+          return json(res, 404, { error: 'Продавец недоступен — лот снят' });
+        }
+        const taken = G.takeListedPlayer(sellerClub, clubListing.id);
+        if (!taken.ok) {
+          db.removeTransferListing(clubListing.id);
+          return json(res, 404, { error: taken.error });
+        }
+        const r = G.buyPlayer(club, { ...clubListing, ...taken.player, value: clubListing.value });
+        if (!r.ok) {
+          // restore seller? rare race — put back
+          sellerClub.players.push(taken.player);
+          db.setClub(seller.id, sellerClub);
+          return json(res, 400, r);
+        }
+        if (!spendMoney(auth.user, r.cost)) return json(res, 400, { error: `Нужно ${r.cost} ¤` });
+        seller.money = Math.max(0, (seller.money || 0) + r.cost);
+        G.pushLedger(club, -r.cost, `Трансфер у ${sellerClub.name} · ${r.player.name}`);
+        G.pushLedger(sellerClub, r.cost, `Продажа клубу · ${r.player.name}`);
+        db.removeTransferListing(clubListing.id);
+        persistUser(auth.user);
+        persistUser(seller);
+        db.setClub(auth.user.id, club);
+        db.setClub(seller.id, sellerClub);
+        pushUserEvent(seller.id, {
+          type: 'transfer_sold',
+          title: 'Игрок продан',
+          body: `${r.player.name} → ${club.name} за ${r.cost} ¤`,
+          money: r.cost
+        });
+        pushUserEvent(auth.user.id, {
+          type: 'transfer_bought',
+          title: 'Игрок куплен',
+          body: `${r.player.name} из ${sellerClub.name}`
+        });
+        return json(res, 200, { ok: true, club: G.publicClub(club, auth.user), user: enrichUser(auth.user), player: r.player, fromClub: true });
+      }
+
       G.refreshClubMarket(club, false);
       const listing = (club.transferList || []).find((p) => p.id === body.playerId);
       if (!listing) return json(res, 404, { error: 'Игрок уже куплен или снят с рынка' });
@@ -1012,6 +1093,11 @@ const server = http.createServer(async (req, res) => {
       club.transferList = (club.transferList || []).filter((p) => p.id !== listing.id);
       persistUser(auth.user);
       db.setClub(auth.user.id, club);
+      pushUserEvent(auth.user.id, {
+        type: 'transfer_bought',
+        title: 'Игрок куплен',
+        body: `${r.player.name} (агенты)`
+      });
       return json(res, 200, { ok: true, club: G.publicClub(club, auth.user), user: enrichUser(auth.user), player: r.player });
     } catch (e) {
       return json(res, 500, { error: String(e.message || e) });
@@ -1024,16 +1110,100 @@ const server = http.createServer(async (req, res) => {
     try {
       const body = JSON.parse((await readBody(req)).toString('utf8'));
       const club = ensureClub(auth.user);
+      const mode = body.mode === 'list' ? 'list' : 'agents';
+      if (mode === 'list') {
+        const listed = G.listPlayer(club, body.playerId, body.price);
+        if (!listed.ok) return json(res, 400, listed);
+        listed.listing.sellerUserId = auth.user.id;
+        listed.listing.sellerClub = club.name;
+        // remove from squad while listed
+        const taken = G.takeListedPlayer(club, body.playerId);
+        if (!taken.ok) return json(res, 400, taken);
+        const market = db.getTransferMarket();
+        const list = (market.list || []).filter((p) => p.id !== listed.listing.id);
+        list.unshift(listed.listing);
+        db.setTransferMarket(list.slice(0, 80), Date.now());
+        db.setClub(auth.user.id, club);
+        pushUserEvent(auth.user.id, {
+          type: 'transfer_listed',
+          title: 'Игрок на рынке',
+          body: `${listed.listing.name} · ${listed.listing.value} ¤`
+        });
+        return json(res, 200, {
+          ok: true,
+          listed: true,
+          listing: listed.listing,
+          club: G.publicClub(club, auth.user),
+          user: enrichUser(auth.user)
+        });
+      }
       const r = G.sellPlayer(club, body.playerId);
       if (!r.ok) return json(res, 400, r);
       auth.user.money = (auth.user.money || 0) + r.value;
       G.pushLedger(club, r.value, r.label);
       persistUser(auth.user);
       db.setClub(auth.user.id, club);
+      pushUserEvent(auth.user.id, {
+        type: 'transfer_sold',
+        title: 'Продажа агентам',
+        body: `${r.player.name} · ${r.value} ¤`,
+        money: r.value
+      });
       return json(res, 200, { ok: true, club: G.publicClub(club, auth.user), user: enrichUser(auth.user), value: r.value });
     } catch (e) {
       return json(res, 500, { error: String(e.message || e) });
     }
+  }
+
+  if (pathname === '/api/transfers/unlist' && req.method === 'POST') {
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    try {
+      const body = JSON.parse((await readBody(req)).toString('utf8'));
+      const club = ensureClub(auth.user);
+      const market = db.getTransferMarket();
+      const listing = (market.list || []).find((p) => p.id === body.playerId && p.sellerUserId === auth.user.id);
+      if (!listing) return json(res, 404, { error: 'Лот не найден' });
+      if ((club.players || []).length >= 25) return json(res, 400, { error: 'Состав полон' });
+      const r = G.buyPlayer(club, listing);
+      if (!r.ok) return json(res, 400, r);
+      // free reclaim
+      db.removeTransferListing(listing.id);
+      db.setClub(auth.user.id, club);
+      return json(res, 200, { ok: true, club: G.publicClub(club, auth.user), player: r.player });
+    } catch (e) {
+      return json(res, 500, { error: String(e.message || e) });
+    }
+  }
+
+  if (pathname === '/api/academy/promote' && req.method === 'POST') {
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    const club = ensureClub(auth.user);
+    const quote = G.quoteYouth(club);
+    if (!quote.ok) return json(res, 400, quote);
+    if (!spendMoney(auth.user, quote.cost)) return json(res, 400, { error: `Нужно ${quote.cost} ¤` });
+    const r = G.promoteYouth(club);
+    if (!r.ok) {
+      auth.user.money = (auth.user.money || 0) + quote.cost; // refund
+      persistUser(auth.user);
+      return json(res, 400, r);
+    }
+    G.pushLedger(club, -r.cost, r.label);
+    persistUser(auth.user);
+    db.setClub(auth.user.id, club);
+    pushUserEvent(auth.user.id, {
+      type: 'youth',
+      title: 'Выпуск академии',
+      body: `${r.player.name} · ${r.player.pos} · талант ${r.player.talent}`
+    });
+    return json(res, 200, {
+      ok: true,
+      player: r.player,
+      club: G.publicClub(club, auth.user),
+      user: enrichUser(auth.user),
+      cost: r.cost
+    });
   }
 
   if (pathname === '/api/rating' && req.method === 'GET') {
@@ -1144,6 +1314,33 @@ const server = http.createServer(async (req, res) => {
     const r = cups.adminFinishCup(id);
     if (!r.ok) return json(res, 400, r);
     return json(res, 200, r);
+  }
+
+  if (pathname.match(/^\/api\/admin\/cups\/[^/]+\/advance$/) && req.method === 'POST') {
+    if (!requireAdmin(req, res)) return;
+    const id = pathname.split('/')[4];
+    const r = cups.adminAdvanceCup(id);
+    if (!r.ok) return json(res, 400, r);
+    return json(res, 200, r);
+  }
+
+  if (pathname.match(/^\/api\/admin\/cups\/[^/]+$/) && req.method === 'DELETE') {
+    if (!requireAdmin(req, res)) return;
+    const id = pathname.split('/')[4];
+    const r = cups.adminDeleteCup(id);
+    if (!r.ok) return json(res, 400, r);
+    return json(res, 200, r);
+  }
+
+  if (pathname === '/api/admin/cups' && req.method === 'GET') {
+    if (!requireAdmin(req, res)) return;
+    return json(res, 200, {
+      ok: true,
+      open: cups.listCups({ status: 'open' }),
+      live: cups.listCups({ status: 'live' }),
+      finished: cups.listCups({ status: 'finished' }).slice(0, 20),
+      stats: cups.stats()
+    });
   }
 
   // static

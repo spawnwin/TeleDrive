@@ -22,6 +22,24 @@ const FORMATIONS = {
 
 const STYLES = ['balance', 'attack', 'defend', 'press', 'counter'];
 
+const INSTRUCTIONS = [
+  { id: 'high_press', label: 'Высокий прессинг', att: 1.04, def: 0.97, fit: 1.08 },
+  { id: 'low_block', label: 'Низкий блок', att: 0.94, def: 1.08, fit: 0.92 },
+  { id: 'wide_play', label: 'Игра в ширину', att: 1.03, def: 0.99, fit: 1.02 },
+  { id: 'through_balls', label: 'Передачи вразрез', att: 1.05, def: 0.98, fit: 1.0 },
+  { id: 'long_balls', label: 'Длинные передачи', att: 1.02, def: 1.01, fit: 0.98 },
+  { id: 'keep_ball', label: 'Контроль мяча', att: 0.98, def: 1.04, fit: 0.95 },
+  { id: 'man_mark', label: 'Персональная опека', att: 0.97, def: 1.05, fit: 1.05 },
+  { id: 'counter_fast', label: 'Быстрый отрыв', att: 1.06, def: 0.96, fit: 1.06 }
+];
+
+const FORMATION_BIAS = {
+  '4-4-2': { att: 1.0, def: 1.0 },
+  '4-3-3': { att: 1.06, def: 0.96 },
+  '3-5-2': { att: 1.02, def: 0.98 },
+  '4-2-3-1': { att: 1.04, def: 1.02 }
+};
+
 function uid(prefix) {
   return prefix + '_' + crypto.randomBytes(5).toString('hex');
 }
@@ -159,6 +177,7 @@ function defaultClub(user, opts = {}) {
     instructions: [],
     lineupIds: [],
     benchIds: [],
+    userId: user?.id || null,
     players,
     staff: { coach: 1, gkCoach: 1, scout: 0, medic: 0 },
     history: [],
@@ -239,17 +258,53 @@ function styleFitnessMul(style) {
   return 1;
 }
 
+function instructionMods(instructions) {
+  const ids = Array.isArray(instructions) ? instructions : [];
+  let att = 1;
+  let def = 1;
+  let fit = 1;
+  INSTRUCTIONS.forEach((ins) => {
+    if (!ids.includes(ins.id)) return;
+    att *= ins.att;
+    def *= ins.def;
+    fit *= ins.fit;
+  });
+  return { att, def, fit };
+}
+
+function teamMatchPower(club, xi, { home = false } = {}) {
+  const base = Math.max(40, clubStrength({ ...club, players: club.players }));
+  const styleMul = { attack: 1.08, press: 1.05, balance: 1, counter: 0.98, defend: 0.9 };
+  const form = FORMATION_BIAS[club.formation] || FORMATION_BIAS['4-4-2'];
+  const ins = instructionMods(club.instructions);
+  let power = base * (styleMul[club.style] || 1) * form.att * ins.att;
+  // defensive solidity slightly reduces opponent chance via separate field
+  const solidity = form.def * ins.def;
+  if (home) power *= 1.05;
+  // XI quality vs full squad
+  if (xi?.length) {
+    const xiStr = xi.reduce((s, p) => s + effectiveMastery(p), 0);
+    const avg = xiStr / Math.max(1, xi.length);
+    power = power * 0.55 + avg * 11 * 0.45;
+  }
+  return { power: Math.max(35, power), solidity, fitMul: styleFitnessMul(club.style) * ins.fit };
+}
+
 function applyFitnessAfterMatch(club, playedIds, opts = {}) {
   const set = new Set(playedIds);
-  const styleMul = styleFitnessMul(opts.style || club.style);
+  const styleMul = (opts.fitMul != null ? opts.fitMul : styleFitnessMul(opts.style || club.style));
   const medic = (club.staff && club.staff.medic) || 0;
   const injuryChance = Math.max(0.02, 0.07 - medic * 0.015);
   const resultDelta = opts.resultDelta || 0;
+  const injuries = [];
   club.players.forEach((p) => {
     if (set.has(p.id)) {
       const loss = Math.round((rnd(10, 22) + (p.age > 28 ? 3 : 0)) * styleMul);
       p.fitness = Math.max(45, (p.fitness || 100) - loss);
-      if (Math.random() < injuryChance) p.injuredHours = rnd(6, Math.max(8, 36 - medic * 6));
+      if (Math.random() < injuryChance) {
+        p.injuredHours = rnd(6, Math.max(8, 36 - medic * 6));
+        injuries.push({ id: p.id, name: p.name, hours: p.injuredHours });
+      }
       p.xpPool = (p.xpPool || 0) + rnd(4, 14) + (p.talent || 5);
       p.morale = Math.max(-20, Math.min(25, (p.morale || 0) + resultDelta + rnd(-1, 1)));
     } else {
@@ -258,50 +313,134 @@ function applyFitnessAfterMatch(club, playedIds, opts = {}) {
       p.morale = Math.max(-20, Math.min(25, (p.morale || 0) + rnd(-1, 1)));
     }
   });
+  return injuries;
 }
 
 function simulateMatch(homeClub, awayClub, meta = {}) {
   const homeXi = resolveXi(homeClub);
   const awayXi = resolveXi(awayClub);
-  const hStr = Math.max(40, clubStrength({ ...homeClub, players: homeXi.length ? homeClub.players : homeClub.players }));
-  const aStr = Math.max(40, clubStrength(awayClub));
-  const styleMul = { attack: 1.08, press: 1.05, balance: 1, counter: 0.98, defend: 0.9 };
-  const hs = hStr * (styleMul[homeClub.style] || 1);
-  const as = aStr * (styleMul[awayClub.style] || 1);
+  const homePow = teamMatchPower(homeClub, homeXi, { home: true });
+  const awayPow = teamMatchPower(awayClub, awayXi, { home: false });
+  const hs = homePow.power / Math.max(0.85, awayPow.solidity);
+  const as = awayPow.power / Math.max(0.85, homePow.solidity);
 
   let hg = 0;
   let ag = 0;
+  let hShots = 0;
+  let aShots = 0;
+  let hOn = 0;
+  let aOn = 0;
+  let hCorners = 0;
+  let aCorners = 0;
+  let hPoss = 50;
   const events = [];
-  const minutes = [];
+  const cards = { home: 0, away: 0 };
+
   for (let m = 1; m <= 90; m++) {
-    if (Math.random() < 0.045) {
-      const homeChance = hs / (hs + as);
+    // possession drift
+    if (m % 9 === 0) {
+      const bias = hs / (hs + as);
+      hPoss = Math.max(35, Math.min(65, Math.round(bias * 100 + rnd(-4, 4))));
+    }
+    // shot chance
+    if (Math.random() < 0.085) {
+      const homeChance = (hs * (hPoss / 50)) / (hs * (hPoss / 50) + as * ((100 - hPoss) / 50));
       const homeAtt = Math.random() < homeChance;
-      const scorerPool = (homeAtt ? homeXi : awayXi).filter((p) => p.pos !== 'Gk');
-      const scorer = pick(scorerPool.length ? scorerPool : (homeAtt ? homeXi : awayXi));
-      if (homeAtt) hg++; else ag++;
-      const ev = {
+      if (homeAtt) hShots++; else aShots++;
+      const onTarget = Math.random() < 0.42 + (homeAtt ? hs : as) / ((hs + as) * 4);
+      if (onTarget) {
+        if (homeAtt) hOn++; else aOn++;
+        const saveChance = 0.55 + ((homeAtt ? awayXi : homeXi).find((p) => p.pos === 'Gk')?.skills?.save || 14) / 120;
+        const isGoal = Math.random() > saveChance * 0.85;
+        if (isGoal) {
+          const scorerPool = (homeAtt ? homeXi : awayXi).filter((p) => p.pos !== 'Gk');
+          const scorer = pick(scorerPool.length ? scorerPool : (homeAtt ? homeXi : awayXi));
+          const assistPool = (homeAtt ? homeXi : awayXi).filter((p) => p.id !== scorer?.id && p.pos !== 'Gk');
+          const assist = Math.random() < 0.65 && assistPool.length ? pick(assistPool) : null;
+          if (homeAtt) hg++; else ag++;
+          events.push({
+            minute: m,
+            type: 'goal',
+            side: homeAtt ? 'home' : 'away',
+            player: scorer?.name || 'Игрок',
+            assist: assist?.name || null,
+            score: [hg, ag]
+          });
+        } else {
+          events.push({
+            minute: m,
+            type: 'shot',
+            side: homeAtt ? 'home' : 'away',
+            player: 'Удар в створ',
+            score: [hg, ag]
+          });
+        }
+      } else if (Math.random() < 0.25) {
+        if (homeAtt) hCorners++; else aCorners++;
+        events.push({
+          minute: m,
+          type: 'corner',
+          side: homeAtt ? 'home' : 'away',
+          player: 'Угловой',
+          score: [hg, ag]
+        });
+      }
+    }
+    // cards
+    if (Math.random() < 0.012) {
+      const homeSide = Math.random() < 0.5;
+      const pool = homeSide ? homeXi : awayXi;
+      const pl = pick(pool.filter((p) => p.pos !== 'Gk').concat(pool));
+      const red = Math.random() < 0.08;
+      cards[homeSide ? 'home' : 'away']++;
+      events.push({
         minute: m,
-        type: 'goal',
-        side: homeAtt ? 'home' : 'away',
-        player: scorer?.name || 'Игрок',
+        type: red ? 'red' : 'yellow',
+        side: homeSide ? 'home' : 'away',
+        player: pl?.name || 'Игрок',
         score: [hg, ag]
-      };
-      events.push(ev);
-      minutes.push(ev);
+      });
+      if (red) {
+        if (homeSide) homePow.power *= 0.92;
+        else awayPow.power *= 0.92;
+      }
     }
   }
-  // avoid too many 0-0
-  if (hg + ag === 0 && Math.random() < 0.7) {
+
+  if (hg + ag === 0 && Math.random() < 0.75) {
     const homeAtt = Math.random() < hs / (hs + as);
-    if (homeAtt) hg = 1; else ag = 1;
-    events.push({ minute: rnd(50, 88), type: 'goal', side: homeAtt ? 'home' : 'away', player: 'Стандарт', score: [hg, ag] });
+    if (homeAtt) { hg = 1; hShots++; hOn++; } else { ag = 1; aShots++; aOn++; }
+    events.push({
+      minute: rnd(55, 88),
+      type: 'goal',
+      side: homeAtt ? 'home' : 'away',
+      player: 'Стандарт',
+      assist: null,
+      score: [hg, ag]
+    });
   }
+
+  events.sort((a, b) => a.minute - b.minute);
 
   const homeResult = hg > ag ? 3 : hg === ag ? 1 : -2;
   const awayResult = ag > hg ? 3 : hg === ag ? 1 : -2;
-  applyFitnessAfterMatch(homeClub, homeXi.map((p) => p.id), { style: homeClub.style, resultDelta: homeResult });
-  applyFitnessAfterMatch(awayClub, awayXi.map((p) => p.id), { style: awayClub.style, resultDelta: awayResult });
+  const homeInj = applyFitnessAfterMatch(homeClub, homeXi.map((p) => p.id), {
+    style: homeClub.style,
+    fitMul: homePow.fitMul,
+    resultDelta: homeResult
+  });
+  const awayInj = applyFitnessAfterMatch(awayClub, awayXi.map((p) => p.id), {
+    style: awayClub.style,
+    fitMul: awayPow.fitMul,
+    resultDelta: awayResult
+  });
+  homeInj.forEach((inj) => {
+    events.push({ minute: rnd(60, 90), type: 'injury', side: 'home', player: inj.name, score: [hg, ag] });
+  });
+  awayInj.forEach((inj) => {
+    events.push({ minute: rnd(60, 90), type: 'injury', side: 'away', player: inj.name, score: [hg, ag] });
+  });
+  events.sort((a, b) => a.minute - b.minute);
 
   const result = {
     id: uid('m'),
@@ -313,17 +452,29 @@ function simulateMatch(homeClub, awayClub, meta = {}) {
       name: homeClub.name,
       short: homeClub.short,
       color: homeClub.color,
-      strength: Math.round(hs)
+      strength: Math.round(hs),
+      formation: homeClub.formation,
+      style: homeClub.style
     },
     away: {
       userId: meta.awayUserId,
       name: awayClub.name,
       short: awayClub.short,
       color: awayClub.color,
-      strength: Math.round(as)
+      strength: Math.round(as),
+      formation: awayClub.formation,
+      style: awayClub.style
     },
     score: [hg, ag],
     events,
+    stats: {
+      possession: [hPoss, 100 - hPoss],
+      shots: [hShots, aShots],
+      shotsOn: [hOn, aOn],
+      corners: [hCorners, aCorners],
+      cards: [cards.home, cards.away]
+    },
+    injuries: { home: homeInj, away: awayInj },
     homeXi: homeXi.map((p) => ({ id: p.id, name: p.name, pos: p.pos, effective: effectiveMastery(p) })),
     awayXi: awayXi.map((p) => ({ id: p.id, name: p.name, pos: p.pos, effective: effectiveMastery(p) }))
   };
@@ -481,17 +632,39 @@ function tickClubClock(club) {
   const now = Date.now();
   const last = club.lastInjuryTick || club.createdAt || now;
   const hours = Math.floor((now - last) / 3600e3);
-  if (hours < 1) return false;
-  const medic = (club.staff && club.staff.medic) || 0;
-  club.players.forEach((p) => {
-    if (p.injuredHours > 0) {
-      p.injuredHours = Math.max(0, Math.round(p.injuredHours - hours * (1 + medic * 0.5)));
-    } else {
-      p.fitness = Math.min(100, (p.fitness || 100) + hours);
-    }
-  });
-  club.lastInjuryTick = now;
-  return true;
+  let changed = false;
+  if (hours >= 1) {
+    const medic = (club.staff && club.staff.medic) || 0;
+    club.players.forEach((p) => {
+      if (p.injuredHours > 0) {
+        p.injuredHours = Math.max(0, Math.round(p.injuredHours - hours * (1 + medic * 0.5)));
+      } else {
+        p.fitness = Math.min(100, (p.fitness || 100) + hours);
+      }
+    });
+    club.lastInjuryTick = now;
+    changed = true;
+  }
+  // age players ~ every 7 real days
+  const lastAge = club.lastAgeTick || club.createdAt || now;
+  const ageDays = Math.floor((now - lastAge) / (24 * 3600e3));
+  if (ageDays >= 7) {
+    const steps = Math.min(4, Math.floor(ageDays / 7));
+    club.players.forEach((p) => {
+      p.age = (p.age || 20) + steps;
+      if (p.age >= 31 && p.skills) {
+        Object.keys(p.skills).forEach((k) => {
+          if (Math.random() < 0.35 * steps) {
+            p.skills[k] = Math.max(8, (p.skills[k] || 10) - 1);
+          }
+        });
+      }
+      if (p.age >= 36) p.wage = Math.max(500, Math.round((p.wage || 1000) * 0.92));
+    });
+    club.lastAgeTick = now;
+    changed = true;
+  }
+  return changed;
 }
 
 function refreshClubMarket(club, force = false) {
@@ -510,7 +683,7 @@ function buyPlayer(club, listing) {
   if ((club.players || []).length >= 25) return { ok: false, error: 'Состав полон (макс. 25)' };
   if ((club.players || []).some((p) => p.id === listing.id)) return { ok: false, error: 'Уже в клубе' };
   const player = {
-    id: listing.id,
+    id: listing.id.startsWith('pl_') ? listing.id : uid('pl'),
     name: listing.name,
     pos: listing.pos,
     age: listing.age,
@@ -519,14 +692,15 @@ function buyPlayer(club, listing) {
     morale: listing.morale || 5,
     wage: listing.wage || 2000,
     skills: listing.skills,
-    specials: [],
-    xpPool: 0,
+    specials: listing.specials || [],
+    xpPool: listing.xpPool || 0,
     injuredHours: 0
   };
   club.players.push(player);
   return { ok: true, player, cost: listing.value || playerValue(player), label: `Трансфер · ${player.name}` };
 }
 
+/** Instant sell to agents at 70%. */
 function sellPlayer(club, playerId) {
   if ((club.lineupIds || []).includes(playerId)) {
     return { ok: false, error: 'Сначала уберите игрока из основы' };
@@ -538,7 +712,83 @@ function sellPlayer(club, playerId) {
   const value = Math.round(playerValue(p) * 0.7);
   club.players.splice(idx, 1);
   club.benchIds = (club.benchIds || []).filter((id) => id !== playerId);
-  return { ok: true, value, player: p, label: `Продажа · ${p.name}` };
+  return { ok: true, value, player: p, label: `Продажа агентам · ${p.name}` };
+}
+
+/** List player on club↔club market at asking price (default 90% value). */
+function listPlayer(club, playerId, askingPrice) {
+  if ((club.lineupIds || []).includes(playerId)) {
+    return { ok: false, error: 'Сначала уберите игрока из основы' };
+  }
+  if ((club.players || []).length <= 16) return { ok: false, error: 'Нельзя выставить — в составе минимум 16' };
+  const p = (club.players || []).find((x) => x.id === playerId);
+  if (!p) return { ok: false, error: 'Игрок не найден' };
+  const fair = playerValue(p);
+  const value = Math.max(Math.round(fair * 0.5), Math.min(Math.round(fair * 1.4), Math.round(askingPrice || fair * 0.9)));
+  return {
+    ok: true,
+    listing: {
+      id: p.id,
+      name: p.name,
+      pos: p.pos,
+      age: p.age,
+      talent: p.talent,
+      fitness: p.fitness,
+      morale: p.morale,
+      wage: p.wage,
+      skills: p.skills,
+      specials: p.specials || [],
+      xpPool: p.xpPool || 0,
+      mastery: masteryOf(p),
+      effective: effectiveMastery(p),
+      value,
+      fair,
+      source: 'club',
+      sellerUserId: club.userId || null,
+      sellerClub: club.name,
+      listedAt: Date.now()
+    },
+    player: p
+  };
+}
+
+function takeListedPlayer(club, playerId) {
+  const idx = (club.players || []).findIndex((p) => p.id === playerId);
+  if (idx < 0) return { ok: false, error: 'Игрок уже ушёл' };
+  const p = club.players[idx];
+  club.players.splice(idx, 1);
+  club.lineupIds = (club.lineupIds || []).filter((id) => id !== playerId);
+  club.benchIds = (club.benchIds || []).filter((id) => id !== playerId);
+  ensureLineup(club, true);
+  return { ok: true, player: p };
+}
+
+function quoteYouth(club) {
+  if ((club.players || []).length >= 25) return { ok: false, error: 'Состав полон (макс. 25)' };
+  const lvl = club.stadiumLevel || 1;
+  if (lvl < 2) return { ok: false, error: 'Нужен стадион ур. 2+ для академии' };
+  const now = Date.now();
+  if (club.lastYouthAt && now - club.lastYouthAt < 24 * 3600e3) {
+    const wait = Math.ceil((24 * 3600e3 - (now - club.lastYouthAt)) / 3600e3);
+    return { ok: false, error: `Следующий выпуск через ~${wait} ч`, waitMs: 24 * 3600e3 - (now - club.lastYouthAt) };
+  }
+  const cost = 20000 + (lvl - 2) * 5000;
+  return { ok: true, cost, stadiumLevel: lvl };
+}
+
+function promoteYouth(club) {
+  const q = quoteYouth(club);
+  if (!q.ok) return q;
+  const lvl = club.stadiumLevel || 1;
+  const pos = pick(POSITIONS.filter((p) => p !== 'Dm' && p !== 'Am').concat(['Cm', 'Cf', 'Cd']));
+  const quality = 10 + Math.min(6, lvl) + rnd(-1, 2);
+  const p = makePlayer(pos, quality);
+  p.age = rnd(16, 19);
+  p.talent = Math.min(10, (p.talent || 5) + rnd(1, 3));
+  p.wage = Math.round(playerValue(p) / 100);
+  club.players.push(p);
+  club.lastYouthAt = Date.now();
+  return { ok: true, player: { ...p, mastery: masteryOf(p), effective: effectiveMastery(p) }, cost: q.cost, label: `Академия · ${p.name}` };
 }
 
 function setLineup(club, lineupIds, benchIds) {
@@ -566,6 +816,7 @@ function skillCap(club, isGk = false) {
 module.exports = {
   FORMATIONS,
   STYLES,
+  INSTRUCTIONS,
   POSITIONS,
   STAFF_ROLES,
   uid,
@@ -596,5 +847,10 @@ module.exports = {
   tickClubClock,
   refreshClubMarket,
   buyPlayer,
-  sellPlayer
+  sellPlayer,
+  listPlayer,
+  takeListedPlayer,
+  promoteYouth,
+  quoteYouth
 };
+

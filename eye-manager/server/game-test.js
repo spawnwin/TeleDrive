@@ -47,4 +47,37 @@ describe('game lineup guards', () => {
     assert.equal(G.settleWageDay(fresh, club), null);
     assert.ok(fresh.lastWageAt);
   });
+
+  it('simulateMatch returns stats and respects instructions', () => {
+    const home = G.defaultClub({ id: 'h', login: 'h', name: 'H', clubName: 'Home FC' });
+    const away = G.defaultClub({ id: 'a', login: 'a', name: 'A', clubName: 'Away FC' });
+    G.ensureLineup(home, true);
+    G.ensureLineup(away, true);
+    home.style = 'attack';
+    home.instructions = ['high_press', 'through_balls'];
+    away.style = 'defend';
+    away.instructions = ['low_block'];
+    const m = G.simulateMatch(home, away, { competition: 'friendly', homeUserId: 'h', awayUserId: 'a' });
+    assert.ok(m.stats);
+    assert.ok(Array.isArray(m.stats.shots));
+    assert.ok(m.events.length >= 0);
+    assert.equal(m.home.formation, home.formation);
+  });
+
+  it('listPlayer and promoteYouth work', () => {
+    const club = G.defaultClub({ id: 'u6', login: 't6', name: 'T6', clubName: 'T6 FC' });
+    club.userId = 'u6';
+    G.ensureLineup(club, true);
+    const spare = club.players.find((p) => !club.lineupIds.includes(p.id));
+    assert.ok(spare);
+    const listed = G.listPlayer(club, spare.id);
+    assert.equal(listed.ok, true);
+    assert.equal(listed.listing.source, 'club');
+
+    club.stadiumLevel = 3;
+    const youth = G.promoteYouth(club);
+    assert.equal(youth.ok, true, youth.error);
+    assert.ok(youth.player.age <= 19);
+    assert.ok(youth.cost >= 20000);
+  });
 });
