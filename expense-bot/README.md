@@ -34,6 +34,18 @@ npm run start -w bot
 
 Локальный UI без Telegram: `ALLOW_DEV_AUTH=1`.
 
+## Публичный запуск (Telegram)
+
+```bash
+cd expense-bot
+# В .env: BOT_TOKEN=... от @BotFather
+./scripts/run-public.sh
+```
+
+Скрипт поднимет HTTPS-туннель Cloudflare и бота. Затем открой бота в Telegram → `/start` → **Открыть Златник**.
+
+Сейчас бот: [@Caura_bot](https://t.me/Caura_bot)
+
 ## Хранение данных
 
 Все расходы — в SQLite на сервере (`expense-bot/data/expenses.db`), не в localStorage.
