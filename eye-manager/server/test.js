@@ -194,6 +194,12 @@ describe('eye xi server', () => {
       assert.equal(youth.status, 200, youth.body);
       assert.ok(JSON.parse(youth.body).player?.name);
 
+      const lgJoin = await post(port, '/api/league/join', {}, auth);
+      assert.equal(lgJoin.status, 200, lgJoin.body);
+      assert.ok(JSON.parse(lgJoin.body).league?.id);
+      const cal = await get(port, '/api/calendar', auth);
+      assert.equal(cal.status, 200, cal.body);
+
       const logout = await post(port, '/api/logout', {}, auth);
       assert.equal(logout.status, 200);
       const meAfter = await get(port, '/api/me', auth);

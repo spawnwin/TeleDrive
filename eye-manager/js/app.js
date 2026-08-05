@@ -31,7 +31,12 @@
     transfer_bought: 'Трансфер',
     transfer_sold: 'Продажа',
     transfer_listed: 'На рынке',
-    youth: 'Академия'
+    youth: 'Академия',
+    league_joined: 'Запись в лигу',
+    league_started: 'Лига стартовала',
+    league_match: 'Матч лиги',
+    league_won: 'Чемпион лиги',
+    league_done: 'Лига завершена'
   };
 
   const TABS = {
@@ -54,6 +59,7 @@
     ],
     matches: [
       ['friendly', 'Товарищеские'],
+      ['league', 'Лига'],
       ['cups', 'Кубки'],
       ['history', 'Архив']
     ],
@@ -73,7 +79,7 @@
     ]
   };
 
-  const COMP_LABELS = { friendly: 'Товарищеский', cup: 'Кубок', match: 'Матч' };
+  const COMP_LABELS = { friendly: 'Товарищеский', cup: 'Кубок', league: 'Лига', match: 'Матч' };
 
   function money(n) {
     return new Intl.NumberFormat('ru-RU').format(Math.round(n || 0)) + ' ¤';
@@ -244,6 +250,8 @@
         </section>`;
       return;
     }
+    const cal = state.me?.calendar;
+    const nextFix = (cal?.items || []).find((x) => x.status === 'next' || x.status === 'planned');
     $('#view').innerHTML = `
       <div class="hero-strip">
         <div class="club-banner" style="--club:${esc(club?.color || '#1fa65a')}">
@@ -251,7 +259,8 @@
           <p>Сила состава ${club?.strength || '—'} · схема ${esc(club?.formation || '4-4-2')} · ${esc(club?.stadium || 'Стадион')}</p>
           ${club?.understrength ? '<p class="hint" style="margin-top:10px;color:var(--warn,#eab308)">В основе меньше 11 здоровых — проверьте травмы и автосостав.</p>' : ''}
           <div style="margin-top:16px;display:flex;gap:8px;flex-wrap:wrap">
-            <button class="btn btn-primary btn-tiny" data-nav="matches">К матчам</button>
+            <button class="btn btn-primary btn-tiny" data-nav="matches" data-goto-tab="league">К лиге</button>
+            <button class="btn btn-tiny" data-nav="matches">К матчам</button>
             <button class="btn btn-tiny" data-nav="players">Состав</button>
           </div>
         </div>
@@ -259,11 +268,11 @@
           <h3>Сводка</h3>
           <div class="grid-3" style="grid-template-columns:1fr 1fr">
             <div class="stat-card"><span>Уровень</span><b>${u?.level || 1}</b></div>
-            <div class="stat-card"><span>Кубки</span><b>${u?.cupsWon || 0}/${u?.cupsPlayed || 0}</b></div>
+            <div class="stat-card"><span>Сезон / тур</span><b>${cal?.season || '—'} / ${cal?.week || '—'}</b></div>
             <div class="stat-card"><span>Слава</span><b>${u?.fame || 0}</b></div>
             <div class="stat-card"><span>Престиж</span><b>${u?.prestige || 0}</b></div>
           </div>
-          <p class="hint" style="margin:14px 0 0">Слава растёт от побед, престиж — от кубков. Выберите соперника в товарищеских или вступите в кубок своего уровня.</p>
+          ${nextFix ? `<p class="hint" style="margin:14px 0 0">Ближайший матч лиги: <strong>${esc(nextFix.home)}</strong> — <strong>${esc(nextFix.away)}</strong>${nextFix.when ? ' · ' + new Date(nextFix.when).toLocaleString('ru-RU') : ''}</p>` : `<p class="hint" style="margin:14px 0 0">Запишитесь в лигу своего уровня или сыграйте товарищеский / кубок.</p>`}
         </section>
       </div>
       <section class="panel">
@@ -469,6 +478,67 @@
         </section>`;
       return;
     }
+    if (state.tab === 'league') {
+      const data = await A().request('api/league?mine=1');
+      const L = data.league;
+      const open = data.open || [];
+      const cal = data.calendar || {};
+      if (!L) {
+        $('#view').innerHTML = `
+          <section class="panel">
+            <h3>Дивизионная лига</h3>
+            <p class="hint">Круговой турнир на 8 клубов вашего уровня. Туры идут автоматически ~каждые 8 минут. Чемпион получает крупный приз и престиж.</p>
+            <div class="list">${open.length ? open.map((c) => `
+              <div class="list-row">
+                <div><strong>${esc(c.name)}</strong><small>${c.humans || 0} чел. · ${c.entrantsCount || 0}/${c.size}</small></div>
+                <button class="btn btn-primary btn-tiny" id="btn-league-join">Вступить</button>
+              </div>`).join('') : '<p class="hint">Открытых лиг нет — нажмите «Вступить», создастся набор</p>'}
+            ${!open.length ? '<button class="btn btn-primary" id="btn-league-join">Вступить в лигу</button>' : ''}
+          </section>`;
+        return;
+      }
+      const myId = A().getUser()?.id;
+      const standings = L.standings || [];
+      const fixtures = (L.fixtures || []).filter((f) => f.round === L.currentRound || f.mine);
+      const myFixtures = (cal.items || L.fixtures || []).filter((f) => f.mine || f.homeUserId === myId || f.awayUserId === myId);
+      $('#view').innerHTML = `
+        <section class="panel">
+          <div class="panel-head">
+            <h3>${esc(L.name)}</h3>
+            <span class="badge">${L.status === 'live' ? 'тур ' + L.currentRound + '/' + L.totalRounds : L.status === 'open' ? 'набор' : 'завершена'}</span>
+          </div>
+          ${L.status === 'open' ? `<p class="hint">Ожидание старта · ${L.humans || 0} менеджеров. Можно выйти до начала.</p>
+            <button class="btn btn-tiny" id="btn-league-leave">Выйти из набора</button>` : ''}
+          ${L.nextRoundAt && L.status === 'live' ? `<p class="hint">Следующий тур: ${new Date(L.nextRoundAt).toLocaleString('ru-RU')}</p>` : ''}
+          ${L.champion ? `<div class="stat-card" style="margin:10px 0"><span>Чемпион</span><b>${esc(L.champion.clubName)}</b></div>` : ''}
+        </section>
+        <section class="panel">
+          <h3>Таблица</h3>
+          <div class="table-wrap"><table class="sheet">
+            <thead><tr><th>#</th><th>Клуб</th><th>И</th><th>В</th><th>Н</th><th>П</th><th>Мячи</th><th>О</th></tr></thead>
+            <tbody>${standings.map((r) => `
+              <tr style="${r.userId === myId ? 'font-weight:700' : ''}">
+                <td>${r.rank}</td>
+                <td>${esc(r.clubName)}${r.isBot ? ' <small>AI</small>' : ''}</td>
+                <td>${r.played}</td><td>${r.won}</td><td>${r.drawn}</td><td>${r.lost}</td>
+                <td>${r.gf}:${r.ga}</td>
+                <td><b>${r.pts}</b></td>
+              </tr>`).join('')}</tbody>
+          </table></div>
+        </section>
+        <section class="panel">
+          <h3>Календарь ваших матчей</h3>
+          <div class="list">${(myFixtures.length ? myFixtures : fixtures).map((f) => `
+            <div class="list-row">
+              <div>
+                <strong>Тур ${f.round}: ${esc(f.home || f.homeName)} ${f.score ? f.score[0] + ':' + f.score[1] : '—'} ${esc(f.away || f.awayName)}</strong>
+                <small>${f.status === 'done' || f.playedAt ? 'сыгран' : f.status === 'next' ? 'следующий' : 'в плане'}</small>
+              </div>
+              ${f.matchId ? `<button class="btn btn-tiny" data-match="${esc(f.matchId)}">Отчёт</button>` : ''}
+            </div>`).join('') || '<p class="hint">Календарь появится после старта</p>'}</div>
+        </section>`;
+      return;
+    }
     if (state.tab === 'cups') {
       const [openData, liveData, doneData] = await Promise.all([
         A().request('api/cups?status=open'),
@@ -636,12 +706,19 @@
             <div class="stat-card"><span>Live</span><b>${data.cupsLive || 0}</b></div>
             <div class="stat-card"><span>Архив</span><b>${data.archive || 0}</b></div>
           </div>
-          <button class="btn btn-primary" id="btn-admin-tick" style="margin-top:14px">Tick кубков</button>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px">
+            <button class="btn btn-primary" id="btn-admin-tick">Tick кубков</button>
+            <button class="btn" id="btn-admin-league-tick">Tick лиг</button>
+          </div>
         </section>`;
       return;
     }
-    const data = await A().request('api/admin/cups');
-    const rows = [...(data.live || []), ...(data.open || [])].slice(0, 40);
+    const [cupsData, leagueData] = await Promise.all([
+      A().request('api/admin/cups'),
+      A().request('api/league')
+    ]);
+    const rows = [...(cupsData.live || []), ...(cupsData.open || [])].slice(0, 40);
+    const leagues = [...(leagueData.leagues || [])].filter((L) => L.status !== 'finished').slice(0, 20);
     $('#view').innerHTML = `
       <section class="panel">
         <div class="panel-head"><h3>Админ · кубки</h3>
@@ -660,6 +737,20 @@
               <button class="btn btn-tiny" data-admin-del="${esc(c.id)}">Удалить</button>
             </div>
           </div>`).join('') : '<p class="hint">Нет кубков</p>'}</div>
+      </section>
+      <section class="panel">
+        <h3>Админ · лиги</h3>
+        <div class="list">${leagues.length ? leagues.map((L) => `
+          <div class="list-row">
+            <div>
+              <strong>${esc(L.name)}</strong>
+              <small>${esc(L.status)} · тур ${L.currentRound || 0}/${L.totalRounds || '—'} · люди ${L.humans || 0}</small>
+            </div>
+            <div style="display:flex;gap:6px">
+              <button class="btn btn-tiny" data-admin-lg-round="${esc(L.id)}">Тур/старт</button>
+              <button class="btn btn-tiny" data-admin-lg-fin="${esc(L.id)}">Доиграть</button>
+            </div>
+          </div>`).join('') : '<p class="hint">Нет лиг</p>'}</div>
       </section>`;
   }
 
@@ -931,7 +1022,8 @@
       const nav = e.target.closest('[data-nav]');
       if (nav && (nav.closest('.side-links') || nav.closest('.topnav') || nav.closest('#view'))) {
         state.section = nav.dataset.nav;
-        state.tab = (TABS[state.section] || [['main']])[0][0];
+        if (nav.dataset.gotoTab) state.tab = nav.dataset.gotoTab;
+        else state.tab = (TABS[state.section] || [['main']])[0][0];
         render();
         return;
       }
@@ -962,6 +1054,22 @@
           await refreshMe();
           showMatch(data.match);
           toast('Матч сыгран');
+        } catch (err) { toast(err.message); }
+      }
+      if (e.target.id === 'btn-league-join') {
+        try {
+          await A().request('api/league/join', { method: 'POST' });
+          toast('Вы в лиге');
+          await refreshMe();
+          render();
+        } catch (err) { toast(err.message); }
+      }
+      if (e.target.id === 'btn-league-leave') {
+        try {
+          await A().request('api/league/leave', { method: 'POST' });
+          toast('Вышли из набора');
+          await refreshMe();
+          render();
         } catch (err) { toast(err.message); }
       }
       const acc = e.target.closest('[data-accept]');
@@ -1087,6 +1195,29 @@
         try {
           await A().request('api/admin/tick', { method: 'POST' });
           toast('Tick выполнен');
+          render();
+        } catch (err) { toast(err.message); }
+      }
+      if (e.target.id === 'btn-admin-league-tick') {
+        try {
+          await A().request('api/admin/league/tick', { method: 'POST' });
+          toast('Лиги tick');
+          render();
+        } catch (err) { toast(err.message); }
+      }
+      const admLgRound = e.target.closest('[data-admin-lg-round]');
+      if (admLgRound) {
+        try {
+          await A().request('api/admin/league/' + admLgRound.dataset.adminLgRound + '/round', { method: 'POST' });
+          toast('Тур лиги');
+          render();
+        } catch (err) { toast(err.message); }
+      }
+      const admLgFin = e.target.closest('[data-admin-lg-fin]');
+      if (admLgFin) {
+        try {
+          await A().request('api/admin/league/' + admLgFin.dataset.adminLgFin + '/finish', { method: 'POST' });
+          toast('Лига доиграна');
           render();
         } catch (err) { toast(err.message); }
       }

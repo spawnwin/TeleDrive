@@ -23,6 +23,7 @@ const cupsCache = { cups: {}, meta: { lastTick: 0 } };
 const archiveCache = { entries: [] };
 const friendlyQueue = [];
 const transferMarket = { list: [], refreshedAt: 0 };
+const leaguesCache = { leagues: {}, meta: { lastTick: 0, seasonCounter: 1 } };
 
 let writeChain = Promise.resolve();
 
@@ -273,6 +274,10 @@ async function hydrateFromDb() {
   const tm = await prisma.meta.findUnique({ where: { key: 'transfer_market' } });
   transferMarket.list = tm ? (parseJson(tm.valueJson, { list: [], refreshedAt: 0 }).list || []) : [];
   transferMarket.refreshedAt = tm ? (parseJson(tm.valueJson, { refreshedAt: 0 }).refreshedAt || 0) : 0;
+  const lg = await prisma.meta.findUnique({ where: { key: 'leagues' } });
+  const lgData = lg ? parseJson(lg.valueJson, { leagues: {}, meta: { lastTick: 0, seasonCounter: 1 } }) : null;
+  leaguesCache.leagues = lgData?.leagues || {};
+  leaguesCache.meta = lgData?.meta || { lastTick: 0, seasonCounter: 1 };
 }
 
 async function init() {
@@ -489,6 +494,32 @@ function removeTransferListing(playerId) {
   enqueue('transfers', flushTransfers);
 }
 
+async function flushLeagues() {
+  await prisma.meta.upsert({
+    where: { key: 'leagues' },
+    create: {
+      key: 'leagues',
+      valueJson: JSON.stringify({ leagues: leaguesCache.leagues, meta: leaguesCache.meta })
+    },
+    update: {
+      valueJson: JSON.stringify({ leagues: leaguesCache.leagues, meta: leaguesCache.meta })
+    }
+  });
+}
+
+function loadLeagues() {
+  return leaguesCache;
+}
+
+function saveLeagues(obj) {
+  if (obj) {
+    leaguesCache.leagues = obj.leagues || {};
+    leaguesCache.meta = obj.meta || leaguesCache.meta;
+  }
+  enqueue('leagues', flushLeagues);
+  return leaguesCache;
+}
+
 async function flushAll() {
   await writeChain;
   await flushUsers();
@@ -498,6 +529,7 @@ async function flushAll() {
   await flushArchive();
   await flushFriendly();
   await flushTransfers();
+  await flushLeagues();
 }
 
 async function disconnect() {
@@ -535,5 +567,7 @@ module.exports = {
   friendlyTake,
   getTransferMarket,
   setTransferMarket,
-  removeTransferListing
+  removeTransferListing,
+  loadLeagues,
+  saveLeagues
 };

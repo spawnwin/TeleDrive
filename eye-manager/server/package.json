@@ -2,11 +2,11 @@
   "name": "eye-manager-server",
   "version": "1.0.0",
   "private": true,
-  "description": "EYE XI — online football manager (11x11-style)",
+  "description": "EYE XI \u2014 online football manager (11x11-style)",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "test": "node --test test.js cups-test.js game-test.js",
+    "test": "node --test test.js cups-test.js game-test.js league-test.js",
     "db:generate": "prisma generate",
     "db:push": "prisma db push"
   },

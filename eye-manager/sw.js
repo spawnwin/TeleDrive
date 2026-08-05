@@ -1,4 +1,4 @@
-const CACHE = 'eye-xi-v7';
+const CACHE = 'eye-xi-v8';
 const ASSETS = [
   './',
   './index.html',

@@ -9,6 +9,7 @@ const { URL } = require('url');
 const db = require('./db');
 const G = require('./game');
 const { createCupsModule } = require('./cups');
+const { createLeagueModule } = require('./league');
 
 const PORT = Number(process.env.EYE_PORT || 9140);
 const ROOT = path.resolve(__dirname, '..');
@@ -94,6 +95,7 @@ function ensureClub(user, opts = {}) {
 }
 
 let cups;
+let league;
 
 function createSession(userId) {
   const sess = sessionsDb();
@@ -429,6 +431,27 @@ function playCupTie(homeEnt, awayEnt, meta = {}) {
   };
 }
 
+function playLeagueTie(homeUserId, awayUserId, meta = {}) {
+  const homeUser = usersDb().users[homeUserId];
+  const awayUser = usersDb().users[awayUserId];
+  if (!homeUser || !awayUser) return null;
+  const homeClub = ensureClub(homeUser);
+  const awayClub = ensureClub(awayUser);
+  const match = G.simulateMatch(homeClub, awayClub, {
+    competition: 'league',
+    homeUserId: homeUser.id,
+    awayUserId: awayUser.id,
+    leagueId: meta.leagueId,
+    round: meta.round
+  });
+  match.leagueName = meta.leagueName;
+  db.setClub(homeUser.id, homeClub);
+  db.setClub(awayUser.id, awayClub);
+  db.addMatch(match);
+  rewardUsers(homeUser, awayUser, match);
+  return match;
+}
+
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
   const pathname = url.pathname;
@@ -443,7 +466,8 @@ const server = http.createServer(async (req, res) => {
       ts: Date.now(),
       db: 'sqlite',
       online: db.listOnlineUsers().length,
-      cups: cups ? cups.stats() : null
+      cups: cups ? cups.stats() : null,
+      league: league ? league.stats() : null
     });
   }
 
@@ -524,12 +548,16 @@ const server = http.createServer(async (req, res) => {
     const club = ensureClub(auth.user);
     if (G.tickClubClock(club)) db.setClub(auth.user.id, club);
     const wage = processWageDay(auth.user, club);
+    const myLeague = league ? league.findMyLeague(auth.user.id) : null;
+    const cal = league ? league.calendarFor(auth.user.id) : null;
     return json(res, 200, {
       ok: true,
       user: enrichUser(auth.user),
       club: G.publicClub(club, auth.user),
       online: db.listOnlineUsers().length,
       liveCup: cups.findMyLiveCup(auth.user.id),
+      league: myLeague ? league.publicLeague(myLeague, auth.user.id) : null,
+      calendar: cal,
       cupEvents: cups.listCupEvents(auth.user.id, { limit: 8 }),
       wageDay: wage,
       challenges: db.friendlyList().filter((f) => f.type === 'challenge' && f.targetUserId === auth.user.id)
@@ -1215,6 +1243,85 @@ const server = http.createServer(async (req, res) => {
     return json(res, 200, { ok: true, leaders: list });
   }
 
+  // ——— league ———
+  if (pathname === '/api/league' && req.method === 'GET') {
+    const auth = authUser(req);
+    const status = url.searchParams.get('status') || undefined;
+    const mine = url.searchParams.get('mine') === '1';
+    if (mine) {
+      if (!auth) return json(res, 401, { error: 'Нужен вход' });
+      const my = league.findMyLeague(auth.user.id);
+      return json(res, 200, {
+        ok: true,
+        league: my ? league.publicLeague(my, auth.user.id) : null,
+        calendar: league.calendarFor(auth.user.id),
+        open: league.listLeagues({ status: 'open' }).filter((L) => {
+          const lvl = auth.user.level || 1;
+          return lvl >= (L.minLevel || 1) && lvl <= (L.maxLevel || 10);
+        }),
+        stats: league.stats()
+      });
+    }
+    return json(res, 200, {
+      ok: true,
+      leagues: league.listLeagues({ status }),
+      stats: league.stats()
+    });
+  }
+
+  if (pathname === '/api/league/join' && req.method === 'POST') {
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    const club = ensureClub(auth.user);
+    const r = league.joinLeague(auth.user, club.name, { strength: G.clubStrength(club) });
+    if (!r.ok) return json(res, 400, r);
+    return json(res, 200, r);
+  }
+
+  if (pathname === '/api/league/leave' && req.method === 'POST') {
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    const r = league.leaveLeague(auth.user.id);
+    if (!r.ok) return json(res, 400, r);
+    return json(res, 200, r);
+  }
+
+  if (pathname === '/api/calendar' && req.method === 'GET') {
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    return json(res, 200, { ok: true, ...league.calendarFor(auth.user.id) });
+  }
+
+  if (pathname.match(/^\/api\/league\/[^/]+$/) && req.method === 'GET') {
+    const auth = authUser(req);
+    const id = pathname.split('/')[3];
+    if (id === 'join' || id === 'leave') return json(res, 404, { error: 'Нет' });
+    const L = league.getLeague(id, auth?.user?.id);
+    if (!L) return json(res, 404, { error: 'Лига не найдена' });
+    return json(res, 200, { ok: true, league: L });
+  }
+
+  if (pathname === '/api/admin/league/tick' && req.method === 'POST') {
+    if (!requireAdmin(req, res)) return;
+    return json(res, 200, league.tick());
+  }
+
+  if (pathname.match(/^\/api\/admin\/league\/[^/]+\/round$/) && req.method === 'POST') {
+    if (!requireAdmin(req, res)) return;
+    const id = pathname.split('/')[4];
+    const r = league.adminForceRound(id);
+    if (!r.ok) return json(res, 400, r);
+    return json(res, 200, r);
+  }
+
+  if (pathname.match(/^\/api\/admin\/league\/[^/]+\/finish$/) && req.method === 'POST') {
+    if (!requireAdmin(req, res)) return;
+    const id = pathname.split('/')[4];
+    const r = league.adminFinish(id);
+    if (!r.ok) return json(res, 400, r);
+    return json(res, 200, r);
+  }
+
   // ——— cups (reuse module) ———
   if (pathname === '/api/cups' && req.method === 'GET') {
     const status = url.searchParams.get('status') || undefined;
@@ -1389,7 +1496,15 @@ async function main() {
           lineup: club.lineupIds,
           lineupIds: club.lineupIds
         };
-        const st = { clubId: 'me', clubs: [me], week: 1, season: 1, ledger: club.ledger || [], inbox: [] };
+        const cal = league ? league.calendarFor(userId) : null;
+        const st = {
+          clubId: 'me',
+          clubs: [me],
+          week: cal?.week || 1,
+          season: cal?.season || 1,
+          ledger: club.ledger || [],
+          inbox: []
+        };
         return { payload: { state: st }, st, me };
       },
       writeCareer: (userId, payload) => {
@@ -1408,6 +1523,29 @@ async function main() {
       }
     }
   });
+
+  league = createLeagueModule({
+    usersDb,
+    saveUsers,
+    store: {
+      loadLeagues: () => db.loadLeagues(),
+      saveLeagues: (x) => db.saveLeagues(x),
+      clubStrength: (userId) => {
+        const club = db.getClub(userId);
+        return club ? G.clubStrength(club) : 0;
+      },
+      ensureBotClub,
+      ensureBotPool: (n) => ensureBotPool(n),
+      playLeagueTie,
+      pushLedger: (userId, amount, label) => {
+        const club = db.getClub(userId);
+        if (!club) return;
+        G.pushLedger(club, amount, label);
+        db.setClub(userId, club);
+      }
+    }
+  });
+
   ensureAdminUser();
   ensureBotPool(24);
   cups.ensureBotPool?.(8);
@@ -1417,6 +1555,7 @@ async function main() {
     console.log(`[EYE XI] http://0.0.0.0:${PORT}`);
     console.log(`[EYE XI] db ${db.DB_FILE}`);
     cups.startScheduler();
+    league.startScheduler();
   });
 
   const shutdown = async () => {
