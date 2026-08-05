@@ -278,6 +278,20 @@ function rewardUsers(home, away, match) {
     if (club) {
       G.pushLedger(club, prize, won ? `Победа vs ${oppName}` : draw ? `Ничья vs ${oppName}` : `Поражение vs ${oppName}`);
       if (tickets) G.pushLedger(club, tickets, 'Билеты (дома)');
+      G.applyBoardAfterMatch(club, match, isHome);
+      if (club.board?.sacked) {
+        pushUserEvent(user.id, {
+          type: 'board',
+          title: 'Совет директоров уволил вас',
+          body: `Уверенность ${club.board.confidence}%. Оформите новый контракт во вкладке «Совет».`
+        });
+      } else if (club.board && club.board.confidence < 35 && !won) {
+        pushUserEvent(user.id, {
+          type: 'board',
+          title: 'Совет недоволен',
+          body: `Уверенность совета: ${club.board.confidence}%. Нужны результаты.`
+        });
+      }
       db.setClub(user.id, club);
     }
     if (match.motm && match.motm.side === (isHome ? 'home' : 'away')) {
@@ -291,7 +305,7 @@ function rewardUsers(home, away, match) {
     (sideInjuries || []).forEach((inj) => {
       pushUserEvent(user.id, {
         type: 'injury',
-        title: 'Травма',
+        title: inj.label ? `Травма · ${inj.label}` : 'Травма',
         body: `${inj.name} выбыл примерно на ${inj.hours} ч`
       });
     });
@@ -465,8 +479,32 @@ function playCupTie(homeEnt, awayEnt, meta = {}) {
     round: meta.round
   });
   match.cupName = meta.cupName;
+  match.round = meta.round || null;
   db.setClub(homeUser.id, homeClub);
   db.setClub(awayUser.id, awayClub);
+  // board confidence for humans
+  if (!homeUser.isBot) {
+    G.applyBoardAfterMatch(homeClub, match, true);
+    db.setClub(homeUser.id, homeClub);
+    if (homeClub.board?.sacked) {
+      pushUserEvent(homeUser.id, {
+        type: 'board',
+        title: 'Совет директоров уволил вас',
+        body: `Уверенность ${homeClub.board.confidence}%. Нужен новый контракт.`
+      });
+    }
+  }
+  if (!awayUser.isBot) {
+    G.applyBoardAfterMatch(awayClub, match, false);
+    db.setClub(awayUser.id, awayClub);
+    if (awayClub.board?.sacked) {
+      pushUserEvent(awayUser.id, {
+        type: 'board',
+        title: 'Совет директоров уволил вас',
+        body: `Уверенность ${awayClub.board.confidence}%. Нужен новый контракт.`
+      });
+    }
+  }
   db.addMatch(match);
   try { social?.newsFromMatch(match); } catch {}
   // prize money handled at cup finalize; appearance fee + home tickets
@@ -507,6 +545,7 @@ function playLeagueTie(homeUserId, awayUserId, meta = {}) {
     round: meta.round
   });
   match.leagueName = meta.leagueName;
+  match.round = meta.round || null;
   db.setClub(homeUser.id, homeClub);
   db.setClub(awayUser.id, awayClub);
   db.addMatch(match);
@@ -1548,6 +1587,109 @@ const server = http.createServer(async (req, res) => {
     return json(res, 200, { ok: true, ...G.medicalBay(club) });
   }
 
+  if (pathname === '/api/medical/treat' && req.method === 'POST') {
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    try {
+      const body = await readBody(req);
+      const club = ensureClub(auth.user);
+      const r = G.treatInjury(club, body.playerId, {
+        spendUserMoney: (cost) => {
+          if ((auth.user.money || 0) < cost) return false;
+          auth.user.money -= cost;
+          persistUser(auth.user);
+          return true;
+        }
+      });
+      if (!r.ok) return json(res, 400, { error: r.error });
+      db.setClub(auth.user.id, club);
+      return json(res, 200, {
+        ok: true,
+        ...r,
+        club: G.publicClub(club, auth.user),
+        user: enrichUser(auth.user),
+        medical: G.medicalBay(club)
+      });
+    } catch (e) {
+      return json(res, 500, { error: String(e.message || e) });
+    }
+  }
+
+  if (pathname === '/api/board' && req.method === 'GET') {
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    const club = ensureClub(auth.user);
+    G.ensureBoard(club, auth.user);
+    const myLeague = league ? league.findMyLeague(auth.user.id) : null;
+    let place = null;
+    let leagueName = null;
+    let week = null;
+    let season = null;
+    if (myLeague) {
+      const pub = league.publicLeague(myLeague, auth.user.id);
+      const row = (pub.standings || []).find((s) => s.userId === auth.user.id);
+      place = row?.rank ?? null;
+      leagueName = pub.name || myLeague.name;
+      week = pub.week || myLeague.week;
+      season = pub.season || myLeague.season;
+    }
+    const board = G.boardStatus(club, auth.user, { place, leagueName, week, season });
+    db.setClub(auth.user.id, club);
+    return json(res, 200, { ok: true, board, club: G.publicClub(club, auth.user) });
+  }
+
+  if (pathname === '/api/board/new-job' && req.method === 'POST') {
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    try {
+      const club = ensureClub(auth.user);
+      const r = G.takeNewJob(club, auth.user);
+      if (!r.ok) return json(res, 400, { error: r.error });
+      auth.user.prestige = Math.max(0, (auth.user.prestige || 0) - (r.prestigeCost || 2));
+      persistUser(auth.user);
+      db.setClub(auth.user.id, club);
+      pushUserEvent(auth.user.id, {
+        type: 'board',
+        title: 'Новый контракт с советом',
+        body: `Цель: ${r.board.targetLabel}. Уверенность ${r.board.confidence}%.`
+      });
+      return json(res, 200, {
+        ok: true,
+        board: G.boardStatus(club, auth.user),
+        club: G.publicClub(club, auth.user),
+        user: enrichUser(auth.user)
+      });
+    } catch (e) {
+      return json(res, 500, { error: String(e.message || e) });
+    }
+  }
+
+  if (pathname === '/api/academy/upgrade' && req.method === 'POST') {
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    try {
+      const club = ensureClub(auth.user);
+      const fin = G.financeSnapshot(auth.user, club);
+      if (fin.embargo) return json(res, 400, { error: 'Эмбарго: улучшения закрыты' });
+      const q = G.quoteAcademy(club);
+      if (!q.ok) return json(res, 400, { error: q.error });
+      if ((auth.user.money || 0) < q.cost) return json(res, 400, { error: `Нужно ${q.cost} ¤` });
+      auth.user.money -= q.cost;
+      persistUser(auth.user);
+      const r = G.upgradeAcademy(club);
+      G.pushLedger(club, -q.cost, r.label);
+      db.setClub(auth.user.id, club);
+      return json(res, 200, {
+        ok: true,
+        academy: G.academyStatus(club),
+        club: G.publicClub(club, auth.user),
+        user: enrichUser(auth.user)
+      });
+    } catch (e) {
+      return json(res, 500, { error: String(e.message || e) });
+    }
+  }
+
   if (pathname === '/api/rating' && req.method === 'GET') {
     const list = Object.values(usersDb().users)
       .filter((u) => !u.isBot)
@@ -1940,6 +2082,16 @@ async function main() {
           body: info.name || 'Онлайн-кубок завершён',
           cupId: info.id
         });
+        const uid = info.champion?.userId;
+        if (uid) {
+          const club = db.getClub(uid);
+          if (club) {
+            G.ensureBoard(club);
+            club.board.cupReached = 'Чемпион';
+            club.board.confidence = Math.min(100, (club.board.confidence || 65) + 8);
+            db.setClub(uid, club);
+          }
+        }
       }
     }
   });
@@ -1982,6 +2134,35 @@ async function main() {
             body: p.name
           });
         });
+      },
+      onBoardSeasonReview: (userId, info) => {
+        const club = db.getClub(userId);
+        const u = usersDb().users[userId];
+        if (!club || !u || u.isBot) return;
+        const review = G.seasonBoardReview(club, info.rank || 99, {
+          user: u,
+          cupReached: club.board?.cupReached || null
+        });
+        db.setClub(userId, club);
+        const conf = review.board?.confidence ?? '—';
+        pushUserEvent(userId, {
+          type: 'board',
+          title: review.sacked
+            ? 'Увольнение советом'
+            : review.ok
+              ? 'Цели сезона выполнены'
+              : 'Цели сезона провалены',
+          body: review.sacked
+            ? `Уверенность ${conf}%. Оформите новый контракт.`
+            : `${review.ok ? 'Совет доволен' : 'Нужны результаты'} · уверенность ${conf}% · место ${info.rank}`
+        });
+        if (review.sacked) {
+          u.prestige = Math.max(0, (u.prestige || 0) - 1);
+          persistUser(u);
+        } else if (review.ok) {
+          u.prestige = (u.prestige || 0) + 1;
+          persistUser(u);
+        }
       },
       onLeagueFinish: (info) => {
         const moves = (info.movements || []).filter((m) => m.kind === 'promote').slice(0, 2);

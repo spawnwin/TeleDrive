@@ -248,8 +248,49 @@ function createCupsModule({ dataDir, usersDb, saveUsers, publicUser, store }) {
       xpAwards: c.xpAwards || null,
       moneyAwards: c.moneyAwards || null,
       bracket: c.bracket || [],
-      history: c.history || []
+      history: c.history || [],
+      tree: buildBracketTree(c)
     };
+  }
+
+  function buildBracketTree(c) {
+    const mapTie = (t) => ({
+      home: {
+        name: t.home?.clubName || t.home?.name || 'TBD',
+        userId: t.home?.userId || null,
+        isBot: !!t.home?.isBot
+      },
+      away: {
+        name: t.away?.clubName || t.away?.name || 'TBD',
+        userId: t.away?.userId || null,
+        isBot: !!t.away?.isBot
+      },
+      score: t.score || null,
+      matchId: t.matchId || null,
+      winnerId: t.winnerId || null,
+      played: !!t.played || !!(t.score && t.score.length === 2)
+    });
+    const rounds = [];
+    (c.history || []).forEach((h) => {
+      rounds.push({
+        round: h.round || 'Раунд',
+        pending: false,
+        ties: (h.ties || []).map(mapTie)
+      });
+    });
+    if (c.status === 'live' && (c.bracket || []).length) {
+      const last = rounds[rounds.length - 1];
+      if (!last || last.round !== c.round) {
+        rounds.push({
+          round: c.round || 'Раунд',
+          pending: true,
+          ties: (c.bracket || []).map(mapTie)
+        });
+      } else if (last.pending === false && (c.bracket || []).some((t) => !t.score)) {
+        // current unfinished ties already mirrored in last history entry
+      }
+    }
+    return rounds;
   }
 
   function readCareerClub(userId) {

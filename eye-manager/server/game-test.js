@@ -159,4 +159,49 @@ describe('game lineup guards', () => {
     const bay = G.medicalBay(home);
     assert.ok(Array.isArray(bay.injured));
   });
+
+  it('board confidence season review and new job', () => {
+    const club = G.defaultClub({ id: 'b1', login: 'b1', name: 'B1', clubName: 'Board FC' });
+    const user = { id: 'b1', level: 3 };
+    const board = G.ensureBoard(club, user);
+    assert.ok(board.confidence >= 50);
+    assert.ok(board.targetPlace >= 2);
+    const before = club.board.confidence;
+    G.applyMatchConfidence(club, { won: false, drew: false, competition: 'league' });
+    assert.ok(club.board.confidence < before);
+    club.board.confidence = 30;
+    club.board.warnings = 2;
+    club.board.targetPlace = 4;
+    const review = G.seasonBoardReview(club, 9, { user });
+    assert.equal(review.ok, false);
+    assert.equal(review.sacked, true);
+    const job = G.takeNewJob(club, user);
+    assert.equal(job.ok, true);
+    assert.equal(club.board.sacked, false);
+    assert.ok(club.board.confidence >= 50);
+  });
+
+  it('injury types treat and academy upgrade', () => {
+    const club = G.defaultClub({ id: 'm1', login: 'm1', name: 'M1', clubName: 'Med FC' });
+    club.stadiumLevel = 3;
+    club.academyLevel = 1;
+    const p = club.players.find((x) => x.pos !== 'Gk');
+    const inj = G.inflictInjury(p, 0, { prefer: 'sprain' });
+    assert.equal(inj.type, 'sprain');
+    assert.ok(p.injuredHours > 0);
+    assert.equal(p.injuryLabel, 'Растяжение');
+    let spent = 0;
+    const treat = G.treatInjury(club, p.id, {
+      spendUserMoney: (c) => { spent = c; return true; }
+    });
+    assert.equal(treat.ok, true);
+    assert.ok(spent >= 4000);
+    assert.ok(treat.hours < treat.hoursBefore);
+    const up = G.upgradeAcademy(club);
+    assert.equal(up.ok, true);
+    assert.equal(club.academyLevel, 2);
+    const st = G.academyStatus(club);
+    assert.equal(st.academyLevel, 2);
+    assert.ok(st.youth.length >= 3);
+  });
 });

@@ -427,6 +427,9 @@ function createLeagueModule({ usersDb, saveUsers, store }) {
       if (store?.onSeasonContracts) {
         try { store.onSeasonContracts(e.userId); } catch {}
       }
+      if (store?.onBoardSeasonReview) {
+        try { store.onBoardSeasonReview(e.userId, { rank, leagueId: L.id, leagueName: L.name }); } catch {}
+      }
       pushEvent(e.userId, {
         type: rank === 1 ? 'league_won' : 'league_done',
         title: rank === 1 ? 'Чемпион лиги!' : `Лига завершена · ${rank} место`,

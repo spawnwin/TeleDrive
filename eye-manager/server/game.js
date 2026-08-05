@@ -58,6 +58,188 @@ const TRAITS = {
   prospect: { label: 'Талант', xp: 1.25 }
 };
 
+const INJURY_TYPES = {
+  knock: { label: 'Ушиб', hoursMul: 0.65 },
+  muscle: { label: 'Мышцы', hoursMul: 1.0 },
+  sprain: { label: 'Растяжение', hoursMul: 1.35 },
+  fracture: { label: 'Перелом', hoursMul: 2.1 }
+};
+
+const CUP_ROUND_RANK = {
+  R32: 1, R16: 1, '1/8': 2, '1/4': 3, '1/2': 4, Финал: 5, Чемпион: 6
+};
+
+function inflictInjury(p, medic = 0, { prefer } = {}) {
+  if (!p) return null;
+  let type = prefer;
+  if (!type) {
+    const roll = Math.random();
+    if (roll < 0.12) type = 'fracture';
+    else if (roll < 0.38) type = 'sprain';
+    else if (roll < 0.72) type = 'muscle';
+    else type = 'knock';
+  }
+  if (!INJURY_TYPES[type]) type = 'muscle';
+  const cfg = INJURY_TYPES[type];
+  const base = rnd(6, Math.max(8, 36 - medic * 6));
+  const hours = Math.max(4, Math.round(base * cfg.hoursMul * traitMul(p, 'injury', 1)));
+  p.injuredHours = Math.max(p.injuredHours || 0, hours);
+  p.injuryType = type;
+  p.injuryLabel = cfg.label;
+  return {
+    id: p.id,
+    name: p.name,
+    hours: p.injuredHours,
+    type,
+    label: cfg.label
+  };
+}
+
+function clearInjury(p) {
+  if (!p) return;
+  p.injuredHours = 0;
+  p.injuryType = null;
+  p.injuryLabel = null;
+}
+
+function targetForClub(club, user) {
+  const str = clubStrength(club);
+  const lvl = user?.level || 1;
+  const stadium = club?.stadiumLevel || 1;
+  const score = str / 10 + lvl * 2 + stadium;
+  if (score >= 28) return { place: 2, label: 'Топ-2 / повышение', cup: 'semi' };
+  if (score >= 22) return { place: 3, label: 'Топ-3', cup: 'quarter' };
+  if (score >= 16) return { place: 4, label: 'Верхняя четвёрка', cup: 'quarter' };
+  if (score >= 12) return { place: 6, label: 'Верхняя шестёрка', cup: null };
+  return { place: 8, label: 'Середина таблицы', cup: null };
+}
+
+function createBoard(club, user) {
+  const t = targetForClub(club, user);
+  return {
+    confidence: 65,
+    targetPlace: t.place,
+    targetLabel: t.label,
+    cupTarget: t.cup,
+    cupReached: null,
+    warnings: 0,
+    sacked: false,
+    createdAt: Date.now()
+  };
+}
+
+function ensureBoard(club, user) {
+  if (!club) return null;
+  if (!club.board || typeof club.board.confidence !== 'number') {
+    club.board = createBoard(club, user);
+  }
+  if (club.board.cupReached === undefined) club.board.cupReached = null;
+  return club.board;
+}
+
+function applyMatchConfidence(club, { won, drew, competition, round } = {}) {
+  const board = ensureBoard(club);
+  if (!board || board.sacked) return board;
+  let d = 0;
+  if (competition === 'friendly') d = won ? 1 : drew ? 0 : -1;
+  else if (competition === 'cup') d = won ? 5 : -4;
+  else if (competition === 'league') d = won ? 4 : drew ? 1 : -5;
+  else d = won ? 3 : drew ? 1 : -4;
+  board.confidence = Math.max(0, Math.min(100, board.confidence + d));
+  if (competition === 'cup' && won && round) {
+    const nextRank = CUP_ROUND_RANK[round] || 0;
+    const curRank = CUP_ROUND_RANK[board.cupReached] || 0;
+    if (nextRank >= curRank) board.cupReached = round;
+  }
+  if (!won && !drew && competition !== 'friendly' && board.confidence < 22) {
+    board.sacked = true;
+  }
+  return board;
+}
+
+function applyBoardAfterMatch(club, match, isHome) {
+  if (!club || !match) return null;
+  const [hg, ag] = match.score || [0, 0];
+  const my = isHome ? hg : ag;
+  const opp = isHome ? ag : hg;
+  return applyMatchConfidence(club, {
+    won: my > opp,
+    drew: my === opp,
+    competition: match.competition || 'friendly',
+    round: match.round || null
+  });
+}
+
+function seasonBoardReview(club, place, { user, cupReached } = {}) {
+  const board = ensureBoard(club, user);
+  if (!board) return { ok: false, sacked: false, board: null };
+  const reached = cupReached || board.cupReached || '';
+  let ok = Number(place) <= board.targetPlace;
+  let bonus = ok ? 1 : 0;
+  if (board.cupTarget === 'quarter' && ['1/4', '1/2', 'Финал', 'Чемпион'].includes(reached)) bonus++;
+  if (board.cupTarget === 'semi' && ['1/2', 'Финал', 'Чемпион'].includes(reached)) bonus++;
+  if (ok) board.confidence = Math.min(100, board.confidence + 12 + bonus * 4);
+  else {
+    board.confidence = Math.max(0, board.confidence - 15);
+    board.warnings = (board.warnings || 0) + 1;
+  }
+  board.sacked = board.confidence < 22 || (board.warnings || 0) >= 3;
+  board.cupReached = null;
+  const next = createBoard(club, user);
+  if (!board.sacked) {
+    // Soft roll into next season targets while keeping confidence/warnings
+    board.targetPlace = next.targetPlace;
+    board.targetLabel = next.targetLabel;
+    board.cupTarget = next.cupTarget;
+  }
+  return { ok, sacked: board.sacked, bonus, board, reached };
+}
+
+function takeNewJob(club, user) {
+  const board = ensureBoard(club, user);
+  if (!board?.sacked) return { ok: false, error: 'Совет директоров вас не увольнял' };
+  club.board = createBoard(club, user);
+  club.board.confidence = 55;
+  return { ok: true, board: club.board, prestigeCost: 2, label: 'Новый контракт с советом' };
+}
+
+function boardStatus(club, user, { place, leagueName, week, season } = {}) {
+  const board = ensureBoard(club, user);
+  if (!board) return null;
+  const placeNum = place != null ? Number(place) : null;
+  const onTrack = placeNum == null ? null : placeNum <= board.targetPlace;
+  const mood = board.sacked
+    ? 'sacked'
+    : board.confidence >= 70
+      ? 'strong'
+      : board.confidence >= 45
+        ? 'ok'
+        : board.confidence >= 25
+          ? 'worried'
+          : 'crisis';
+  return {
+    ...board,
+    place: placeNum,
+    leagueName: leagueName || null,
+    week: week || null,
+    season: season || null,
+    onTrack,
+    mood,
+    moodLabel: {
+      sacked: 'Увольнение',
+      strong: 'Доверие высоко',
+      ok: 'Стабильно',
+      worried: 'Совет нервничает',
+      crisis: 'Кризис доверия'
+    }[mood],
+    cupTargetLabel: board.cupTarget === 'semi'
+      ? 'Полуфинал кубка'
+      : board.cupTarget === 'quarter'
+        ? '1/4 кубка'
+        : null
+  };
+}
+
 function rollTraits(pos, talent = 5) {
   const pool = Object.keys(TRAITS);
   const n = Math.random() < 0.35 + talent * 0.03 ? (Math.random() < 0.25 ? 2 : 1) : 0;
@@ -228,6 +410,9 @@ function defaultClub(user, opts = {}) {
     userId: user?.id || null,
     players,
     staff: { coach: 1, gkCoach: 1, scout: 0, medic: 0 },
+    academyLevel: 1,
+    youth: [],
+    board: null,
     history: [],
     ledger: [],
     createdAt: Date.now()
@@ -312,6 +497,8 @@ function publicClub(club, user) {
     pressBuff: club.pressBuff && club.pressBuff.until > Date.now() ? club.pressBuff : null,
     chemistry: formationChemistry(club, resolveXi(club)),
     youthCount: Array.isArray(club.youth) ? club.youth.length : 0,
+    academyLevel: club.academyLevel || 1,
+    board: boardStatus(club, user),
     manager: user ? { id: user.id, login: user.login, name: user.name, level: user.level } : null
   };
 }
@@ -391,15 +578,18 @@ function applyFitnessAfterMatch(club, playedIds, opts = {}) {
     if (set.has(p.id)) {
       const loss = Math.round((rnd(10, 22) + (p.age > 28 ? 3 : 0)) * styleMul);
       p.fitness = Math.max(45, (p.fitness || 100) - loss);
-      if (Math.random() < injuryChance) {
-        p.injuredHours = rnd(6, Math.max(8, 36 - medic * 6));
-        injuries.push({ id: p.id, name: p.name, hours: p.injuredHours });
+      if (Math.random() < injuryChance * traitMul(p, 'injury', 1)) {
+        const inj = inflictInjury(p, medic);
+        if (inj) injuries.push(inj);
       }
       p.xpPool = (p.xpPool || 0) + rnd(4, 14) + (p.talent || 5);
       p.morale = Math.max(-20, Math.min(25, (p.morale || 0) + resultDelta + rnd(-1, 1)));
     } else {
       p.fitness = Math.min(100, (p.fitness || 100) + rnd(4, 10) + medic);
-      if (p.injuredHours > 0) p.injuredHours = Math.max(0, p.injuredHours - (8 + medic * 4));
+      if (p.injuredHours > 0) {
+        p.injuredHours = Math.max(0, p.injuredHours - (8 + medic * 4));
+        if (p.injuredHours <= 0) clearInjury(p);
+      }
       p.morale = Math.max(-20, Math.min(25, (p.morale || 0) + rnd(-1, 1)));
     }
   });
@@ -653,9 +843,18 @@ function simulateMatch(homeClub, awayClub, meta = {}) {
       if (victim) {
         const brittle = traitMul(victim, 'injury', 1);
         if (Math.random() < brittle * 0.7) {
-          victim.injuredHours = Math.max(victim.injuredHours || 0, rnd(8, 30));
-          events.push({ minute: m, type: 'injury', side: homeSide ? 'home' : 'away', player: victim.name, score: [hg, ag] });
-          trySub(live, bench, victim, events, m, homeSide ? 'home' : 'away', [hg, ag], 'травма');
+          const medic = ((homeSide ? homeClub : awayClub).staff && (homeSide ? homeClub : awayClub).staff.medic) || 0;
+          const inj = inflictInjury(victim, medic);
+          events.push({
+            minute: m,
+            type: 'injury',
+            side: homeSide ? 'home' : 'away',
+            player: victim.name,
+            injuryType: inj?.type,
+            injuryLabel: inj?.label,
+            score: [hg, ag]
+          });
+          trySub(live, bench, victim, events, m, homeSide ? 'home' : 'away', [hg, ag], inj?.label || 'травма');
           if (homeSide) hs *= 0.97; else as *= 0.97;
         }
       }
@@ -812,6 +1011,9 @@ function simulateMatch(homeClub, awayClub, meta = {}) {
     createdAt: Date.now(),
     status: 'done',
     competition: meta.competition || 'friendly',
+    round: meta.round || null,
+    cupId: meta.cupId || null,
+    leagueId: meta.leagueId || null,
     home: {
       userId: meta.homeUserId, name: homeClub.name, short: homeClub.short, color: homeClub.color,
       strength: Math.round(hs), formation: homeClub.formation, style: homeClub.style,
@@ -951,7 +1153,10 @@ function recoverSquad(club) {
   const medic = (club.staff && club.staff.medic) || 0;
   club.players.forEach((p) => {
     p.fitness = Math.min(100, (p.fitness || 100) + rnd(8, 16) + medic * 3);
-    if (p.injuredHours > 0) p.injuredHours = Math.max(0, p.injuredHours - (12 + medic * 6));
+    if (p.injuredHours > 0) {
+      p.injuredHours = Math.max(0, p.injuredHours - (12 + medic * 6));
+      if (p.injuredHours <= 0) clearInjury(p);
+    }
   });
   return club;
 }
@@ -1102,6 +1307,7 @@ function tickClubClock(club) {
     club.players.forEach((p) => {
       if (p.injuredHours > 0) {
         p.injuredHours = Math.max(0, Math.round(p.injuredHours - hours * (1 + medic * 0.5)));
+        if (p.injuredHours <= 0) clearInjury(p);
       } else {
         p.fitness = Math.min(100, (p.fitness || 100) + hours);
       }
@@ -1235,24 +1441,27 @@ function quoteYouth(club) {
   const lvl = club.stadiumLevel || 1;
   if (lvl < 2) return { ok: false, error: 'Нужен стадион ур. 2+ для академии' };
   const now = Date.now();
-  if (club.lastYouthAt && now - club.lastYouthAt < 24 * 3600e3) {
-    const wait = Math.ceil((24 * 3600e3 - (now - club.lastYouthAt)) / 3600e3);
-    return { ok: false, error: `Следующий выпуск через ~${wait} ч`, waitMs: 24 * 3600e3 - (now - club.lastYouthAt) };
+  const acLvl = club.academyLevel || 1;
+  const cdMs = Math.max(12, 24 - (acLvl - 1) * 2) * 3600e3;
+  if (club.lastYouthAt && now - club.lastYouthAt < cdMs) {
+    const wait = Math.ceil((cdMs - (now - club.lastYouthAt)) / 3600e3);
+    return { ok: false, error: `Следующий выпуск через ~${wait} ч`, waitMs: cdMs - (now - club.lastYouthAt) };
   }
-  const cost = 20000 + (lvl - 2) * 5000;
-  return { ok: true, cost, stadiumLevel: lvl };
+  const cost = 20000 + (lvl - 2) * 5000 + (acLvl - 1) * 3000;
+  return { ok: true, cost, stadiumLevel: lvl, academyLevel: acLvl };
 }
 
 function makeYouthProspect(club) {
   const lvl = club.stadiumLevel || 1;
+  const ac = club.academyLevel || 1;
   const pos = pick(POSITIONS.filter((p) => p !== 'Dm' && p !== 'Am').concat(['Cm', 'Cf', 'Cd']));
-  const quality = 9 + Math.min(6, lvl) + rnd(-1, 2);
+  const quality = 9 + Math.min(6, lvl) + Math.min(3, ac - 1) + rnd(-1, 2);
   const p = makePlayer(pos, quality);
   p.age = rnd(15, 18);
-  p.talent = Math.min(10, (p.talent || 5) + rnd(1, 3));
+  p.talent = Math.min(10, (p.talent || 5) + rnd(1, 2) + Math.max(0, ac - 2));
   p.wage = Math.round(playerValue(p) / 120);
   p.contractYears = rnd(2, 4);
-  p.pot = Math.min(99, masteryOf(p) + p.talent * 3 + rnd(2, 8));
+  p.pot = Math.min(99, masteryOf(p) + p.talent * 3 + rnd(2, 8) + ac);
   p.youth = true;
   return p;
 }
@@ -1260,7 +1469,10 @@ function makeYouthProspect(club) {
 function ensureYouthPool(club, { refill = false } = {}) {
   if (!club) return [];
   club.youth = Array.isArray(club.youth) ? club.youth : [];
-  const max = Math.min(6, 3 + Math.max(0, (club.stadiumLevel || 1) - 1));
+  if (club.academyLevel == null) club.academyLevel = 1;
+  const stadium = club.stadiumLevel || 1;
+  const ac = club.academyLevel || 1;
+  const max = Math.min(8, 2 + ac + Math.max(0, stadium - 1));
   const now = Date.now();
   const stale = !club.lastYouthRefill || (now - club.lastYouthRefill > 12 * 3600e3);
   if (refill || stale || club.youth.length === 0) {
@@ -1280,18 +1492,38 @@ function publicYouth(p) {
   };
 }
 
+function quoteAcademy(club) {
+  const lvl = club.academyLevel || 1;
+  if (lvl >= 5) return { ok: false, error: 'Академия уже максимального уровня' };
+  const stadium = club.stadiumLevel || 1;
+  if (stadium < 2) return { ok: false, error: 'Нужен стадион ур. 2+' };
+  if (lvl >= stadium) return { ok: false, error: 'Уровень академии не выше стадиона' };
+  return { ok: true, cost: 55000 * lvl, nextLevel: lvl + 1, label: `Академия → ур. ${lvl + 1}` };
+}
+
+function upgradeAcademy(club) {
+  const q = quoteAcademy(club);
+  if (!q.ok) return q;
+  club.academyLevel = q.nextLevel;
+  ensureYouthPool(club, { refill: true });
+  return { ok: true, cost: q.cost, label: q.label, academyLevel: club.academyLevel };
+}
+
 function academyStatus(club) {
   ensureYouthPool(club);
   const q = quoteYouth(club);
+  const up = quoteAcademy(club);
   return {
     stadiumLevel: club.stadiumLevel || 1,
+    academyLevel: club.academyLevel || 1,
     squadSize: (club.players || []).length,
     youth: (club.youth || []).map(publicYouth),
     canPromote: q.ok,
     promoteCost: q.ok ? q.cost : null,
     promoteError: q.ok ? null : q.error,
     waitMs: q.waitMs || 0,
-    lastYouthAt: club.lastYouthAt || null
+    lastYouthAt: club.lastYouthAt || null,
+    upgrade: up.ok ? up : { ok: false, error: up.error }
   };
 }
 
@@ -1331,13 +1563,14 @@ function releaseYouth(club, youthId) {
 
 function tickYouthGrowth(club) {
   if (!club?.youth?.length) return false;
+  const ac = club.academyLevel || 1;
   let changed = false;
   club.youth.forEach((p) => {
     if (!p.skills) return;
-    if (Math.random() < 0.35 + (p.talent || 5) * 0.04) {
+    if (Math.random() < 0.28 + (p.talent || 5) * 0.04 + ac * 0.05) {
       const keys = Object.keys(p.skills);
       const k = pick(keys);
-      const cap = Math.min(28, (p.pot || 40) / 2);
+      const cap = Math.min(28, (p.pot || 40) / 2 + ac);
       if ((p.skills[k] || 10) < cap) {
         p.skills[k] = Math.min(cap, (p.skills[k] || 10) + 1);
         changed = true;
@@ -1351,14 +1584,22 @@ function medicalBay(club) {
   const medic = (club.staff && club.staff.medic) || 0;
   const injured = (club.players || [])
     .filter((p) => (p.injuredHours || 0) > 0)
-    .map((p) => ({
-      id: p.id,
-      name: p.name,
-      pos: p.pos,
-      hours: p.injuredHours,
-      etaHours: Math.max(1, Math.ceil(p.injuredHours / (1 + medic * 0.5))),
-      mastery: masteryOf(p)
-    }))
+    .map((p) => {
+      const type = p.injuryType || 'muscle';
+      const label = p.injuryLabel || INJURY_TYPES[type]?.label || 'Травма';
+      const treatCost = 8000 + Math.round((p.injuredHours || 0) * 400);
+      return {
+        id: p.id,
+        name: p.name,
+        pos: p.pos,
+        hours: p.injuredHours,
+        etaHours: Math.max(1, Math.ceil(p.injuredHours / (1 + medic * 0.5))),
+        type,
+        label,
+        treatCost,
+        mastery: masteryOf(p)
+      };
+    })
     .sort((a, b) => b.hours - a.hours);
   const suspended = (club.players || [])
     .filter((p) => (p.suspendedMatches || 0) > 0)
@@ -1381,6 +1622,32 @@ function medicalBay(club) {
     .sort((a, b) => a.fitness - b.fitness)
     .slice(0, 8);
   return { medic, injured, suspended, tired };
+}
+
+function treatInjury(club, playerId, { spendUserMoney } = {}) {
+  const p = (club.players || []).find((x) => x.id === playerId);
+  if (!p) return { ok: false, error: 'Игрок не найден' };
+  if (!(p.injuredHours > 0)) return { ok: false, error: 'Игрок здоров' };
+  const medic = (club.staff && club.staff.medic) || 0;
+  const cost = 8000 + Math.round(p.injuredHours * 400) - medic * 1500;
+  const pay = Math.max(4000, cost);
+  if (typeof spendUserMoney === 'function') {
+    if (!spendUserMoney(pay)) return { ok: false, error: `Нужно ${pay} ¤ на лечение` };
+  }
+  const before = p.injuredHours;
+  p.injuredHours = Math.max(0, Math.ceil(p.injuredHours / 2) - (4 + medic * 2));
+  if (p.injuredHours <= 0) clearInjury(p);
+  pushLedger(club, -pay, `Лечение · ${p.name}`);
+  return {
+    ok: true,
+    cost: pay,
+    hoursBefore: before,
+    hours: p.injuredHours || 0,
+    player: { ...p, mastery: masteryOf(p), effective: effectiveMastery(p) },
+    label: p.injuredHours > 0
+      ? `Лечение · ${p.name}: осталось ~${p.injuredHours}ч`
+      : `Выписан · ${p.name}`
+  };
 }
 
 function releasePlayer(club, playerId) {
@@ -1521,6 +1788,7 @@ module.exports = {
   STYLES,
   INSTRUCTIONS,
   TRAITS,
+  INJURY_TYPES,
   POSITIONS,
   STAFF_ROLES,
   uid,
@@ -1569,9 +1837,22 @@ module.exports = {
   quoteYouth,
   ensureYouthPool,
   academyStatus,
+  quoteAcademy,
+  upgradeAcademy,
   releaseYouth,
   tickYouthGrowth,
   medicalBay,
+  treatInjury,
+  inflictInjury,
+  clearInjury,
+  ensureBoard,
+  createBoard,
+  applyMatchConfidence,
+  applyBoardAfterMatch,
+  seasonBoardReview,
+  takeNewJob,
+  boardStatus,
+  targetForClub,
   POS_GROUP,
   releasePlayer,
   renegotiateWage,

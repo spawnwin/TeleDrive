@@ -44,7 +44,8 @@
     contract_ask: 'Контракт',
     contract_left: 'Свободный агент',
     suspension: 'Дисквалификация',
-    release: 'Отчисление'
+    release: 'Отчисление',
+    board: 'Совет директоров'
   };
 
   const TRAIT_LABELS = {
@@ -61,6 +62,7 @@
   const TABS = {
     cabinet: [
       ['main', 'Главная'],
+      ['board', 'Совет'],
       ['finance', 'Финансы'],
       ['mail', 'События'],
       ['press', 'Пресса'],
@@ -275,6 +277,45 @@
   async function renderCabinet() {
     const club = state.club;
     const u = state.me?.user;
+    if (state.tab === 'board') {
+      let board = club?.board || null;
+      try {
+        const data = await A().request('api/board');
+        board = data.board;
+        if (data.club) state.club = data.club;
+      } catch {}
+      const conf = board?.confidence ?? 0;
+      const confColor = conf >= 55 ? 'var(--grass-bright)' : conf >= 35 ? 'var(--warn,#eab308)' : 'var(--danger)';
+      const placeLine = board?.place != null
+        ? `${board.place}-е место · цель ≤${board.targetPlace}`
+        : `Цель: место не ниже ${board?.targetPlace || '—'}`;
+      $('#view').innerHTML = `
+        <section class="panel">
+          <div class="panel-head">
+            <h3>Совет директоров</h3>
+            <span class="badge ${board?.sacked ? 'danger' : ''}">${esc(board?.moodLabel || '—')}</span>
+          </div>
+          <p class="hint">${esc(board?.leagueName || 'Вне лиги')} · сезон ${board?.season || '—'} · тур ${board?.week || '—'}</p>
+          <h2 style="margin:8px 0;font-family:Syne,sans-serif">${esc(board?.targetLabel || 'Цели сезона')}</h2>
+          <div class="board-conf"><i style="width:${conf}%;background:${confColor}"></i></div>
+          <div class="grid-3" style="margin-top:12px">
+            <div class="stat-card"><span>Уверенность</span><b style="color:${confColor}">${conf}%</b></div>
+            <div class="stat-card"><span>Прогресс</span><b>${esc(placeLine)}</b></div>
+            <div class="stat-card"><span>Предупреждения</span><b>${board?.warnings || 0}/3</b></div>
+          </div>
+          ${board?.cupTargetLabel ? `<p class="hint" style="margin-top:12px">Кубковая цель: <strong>${esc(board.cupTargetLabel)}</strong>${board.cupReached ? ' · сейчас: ' + esc(board.cupReached) : ''}</p>` : ''}
+          ${board?.onTrack === false ? '<p class="hint" style="color:var(--warn,#eab308)">Сейчас ниже целевой зоны таблицы.</p>' : ''}
+          ${board?.onTrack === true ? '<p class="hint" style="color:var(--grass-bright)">Вы в целевой зоне.</p>' : ''}
+          ${board?.sacked ? `
+            <div class="stat-card" style="margin-top:14px;border-color:var(--danger)">
+              <span>Статус</span><b style="color:var(--danger)">Уволены</b>
+            </div>
+            <p class="hint">Совет требует нового контракта (−2 престижа). Клуб остаётся за вами.</p>
+            <button class="btn btn-primary" id="btn-new-job" style="margin-top:10px">Подписать новый контракт</button>
+          ` : '<p class="hint" style="margin-top:12px">Победы в лиге и кубке поднимают доверие. Провал целей в конце сезона — предупреждение; 3 предупреждения или уверенность &lt;22% — увольнение.</p>'}
+        </section>`;
+      return;
+    }
     if (state.tab === 'finance') {
       const ledger = club?.ledger || [];
       const fin = state.me?.user?.finance || {};
@@ -391,15 +432,19 @@
     }
     const cal = state.me?.calendar;
     const nextFix = (cal?.items || []).find((x) => x.status === 'next' || x.status === 'planned');
+    const board = club?.board;
+    const conf = board?.confidence;
     $('#view').innerHTML = `
       <div class="hero-strip">
         <div class="club-banner" style="--club:${esc(club?.color || '#1fa65a')}">
           <h2>${esc(club?.name || 'Клуб')}</h2>
           <p>Сила состава ${club?.strength || '—'} · схема ${esc(club?.formation || '4-4-2')} · ${esc(club?.stadium || 'Стадион')}</p>
           ${club?.understrength ? '<p class="hint" style="margin-top:10px;color:var(--warn,#eab308)">В основе меньше 11 здоровых — проверьте травмы и автосостав.</p>' : ''}
+          ${board?.sacked ? '<p class="hint" style="margin-top:10px;color:var(--danger)">Совет уволил вас — оформите контракт во вкладке «Совет».</p>' : ''}
           <div style="margin-top:16px;display:flex;gap:8px;flex-wrap:wrap">
             <button class="btn btn-primary btn-tiny" data-nav="matches" data-goto-tab="league">К лиге</button>
             <button class="btn btn-tiny" data-nav="matches">К матчам</button>
+            <button class="btn btn-tiny" data-nav="cabinet" data-goto-tab="board">Совет</button>
             <button class="btn btn-tiny" data-nav="players">Состав</button>
           </div>
         </div>
@@ -410,6 +455,8 @@
             <div class="stat-card"><span>Сезон / тур</span><b>${cal?.season || '—'} / ${cal?.week || '—'}</b></div>
             <div class="stat-card"><span>Слава</span><b>${u?.fame || 0}</b></div>
             <div class="stat-card"><span>Престиж</span><b>${u?.prestige || 0}</b></div>
+            ${conf != null ? `<div class="stat-card"><span>Совет</span><b>${conf}%</b></div>` : ''}
+            ${board?.targetLabel ? `<div class="stat-card"><span>Цель</span><b>${esc(board.targetLabel)}</b></div>` : ''}
           </div>
           ${nextFix ? `<p class="hint" style="margin:14px 0 0">Ближайший матч лиги: <strong>${esc(nextFix.home)}</strong> — <strong>${esc(nextFix.away)}</strong>${nextFix.when ? ' · ' + new Date(nextFix.when).toLocaleString('ru-RU') : ''}</p>` : `<p class="hint" style="margin:14px 0 0">Запишитесь в лигу своего уровня или сыграйте товарищеский / кубок.</p>`}
         </section>
@@ -517,8 +564,14 @@
           <h3>Травмы</h3>
           <div class="list">${med.injured?.length ? med.injured.map((p) => `
             <div class="list-row">
-              <div><strong>${esc(p.name)} · ${esc(p.pos)}</strong><small>~${p.etaHours} ч до возврата (осталось ${p.hours}ч)</small></div>
-              <b>${p.mastery}</b>
+              <div>
+                <strong>${esc(p.name)} · ${esc(p.pos)}</strong>
+                <small>${esc(p.label || 'Травма')} · ~${p.etaHours} ч до возврата (осталось ${p.hours}ч)</small>
+              </div>
+              <div style="display:flex;gap:8px;align-items:center">
+                <b>${p.mastery}</b>
+                <button class="btn btn-primary btn-tiny" data-treat="${esc(p.id)}">Лечить · ${money(p.treatCost || 8000)}</button>
+              </div>
             </div>`).join('') : '<p class="hint">Лазарет пуст</p>'}</div>
         </section>
         ${med.suspended?.length ? `<section class="panel"><h3>Дисквалификации</h3>
@@ -611,16 +664,23 @@
       return;
     }
     if (state.tab === 'academy') {
-      let ac = { youth: [], stadiumLevel: club.stadiumLevel || 1, squadSize: (club.players || []).length, canPromote: false, promoteCost: 0, promoteError: null };
+      let ac = { youth: [], stadiumLevel: club.stadiumLevel || 1, academyLevel: 1, squadSize: (club.players || []).length, canPromote: false, promoteCost: 0, promoteError: null, upgrade: { ok: false } };
       try { ac = await A().request('api/academy'); } catch {}
+      const up = ac.upgrade || {};
       $('#view').innerHTML = `
         <section class="panel">
           <h3>Молодёжная академия</h3>
-          <p class="hint">Пул воспитанников растёт со стадионом. Раз в сутки можно выпустить одного в основу. Нужен стадион ур. 2+.</p>
+          <p class="hint">Уровень академии растёт с стадионом. Выше ур. — больше пул, лучше таланты и быстрее выпуск.</p>
           <div class="grid-3">
+            <div class="stat-card"><span>Академия</span><b>${ac.academyLevel || 1} / 5</b></div>
             <div class="stat-card"><span>Стадион</span><b>${ac.stadiumLevel || 1} / 8</b></div>
             <div class="stat-card"><span>Состав</span><b>${ac.squadSize || 0}/25</b></div>
-            <div class="stat-card"><span>Выпуск</span><b>${ac.promoteCost ? money(ac.promoteCost) : '—'}</b></div>
+          </div>
+          <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn btn-primary" id="btn-academy-up" ${up.ok ? '' : 'disabled'}>
+              ${up.ok ? `Улучшить · ${money(up.cost)}` : esc(up.error || 'Макс. уровень')}
+            </button>
+            <span class="badge">Выпуск: ${ac.promoteCost ? money(ac.promoteCost) : '—'}</span>
           </div>
           ${ac.promoteError ? `<p class="hint" style="margin-top:10px">${esc(ac.promoteError)}</p>` : ''}
         </section>
@@ -636,7 +696,7 @@
                 <button class="btn btn-primary btn-tiny" data-youth-promote="${esc(p.id)}" ${ac.canPromote ? '' : 'disabled'}>В основу</button>
                 <button class="btn btn-tiny" data-youth-release="${esc(p.id)}">Отпустить</button>
               </div>
-            </div>`).join('') : '<p class="hint">Пул пуст — улучшите стадион</p>'}</div>
+            </div>`).join('') : '<p class="hint">Пул пуст — улучшите стадион / академию</p>'}</div>
         </section>`;
       return;
     }
@@ -1264,7 +1324,36 @@
     const ties = (c.history || []).slice().reverse().flatMap((h) =>
       (h.ties || []).map((t) => ({ ...t, round: h.round }))
     );
+    const tree = c.tree && c.tree.length ? c.tree : null;
     const bracket = c.bracket || [];
+    const treeHtml = tree ? `
+      <h3>Сетка турнира</h3>
+      <div class="cup-bracket" style="--rounds:${tree.length}">
+        ${tree.map((round) => `
+          <div class="cup-round ${round.pending ? 'is-pending' : ''}">
+            <div class="cup-round-title">${esc(round.round)}${round.pending ? ' · сейчас' : ''}</div>
+            ${(round.ties || []).map((t) => {
+              const hs = t.score ? t.score[0] : '–';
+              const as = t.score ? t.score[1] : '–';
+              const hw = t.winnerId && t.home?.userId === t.winnerId;
+              const aw = t.winnerId && t.away?.userId === t.winnerId;
+              return `<div class="cup-tie">
+                <div class="cup-side ${hw ? 'is-win' : ''} ${t.home?.userId === myId ? 'is-me' : ''}">
+                  <span>${esc(t.home?.name || 'TBD')}</span><b>${hs}</b>
+                </div>
+                <div class="cup-side ${aw ? 'is-win' : ''} ${t.away?.userId === myId ? 'is-me' : ''}">
+                  <span>${esc(t.away?.name || 'TBD')}</span><b>${as}</b>
+                </div>
+                ${t.matchId ? `<button class="btn btn-tiny" data-match="${esc(t.matchId)}">Отчёт</button>` : ''}
+              </div>`;
+            }).join('')}
+          </div>`).join('')}
+      </div>` : (bracket.length ? `<h3>Текущая сетка</h3><div class="list">${bracket.map((t) => `
+        <div class="list-row">
+          <div><strong>${esc(t.home?.clubName || t.home?.name)} ${t.score ? t.score[0] + ':' + t.score[1] : 'vs'} ${esc(t.away?.clubName || t.away?.name)}</strong>
+          <small>${t.score ? 'сыграно' : 'ожидание'}${t.matchId ? ' · есть отчёт' : ''}</small></div>
+          ${t.matchId ? `<button class="btn btn-tiny" data-match="${esc(t.matchId)}">Отчёт</button>` : ''}
+        </div>`).join('')}</div>` : '');
     return `
       <div class="panel-head">
         <h2 style="margin:0;font-family:Syne,sans-serif">${esc(c.name)}</h2>
@@ -1275,13 +1364,8 @@
         ${c.nextRoundAt && c.status === 'live' ? ' · след. раунд ' + new Date(c.nextRoundAt).toLocaleTimeString('ru-RU') : ''}
       </p>
       ${c.champion ? `<div class="stat-card" style="margin-bottom:12px"><span>Чемпион</span><b>${esc(c.champion.clubName || c.champion.name)}</b></div>` : ''}
-      ${bracket.length ? `<h3>Текущая сетка</h3><div class="list">${bracket.map((t) => `
-        <div class="list-row">
-          <div><strong>${esc(t.home?.clubName || t.home?.name)} ${t.score ? t.score[0] + ':' + t.score[1] : 'vs'} ${esc(t.away?.clubName || t.away?.name)}</strong>
-          <small>${t.score ? 'сыграно' : 'ожидание'}${t.matchId ? ' · есть отчёт' : ''}</small></div>
-          ${t.matchId ? `<button class="btn btn-tiny" data-match="${esc(t.matchId)}">Отчёт</button>` : ''}
-        </div>`).join('')}</div>` : ''}
-      ${ties.length ? `<h3 style="margin-top:14px">История</h3><div class="list">${ties.slice(0, 16).map((t) => `
+      ${treeHtml}
+      ${ties.length && !tree ? `<h3 style="margin-top:14px">История</h3><div class="list">${ties.slice(0, 16).map((t) => `
         <div class="list-row">
           <div><strong>${esc(t.round)}: ${esc(t.home?.clubName || t.home?.name)} ${t.score?.[0]}:${t.score?.[1]} ${esc(t.away?.clubName || t.away?.name)}</strong></div>
           ${t.matchId ? `<button class="btn btn-tiny" data-match="${esc(t.matchId)}">Отчёт</button>` : ''}
@@ -1755,6 +1839,49 @@
           A().setUser(data.user);
           paintSidebar();
           toast('Состав восстановлен');
+          render();
+        } catch (err) { toast(err.message); }
+      }
+      if (e.target.id === 'btn-new-job') {
+        try {
+          const data = await A().request('api/board/new-job', { method: 'POST' });
+          state.club = data.club;
+          if (data.user) {
+            state.me.user = data.user;
+            A().setUser(data.user);
+            paintSidebar();
+          }
+          toast('Новый контракт с советом');
+          render();
+        } catch (err) { toast(err.message); }
+      }
+      if (e.target.id === 'btn-academy-up') {
+        try {
+          const data = await A().request('api/academy/upgrade', { method: 'POST' });
+          state.club = data.club;
+          if (data.user) {
+            state.me.user = data.user;
+            A().setUser(data.user);
+            paintSidebar();
+          }
+          toast('Академия улучшена');
+          render();
+        } catch (err) { toast(err.message); }
+      }
+      const treatBtn = e.target.closest('[data-treat]');
+      if (treatBtn) {
+        try {
+          const data = await A().request('api/medical/treat', {
+            method: 'POST',
+            body: { playerId: treatBtn.dataset.treat }
+          });
+          state.club = data.club;
+          if (data.user) {
+            state.me.user = data.user;
+            A().setUser(data.user);
+            paintSidebar();
+          }
+          toast(data.label || 'Лечение проведено');
           render();
         } catch (err) { toast(err.message); }
       }
