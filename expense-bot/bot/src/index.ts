@@ -3,7 +3,7 @@ import cors from 'cors'
 import express from 'express'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { Bot, InlineKeyboard, webhookCallback } from 'grammy'
+import { Bot, InlineKeyboard, Keyboard, webhookCallback } from 'grammy'
 import { createApiRouter } from './api.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -32,6 +32,28 @@ function buildOpenKeyboard() {
   return new InlineKeyboard().webApp('Открыть Златник', WEBAPP_URL)
 }
 
+function buildReplyKeyboard() {
+  return new Keyboard()
+    .webApp('Открыть Златник', WEBAPP_URL)
+    .resized()
+    .persistent()
+}
+
+async function attachMenuButton(bot: Bot, chatId: number) {
+  try {
+    await bot.api.setChatMenuButton({
+      chat_id: chatId,
+      menu_button: {
+        type: 'web_app',
+        text: 'Златник',
+        web_app: { url: WEBAPP_URL },
+      },
+    })
+  } catch (err) {
+    console.warn('[zlatnik] setChatMenuButton failed:', err)
+  }
+}
+
 async function start() {
   if (!BOT_TOKEN || BOT_TOKEN.includes('ABC-DEF')) {
     console.warn(
@@ -49,6 +71,7 @@ async function start() {
 
   bot.command('start', async (ctx) => {
     const name = ctx.from?.first_name ?? 'друг'
+    if (ctx.chat) await attachMenuButton(bot, ctx.chat.id)
     await ctx.reply(
       [
         `Привет, ${name}!`,
@@ -57,21 +80,19 @@ async function start() {
         'Имя от древнерусской золотой монеты. Все данные хранятся на сервере.',
         '',
         'Нажми кнопку ниже — приложение откроется прямо в Telegram.',
-        '',
-        'Команды:',
-        '/app — открыть Златник',
-        '/today — траты за сегодня',
-        '/month — траты за месяц',
-        '/help — справка',
       ].join('\n'),
       {
         parse_mode: 'Markdown',
         reply_markup: buildOpenKeyboard(),
       },
     )
+    await ctx.reply('Или открой из нижней панели:', {
+      reply_markup: buildReplyKeyboard(),
+    })
   })
 
   bot.command('app', async (ctx) => {
+    if (ctx.chat) await attachMenuButton(bot, ctx.chat.id)
     await ctx.reply('Открой Златник и добавь трату за пару секунд.', {
       reply_markup: buildOpenKeyboard(),
     })
@@ -100,7 +121,7 @@ async function start() {
   })
 
   bot.command('month', async (ctx) => {
-    await ctx.reply('Месячная статистика и категории — в Ауре.', {
+    await ctx.reply('Месячная статистика и категории — в Златнике.', {
       reply_markup: buildOpenKeyboard(),
     })
   })
