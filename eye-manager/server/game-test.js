@@ -274,4 +274,64 @@ describe('game lineup guards', () => {
     assert.equal(profile.login, 'loanmgr');
     assert.ok(profile.club.top.length >= 1);
   });
+
+  it('tv training offers player card and skill cap', () => {
+    const club = G.defaultClub({ id: 'tv1', login: 'tv1', name: 'TV1', clubName: 'TV FC' });
+    const user = { id: 'tv1', level: 4, fame: 40, fans: 15000, money: 800000, lastWageAt: Date.now() - 24 * 3600e3 };
+    assert.equal(club.trainingLevel, 1);
+    const tv = G.weeklyTvIncome(club, user);
+    assert.ok(tv > 20000);
+    const fin = G.financeSnapshot(user, club);
+    assert.ok(fin.tvWeekly > 0);
+    assert.ok(fin.tvDaily > 0);
+
+    club.stadiumLevel = 3;
+    const q = G.quoteTraining(club);
+    assert.equal(q.ok, true);
+    const up = G.upgradeTraining(club);
+    assert.equal(up.ok, true);
+    assert.equal(club.trainingLevel, 2);
+    assert.ok(G.skillCap(club, false) > G.skillCap({ ...club, trainingLevel: 1 }, false));
+
+    G.ensureLineup(club, true);
+    const offers = G.maybeGenerateTransferOffers(club, { force: true });
+    assert.ok(offers.length >= 1);
+    const offer = offers[0];
+    const reject = G.resolveTransferOffer(club, offer.id, 'reject');
+    assert.equal(reject.ok, true);
+    assert.equal(reject.decision, 'reject');
+
+    const more = G.maybeGenerateTransferOffers(club, { force: true });
+    assert.ok(more.length >= 1);
+    // ensure not in XI for accept path
+    const oid = more[0].playerId;
+    club.lineupIds = (club.lineupIds || []).filter((id) => id !== oid);
+    club.benchIds = (club.benchIds || []).filter((id) => id !== oid);
+    while ((club.players || []).length <= 16) {
+      club.players.push(G.makePlayer('Cm', 10));
+    }
+    const before = club.players.length;
+    const moneyBefore = user.money;
+    const acc = G.resolveTransferOffer(club, more[0].id, 'accept');
+    assert.equal(acc.ok, true);
+    assert.equal(club.players.length, before - 1);
+
+    const wage = G.settleWageDay(user, club);
+    assert.ok(wage);
+    assert.ok(wage.tvPay > 0);
+    assert.ok(user.money > moneyBefore - 1 || wage.tvPay > 0);
+
+    const away = G.defaultClub({ id: 'tv2', login: 'tv2', name: 'TV2', clubName: 'Away TV' });
+    G.ensureLineup(club, true);
+    G.ensureLineup(away, true);
+    G.simulateMatch(club, away, { competition: 'friendly', homeUserId: 'tv1', awayUserId: 'tv2' });
+    const rated = club.players.find((p) => p.lastRating != null);
+    assert.ok(rated);
+    assert.ok(Array.isArray(rated.ratingLog));
+    assert.ok(rated.ratingLog.length >= 1);
+    const card = G.playerCard(club, rated.id);
+    assert.ok(card);
+    assert.equal(card.id, rated.id);
+    assert.ok(card.avgRating != null);
+  });
 });

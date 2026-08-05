@@ -675,6 +675,39 @@ table.sheet tr.row-warn {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
+.watch-speed {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+}
+.watch-speed .btn.is-active {
+  border-color: var(--grass-bright);
+  color: var(--grass-bright);
+}
+
+.rating-bars .rating-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  height: 56px;
+  margin-top: 8px;
+}
+.rating-bars i {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  width: 28px;
+  background: linear-gradient(180deg, rgba(31,166,90,.85), rgba(31,166,90,.25));
+  border-radius: 4px 4px 2px 2px;
+  font-style: normal;
+}
+.rating-bars i b {
+  font-size: 10px;
+  font-weight: 600;
+  padding-bottom: 2px;
+  color: var(--text, #fff);
+}
+
 .board-conf {
   height: 10px;
   border-radius: 999px;

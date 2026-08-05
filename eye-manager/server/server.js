@@ -394,6 +394,24 @@ function processWageDay(user, club) {
       body: `${p.name} вернулся в клуб`
     });
   });
+  if (result.tvPay > 0) {
+    pushUserEvent(user.id, {
+      type: 'finance',
+      title: 'ТВ-права',
+      body: `+${Math.round(result.tvPay)} ¤ медиадоход`,
+      money: result.tvPay
+    });
+  }
+  (result.offers || []).forEach((o) => {
+    pushUserEvent(user.id, {
+      type: 'transfer_offer',
+      title: 'Входящее предложение',
+      body: `${o.buyer} за ${o.playerName}: ${o.bid} ¤`,
+      offerId: o.id,
+      playerId: o.playerId,
+      money: o.bid
+    });
+  });
   if (result.contracts) {
     (result.contracts.asks || []).forEach((p) => {
       pushUserEvent(user.id, {
@@ -1717,6 +1735,99 @@ const server = http.createServer(async (req, res) => {
     } catch (e) {
       return json(res, 500, { error: String(e.message || e) });
     }
+  }
+
+  if (pathname === '/api/training' && req.method === 'GET') {
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    const club = ensureClub(auth.user);
+    const upgrade = G.quoteTraining(club);
+    return json(res, 200, {
+      ok: true,
+      trainingLevel: club.trainingLevel || 1,
+      stadiumLevel: club.stadiumLevel || 1,
+      skillCap: G.skillCap(club, false),
+      gkSkillCap: G.skillCap(club, true),
+      upgrade: upgrade.ok ? upgrade : { ok: false, error: upgrade.error }
+    });
+  }
+
+  if (pathname === '/api/training/upgrade' && req.method === 'POST') {
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    try {
+      const club = ensureClub(auth.user);
+      const fin = G.financeSnapshot(auth.user, club);
+      if (fin.embargo) return json(res, 400, { error: 'Эмбарго: улучшения закрыты' });
+      const q = G.quoteTraining(club);
+      if (!q.ok) return json(res, 400, { error: q.error });
+      if ((auth.user.money || 0) < q.cost) return json(res, 400, { error: `Нужно ${q.cost} ¤` });
+      auth.user.money -= q.cost;
+      persistUser(auth.user);
+      const r = G.upgradeTraining(club);
+      G.pushLedger(club, -q.cost, r.label);
+      db.setClub(auth.user.id, club);
+      return json(res, 200, {
+        ok: true,
+        trainingLevel: club.trainingLevel || 1,
+        club: G.publicClub(club, auth.user),
+        user: enrichUser(auth.user),
+        label: r.label
+      });
+    } catch (e) {
+      return json(res, 500, { error: String(e.message || e) });
+    }
+  }
+
+  if (pathname === '/api/transfers/offers' && req.method === 'GET') {
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    const club = ensureClub(auth.user);
+    G.maybeGenerateTransferOffers(club);
+    db.setClub(auth.user.id, club);
+    const offers = (club.transferOffers || []).filter((o) => !o.resolved && (o.expiresAt || 0) > Date.now());
+    return json(res, 200, { ok: true, offers });
+  }
+
+  if (pathname === '/api/transfers/offers' && req.method === 'POST') {
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    try {
+      const body = JSON.parse((await readBody(req)).toString('utf8') || '{}');
+      const club = ensureClub(auth.user);
+      const decision = body.decision === 'accept' ? 'accept' : 'reject';
+      const r = G.resolveTransferOffer(club, body.offerId, decision);
+      if (!r.ok) return json(res, 400, { error: r.error });
+      if (r.decision === 'accept') {
+        auth.user.money = (auth.user.money || 0) + r.offer.bid;
+        persistUser(auth.user);
+        pushUserEvent(auth.user.id, {
+          type: 'transfer_sold',
+          title: 'Продажа по предложению',
+          body: `${r.offer.playerName} → ${r.offer.buyer} · ${r.offer.bid} ¤`,
+          money: r.offer.bid
+        });
+      }
+      db.setClub(auth.user.id, club);
+      return json(res, 200, {
+        ok: true,
+        ...r,
+        club: G.publicClub(club, auth.user),
+        user: enrichUser(auth.user)
+      });
+    } catch (e) {
+      return json(res, 500, { error: String(e.message || e) });
+    }
+  }
+
+  if (pathname.match(/^\/api\/players\/[^/]+$/) && req.method === 'GET') {
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    const playerId = decodeURIComponent(pathname.split('/')[3] || '');
+    const club = ensureClub(auth.user);
+    const card = G.playerCard(club, playerId);
+    if (!card) return json(res, 404, { error: 'Игрок не найден' });
+    return json(res, 200, { ok: true, player: card });
   }
 
   if (pathname === '/api/sponsor' && req.method === 'GET') {

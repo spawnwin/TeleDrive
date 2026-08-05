@@ -49,7 +49,9 @@
     playtime: 'Игровое время',
     derby: 'Дерби',
     season_awards: 'Итоги сезона',
-    loan: 'Аренда'
+    loan: 'Аренда',
+    transfer_offer: 'Предложение',
+    transfer_sold: 'Продажа'
   };
 
   const TRAIT_LABELS = {
@@ -76,6 +78,7 @@
     team: [
       ['formation', 'Построение'],
       ['stadium', 'Стадион'],
+      ['training', 'База'],
       ['colors', 'Клуб']
     ],
     players: [
@@ -343,6 +346,8 @@
           <div class="stat-card"><span>Зарплаты / сут</span><b>${money(fin.dayWages || Math.round((club?.players || []).reduce((s, p) => s + (p.wage || 0), 0) / 7))}</b></div>
           <div class="stat-card"><span>Стоимость состава</span><b>${money(fin.squadValue)}</b></div>
           <div class="stat-card"><span>Спонсор / нед</span><b>${sponsor ? money(sponsor.weekly) : '—'}</b></div>
+          <div class="stat-card"><span>ТВ / нед</span><b>${money(fin.tvWeekly || club?.tvWeekly)}</b></div>
+          <div class="stat-card"><span>ТВ / сут</span><b>${money(fin.tvDaily || Math.round((fin.tvWeekly || club?.tvWeekly || 0) / 7))}</b></div>
           <div class="stat-card"><span>Форма</span><b class="form-pills">${esc(form.formStr || '—')}</b></div>
         </div>
         ${fin.embargo ? '<p class="hint" style="color:var(--danger)">Эмбарго: трансферы и улучшения закрыты до выхода из банкротства.</p>' : ''}
@@ -356,8 +361,13 @@
             <p class="hint">Доход спонсора капает вместе с суточным расчётом. Переподписание раз в 5 дней.</p>` : '<p class="hint">Спонсор появится после первого входа в клуб.</p>'}
         </section>
         <section class="panel">
+          <h3>ТВ и медиаправа</h3>
+          <p>Ежедневно ~${money(fin.tvDaily || Math.round((fin.tvWeekly || club?.tvWeekly || 0) / 7))} от стадиона, уровня, славы и формы.</p>
+          <p class="hint">Растёт с уровнем стадиона, менеджера и серией побед.</p>
+        </section>
+        <section class="panel">
           <h3>Движение средств</h3>
-          <p class="hint">Матчи: приз + билеты только дома. Раз в сутки — 1/7 зарплаты, доход фанатов и спонсор. Кубки: взнос за матч и призовые.</p>
+          <p class="hint">Матчи: приз + билеты только дома. Раз в сутки — 1/7 зарплаты, доход фанатов, спонсор и ТВ. Кубки: взнос за матч и призовые.</p>
           <div class="list">${ledger.length ? ledger.map((row) => `
             <div class="list-row">
               <div><strong>${esc(row.label)}</strong><small>${new Date(row.at).toLocaleString('ru-RU')}</small></div>
@@ -484,6 +494,8 @@
             ${board?.targetLabel ? `<div class="stat-card"><span>Цель</span><b>${esc(board.targetLabel)}</b></div>` : ''}
             ${club?.form?.formStr ? `<div class="stat-card"><span>Форма</span><b class="form-pills">${esc(club.form.formStr)}</b></div>` : ''}
             ${club?.sponsor ? `<div class="stat-card"><span>Спонсор</span><b>${money(club.sponsor.weekly)}/нед</b></div>` : ''}
+            ${club?.tvWeekly ? `<div class="stat-card"><span>ТВ</span><b>${money(club.tvWeekly)}/нед</b></div>` : ''}
+            ${club?.trainingLevel ? `<div class="stat-card"><span>База</span><b>ур. ${club.trainingLevel}</b></div>` : ''}
           </div>
           ${nextFix ? `<p class="hint" style="margin:14px 0 0">Ближайший матч лиги: <strong>${esc(nextFix.home)}</strong> — <strong>${esc(nextFix.away)}</strong>${nextFix.when ? ' · ' + new Date(nextFix.when).toLocaleString('ru-RU') : ''}</p>` : `<p class="hint" style="margin:14px 0 0">Запишитесь в лигу своего уровня или сыграйте товарищеский / кубок.</p>`}
         </section>
@@ -515,6 +527,25 @@
             <button class="btn btn-primary" type="submit">Сохранить цену</button>
           </form>
           <p class="hint" style="margin-top:12px">Дороже билет — меньше заполняемость, но выше выручка с места. Доход только дома.</p>
+        </section>`;
+      return;
+    }
+    if (state.tab === 'training') {
+      let tr = { trainingLevel: club.trainingLevel || 1, stadiumLevel: club.stadiumLevel || 1, upgrade: { ok: false }, skillCap: club.skillCap, gkSkillCap: club.gkSkillCap };
+      try { tr = await A().request('api/training'); } catch {}
+      const up = tr.upgrade || {};
+      $('#view').innerHTML = `
+        <section class="panel">
+          <h3>Тренировочная база</h3>
+          <p class="hint">Выше уровень — больше XP с сессий, короче кулдаун и выше потолок умений. Не выше стадиона+1.</p>
+          <div class="grid-3">
+            <div class="stat-card"><span>База</span><b>${tr.trainingLevel || 1} / 5</b></div>
+            <div class="stat-card"><span>Стадион</span><b>${tr.stadiumLevel || 1} / 8</b></div>
+            <div class="stat-card"><span>Потолок</span><b>${tr.skillCap || '—'} / вр. ${tr.gkSkillCap || '—'}</b></div>
+          </div>
+          <button class="btn btn-primary" id="btn-training-up" style="margin-top:14px" ${up.ok ? '' : 'disabled'}>
+            ${up.ok ? `Улучшить · ${money(up.cost)}` : esc(up.error || 'Макс. уровень')}
+          </button>
         </section>`;
       return;
     }
@@ -619,7 +650,7 @@
       $('#view').innerHTML = `
         <section class="panel">
           <h3>Тренировки</h3>
-          <p class="hint">Сессия даёт опыт игроку (кулдаун 40 мин). Затем опыт тратится на умения (+1 = 8 опыта). Потолок: полевые ${club.skillCap || 20}, вратари ${club.gkSkillCap || 20}.</p>
+          <p class="hint">Сессия даёт опыт игроку (кулдаун зависит от базы, ур. ${club.trainingLevel || 1}). Затем опыт тратится на умения (+1 = 8 опыта). Потолок: полевые ${club.skillCap || 20}, вратари ${club.gkSkillCap || 20}.</p>
           <div class="train-sessions">
             <button class="btn btn-tiny" data-session-hint="technical">Техника</button>
             <button class="btn btn-tiny" data-session-hint="physical">Физика · 2 000</button>
@@ -654,6 +685,11 @@
       const clubListings = data.clubListings || [];
       const myListings = data.myListings || [];
       const scout = data.scoutLevel || 0;
+      let offers = club.transferOffers || [];
+      try {
+        const od = await A().request('api/transfers/offers');
+        offers = od.offers || offers;
+      } catch {}
       $('#view').innerHTML = `
         <section class="panel">
           <div class="panel-head">
@@ -661,6 +697,18 @@
             <button class="btn btn-tiny" id="btn-market-refresh" ${scout < 1 ? 'disabled' : ''}>Обновить агентов · 5 000 ¤</button>
           </div>
           <p class="hint">Скаут ур. ${scout}. Состав ${data.squadSize || 0}/25. Можно купить у других клубов или у агентов; своего игрока — выставить или продать агентам.</p>
+          ${offers.length ? `<h4 style="margin:12px 0 8px;font-family:Syne,sans-serif">Входящие предложения</h4>
+            <div class="list">${offers.map((o) => `
+              <div class="list-row">
+                <div>
+                  <strong>${esc(o.playerName)} · ${esc(o.pos)}</strong>
+                  <small>${esc(o.buyer)} · маст. ${o.mastery} · оценка ${money(o.fair)} · до ${new Date(o.expiresAt).toLocaleString('ru-RU')}</small>
+                </div>
+                <div style="display:flex;gap:6px;flex-wrap:wrap">
+                  <button class="btn btn-primary btn-tiny" data-offer="${esc(o.id)}" data-decision="accept">${money(o.bid)}</button>
+                  <button class="btn btn-tiny" data-offer="${esc(o.id)}" data-decision="reject">Отказать</button>
+                </div>
+              </div>`).join('')}</div>` : ''}
           ${myListings.length ? `<h4 style="margin:12px 0 8px;font-family:Syne,sans-serif">Ваши лоты</h4>
             <div class="list">${myListings.map((p) => `
               <div class="list-row">
@@ -774,7 +822,7 @@
           <tbody>${players.map((p) => `
             <tr class="${p.wantsRenew || (p.contractYears || 0) <= 0 || p.request === 'playtime' ? 'row-warn' : ''}">
               <td>
-                <button type="button" class="link" data-train="${esc(p.id)}"><strong>${esc(p.name)}</strong></button>
+                <button type="button" class="link" data-card="${esc(p.id)}"><strong>${esc(p.name)}</strong></button>
                 <div class="hint">${(p.specials||[]).map((s)=>TRAIT_LABELS[s]||s).join(' · ') || '—'}${p.yellows ? ' · ЖК ' + p.yellows : ''}${p.suspendedMatches ? ' · дискв. ' + p.suspendedMatches : ''}${p.wantsRenew ? ' · ждёт контракт' : ''}${p.request === 'playtime' ? ' · хочет минуты' : ''}${p.seasonApps ? ' · матчей ' + p.seasonApps : ''}${p.form != null ? ' · форма ' + Math.round(p.form) : ''}${p.loanUntil ? ' · в аренде' : ''}</div>
               </td>
               <td><span class="badge">${esc(p.pos)}</span></td>
@@ -1383,8 +1431,14 @@
         <div class="stat-card"><span>Удары (в створ)</span><b>${(st.shots||[])[0]||0}(${(st.shotsOn||[])[0]||0}) : ${(st.shots||[])[1]||0}(${(st.shotsOn||[])[1]||0})</b></div>
         <div class="stat-card"><span>Угловые / карт.</span><b>${(st.corners||[])[0]||0}:${(st.corners||[])[1]||0} / ${(st.cards||[])[0]||0}:${(st.cards||[])[1]||0}</b></div>
       </div>` : ''}
-      <div style="display:flex;gap:8px;margin:8px 0 12px">
+      <div style="display:flex;gap:8px;margin:8px 0 12px;flex-wrap:wrap;align-items:center">
         <button class="btn btn-primary btn-tiny" id="btn-watch-match">Смотреть</button>
+        <div class="watch-speed" id="watch-speed" hidden>
+          <button class="btn btn-tiny is-active" data-speed="1">1×</button>
+          <button class="btn btn-tiny" data-speed="2">2×</button>
+          <button class="btn btn-tiny" data-speed="4">4×</button>
+          <button class="btn btn-tiny" id="btn-watch-skip">Пропуск</button>
+        </div>
         <button class="btn btn-tiny" id="btn-show-all-events">Все события</button>
       </div>
       <h3>События</h3>
@@ -1403,25 +1457,72 @@
     };
     paint(all.filter((e) => e.type === 'goal' || e.type === 'red' || e.type === 'sub' || e.type === 'injury' || e.type === 'pens'));
     $('#btn-show-all-events')?.addEventListener('click', () => paint(all));
-    $('#btn-watch-match')?.addEventListener('click', () => {
+    let watchTimer = null;
+    let watchIdx = 0;
+    let watchSpeed = 1;
+    let watching = false;
+    const clearWatch = () => {
+      if (watchTimer) {
+        clearTimeout(watchTimer);
+        watchTimer = null;
+      }
+    };
+    const appendEv = (e) => {
       const scoreEl = $('#match-live-score');
+      if (e.score) scoreEl.textContent = `${e.score[0]}:${e.score[1]}`;
+      const row = document.createElement('div');
+      row.className = 'event';
+      row.innerHTML = `<span class="min">${e.minute}'</span><span>${evLabel(e)}: ${esc(e.side === 'home' ? match.home?.name : match.away?.name)} — ${esc(e.player)} (${e.score?.[0]}:${e.score?.[1]})</span>`;
+      box.appendChild(row);
+      box.scrollTop = box.scrollHeight;
+    };
+    const finishWatch = () => {
+      watching = false;
+      clearWatch();
+      $('#match-live-score').textContent = `${match.score?.[0]}:${match.score?.[1]}`;
+      $('#watch-speed')?.setAttribute('hidden', '');
+    };
+    const scheduleNext = () => {
+      if (!watching) return;
+      if (watchIdx >= all.length) {
+        finishWatch();
+        return;
+      }
+      const e = all[watchIdx++];
+      appendEv(e);
+      const base = e.type === 'goal' || e.type === 'red' ? 700 : 280;
+      const delay = Math.max(40, Math.round(base / watchSpeed));
+      watchTimer = setTimeout(scheduleNext, delay);
+    };
+    $('#btn-watch-match')?.addEventListener('click', () => {
+      clearWatch();
+      watching = true;
+      watchIdx = 0;
+      watchSpeed = 1;
       box.innerHTML = '';
-      let i = 0;
-      const tick = () => {
-        if (i >= all.length) {
-          scoreEl.textContent = `${match.score?.[0]}:${match.score?.[1]}`;
-          return;
-        }
-        const e = all[i++];
-        if (e.score) scoreEl.textContent = `${e.score[0]}:${e.score[1]}`;
-        const row = document.createElement('div');
-        row.className = 'event';
-        row.innerHTML = `<span class="min">${e.minute}'</span><span>${evLabel(e)}: ${esc(e.side === 'home' ? match.home?.name : match.away?.name)} — ${esc(e.player)} (${e.score?.[0]}:${e.score?.[1]})</span>`;
-        box.appendChild(row);
-        box.scrollTop = box.scrollHeight;
-        setTimeout(tick, e.type === 'goal' || e.type === 'red' ? 700 : 280);
-      };
-      tick();
+      const speedBar = $('#watch-speed');
+      if (speedBar) {
+        speedBar.hidden = false;
+        speedBar.querySelectorAll('[data-speed]').forEach((b) => {
+          b.classList.toggle('is-active', b.dataset.speed === '1');
+        });
+      }
+      scheduleNext();
+    });
+    $('#watch-speed')?.addEventListener('click', (ev) => {
+      const spd = ev.target.closest('[data-speed]');
+      if (spd) {
+        watchSpeed = Number(spd.dataset.speed) || 1;
+        $('#watch-speed').querySelectorAll('[data-speed]').forEach((b) => {
+          b.classList.toggle('is-active', b === spd);
+        });
+        return;
+      }
+      if (ev.target.id === 'btn-watch-skip') {
+        clearWatch();
+        while (watchIdx < all.length) appendEv(all[watchIdx++]);
+        finishWatch();
+      }
     });
   }
 
@@ -1542,6 +1643,53 @@
           <button class="btn btn-tiny" data-skill="${k}" data-pid="${esc(p.id)}">+1 (8 опыта)</button>
         </div>`).join('')}</div>
     `);
+  }
+
+  async function showPlayerCard(playerId) {
+    let p = null;
+    try {
+      const data = await A().request('api/players/' + encodeURIComponent(playerId));
+      p = data.player;
+    } catch {
+      p = state.club?.players?.find((x) => x.id === playerId);
+    }
+    if (!p) {
+      toast('Игрок не найден');
+      return;
+    }
+    const ratings = (p.ratingLog || []).slice(0, 8);
+    const traits = (p.traits || (p.specials || []).map((id) => ({ id, label: TRAIT_LABELS[id] || id })));
+    openModal(`
+      <div class="panel-head">
+        <h2 style="margin:0;font-family:Syne,sans-serif">${esc(p.name)}</h2>
+        <button class="btn btn-tiny" id="modal-close">Закрыть</button>
+      </div>
+      <div class="player-card">
+        <div class="grid-3">
+          <div class="stat-card"><span>Позиция</span><b>${esc(p.pos)}</b></div>
+          <div class="stat-card"><span>Мастерство</span><b>${p.mastery ?? '—'} / эфф. ${p.effective ?? '—'}</b></div>
+          <div class="stat-card"><span>Стоимость</span><b>${money(p.value)}</b></div>
+          <div class="stat-card"><span>Возраст</span><b>${p.age}</b></div>
+          <div class="stat-card"><span>Форма</span><b>${p.form != null ? Math.round(p.form) : '—'}</b></div>
+          <div class="stat-card"><span>Ср. оценка</span><b>${p.avgRating != null ? p.avgRating : (p.lastRating ?? '—')}</b></div>
+          <div class="stat-card"><span>Физа</span><b>${p.fitness ?? 100}%</b></div>
+          <div class="stat-card"><span>Мораль</span><b>${(p.morale || 0) > 0 ? '+' : ''}${p.morale || 0}</b></div>
+          <div class="stat-card"><span>Контракт</span><b>${p.contractYears == null ? '—' : p.contractYears + ' г.'}</b></div>
+        </div>
+        ${traits.length ? `<p class="hint" style="margin-top:12px">Черты: ${traits.map((t) => esc(t.label || t.id)).join(' · ')}</p>` : ''}
+        ${p.onLoan || p.loanUntil ? `<p class="hint">В аренде${p.loanDaysLeft != null ? ' · ещё ~' + p.loanDaysLeft + ' дн.' : ''}</p>` : ''}
+        ${ratings.length ? `<div class="rating-bars" style="margin-top:12px"><span class="hint">Оценки матчей</span><div class="rating-row">${ratings.map((r) =>
+          `<i title="${r}" style="height:${Math.max(12, Math.min(48, Math.round(r * 4)))}px"><b>${r}</b></i>`
+        ).join('')}</div></div>` : '<p class="hint" style="margin-top:12px">Пока нет оценок матчей</p>'}
+        <div style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn btn-primary btn-tiny" data-train="${esc(p.id)}" id="card-train">Умения</button>
+        </div>
+      </div>
+    `);
+    $('#card-train')?.addEventListener('click', () => {
+      closeModal();
+      showTrain(p.id);
+    });
   }
 
   function bind() {
@@ -1900,6 +2048,11 @@
       }
       const train = e.target.closest('[data-train]');
       if (train) showTrain(train.dataset.train);
+      const cardBtn = e.target.closest('[data-card]');
+      if (cardBtn) {
+        showPlayerCard(cardBtn.dataset.card);
+        return;
+      }
       const skill = e.target.closest('[data-skill]');
       if (skill) {
         try {
@@ -1968,6 +2121,36 @@
             paintSidebar();
           }
           toast(data.label || 'Спонсор обновлён');
+          render();
+        } catch (err) { toast(err.message); }
+      }
+      if (e.target.id === 'btn-training-up') {
+        try {
+          const data = await A().request('api/training/upgrade', { method: 'POST' });
+          state.club = data.club;
+          if (data.user) {
+            state.me.user = data.user;
+            A().setUser(data.user);
+            paintSidebar();
+          }
+          toast(data.label || 'База улучшена');
+          render();
+        } catch (err) { toast(err.message); }
+      }
+      const offerBtn = e.target.closest('[data-offer]');
+      if (offerBtn) {
+        try {
+          const data = await A().request('api/transfers/offers', {
+            method: 'POST',
+            body: { offerId: offerBtn.dataset.offer, decision: offerBtn.dataset.decision || 'reject' }
+          });
+          state.club = data.club;
+          if (data.user) {
+            state.me.user = data.user;
+            A().setUser(data.user);
+            paintSidebar();
+          }
+          toast(data.label || (data.decision === 'accept' ? 'Игрок продан' : 'Отказ'));
           render();
         } catch (err) { toast(err.message); }
       }

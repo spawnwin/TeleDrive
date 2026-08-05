@@ -248,6 +248,9 @@ function applyPlayerMatchForms(club, mappedXi) {
     const cur = p.form == null ? 60 : p.form;
     p.form = Math.round(cur * 0.65 + target * 0.35);
     p.lastRating = Math.round(rating * 10) / 10;
+    p.ratingLog = Array.isArray(p.ratingLog) ? p.ratingLog : [];
+    p.ratingLog.unshift(p.lastRating);
+    if (p.ratingLog.length > 12) p.ratingLog.length = 12;
   });
   // unused / bench drift toward 58
   (club.players || []).forEach((p) => {
@@ -627,11 +630,13 @@ function defaultClub(user, opts = {}) {
     players,
     staff: { coach: 1, gkCoach: 1, scout: 0, medic: 0 },
     academyLevel: 1,
+    trainingLevel: 1,
     youth: [],
     board: null,
     form: [],
     rivals: [],
     sponsor: null,
+    transferOffers: [],
     seasonArchive: [],
     history: [],
     ledger: [],
@@ -718,13 +723,16 @@ function publicClub(club, user) {
     chemistry: formationChemistry(club, resolveXi(club)),
     youthCount: Array.isArray(club.youth) ? club.youth.length : 0,
     academyLevel: club.academyLevel || 1,
+    trainingLevel: club.trainingLevel || 1,
     board: boardStatus(club, user),
     form: clubFormGuide(club),
     sponsor: club.sponsor || null,
+    tvWeekly: weeklyTvIncome(club, user),
     seasonArchive: (club.seasonArchive || []).slice(0, 4),
     playtimeRequests: (club.players || []).filter((p) => p.request === 'playtime').map((p) => ({
       id: p.id, name: p.name, pos: p.pos, apps: p.seasonApps || 0, mastery: masteryOf(p)
     })),
+    transferOffers: (club.transferOffers || []).filter((o) => !o.resolved).slice(0, 8),
     loans: loansStatus(club),
     lineupFit: lineupFitMap(club),
     manager: user ? { id: user.id, login: user.login, name: user.name, level: user.level } : null
@@ -955,6 +963,8 @@ function financeSnapshot(user, club) {
   ensureSponsor(club, user);
   const sponsorWeekly = club.sponsor?.weekly || 0;
   const sponsorDaily = Math.round(sponsorWeekly / 7);
+  const tvWeekly = weeklyTvIncome(club, user);
+  const tvDaily = Math.round(tvWeekly / 7);
   let status = 'healthy';
   if (money < 0 && debt >= credit) status = 'insolvent';
   else if (money < 0 && debt >= credit * 0.55) status = 'critical';
@@ -969,6 +979,8 @@ function financeSnapshot(user, club) {
     dayWages,
     sponsorWeekly,
     sponsorDaily,
+    tvWeekly,
+    tvDaily,
     sponsor: club.sponsor || null,
     squadValue: (club?.players || []).reduce((s, p) => s + playerValue(p), 0),
     embargo: status === 'insolvent',
@@ -1024,6 +1036,139 @@ function ensureSponsor(club, user) {
   if (!club) return null;
   if (!club.sponsor || !club.sponsor.weekly) return pickSponsor(club, user, { force: true });
   return club.sponsor;
+}
+
+function weeklyTvIncome(club, user) {
+  const stadium = club?.stadiumLevel || 1;
+  const level = user?.level || 1;
+  const fame = user?.fame || 0;
+  const fans = user?.fans || 10000;
+  const formPts = clubFormGuide(club).pts || 0;
+  const base = 18000 + stadium * 9000 + level * 4500 + Math.min(40000, fame * 180) + Math.round(fans * 0.08);
+  return Math.round(base * (1 + Math.min(0.15, formPts * 0.012)));
+}
+
+function quoteTraining(club) {
+  const lvl = club.trainingLevel || 1;
+  if (lvl >= 5) return { ok: false, error: 'База уже максимального уровня' };
+  const stadium = club.stadiumLevel || 1;
+  if (lvl >= stadium + 1) return { ok: false, error: 'Сначала улучшите стадион' };
+  return { ok: true, cost: 70000 * lvl, nextLevel: lvl + 1, label: `База → ур. ${lvl + 1}` };
+}
+
+function upgradeTraining(club) {
+  const q = quoteTraining(club);
+  if (!q.ok) return q;
+  club.trainingLevel = q.nextLevel;
+  return { ok: true, cost: q.cost, label: q.label, trainingLevel: club.trainingLevel };
+}
+
+const BUYER_CLUBS = [
+  'Динамо Север', 'Крылья Волги', 'Металлург', 'Авангард Сити',
+  'Рубин Порт', 'Энергия', 'Спарта Урал', 'Олимп Юг'
+];
+
+function maybeGenerateTransferOffers(club, { force = false } = {}) {
+  if (!club) return [];
+  club.transferOffers = Array.isArray(club.transferOffers) ? club.transferOffers : [];
+  club.transferOffers = club.transferOffers.filter((o) => !o.resolved && (o.expiresAt || 0) > Date.now());
+  const now = Date.now();
+  if (!force && club.lastOfferAt && now - club.lastOfferAt < 18 * 3600e3) return [];
+  if (!force && Math.random() > 0.55) {
+    club.lastOfferAt = now;
+    return [];
+  }
+  const xi = new Set(club.lineupIds || []);
+  const pool = (club.players || [])
+    .filter((p) =>
+      !p.loanUntil &&
+      !(p.injuredHours > 0) &&
+      masteryOf(p) >= 12 &&
+      (club.players.length > 16 || !xi.has(p.id))
+    )
+    .sort((a, b) => effectiveMastery(b) - effectiveMastery(a));
+  if (!pool.length) return [];
+  const created = [];
+  const n = force ? 1 : (Math.random() < 0.35 ? 2 : 1);
+  for (let i = 0; i < n && i < pool.length; i++) {
+    const p = pool[i];
+    if (club.transferOffers.some((o) => o.playerId === p.id)) continue;
+    const fair = playerValue(p);
+    const bid = Math.round(fair * (0.85 + Math.random() * 0.45));
+    const offer = {
+      id: uid('off'),
+      playerId: p.id,
+      playerName: p.name,
+      pos: p.pos,
+      mastery: masteryOf(p),
+      buyer: pick(BUYER_CLUBS),
+      bid,
+      fair,
+      at: now,
+      expiresAt: now + 48 * 3600e3,
+      resolved: false
+    };
+    club.transferOffers.unshift(offer);
+    created.push(offer);
+  }
+  if (club.transferOffers.length > 12) club.transferOffers.length = 12;
+  club.lastOfferAt = now;
+  return created;
+}
+
+function resolveTransferOffer(club, offerId, decision) {
+  club.transferOffers = Array.isArray(club.transferOffers) ? club.transferOffers : [];
+  const offer = club.transferOffers.find((o) => o.id === offerId && !o.resolved);
+  if (!offer) return { ok: false, error: 'Предложение не найдено или истекло' };
+  if ((offer.expiresAt || 0) < Date.now()) {
+    offer.resolved = true;
+    return { ok: false, error: 'Предложение истекло' };
+  }
+  if (decision !== 'accept') {
+    offer.resolved = true;
+    offer.decision = 'reject';
+    return { ok: true, decision: 'reject', offer, label: `Отказ · ${offer.buyer}` };
+  }
+  if ((club.lineupIds || []).includes(offer.playerId)) {
+    return { ok: false, error: 'Сначала уберите игрока из основы' };
+  }
+  if ((club.players || []).length <= 16) {
+    return { ok: false, error: 'В составе минимум 16' };
+  }
+  const taken = takeListedPlayer(club, offer.playerId);
+  if (!taken.ok) return taken;
+  offer.resolved = true;
+  offer.decision = 'accept';
+  pushLedger(club, offer.bid, `Продажа · ${offer.playerName} → ${offer.buyer}`);
+  return {
+    ok: true,
+    decision: 'accept',
+    offer,
+    player: taken.player,
+    value: offer.bid,
+    label: `Продано в ${offer.buyer} · ${offer.playerName}`
+  };
+}
+
+function playerCard(club, playerId) {
+  const p = (club.players || []).find((x) => x.id === playerId);
+  if (!p) return null;
+  const ratings = Array.isArray(p.ratingLog) ? p.ratingLog.slice(0, 8) : [];
+  const avg = ratings.length
+    ? Math.round((ratings.reduce((s, r) => s + r, 0) / ratings.length) * 10) / 10
+    : (p.lastRating || null);
+  return {
+    ...p,
+    mastery: masteryOf(p),
+    effective: effectiveMastery(p),
+    value: playerValue(p),
+    form: p.form ?? 60,
+    avgRating: avg,
+    ratingLog: ratings,
+    traits: (p.specials || []).map((id) => ({ id, label: TRAITS[id]?.label || id })),
+    onLoan: !!p.loanUntil,
+    loanDaysLeft: p.loanUntil ? Math.max(0, Math.ceil((p.loanUntil - Date.now()) / (24 * 3600e3))) : 0
+  };
 }
 
 function renegotiateSponsor(club, user) {
@@ -1613,21 +1758,22 @@ function trainSession(club, playerId, session = 'technical', { spendUserMoney } 
     return { ok: false, error: 'Слишком устал — нужна сессия «Восстановление»' };
   }
   const coach = (club.staff && club.staff.coach) || 1;
+  const trainLvl = club.trainingLevel || 1;
   const cost = cfg.money || 0;
   if (cost > 0 && typeof spendUserMoney === 'function') {
     const spent = spendUserMoney(cost);
     if (!spent) return { ok: false, error: `Нужно ${cost} ¤` };
   }
-  const xpGain = rnd(cfg.xpMin, cfg.xpMax) + Math.max(0, coach - 1);
+  const xpGain = rnd(cfg.xpMin, cfg.xpMax) + Math.max(0, coach - 1) + Math.max(0, trainLvl - 1);
   p.xpPool = (p.xpPool || 0) + xpGain;
   if (cfg.fitnessCost < 0) {
-    p.fitness = Math.min(100, (p.fitness || 100) - cfg.fitnessCost + rnd(0, 4));
+    p.fitness = Math.min(100, (p.fitness || 100) - cfg.fitnessCost + rnd(0, 4) + Math.max(0, trainLvl - 2));
   } else {
-    p.fitness = Math.max(18, (p.fitness || 100) - (cfg.fitnessCost + rnd(0, 4)));
+    p.fitness = Math.max(18, (p.fitness || 100) - (cfg.fitnessCost + rnd(0, 4) - Math.max(0, trainLvl - 2)));
   }
   p.morale = Math.max(-20, Math.min(25, (p.morale || 0) + (cfg.morale || 0)));
-  p.trainCdUntil = now + 40 * 60 * 1000;
-  p.lastTrain = { at: now, session: kind, xp: xpGain };
+  p.trainCdUntil = now + Math.max(25, 40 - (trainLvl - 1) * 3) * 60 * 1000;
+  p.lastTrain = { at: now, session: kind, xp: xpGain, trainingLevel: trainLvl };
   if (cost > 0) pushLedger(club, -cost, `Тренировка · ${cfg.label} · ${p.name}`);
   return {
     ok: true,
@@ -1635,8 +1781,9 @@ function trainSession(club, playerId, session = 'technical', { spendUserMoney } 
     sessionLabel: cfg.label,
     xpGain,
     cost,
+    trainingLevel: trainLvl,
     player: { ...p, mastery: masteryOf(p), effective: effectiveMastery(p) },
-    cooldownMs: 40 * 60 * 1000
+    cooldownMs: Math.max(25, 40 - (trainLvl - 1) * 3) * 60 * 1000
   };
 }
 
@@ -1742,7 +1889,9 @@ function settleWageDay(user, club, now = Date.now()) {
   ensureSponsor(club, user);
   const sponsorDaily = Math.round((club.sponsor?.weekly || 0) / 7);
   const sponsorPay = sponsorDaily * days;
-  const delta = grant + sponsorPay - wages;
+  const tvWeekly = weeklyTvIncome(club, user);
+  const tvPay = Math.round(tvWeekly / 7) * days;
+  const delta = grant + sponsorPay + tvPay - wages;
   user.money = Math.round((user.money || 0) + delta);
   const credit = creditLimit(user, club);
   if (user.money < -credit) user.money = -credit;
@@ -1766,6 +1915,9 @@ function settleWageDay(user, club, now = Date.now()) {
         : `Спонсор · ${club.sponsor.name} (${days} дн.)`
     );
   }
+  if (tvPay > 0) {
+    pushLedger(club, tvPay, days === 1 ? 'ТВ-права' : `ТВ-права (${days} дн.)`);
+  }
   club.contractDayAcc = (club.contractDayAcc || 0) + days;
   let contracts = null;
   if (club.contractDayAcc >= 5) {
@@ -1776,10 +1928,12 @@ function settleWageDay(user, club, now = Date.now()) {
   tickYouthGrowth(club);
   const loans = tickLoans(club, now);
   const playtime = processPlaytimeRequests(club);
+  const offers = maybeGenerateTransferOffers(club);
   const finance = financeSnapshot(user, club);
   return {
-    wages, grant, sponsorPay, delta, weekBill, days, at: now,
-    contracts, interest, finance, playtime, loans, sponsor: club.sponsor
+    wages, grant, sponsorPay, tvPay, delta, weekBill, days, at: now,
+    contracts, interest, finance, playtime, loans, offers, sponsor: club.sponsor,
+    tvWeekly
   };
 }
 
@@ -2292,8 +2446,9 @@ function setLineup(club, lineupIds, benchIds) {
 
 function skillCap(club, isGk = false) {
   const staff = club.staff || {};
-  if (isGk) return 15 + (staff.gkCoach || 0) * 5;
-  return 15 + (staff.coach || 0) * 5;
+  const train = Math.max(0, (club.trainingLevel || 1) - 1);
+  if (isGk) return 15 + (staff.gkCoach || 0) * 5 + train;
+  return 15 + (staff.coach || 0) * 5 + train;
 }
 
 module.exports = {
@@ -2394,6 +2549,12 @@ module.exports = {
   loanOutPlayer,
   tickLoans,
   loansStatus,
-  publicProfile
+  publicProfile,
+  weeklyTvIncome,
+  quoteTraining,
+  upgradeTraining,
+  maybeGenerateTransferOffers,
+  resolveTransferOffer,
+  playerCard
 };
 
