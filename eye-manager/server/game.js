@@ -227,7 +227,19 @@ function defaultClub(user, opts = {}) {
   };
 }
 
+function normalizeContracts(club) {
+  if (!club?.players) return club;
+  club.players.forEach((p) => {
+    if (p.contractYears == null || p.contractYears === undefined) {
+      p.contractYears = 1 + Math.floor(Math.random() * 3);
+    }
+  });
+  return club;
+}
+
 function ensureLineup(club, force = false) {
+  if (!club) return club;
+  normalizeContracts(club);
   const players = club.players || [];
   const validIds = new Set(players.map((p) => p.id));
   const healthy = (id) => {
@@ -1163,6 +1175,7 @@ module.exports = {
   resolveXi,
   defaultClub,
   ensureLineup,
+  normalizeContracts,
   publicClub,
   simulateMatch,
   trainPlayer,
