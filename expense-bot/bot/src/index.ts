@@ -5,6 +5,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { Bot, InlineKeyboard, Keyboard, webhookCallback } from 'grammy'
 import { createApiRouter } from './api.js'
+import { setupBotProfile } from './setupProfile.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const PORT = Number(process.env.PORT ?? 3000)
@@ -35,6 +36,8 @@ function buildOpenKeyboard() {
 function buildReplyKeyboard() {
   return new Keyboard()
     .webApp('Открыть Златник', WEBAPP_URL)
+    .row()
+    .text('Справка')
     .resized()
     .persistent()
 }
@@ -54,6 +57,40 @@ async function attachMenuButton(bot: Bot, chatId: number) {
   }
 }
 
+function welcomeText(name: string) {
+  return [
+    `Привет, ${name}!`,
+    '',
+    'Я *Златник* — учёт расходов в Telegram.',
+    'Имя от золотой монеты Древней Руси.',
+    '',
+    'Что умею:',
+    '• записывать траты за пару секунд',
+    '• категории — свои, с редактированием',
+    '• сводка за день, неделю и месяц',
+    '• тёмный Liquid Glass и светлая тема',
+    '',
+    'Нажми кнопку — откроется приложение.',
+  ].join('\n')
+}
+
+const HELP_TEXT = [
+  '*Как пользоваться Златником*',
+  '',
+  '1. Нажми «Открыть Златник»',
+  '2. Добавь расход: сумма → категория → сохранить',
+  '3. «Управление» — свои категории',
+  '4. «Сводка» — неделя и топ категорий',
+  '5. ☀ / ☾ — переключение темы',
+  '',
+  'Команды:',
+  '/app — открыть приложение',
+  '/categories — про категории',
+  '/today — траты за сегодня',
+  '/month — траты за месяц',
+  '/help — эта справка',
+].join('\n')
+
 async function start() {
   if (!BOT_TOKEN || BOT_TOKEN.includes('ABC-DEF')) {
     console.warn(
@@ -62,7 +99,6 @@ async function start() {
     app.listen(PORT, () => {
       console.log(`[zlatnik] http://localhost:${PORT} (без бота)`)
       console.log(`[zlatnik] Mini App: ${WEBAPP_URL}`)
-      console.log('[zlatnik] Для локальной разработки: ALLOW_DEV_AUTH=1')
     })
     return
   }
@@ -72,54 +108,57 @@ async function start() {
   bot.command('start', async (ctx) => {
     const name = ctx.from?.first_name ?? 'друг'
     if (ctx.chat) await attachMenuButton(bot, ctx.chat.id)
-    await ctx.reply(
-      [
-        `Привет, ${name}!`,
-        '',
-        'Я *Златник* — мини-приложение для учёта расходов.',
-        'Имя от древнерусской золотой монеты.',
-        '',
-        'Нажми кнопку ниже — приложение откроется прямо в Telegram.',
-      ].join('\n'),
-      {
-        parse_mode: 'Markdown',
-        reply_markup: buildOpenKeyboard(),
-      },
-    )
-    await ctx.reply('Или открой из нижней панели:', {
+    await ctx.reply(welcomeText(name), {
+      parse_mode: 'Markdown',
+      reply_markup: buildOpenKeyboard(),
+    })
+    await ctx.reply('Быстрый доступ снизу:', {
       reply_markup: buildReplyKeyboard(),
     })
   })
 
   bot.command('app', async (ctx) => {
     if (ctx.chat) await attachMenuButton(bot, ctx.chat.id)
-    await ctx.reply('Открой Златник и добавь трату за пару секунд.', {
+    await ctx.reply('Открой приложение и добавь трату:', {
       reply_markup: buildOpenKeyboard(),
     })
   })
 
-  bot.command('help', async (ctx) => {
+  bot.command('categories', async (ctx) => {
     await ctx.reply(
       [
-        '*Златник* — учёт расходов в Telegram Mini App.',
-        'Название — от золотой монеты Древней Руси.',
+        '*Категории*',
         '',
-        '1. Нажми «Открыть Златник»',
-        '2. Выбери категорию и сумму',
-        '3. Смотри сводку за день и месяц',
+        'В приложении: Главная → *Управление*.',
+        'Можно добавлять, переименовывать и удалять.',
+        'При удалении траты переносятся в другую категорию.',
       ].join('\n'),
       { parse_mode: 'Markdown', reply_markup: buildOpenKeyboard() },
     )
   })
 
+  bot.command('help', async (ctx) => {
+    await ctx.reply(HELP_TEXT, {
+      parse_mode: 'Markdown',
+      reply_markup: buildOpenKeyboard(),
+    })
+  })
+
   bot.command('today', async (ctx) => {
-    await ctx.reply('Открой Златник — там актуальная сводка за сегодня.', {
+    await ctx.reply('Сводка за сегодня — в приложении на главном экране.', {
       reply_markup: buildOpenKeyboard(),
     })
   })
 
   bot.command('month', async (ctx) => {
-    await ctx.reply('Месячная статистика и категории — в Златнике.', {
+    await ctx.reply('Месяц, неделя и топ категорий — во вкладке «Сводка».', {
+      reply_markup: buildOpenKeyboard(),
+    })
+  })
+
+  bot.hears('Справка', async (ctx) => {
+    await ctx.reply(HELP_TEXT, {
+      parse_mode: 'Markdown',
       reply_markup: buildOpenKeyboard(),
     })
   })
@@ -130,6 +169,13 @@ async function start() {
       reply_markup: buildOpenKeyboard(),
     })
   })
+
+  // Профиль: имя, описания, команды, меню, аватар
+  try {
+    await setupBotProfile(bot, WEBAPP_URL)
+  } catch (err) {
+    console.warn('[zlatnik] setupBotProfile:', err)
+  }
 
   const useWebhook = process.env.USE_WEBHOOK === '1'
   if (useWebhook) {
@@ -146,7 +192,8 @@ async function start() {
       console.log(`[zlatnik] Mini App URL: ${WEBAPP_URL}`)
     })
     bot.start({
-      onStart: (info) => console.log(`[zlatnik] бот @${info.username} запущен (long polling)`),
+      onStart: (info) =>
+        console.log(`[zlatnik] бот @${info.username} готов · https://t.me/${info.username}`),
     })
   }
 }

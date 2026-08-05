@@ -1,7 +1,29 @@
 # Златник — Telegram Mini App для учёта расходов
 
-Бот учёта расходов в стиле **Liquid Glass** (тёмная тема по умолчанию, переключение).  
+Учёт расходов в стиле **Liquid Glass**.  
 Название — от **златника**, золотой монеты Древней Руси.
+
+**Бот:** [@Caura_bot](https://t.me/Caura_bot)
+
+## Профиль бота (уже настроено)
+
+| Поле | Значение |
+|------|----------|
+| Имя | Златник |
+| Username | `@Caura_bot` |
+| Короткое описание | Учёт расходов · золотая монета Древней Руси |
+| Аватар | золотая монета с буквой З |
+| Кнопка меню | Mini App «Златник» |
+| Команды | `/start` `/app` `/categories` `/today` `/month` `/help` |
+
+Перенастроить профиль:
+
+```bash
+cd expense-bot
+./scripts/setup-bot-profile.sh
+```
+
+При старте бота профиль обновляется автоматически.
 
 ## Возможности
 
@@ -11,11 +33,12 @@
 - Категории: добавление, редактирование, удаление
 - Сводка за день / месяц / 7 дней
 
-## Быстрый старт
+## Запуск
 
 ```bash
 cd expense-bot
 cp .env.example .env
+# BOT_TOKEN + WEBAPP_URL (HTTPS)
 npm install
 npm run build -w web
 npm run start -w bot
@@ -23,5 +46,4 @@ npm run start -w bot
 
 Локально без Telegram: `ALLOW_DEV_AUTH=1`.
 
-Публично: `./scripts/run-public.sh`  
-Бот: [@Caura_bot](https://t.me/Caura_bot)
+Публично с туннелем: `./scripts/run-public.sh`
