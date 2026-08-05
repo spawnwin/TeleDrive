@@ -430,6 +430,18 @@ table.sheet tr:hover td { background: rgba(61,220,132,.05); }
   backdrop-filter: blur(6px);
 }
 .player-chip b { display: block; color: var(--grass-bright); font-size: 10px; }
+.player-chip.fit-ideal { border-color: rgba(61,220,132,.55); box-shadow: 0 0 0 1px rgba(61,220,132,.15); }
+.player-chip.fit-ok { border-color: rgba(180,220,120,.4); }
+.player-chip.fit-mid { border-color: rgba(234,179,8,.45); }
+.player-chip.fit-bad { border-color: rgba(248,113,113,.5); background: rgba(40,10,10,.75); }
+.player-chip.fit-ideal b { color: var(--grass-bright); }
+.player-chip.fit-bad b { color: #fca5a5; }
+
+.badge.warn {
+  color: #fbbf24;
+  border-color: rgba(251,191,36,.35);
+  background: rgba(251,191,36,.12);
+}
 
 .match-score {
   display: flex;

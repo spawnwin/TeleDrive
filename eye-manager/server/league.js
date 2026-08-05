@@ -487,6 +487,24 @@ function createLeagueModule({ usersDb, saveUsers, store }) {
     }
     L.currentRound = round + 1;
     L.nextRoundAt = now + ROUND_MS;
+    // Mid-season board review at half of schedule
+    const half = Math.max(2, Math.floor((L.totalRounds || 14) / 2));
+    if (round === half && typeof store?.onMidSeasonBoard === 'function') {
+      const pub = publicLeague(L);
+      (L.entrants || []).filter((e) => !e.isBot).forEach((e) => {
+        const row = (pub.standings || []).find((s) => s.userId === e.userId);
+        try {
+          store.onMidSeasonBoard(e.userId, {
+            rank: row?.rank || 99,
+            leagueId: L.id,
+            leagueName: L.name,
+            season: L.season || state.meta.seasonCounter || 1,
+            week: L.currentRound,
+            totalRounds: L.totalRounds
+          });
+        } catch {}
+      });
+    }
     return { action: 'round', round, results: played, nextRoundAt: L.nextRoundAt };
   }
 

@@ -48,7 +48,8 @@
     board: 'Совет директоров',
     playtime: 'Игровое время',
     derby: 'Дерби',
-    season_awards: 'Итоги сезона'
+    season_awards: 'Итоги сезона',
+    loan: 'Аренда'
   };
 
   const TRAIT_LABELS = {
@@ -82,7 +83,8 @@
       ['train', 'Тренировки'],
       ['recover', 'Восстановление'],
       ['market', 'Трансферы'],
-      ['academy', 'Академия']
+      ['academy', 'Академия'],
+      ['loans', 'Аренда']
     ],
     matches: [
       ['friendly', 'Товарищеские'],
@@ -270,10 +272,18 @@
       '4-2-3-1': [[50,12],[18,28],[38,30],[62,30],[82,28],[35,48],[65,48],[18,66],[50,64],[82,66],[50,84]]
     };
     const form = slots[club.formation] || slots['4-4-2'];
+    const fit = club.lineupFit || [];
     const xi = (club.lineupIds || []).map((id) => club.players.find((p) => p.id === id)).filter(Boolean);
     return `<div class="pitch">${xi.map((p, i) => {
       const [x, y] = form[i] || [50, 50];
-      return `<div class="player-chip" style="left:${x}%;top:${y}%"><b>${esc(p.pos)}</b>${esc((p.name || '').split(' ').pop())}<div>${p.effective || p.mastery}</div></div>`;
+      const row = fit[i] || {};
+      const fitScore = row.fit != null ? row.fit : 50;
+      const fitClass = fitScore >= 90 ? 'fit-ideal' : fitScore >= 60 ? 'fit-ok' : fitScore >= 30 ? 'fit-mid' : 'fit-bad';
+      return `<div class="player-chip ${fitClass}" style="left:${x}%;top:${y}%" title="${esc(row.fitLabel || '')}">
+        <b>${esc(p.pos)}${row.slot && row.slot !== p.pos ? '→' + esc(row.slot) : ''}</b>
+        ${esc((p.name || '').split(' ').pop())}
+        <div>${p.effective || p.mastery}${p.form != null ? ' · ф' + Math.round(p.form) : ''}</div>
+      </div>`;
     }).join('')}</div>`;
   }
 
@@ -680,6 +690,35 @@
         </section>`;
       return;
     }
+    if (state.tab === 'loans') {
+      let loans = { out: [] };
+      try { loans = await A().request('api/loans'); } catch {}
+      const candidates = players.filter((p) =>
+        !(club.lineupIds || []).includes(p.id) && !p.loanUntil && !(p.injuredHours > 0)
+      );
+      $('#view').innerHTML = `
+        <section class="panel">
+          <h3>Аренда</h3>
+          <p class="hint">Отдайте запасного на 3–14 дней: разовый сбор + зарплата не капает. Пока в аренде игрок недоступен для основы.</p>
+          <div class="list">${loans.out?.length ? loans.out.map((p) => `
+            <div class="list-row">
+              <div><strong>${esc(p.name)} · ${esc(p.pos)}</strong><small>ещё ~${p.daysLeft} дн. · сбор был ${money(p.fee)}</small></div>
+              <b>${p.mastery}</b>
+            </div>`).join('') : '<p class="hint">Никого в аренде</p>'}</div>
+        </section>
+        <section class="panel">
+          <h3>Можно отдать</h3>
+          <div class="list">${candidates.length ? candidates.map((p) => `
+            <div class="list-row">
+              <div><strong>${esc(p.name)} · ${esc(p.pos)}</strong><small>маст. ${p.mastery} · зарп. ${money(p.wage)}</small></div>
+              <div style="display:flex;gap:6px">
+                <button class="btn btn-tiny" data-loan="${esc(p.id)}" data-days="7">7 дн.</button>
+                <button class="btn btn-primary btn-tiny" data-loan="${esc(p.id)}" data-days="14">14 дн.</button>
+              </div>
+            </div>`).join('') : '<p class="hint">Нет свободных запасных</p>'}</div>
+        </section>`;
+      return;
+    }
     if (state.tab === 'academy') {
       let ac = { youth: [], stadiumLevel: club.stadiumLevel || 1, academyLevel: 1, squadSize: (club.players || []).length, canPromote: false, promoteCost: 0, promoteError: null, upgrade: { ok: false } };
       try { ac = await A().request('api/academy'); } catch {}
@@ -736,13 +775,13 @@
             <tr class="${p.wantsRenew || (p.contractYears || 0) <= 0 || p.request === 'playtime' ? 'row-warn' : ''}">
               <td>
                 <button type="button" class="link" data-train="${esc(p.id)}"><strong>${esc(p.name)}</strong></button>
-                <div class="hint">${(p.specials||[]).map((s)=>TRAIT_LABELS[s]||s).join(' · ') || '—'}${p.yellows ? ' · ЖК ' + p.yellows : ''}${p.suspendedMatches ? ' · дискв. ' + p.suspendedMatches : ''}${p.wantsRenew ? ' · ждёт контракт' : ''}${p.request === 'playtime' ? ' · хочет минуты' : ''}${p.seasonApps ? ' · матчей ' + p.seasonApps : ''}</div>
+                <div class="hint">${(p.specials||[]).map((s)=>TRAIT_LABELS[s]||s).join(' · ') || '—'}${p.yellows ? ' · ЖК ' + p.yellows : ''}${p.suspendedMatches ? ' · дискв. ' + p.suspendedMatches : ''}${p.wantsRenew ? ' · ждёт контракт' : ''}${p.request === 'playtime' ? ' · хочет минуты' : ''}${p.seasonApps ? ' · матчей ' + p.seasonApps : ''}${p.form != null ? ' · форма ' + Math.round(p.form) : ''}${p.loanUntil ? ' · в аренде' : ''}</div>
               </td>
               <td><span class="badge">${esc(p.pos)}</span></td>
               <td>${p.age}</td>
               <td>${p.mastery}</td>
               <td><b>${p.effective}</b></td>
-              <td>${p.fitness}%${p.injuredHours ? ' <span class="badge danger">травма</span>' : ''}${p.suspendedMatches ? ' <span class="badge danger">дискв.</span>' : ''}</td>
+              <td>${p.fitness}%${p.injuredHours ? ' <span class="badge danger">травма</span>' : ''}${p.suspendedMatches ? ' <span class="badge danger">дискв.</span>' : ''}${p.loanUntil ? ' <span class="badge warn">аренда</span>' : ''}</td>
               <td>${p.morale > 0 ? '+' : ''}${p.morale || 0}</td>
               <td>${p.contractYears == null ? '—' : (p.contractYears <= 0 ? '0!' : p.contractYears + ' г.')}</td>
               <td>${money(p.wage)}</td>
@@ -751,6 +790,7 @@
                 <button class="btn btn-tiny" data-wage-down="${esc(p.id)}">−</button>
                 <button class="btn btn-primary btn-tiny" data-renew="${esc(p.id)}" title="Продлить контракт">Контр.</button>
                 <button class="btn btn-tiny" data-list="${esc(p.id)}">Рынок</button>
+                <button class="btn btn-tiny" data-loan="${esc(p.id)}" ${p.loanUntil || (club.lineupIds||[]).includes(p.id) ? 'disabled' : ''}>Аренда</button>
                 <button class="btn btn-tiny" data-sell="${esc(p.id)}">Агенты</button>
                 <button class="btn btn-tiny" data-release="${esc(p.id)}">Отчисл.</button>
               </td>
@@ -1177,7 +1217,7 @@
             <tbody>${leaders.map((u) => `
               <tr>
                 <td>${u.rank || '—'}</td>
-                <td><strong>${esc(u.name || u.login)}</strong></td>
+                <td><button type="button" class="link" data-profile="${esc(u.login)}"><strong>${esc(u.name || u.login)}</strong></button></td>
                 <td>${esc(u.clubName || '—')}</td>
                 <td>${u.level || 1}</td>
                 <td><b>${u.cupsWon || 0}</b></td>
@@ -1240,7 +1280,7 @@
           <tbody>${leaders.map((u, i) => `
             <tr>
               <td>${i + 1}</td>
-              <td><strong>${esc(u.name || u.login)}</strong></td>
+              <td><button type="button" class="link" data-profile="${esc(u.login)}"><strong>${esc(u.name || u.login)}</strong></button></td>
               <td>${esc(u.clubName || '—')}</td>
               <td>${u.level}</td>
               <td><b>${u.points || 0}</b></td>
@@ -1268,6 +1308,38 @@
     } catch (e) {
       view.innerHTML = `<section class="panel"><p class="hint">${esc(e.message || 'Ошибка загрузки')}</p></section>`;
     }
+  }
+
+  function showProfile(login) {
+    A().request('api/profile/' + encodeURIComponent(login)).then((data) => {
+      const p = data.profile;
+      const c = p.club || {};
+      openModal(`
+        <div class="panel-head">
+          <h2 style="margin:0;font-family:Syne,sans-serif">${esc(p.name || p.login)}</h2>
+          <button class="btn btn-tiny" id="modal-close">Закрыть</button>
+        </div>
+        <p class="hint">@${esc(p.login)} · ур. ${p.level} · очки ${p.points || 0} · престиж ${p.prestige || 0}</p>
+        ${c.name ? `
+          <div class="club-banner" style="--club:${esc(c.color || '#1fa65a')};margin:12px 0">
+            <h2 style="font-size:22px">${esc(c.name)}</h2>
+            <p>Сила ${c.strength} · ${esc(c.formation)} · форма ${esc(c.form?.formStr || '—')}</p>
+          </div>
+          <div class="grid-3">
+            <div class="stat-card"><span>Стадион</span><b>${esc(c.stadium || '—')} · ур. ${c.stadiumLevel || 1}</b></div>
+            <div class="stat-card"><span>Химия</span><b>${c.chemistry ?? '—'}</b></div>
+            <div class="stat-card"><span>Спонсор</span><b>${c.sponsor ? money(c.sponsor.weekly) + '/нед' : '—'}</b></div>
+          </div>
+          ${c.board ? `<p class="hint" style="margin-top:10px">Совет: ${esc(c.board.mood || '')} · ${esc(c.board.targetLabel || '')} · ${c.board.confidence}%</p>` : ''}
+          <h3 style="margin-top:14px">Лидеры состава</h3>
+          <div class="list">${(c.top || []).map((pl) => `
+            <div class="list-row">
+              <div><strong>${esc(pl.name)} · ${esc(pl.pos)}</strong><small>форма ${Math.round(pl.form || 60)}</small></div>
+              <b>${pl.effective}</b>
+            </div>`).join('') || '<p class="hint">Нет данных</p>'}</div>
+        ` : '<p class="hint">Клуб не создан</p>'}
+      `);
+    }).catch((err) => toast(err.message));
   }
 
   function showMatch(match) {
@@ -1918,6 +1990,28 @@
           toast(data.label || 'Решение принято');
           render();
         } catch (err) { toast(err.message); }
+      }
+      const loanBtn = e.target.closest('[data-loan]');
+      if (loanBtn) {
+        try {
+          const data = await A().request('api/loans', {
+            method: 'POST',
+            body: { playerId: loanBtn.dataset.loan, days: Number(loanBtn.dataset.days || 7) }
+          });
+          state.club = data.club;
+          if (data.user) {
+            state.me.user = data.user;
+            A().setUser(data.user);
+            paintSidebar();
+          }
+          toast(data.label || ('Аренда +' + money(data.fee)));
+          render();
+        } catch (err) { toast(err.message); }
+      }
+      const profileBtn = e.target.closest('[data-profile]');
+      if (profileBtn) {
+        showProfile(profileBtn.dataset.profile);
+        return;
       }
       if (e.target.id === 'btn-new-job') {
         try {

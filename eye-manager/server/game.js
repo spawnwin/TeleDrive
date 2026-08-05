@@ -195,6 +195,219 @@ function seasonBoardReview(club, place, { user, cupReached } = {}) {
   return { ok, sacked: board.sacked, bonus, board, reached };
 }
 
+function midSeasonBoardReview(club, place, { user, season } = {}) {
+  const board = ensureBoard(club, user);
+  if (!board || board.sacked) return { ok: false, skipped: true, board };
+  const seasonKey = season || 1;
+  if (board.midReviewDone === seasonKey) return { ok: false, skipped: true, board };
+  board.midReviewDone = seasonKey;
+  const placeNum = Number(place) || 99;
+  const target = board.targetPlace || 8;
+  let delta = 0;
+  let verdict = 'on_track';
+  if (placeNum <= target) {
+    delta = placeNum <= Math.max(1, target - 2) ? 8 : 4;
+    verdict = 'ahead';
+  } else if (placeNum <= target + 2) {
+    delta = -3;
+    verdict = 'behind';
+  } else {
+    delta = -8;
+    verdict = 'crisis';
+    board.warnings = (board.warnings || 0) + (placeNum > target + 3 ? 1 : 0);
+  }
+  board.confidence = Math.max(0, Math.min(100, board.confidence + delta));
+  if (board.confidence < 22 || (board.warnings || 0) >= 3) board.sacked = true;
+  return {
+    ok: true,
+    board,
+    place: placeNum,
+    target,
+    delta,
+    verdict,
+    sacked: board.sacked,
+    label: verdict === 'ahead'
+      ? 'Совет доволен ходом сезона'
+      : verdict === 'on_track'
+        ? 'Промежуточная оценка: норма'
+        : verdict === 'behind'
+          ? 'Совет ждёт рывок во второй половине'
+          : 'Жёсткий разговор с советом'
+  };
+}
+
+function applyPlayerMatchForms(club, mappedXi) {
+  if (!club || !mappedXi?.length) return;
+  const byId = new Map((club.players || []).map((p) => [p.id, p]));
+  mappedXi.forEach((row) => {
+    const p = byId.get(row.id);
+    if (!p) return;
+    const rating = Number(row.rating) || 6.5;
+    // Map 4–10 rating → form delta around 60 baseline
+    const target = Math.max(30, Math.min(95, Math.round(40 + (rating - 4) * 10)));
+    const cur = p.form == null ? 60 : p.form;
+    p.form = Math.round(cur * 0.65 + target * 0.35);
+    p.lastRating = Math.round(rating * 10) / 10;
+  });
+  // unused / bench drift toward 58
+  (club.players || []).forEach((p) => {
+    if (mappedXi.some((r) => r.id === p.id)) return;
+    if (p.loanUntil) return;
+    p.form = Math.max(30, Math.min(95, Math.round((p.form == null ? 60 : p.form) * 0.92 + 58 * 0.08)));
+  });
+}
+
+function slotFitScore(playerPos, slotPos) {
+  if (!playerPos || !slotPos) return 0;
+  if (playerPos === slotPos) return 100;
+  if (POS_GROUP[playerPos] === POS_GROUP[slotPos]) return 65;
+  // adjacent groups
+  const order = ['GK', 'DEF', 'MID', 'ATT'];
+  const a = order.indexOf(POS_GROUP[playerPos]);
+  const b = order.indexOf(POS_GROUP[slotPos]);
+  if (a >= 0 && b >= 0 && Math.abs(a - b) === 1) return 35;
+  return 15;
+}
+
+function lineupFitMap(club) {
+  ensureLineup(club);
+  const slots = FORMATIONS[club?.formation] || FORMATIONS['4-4-2'];
+  const byId = new Map((club.players || []).map((p) => [p.id, p]));
+  return (club.lineupIds || []).slice(0, 11).map((id, i) => {
+    const p = byId.get(id);
+    const slot = slots[i] || p?.pos;
+    const fit = p ? slotFitScore(p.pos, slot) : 0;
+    return {
+      id,
+      name: p?.name || '—',
+      pos: p?.pos || '?',
+      slot,
+      fit,
+      fitLabel: fit >= 90 ? 'идеал' : fit >= 60 ? 'близко' : fit >= 30 ? 'терпимо' : 'не в своей',
+      effective: p ? effectiveMastery(p) : 0,
+      form: p?.form ?? 60
+    };
+  });
+}
+
+function quoteLoanOut(club, playerId, days = 7) {
+  const p = (club.players || []).find((x) => x.id === playerId);
+  if (!p) return { ok: false, error: 'Игрок не найден' };
+  if ((club.lineupIds || []).includes(playerId)) return { ok: false, error: 'Сначала уберите из основы' };
+  if ((club.players || []).length <= 16) return { ok: false, error: 'В составе минимум 16' };
+  if (p.loanUntil) return { ok: false, error: 'Уже в аренде' };
+  if ((p.injuredHours || 0) > 0) return { ok: false, error: 'Травмирован' };
+  const d = Math.max(3, Math.min(14, Math.round(Number(days) || 7)));
+  const fee = Math.round(playerValue(p) * 0.04 + (p.wage || 1000) * (d / 7) * 0.5);
+  const wageSave = Math.round((p.wage || 1000) * (d / 7));
+  return { ok: true, days: d, fee, wageSave, player: p };
+}
+
+function loanOutPlayer(club, playerId, days = 7) {
+  const q = quoteLoanOut(club, playerId, days);
+  if (!q.ok) return q;
+  const p = q.player;
+  p.loanUntil = Date.now() + q.days * 24 * 3600e3;
+  p.loanDays = q.days;
+  p.loanFee = q.fee;
+  p.onLoan = true;
+  club.lineupIds = (club.lineupIds || []).filter((id) => id !== playerId);
+  club.benchIds = (club.benchIds || []).filter((id) => id !== playerId);
+  ensureLineup(club, true);
+  pushLedger(club, q.fee, `Аренда · ${p.name} (${q.days} дн.)`);
+  return {
+    ok: true,
+    fee: q.fee,
+    days: q.days,
+    player: { ...p, mastery: masteryOf(p), effective: effectiveMastery(p) },
+    label: `В аренду · ${p.name}`
+  };
+}
+
+function tickLoans(club, now = Date.now()) {
+  if (!club?.players?.length) return { returned: [] };
+  const returned = [];
+  club.players.forEach((p) => {
+    if (!p.loanUntil) return;
+    if (now >= p.loanUntil) {
+      returned.push({ id: p.id, name: p.name });
+      delete p.loanUntil;
+      delete p.loanDays;
+      delete p.loanFee;
+      delete p.onLoan;
+      p.morale = Math.min(25, (p.morale || 0) + 2);
+      p.fitness = Math.min(100, (p.fitness || 100) + 8);
+    }
+  });
+  return { returned };
+}
+
+function loansStatus(club) {
+  const now = Date.now();
+  const out = (club.players || [])
+    .filter((p) => p.loanUntil)
+    .map((p) => ({
+      id: p.id,
+      name: p.name,
+      pos: p.pos,
+      until: p.loanUntil,
+      daysLeft: Math.max(0, Math.ceil((p.loanUntil - now) / (24 * 3600e3))),
+      fee: p.loanFee || 0,
+      mastery: masteryOf(p)
+    }));
+  return { out };
+}
+
+function publicProfile(user, club) {
+  if (!user) return null;
+  ensureLineup(club);
+  ensureSponsor(club, user);
+  ensureBoard(club, user);
+  const form = clubFormGuide(club);
+  const top = [...(club?.players || [])]
+    .filter((p) => !p.loanUntil)
+    .sort((a, b) => effectiveMastery(b) - effectiveMastery(a))
+    .slice(0, 5)
+    .map((p) => ({
+      name: p.name,
+      pos: p.pos,
+      mastery: masteryOf(p),
+      effective: effectiveMastery(p),
+      form: p.form ?? 60
+    }));
+  return {
+    login: user.login,
+    name: user.name,
+    level: user.level || 1,
+    xp: user.xp || 0,
+    fame: user.fame || 0,
+    prestige: user.prestige || 0,
+    points: user.points || 0,
+    fans: user.fans || 0,
+    cupsWon: user.cupsWon || 0,
+    cupsPlayed: user.cupsPlayed || 0,
+    club: club ? {
+      name: club.name,
+      short: club.short,
+      color: club.color,
+      stadium: club.stadium,
+      stadiumLevel: club.stadiumLevel || 1,
+      formation: club.formation,
+      style: club.style,
+      strength: clubStrength(club),
+      chemistry: formationChemistry(club, resolveXi(club)),
+      form,
+      sponsor: club.sponsor ? { name: club.sponsor.name, weekly: club.sponsor.weekly } : null,
+      board: club.board ? {
+        confidence: club.board.confidence,
+        targetLabel: club.board.targetLabel,
+        mood: boardStatus(club, user)?.moodLabel
+      } : null,
+      top
+    } : null
+  };
+}
+
 function takeNewJob(club, user) {
   const board = ensureBoard(club, user);
   if (!board?.sacked) return { ok: false, error: 'Совет директоров вас не увольнял' };
@@ -253,7 +466,7 @@ function rollTraits(pos, talent = 5) {
 }
 
 function playerAvailable(p) {
-  return p && !(p.injuredHours > 0) && !(p.suspendedMatches > 0);
+  return p && !(p.injuredHours > 0) && !(p.suspendedMatches > 0) && !p.loanUntil && !p.onLoan;
 }
 
 function traitMul(p, key, fallback = 1) {
@@ -319,7 +532,8 @@ function effectiveMastery(p) {
   const m = masteryOf(p);
   const fit = (p.fitness || 100) / 100;
   const morale = 1 + ((p.morale || 0) / 100) * 0.12;
-  return Math.round(m * fit * morale);
+  const form = 1 + ((((p.form || 60) - 60) / 100) * 0.1);
+  return Math.round(m * fit * morale * form);
 }
 
 function makePlayer(pos, quality = 14) {
@@ -341,7 +555,9 @@ function makePlayer(pos, quality = 14) {
     xpPool: 0,
     injuredHours: 0,
     yellows: 0,
-    suspendedMatches: 0
+    suspendedMatches: 0,
+    form: rnd(55, 70),
+    seasonApps: 0
   };
 }
 
@@ -509,6 +725,8 @@ function publicClub(club, user) {
     playtimeRequests: (club.players || []).filter((p) => p.request === 'playtime').map((p) => ({
       id: p.id, name: p.name, pos: p.pos, apps: p.seasonApps || 0, mastery: masteryOf(p)
     })),
+    loans: loansStatus(club),
+    lineupFit: lineupFitMap(club),
     manager: user ? { id: user.id, login: user.login, name: user.name, level: user.level } : null
   };
 }
@@ -1300,6 +1518,8 @@ function simulateMatch(homeClub, awayClub, meta = {}) {
 
   applyMatchAwards(homeClub, result, true);
   applyMatchAwards(awayClub, result, false);
+  applyPlayerMatchForms(homeClub, homeMapped);
+  applyPlayerMatchForms(awayClub, awayMapped);
   bumpSeasonApps(homeClub, homeXi.map((p) => p.id).concat(Object.keys(ratings.home)));
   bumpSeasonApps(awayClub, awayXi.map((p) => p.id).concat(Object.keys(ratings.away)));
 
@@ -1497,7 +1717,10 @@ function setTicketPrice(club, price) {
 }
 
 function weeklyWages(club) {
-  return (club.players || []).reduce((s, p) => s + (p.wage || 0), 0);
+  return (club.players || []).reduce((s, p) => {
+    if (p.loanUntil || p.onLoan) return s; // wage covered by loan club
+    return s + (p.wage || 0);
+  }, 0);
 }
 
 /** Pure wage settle: multi-day catch-up capped at 7. Mutates user.money + lastWageAt + club ledger. */
@@ -1551,11 +1774,12 @@ function settleWageDay(user, club, now = Date.now()) {
     contracts = tickContracts(club, ticks);
   }
   tickYouthGrowth(club);
+  const loans = tickLoans(club, now);
   const playtime = processPlaytimeRequests(club);
   const finance = financeSnapshot(user, club);
   return {
     wages, grant, sponsorPay, delta, weekBill, days, at: now,
-    contracts, interest, finance, playtime, sponsor: club.sponsor
+    contracts, interest, finance, playtime, loans, sponsor: club.sponsor
   };
 }
 
@@ -1623,6 +1847,7 @@ function tickClubClock(club) {
     changed = true;
   }
   if (tickYouthGrowth(club)) changed = true;
+  if (tickLoans(club).returned?.length) changed = true;
   return changed;
 }
 
@@ -2160,6 +2385,15 @@ module.exports = {
   processPlaytimeRequests,
   resolvePlaytimeRequest,
   snapshotSeasonAwards,
-  bumpSeasonApps
+  bumpSeasonApps,
+  midSeasonBoardReview,
+  applyPlayerMatchForms,
+  slotFitScore,
+  lineupFitMap,
+  quoteLoanOut,
+  loanOutPlayer,
+  tickLoans,
+  loansStatus,
+  publicProfile
 };
 

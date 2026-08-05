@@ -387,6 +387,13 @@ function processWageDay(user, club) {
       playerId: p.id
     });
   });
+  (result.loans?.returned || []).forEach((p) => {
+    pushUserEvent(user.id, {
+      type: 'loan',
+      title: 'Конец аренды',
+      body: `${p.name} вернулся в клуб`
+    });
+  });
   if (result.contracts) {
     (result.contracts.asks || []).forEach((p) => {
       pushUserEvent(user.id, {
@@ -1745,6 +1752,52 @@ const server = http.createServer(async (req, res) => {
     }
   }
 
+  if (pathname === '/api/loans' && req.method === 'GET') {
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    const club = ensureClub(auth.user);
+    const tick = G.tickLoans(club);
+    if (tick.returned?.length) db.setClub(auth.user.id, club);
+    return json(res, 200, { ok: true, ...G.loansStatus(club), returned: tick.returned });
+  }
+
+  if (pathname === '/api/loans' && req.method === 'POST') {
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    try {
+      const body = JSON.parse((await readBody(req)).toString('utf8') || '{}');
+      const club = ensureClub(auth.user);
+      const r = G.loanOutPlayer(club, body.playerId, body.days || 7);
+      if (!r.ok) return json(res, 400, { error: r.error });
+      auth.user.money = (auth.user.money || 0) + r.fee;
+      persistUser(auth.user);
+      db.setClub(auth.user.id, club);
+      pushUserEvent(auth.user.id, {
+        type: 'loan',
+        title: 'Игрок в аренде',
+        body: `${r.player.name} · ${r.days} дн. · +${r.fee} ¤`,
+        money: r.fee
+      });
+      return json(res, 200, {
+        ok: true,
+        ...r,
+        loans: G.loansStatus(club),
+        club: G.publicClub(club, auth.user),
+        user: enrichUser(auth.user)
+      });
+    } catch (e) {
+      return json(res, 500, { error: String(e.message || e) });
+    }
+  }
+
+  if (pathname.match(/^\/api\/profile\/[^/]+$/) && req.method === 'GET') {
+    const login = decodeURIComponent(pathname.split('/')[3] || '').toLowerCase();
+    const user = Object.values(usersDb().users).find((u) => !u.isBot && u.login === login);
+    if (!user) return json(res, 404, { error: 'Менеджер не найден' });
+    const club = db.getClub(user.id);
+    return json(res, 200, { ok: true, profile: G.publicProfile(user, club) });
+  }
+
   if (pathname === '/api/players/playtime' && req.method === 'POST') {
     const auth = requireAuth(req, res);
     if (!auth) return;
@@ -2280,6 +2333,29 @@ async function main() {
         } else if (review.ok) {
           u.prestige = (u.prestige || 0) + 1;
           persistUser(u);
+        }
+      },
+      onMidSeasonBoard: (userId, info) => {
+        const club = db.getClub(userId);
+        const u = usersDb().users[userId];
+        if (!club || !u || u.isBot) return;
+        const review = G.midSeasonBoardReview(club, info.rank || 99, {
+          user: u,
+          season: info.season || 1
+        });
+        if (!review.ok) return;
+        db.setClub(userId, club);
+        pushUserEvent(userId, {
+          type: 'board',
+          title: review.label || 'Промежуточная оценка совета',
+          body: `Место ${review.place} · цель ≤${review.target} · уверенность ${review.board?.confidence}% (${review.delta >= 0 ? '+' : ''}${review.delta})`
+        });
+        if (review.sacked) {
+          pushUserEvent(userId, {
+            type: 'board',
+            title: 'Увольнение советом',
+            body: 'После промежуточного отчёта совет расторг контракт.'
+          });
         }
       },
       onLeagueFinish: (info) => {

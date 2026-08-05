@@ -234,4 +234,44 @@ describe('game lineup guards', () => {
     assert.equal(home.seasonArchive[0].season, 2);
     assert.equal(home.players[0].seasonGoals || 0, 0);
   });
+
+  it('player form loans midseason and profile', () => {
+    const club = G.defaultClub({ id: 'l1', login: 'l1', name: 'L1', clubName: 'Loan FC' });
+    const user = { id: 'l1', login: 'loanmgr', name: 'Loan Mgr', level: 3, fame: 20, prestige: 2, points: 10, fans: 10000 };
+    G.ensureLineup(club, true);
+    G.ensureBoard(club, user);
+    const spare = club.players.find((p) => !(club.lineupIds || []).includes(p.id));
+    assert.ok(spare);
+    const loan = G.loanOutPlayer(club, spare.id, 7);
+    assert.equal(loan.ok, true);
+    assert.ok(spare.loanUntil > Date.now());
+    assert.equal(G.playerAvailable(spare), false);
+    assert.ok(G.weeklyWages(club) < club.players.reduce((s, p) => s + (p.wage || 0), 0));
+    spare.loanUntil = Date.now() - 1000;
+    const ret = G.tickLoans(club);
+    assert.equal(ret.returned.length, 1);
+    assert.equal(!!spare.loanUntil, false);
+
+    const mid = G.midSeasonBoardReview(club, 2, { user, season: 1 });
+    assert.equal(mid.ok, true);
+    assert.ok(mid.delta > 0);
+    const mid2 = G.midSeasonBoardReview(club, 2, { user, season: 1 });
+    assert.equal(mid2.skipped, true);
+
+    const away = G.defaultClub({ id: 'l2', login: 'l2', name: 'L2', clubName: 'Away' });
+    G.ensureLineup(away, true);
+    const m = G.simulateMatch(club, away, { competition: 'friendly', homeUserId: 'l1', awayUserId: 'l2' });
+    assert.ok(m.homeXi?.length);
+    const rated = club.players.find((p) => p.lastRating != null);
+    assert.ok(rated);
+    assert.ok(rated.form >= 30 && rated.form <= 95);
+
+    const fit = G.lineupFitMap(club);
+    assert.equal(fit.length, 11);
+    assert.ok(fit.every((r) => r.fit >= 0));
+
+    const profile = G.publicProfile(user, club);
+    assert.equal(profile.login, 'loanmgr');
+    assert.ok(profile.club.top.length >= 1);
+  });
 });
