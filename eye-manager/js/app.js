@@ -36,7 +36,20 @@
     league_started: 'Лига стартовала',
     league_match: 'Матч лиги',
     league_won: 'Чемпион лиги',
-    league_done: 'Лига завершена'
+    league_done: 'Лига завершена',
+    suspension: 'Дисквалификация',
+    release: 'Отчисление'
+  };
+
+  const TRAIT_LABELS = {
+    finisher: 'Снайпер',
+    engine: 'Мотор',
+    brittle: 'Хрупкий',
+    leader: 'Лидер',
+    rock: 'Скала',
+    playmaker: 'Диспетчер',
+    hothead: 'Горячая голова',
+    prospect: 'Талант'
   };
 
   const TABS = {
@@ -286,6 +299,7 @@
     if (state.tab === 'stadium') {
       const lvl = club.stadiumLevel || 1;
       const cost = 100000 * lvl;
+      const price = club.ticketPrice || 10;
       $('#view').innerHTML = `
         <section class="panel">
           <div class="panel-head"><h3>${esc(club.stadium)}</h3><button class="btn btn-primary btn-tiny" id="btn-stadium" ${lvl >= 8 ? 'disabled' : ''}>Улучшить · ${money(cost)}</button></div>
@@ -294,7 +308,13 @@
             <div class="stat-card"><span>Вместимость</span><b>${money(club.capacity || 8000).replace(' ¤','')}</b></div>
             <div class="stat-card"><span>Фанаты</span><b>${money(state.me?.user?.fans).replace(' ¤','')}</b></div>
           </div>
-          <p class="hint" style="margin-top:12px">Каждый уровень увеличивает вместимость и привлекает болельщиков.</p>
+          <form class="form-grid" id="form-tickets" style="margin-top:14px">
+            <label>Цена билета (5–40 ¤)
+              <input name="price" type="number" min="5" max="40" value="${price}" />
+            </label>
+            <button class="btn btn-primary" type="submit">Сохранить цену</button>
+          </form>
+          <p class="hint" style="margin-top:12px">Дороже билет — меньше заполняемость, но выше выручка с места. Доход только дома.</p>
         </section>`;
       return;
     }
@@ -314,6 +334,8 @@
     }
     const sorted = [...(club.players || [])].sort((a, b) => (b.effective || 0) - (a.effective || 0));
     const xi = new Set(club.lineupIds || []);
+    const bench = new Set(club.benchIds || []);
+    const blocked = (p) => !!(p.injuredHours || p.suspendedMatches);
     $('#view').innerHTML = `
       <div class="grid-2">
         <section class="panel">
@@ -321,7 +343,7 @@
           ${pitchHtml(club)}
         </section>
         <section class="panel">
-          <h3>Схема и основа</h3>
+          <h3>Схема, основа и скамейка</h3>
           <form class="form-grid" id="form-formation">
             <label>Формация
               <select name="formation">
@@ -331,14 +353,21 @@
             <input type="hidden" name="rebuildLineup" value="1" />
             <button class="btn btn-primary" type="submit">Автосостав по схеме</button>
           </form>
-          <p class="hint">Отметьте ровно 11 игроков, включая вратаря. Травмированных в основу нельзя.</p>
-          ${club.understrength ? '<p class="hint" style="color:var(--warn,#eab308)">Сейчас в основе меньше 11 здоровых — сохраните основу или нажмите «Автосостав».</p>' : ''}
+          <p class="hint">11 в основе (+вратарь) и до 7 на скамейке. Травмы и дисквалификации блокируют.</p>
+          ${club.understrength ? '<p class="hint" style="color:var(--warn,#eab308)">В основе меньше 11 доступных.</p>' : ''}
+          <h4 style="margin:12px 0 6px;font-family:Syne,sans-serif">Основа</h4>
           <div class="list" id="lineup-picker">${sorted.map((p) => `
             <label class="list-row" style="cursor:pointer">
-              <div><strong>${esc(p.name)} · ${esc(p.pos)}</strong><small>эфф. ${p.effective} · физа ${p.fitness}%${p.injuredHours ? ' · травма' : ''}</small></div>
-              <input type="checkbox" data-lineup-id="${esc(p.id)}" ${xi.has(p.id) ? 'checked' : ''} ${p.injuredHours ? 'disabled' : ''} />
+              <div><strong>${esc(p.name)} · ${esc(p.pos)}</strong><small>эфф. ${p.effective}${p.injuredHours ? ' · травма' : ''}${p.suspendedMatches ? ' · дискв. ' + p.suspendedMatches : ''}${(p.specials||[]).length ? ' · ' + (p.specials||[]).map((s)=>TRAIT_LABELS[s]||s).join(', ') : ''}</small></div>
+              <input type="checkbox" data-lineup-id="${esc(p.id)}" ${xi.has(p.id) ? 'checked' : ''} ${blocked(p) ? 'disabled' : ''} />
             </label>`).join('')}</div>
-          <button class="btn btn-primary" id="btn-save-lineup" style="margin-top:12px">Сохранить основу</button>
+          <h4 style="margin:14px 0 6px;font-family:Syne,sans-serif">Скамейка (до 7)</h4>
+          <div class="list" id="bench-picker">${sorted.map((p) => `
+            <label class="list-row" style="cursor:pointer">
+              <div><strong>${esc(p.name)} · ${esc(p.pos)}</strong></div>
+              <input type="checkbox" data-bench-id="${esc(p.id)}" ${bench.has(p.id) ? 'checked' : ''} ${blocked(p) || xi.has(p.id) ? 'disabled' : ''} />
+            </label>`).join('')}</div>
+          <button class="btn btn-primary" id="btn-save-lineup" style="margin-top:12px">Сохранить основу и скамейку</button>
         </section>
       </div>`;
   }
@@ -441,19 +470,25 @@
       <section class="panel">
         <div class="panel-head"><h3>Состав</h3><span class="badge">${players.length} игроков</span></div>
         <div class="table-wrap"><table class="sheet">
-          <thead><tr><th>Имя</th><th>Поз</th><th>Возр</th><th>Маст</th><th>Эфф</th><th>Физа</th><th>Мораль</th><th></th></tr></thead>
+          <thead><tr><th>Имя</th><th>Поз</th><th>Возр</th><th>Маст</th><th>Эфф</th><th>Физа</th><th>Зарп.</th><th></th></tr></thead>
           <tbody>${players.map((p) => `
             <tr>
-              <td><button type="button" class="link" data-train="${esc(p.id)}"><strong>${esc(p.name)}</strong></button></td>
+              <td>
+                <button type="button" class="link" data-train="${esc(p.id)}"><strong>${esc(p.name)}</strong></button>
+                <div class="hint">${(p.specials||[]).map((s)=>TRAIT_LABELS[s]||s).join(' · ') || '—'}${p.yellows ? ' · ЖК ' + p.yellows : ''}${p.suspendedMatches ? ' · дискв. ' + p.suspendedMatches : ''}</div>
+              </td>
               <td><span class="badge">${esc(p.pos)}</span></td>
               <td>${p.age}</td>
               <td>${p.mastery}</td>
               <td><b>${p.effective}</b></td>
-              <td>${p.fitness}%${p.injuredHours ? ' <span class="badge danger">травма</span>' : ''}</td>
-              <td>${p.morale > 0 ? '+' : ''}${p.morale}</td>
+              <td>${p.fitness}%${p.injuredHours ? ' <span class="badge danger">травма</span>' : ''}${p.suspendedMatches ? ' <span class="badge danger">дискв.</span>' : ''}</td>
+              <td>${money(p.wage)}</td>
               <td style="white-space:nowrap">
-                <button class="btn btn-tiny" data-list="${esc(p.id)}">На рынок</button>
-                <button class="btn btn-tiny" data-sell="${esc(p.id)}">Агентам</button>
+                <button class="btn btn-tiny" data-wage-up="${esc(p.id)}">+</button>
+                <button class="btn btn-tiny" data-wage-down="${esc(p.id)}">−</button>
+                <button class="btn btn-tiny" data-list="${esc(p.id)}">Рынок</button>
+                <button class="btn btn-tiny" data-sell="${esc(p.id)}">Агенты</button>
+                <button class="btn btn-tiny" data-release="${esc(p.id)}">Отчисл.</button>
               </td>
             </tr>`).join('')}</tbody>
         </table></div>
@@ -501,6 +536,10 @@
       const standings = L.standings || [];
       const fixtures = (L.fixtures || []).filter((f) => f.round === L.currentRound || f.mine);
       const myFixtures = (cal.items || L.fixtures || []).filter((f) => f.mine || f.homeUserId === myId || f.awayUserId === myId);
+      const nextMine = (L.fixtures || []).find((f) => f.round === L.currentRound && !f.playedAt && (f.homeUserId === myId || f.awayUserId === myId));
+      const club = state.club;
+      const unavailable = (club?.players || []).filter((p) => p.injuredHours || p.suspendedMatches);
+      const xiStr = club?.strength || '—';
       $('#view').innerHTML = `
         <section class="panel">
           <div class="panel-head">
@@ -512,6 +551,17 @@
           ${L.nextRoundAt && L.status === 'live' ? `<p class="hint">Следующий тур: ${new Date(L.nextRoundAt).toLocaleString('ru-RU')}</p>` : ''}
           ${L.champion ? `<div class="stat-card" style="margin:10px 0"><span>Чемпион</span><b>${esc(L.champion.clubName)}</b></div>` : ''}
         </section>
+        ${L.status === 'live' && nextMine ? `<section class="panel">
+          <div class="panel-head"><h3>Подготовка к туру ${L.currentRound}</h3>
+            <div style="display:flex;gap:6px">
+              <button class="btn btn-tiny" data-nav="team" data-goto-tab="formation">Основа</button>
+              <button class="btn btn-tiny" data-nav="tactics">Тактика</button>
+            </div>
+          </div>
+          <p><strong>${esc(nextMine.homeName || nextMine.home)}</strong> — <strong>${esc(nextMine.awayName || nextMine.away)}</strong></p>
+          <p class="hint">Сила вашей основы: ${xiStr}. ${unavailable.length ? 'Недоступны: ' + unavailable.map((p) => p.name).join(', ') : 'Все в строю.'}</p>
+          ${L.nextRoundAt ? `<p class="hint">Автостарт: ${new Date(L.nextRoundAt).toLocaleString('ru-RU')}</p>` : ''}
+        </section>` : ''}
         <section class="panel">
           <h3>Таблица</h3>
           <div class="table-wrap"><table class="sheet">
@@ -859,17 +909,28 @@
       if (e.type === 'yellow') return 'Жёлтая';
       if (e.type === 'red') return 'Красная';
       if (e.type === 'injury') return 'Травма';
+      if (e.type === 'sub') return 'Замена';
       if (e.type === 'pens') return 'Пенальти';
       return esc(e.type || 'Событие');
     };
+    const xiBlock = (xi, title) => {
+      if (!xi?.length) return '';
+      return `<h3>${title}</h3><div class="list">${xi.slice(0, 14).map((p) => `
+        <div class="list-row">
+          <div><strong>${esc(p.pos)} · ${esc(p.name)}</strong>
+            <small>${(p.specials || []).map((s) => TRAIT_LABELS[s] || s).join(', ') || '—'}</small>
+          </div>
+          <b>${p.rating != null ? p.rating.toFixed ? p.rating.toFixed(1) : p.rating : p.effective}</b>
+        </div>`).join('')}</div>`;
+    };
     openModal(`
       <div class="panel-head">
-        <h2 style="margin:0;font-family:Syne,sans-serif">${compLabel(match.competition)}${match.cupName ? ' · ' + esc(match.cupName) : ''}</h2>
+        <h2 style="margin:0;font-family:Syne,sans-serif">${compLabel(match.competition)}${match.cupName || match.leagueName ? ' · ' + esc(match.cupName || match.leagueName) : ''}</h2>
         <button class="btn btn-tiny" id="modal-close">Закрыть</button>
       </div>
       <div class="match-score">
         <div class="team"><strong>${esc(match.home?.name)}</strong><div class="hint">${esc(match.home?.formation || '')} · ${esc(match.home?.style || '')} · сила ${match.home?.strength}</div></div>
-        <div class="score">${match.score?.[0]}:${match.score?.[1]}</div>
+        <div class="score" id="match-live-score">${match.score?.[0]}:${match.score?.[1]}</div>
         <div class="team"><strong>${esc(match.away?.name)}</strong><div class="hint">${esc(match.away?.formation || '')} · ${esc(match.away?.style || '')} · сила ${match.away?.strength}</div></div>
       </div>
       ${st.shots ? `<div class="grid-3" style="margin:12px 0">
@@ -877,11 +938,46 @@
         <div class="stat-card"><span>Удары (в створ)</span><b>${(st.shots||[])[0]||0}(${(st.shotsOn||[])[0]||0}) : ${(st.shots||[])[1]||0}(${(st.shotsOn||[])[1]||0})</b></div>
         <div class="stat-card"><span>Угловые / карт.</span><b>${(st.corners||[])[0]||0}:${(st.corners||[])[1]||0} / ${(st.cards||[])[0]||0}:${(st.cards||[])[1]||0}</b></div>
       </div>` : ''}
+      <div style="display:flex;gap:8px;margin:8px 0 12px">
+        <button class="btn btn-primary btn-tiny" id="btn-watch-match">Смотреть</button>
+        <button class="btn btn-tiny" id="btn-show-all-events">Все события</button>
+      </div>
       <h3>События</h3>
-      <div class="events">${(match.events || []).map((e) => {
-        return `<div class="event"><span class="min">${e.minute}'</span><span>${evLabel(e)}: ${esc(e.side === 'home' ? match.home?.name : match.away?.name)} — ${esc(e.player)} (${e.score?.[0]}:${e.score?.[1]})</span></div>`;
-      }).join('') || '<p class="hint">Без событий</p>'}</div>
+      <div class="events" id="match-events"></div>
+      <div class="grid-2" style="margin-top:14px">
+        <section>${xiBlock(match.homeXi, esc(match.home?.name) + ' · оценки')}</section>
+        <section>${xiBlock(match.awayXi, esc(match.away?.name) + ' · оценки')}</section>
+      </div>
     `);
+    const box = $('#match-events');
+    const all = match.events || [];
+    const paint = (list) => {
+      box.innerHTML = list.map((e) =>
+        `<div class="event"><span class="min">${e.minute}'</span><span>${evLabel(e)}: ${esc(e.side === 'home' ? match.home?.name : match.away?.name)} — ${esc(e.player)} (${e.score?.[0]}:${e.score?.[1]})</span></div>`
+      ).join('') || '<p class="hint">Без событий</p>';
+    };
+    paint(all.filter((e) => e.type === 'goal' || e.type === 'red' || e.type === 'sub' || e.type === 'injury' || e.type === 'pens'));
+    $('#btn-show-all-events')?.addEventListener('click', () => paint(all));
+    $('#btn-watch-match')?.addEventListener('click', () => {
+      const scoreEl = $('#match-live-score');
+      box.innerHTML = '';
+      let i = 0;
+      const tick = () => {
+        if (i >= all.length) {
+          scoreEl.textContent = `${match.score?.[0]}:${match.score?.[1]}`;
+          return;
+        }
+        const e = all[i++];
+        if (e.score) scoreEl.textContent = `${e.score[0]}:${e.score[1]}`;
+        const row = document.createElement('div');
+        row.className = 'event';
+        row.innerHTML = `<span class="min">${e.minute}'</span><span>${evLabel(e)}: ${esc(e.side === 'home' ? match.home?.name : match.away?.name)} — ${esc(e.player)} (${e.score?.[0]}:${e.score?.[1]})</span>`;
+        box.appendChild(row);
+        box.scrollTop = box.scrollHeight;
+        setTimeout(tick, e.type === 'goal' || e.type === 'red' ? 700 : 280);
+      };
+      tick();
+    });
   }
 
   function stopCupPoll() {
@@ -1366,14 +1462,43 @@
       }
       if (e.target.id === 'btn-save-lineup') {
         const ids = $$('#lineup-picker [data-lineup-id]:checked').map((el) => el.dataset.lineupId);
+        const benchIds = $$('#bench-picker [data-bench-id]:checked').map((el) => el.dataset.benchId).filter((id) => !ids.includes(id)).slice(0, 7);
         if (ids.length !== 11) {
           toast('Отметьте ровно 11 игроков');
           return;
         }
         try {
-          const data = await A().request('api/club/lineup', { method: 'POST', body: { lineupIds: ids } });
+          const data = await A().request('api/club/lineup', { method: 'POST', body: { lineupIds: ids, benchIds } });
           state.club = data.club;
-          toast('Основа сохранена');
+          toast('Основа и скамейка сохранены');
+          render();
+        } catch (err) { toast(err.message); }
+      }
+      const release = e.target.closest('[data-release]');
+      if (release) {
+        if (!confirm('Отчислить игрока без компенсации?')) return;
+        try {
+          const data = await A().request('api/players/release', { method: 'POST', body: { playerId: release.dataset.release } });
+          state.club = data.club;
+          toast('Отчислен');
+          render();
+        } catch (err) { toast(err.message); }
+      }
+      const wageUp = e.target.closest('[data-wage-up]');
+      if (wageUp) {
+        try {
+          const data = await A().request('api/players/wage', { method: 'POST', body: { playerId: wageUp.dataset.wageUp, direction: 'raise' } });
+          state.club = data.club;
+          toast('Зарплата повышена');
+          render();
+        } catch (err) { toast(err.message); }
+      }
+      const wageDown = e.target.closest('[data-wage-down]');
+      if (wageDown) {
+        try {
+          const data = await A().request('api/players/wage', { method: 'POST', body: { playerId: wageDown.dataset.wageDown, direction: 'cut' } });
+          state.club = data.club;
+          toast('Зарплата снижена');
           render();
         } catch (err) { toast(err.message); }
       }
@@ -1392,6 +1517,17 @@
     });
 
     document.addEventListener('submit', async (e) => {
+      if (e.target.id === 'form-tickets') {
+        e.preventDefault();
+        const fd = new FormData(e.target);
+        try {
+          const data = await A().request('api/club/tickets', { method: 'POST', body: { price: Number(fd.get('price')) } });
+          state.club = data.club;
+          toast('Цена билета сохранена');
+          render();
+        } catch (err) { toast(err.message); }
+        return;
+      }
       if (e.target.id === 'form-club' || e.target.id === 'form-formation' || e.target.id === 'form-tactics') {
         e.preventDefault();
         const fd = new FormData(e.target);

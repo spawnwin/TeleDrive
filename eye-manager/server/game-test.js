@@ -62,22 +62,24 @@ describe('game lineup guards', () => {
     assert.ok(Array.isArray(m.stats.shots));
     assert.ok(m.events.length >= 0);
     assert.equal(m.home.formation, home.formation);
+    assert.ok(Array.isArray(m.homeXi));
   });
 
-  it('listPlayer and promoteYouth work', () => {
-    const club = G.defaultClub({ id: 'u6', login: 't6', name: 'T6', clubName: 'T6 FC' });
-    club.userId = 'u6';
+  it('traits, suspensions and release work', () => {
+    const club = G.defaultClub({ id: 'u7', login: 't7', name: 'T7', clubName: 'T7 FC' });
     G.ensureLineup(club, true);
+    assert.ok(club.players.some((p) => Array.isArray(p.specials)));
     const spare = club.players.find((p) => !club.lineupIds.includes(p.id));
-    assert.ok(spare);
-    const listed = G.listPlayer(club, spare.id);
-    assert.equal(listed.ok, true);
-    assert.equal(listed.listing.source, 'club');
-
-    club.stadiumLevel = 3;
-    const youth = G.promoteYouth(club);
-    assert.equal(youth.ok, true, youth.error);
-    assert.ok(youth.player.age <= 19);
-    assert.ok(youth.cost >= 20000);
+    spare.suspendedMatches = 1;
+    G.ensureLineup(club, true);
+    assert.ok(!club.lineupIds.includes(spare.id));
+    const rel = G.releasePlayer(club, spare.id);
+    assert.equal(rel.ok, true);
+    const wage = G.renegotiateWage(club, club.lineupIds[1], 'raise');
+    assert.equal(wage.ok, true);
+    assert.ok(wage.player.morale >= 0);
+    club.ticketPrice = 25;
+    const tickets = G.ticketIncome(club, { fans: 12000 }, true);
+    assert.ok(tickets > 0);
   });
 });

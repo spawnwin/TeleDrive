@@ -40,6 +40,42 @@ const FORMATION_BIAS = {
   '4-2-3-1': { att: 1.04, def: 1.02 }
 };
 
+const TRAITS = {
+  finisher: { label: 'Снайпер', shot: 1.12 },
+  engine: { label: 'Мотор', fit: 0.9, power: 1.03 },
+  brittle: { label: 'Хрупкий', injury: 1.6 },
+  leader: { label: 'Лидер', morale: 1.08, power: 1.02 },
+  rock: { label: 'Скала', def: 1.06, injury: 0.7 },
+  playmaker: { label: 'Диспетчер', assist: 1.25, shot: 0.95 },
+  hothead: { label: 'Горячая голова', card: 1.8, tackle: 1.05 },
+  prospect: { label: 'Талант', xp: 1.25 }
+};
+
+function rollTraits(pos, talent = 5) {
+  const pool = Object.keys(TRAITS);
+  const n = Math.random() < 0.35 + talent * 0.03 ? (Math.random() < 0.25 ? 2 : 1) : 0;
+  const out = [];
+  const copy = pool.slice().sort(() => Math.random() - 0.5);
+  for (let i = 0; i < n && i < copy.length; i++) {
+    if (pos === 'Gk' && ['finisher', 'playmaker'].includes(copy[i])) continue;
+    out.push(copy[i]);
+  }
+  return out;
+}
+
+function playerAvailable(p) {
+  return p && !(p.injuredHours > 0) && !(p.suspendedMatches > 0);
+}
+
+function traitMul(p, key, fallback = 1) {
+  let m = fallback;
+  (p.specials || []).forEach((id) => {
+    const t = TRAITS[id];
+    if (t && t[key] != null) m *= t[key];
+  });
+  return m;
+}
+
 function uid(prefix) {
   return prefix + '_' + crypto.randomBytes(5).toString('hex');
 }
@@ -100,19 +136,22 @@ function effectiveMastery(p) {
 function makePlayer(pos, quality = 14) {
   const base = quality + rnd(-2, 3);
   const age = rnd(18, 32);
+  const talent = rnd(3, 9);
   return {
     id: uid('pl'),
     name: pick(FIRST) + ' ' + pick(LAST),
     pos,
     age,
-    talent: rnd(3, 9),
+    talent,
     fitness: rnd(88, 100),
     morale: rnd(-5, 12),
     wage: rnd(800, 4000) * Math.max(1, Math.round(base / 10)),
     skills: skillForPos(pos, base),
-    specials: [],
+    specials: rollTraits(pos, talent),
     xpPool: 0,
-    injuredHours: 0
+    injuredHours: 0,
+    yellows: 0,
+    suspendedMatches: 0
   };
 }
 
@@ -131,7 +170,7 @@ function resolveXi(club) {
   const byId = new Map((club.players || []).map((p) => [p.id, p]));
   const fromLineup = (club.lineupIds || [])
     .map((id) => byId.get(id))
-    .filter((p) => p && !(p.injuredHours > 0));
+    .filter((p) => playerAvailable(p));
   if (fromLineup.length >= 11) return fromLineup.slice(0, 11);
 
   const form = FORMATIONS[club.formation] || FORMATIONS['4-4-2'];
@@ -142,7 +181,7 @@ function resolveXi(club) {
     let best = null;
     let bestScore = -1;
     for (const p of club.players) {
-      if (used.has(p.id) || p.injuredHours > 0) continue;
+      if (used.has(p.id) || !playerAvailable(p)) continue;
       const posOk = p.pos === slot || (slot === 'Cd' && p.pos === 'Cd') || (slot.endsWith('d') && p.pos.includes('d'));
       const score = effectiveMastery(p) + (p.pos === slot ? 8 : 0) + (posOk ? 3 : -6);
       if (score > bestScore) { bestScore = score; best = p; }
@@ -152,7 +191,7 @@ function resolveXi(club) {
   if (xi.length < 11) {
     for (const p of [...club.players].sort((a, b) => effectiveMastery(b) - effectiveMastery(a))) {
       if (xi.length >= 11) break;
-      if (used.has(p.id) || p.injuredHours > 0) continue;
+      if (used.has(p.id) || !playerAvailable(p)) continue;
       used.add(p.id);
       xi.push(p);
     }
@@ -172,6 +211,7 @@ function defaultClub(user, opts = {}) {
     stadium: opts.stadium || 'Арена клуба',
     stadiumLevel: 1,
     capacity: 8000,
+    ticketPrice: 10,
     formation: '4-4-2',
     style: 'balance',
     instructions: [],
@@ -191,7 +231,7 @@ function ensureLineup(club, force = false) {
   const validIds = new Set(players.map((p) => p.id));
   const healthy = (id) => {
     const p = players.find((x) => x.id === id);
-    return p && !(p.injuredHours > 0);
+    return playerAvailable(p);
   };
   let kept = (club.lineupIds || []).filter((id) => validIds.has(id) && healthy(id));
   const hasGk = kept.some((id) => players.find((p) => p.id === id)?.pos === 'Gk');
@@ -208,7 +248,7 @@ function ensureLineup(club, force = false) {
   club.lineupIds = xi.map((p) => p.id);
   // ensure GK present if any healthy GK exists
   if (!club.lineupIds.some((id) => players.find((p) => p.id === id)?.pos === 'Gk')) {
-    const gk = players.find((p) => p.pos === 'Gk' && !(p.injuredHours > 0));
+    const gk = players.find((p) => p.pos === 'Gk' && playerAvailable(p));
     if (gk && club.lineupIds.length) {
       club.lineupIds[club.lineupIds.length - 1] = gk.id;
       club.lineupIds = [...new Set(club.lineupIds)].slice(0, 11);
@@ -230,6 +270,7 @@ function publicClub(club, user) {
     stadium: club.stadium,
     stadiumLevel: club.stadiumLevel || 1,
     capacity: club.capacity || 8000,
+    ticketPrice: club.ticketPrice || 10,
     formation: club.formation,
     style: club.style,
     instructions: club.instructions || [],
@@ -316,93 +357,189 @@ function applyFitnessAfterMatch(club, playedIds, opts = {}) {
   return injuries;
 }
 
+function resolveBench(club, xiIds) {
+  const used = new Set(xiIds);
+  const byId = new Map((club.players || []).map((p) => [p.id, p]));
+  let bench = (club.benchIds || []).map((id) => byId.get(id)).filter((p) => p && playerAvailable(p) && !used.has(p.id));
+  if (bench.length < 7) {
+    const rest = (club.players || [])
+      .filter((p) => playerAvailable(p) && !used.has(p.id) && !bench.some((b) => b.id === p.id))
+      .sort((a, b) => effectiveMastery(b) - effectiveMastery(a));
+    bench = bench.concat(rest).slice(0, 7);
+  }
+  return bench.slice(0, 7);
+}
+
+function trySub(liveXi, bench, outPlayer, events, minute, side, score, reason) {
+  if (!outPlayer) return null;
+  const idx = liveXi.findIndex((p) => p.id === outPlayer.id);
+  if (idx < 0) return null;
+  const sub = bench.find((p) => playerAvailable(p) && !liveXi.some((x) => x.id === p.id));
+  if (!sub) {
+    liveXi.splice(idx, 1);
+    return null;
+  }
+  const bi = bench.findIndex((p) => p.id === sub.id);
+  if (bi >= 0) bench.splice(bi, 1);
+  liveXi[idx] = sub;
+  events.push({
+    minute,
+    type: 'sub',
+    side,
+    player: `${outPlayer.name} → ${sub.name}`,
+    score: [...score],
+    out: outPlayer.name,
+    inn: sub.name
+  });
+  return sub;
+}
+
+function applyDiscipline(club, cardLog) {
+  const bans = [];
+  (cardLog || []).forEach((c) => {
+    const p = (club.players || []).find((x) => x.id === c.playerId);
+    if (!p) return;
+    if (c.type === 'yellow') {
+      p.yellows = (p.yellows || 0) + 1;
+      if (p.yellows >= 5) {
+        p.yellows = 0;
+        p.suspendedMatches = (p.suspendedMatches || 0) + 1;
+        bans.push({ id: p.id, name: p.name, matches: 1, reason: '5 ЖК' });
+      }
+    }
+    if (c.type === 'red') {
+      p.suspendedMatches = (p.suspendedMatches || 0) + 1;
+      bans.push({ id: p.id, name: p.name, matches: 1, reason: 'КК' });
+    }
+  });
+  return bans;
+}
+
+function serveSuspensions(club, startedBannedIds) {
+  (club.players || []).forEach((p) => {
+    if (startedBannedIds.has(p.id) && (p.suspendedMatches || 0) > 0) {
+      p.suspendedMatches = Math.max(0, (p.suspendedMatches || 0) - 1);
+    }
+  });
+}
+
 function simulateMatch(homeClub, awayClub, meta = {}) {
-  const homeXi = resolveXi(homeClub);
-  const awayXi = resolveXi(awayClub);
+  const homeBanned = new Set((homeClub.players || []).filter((p) => (p.suspendedMatches || 0) > 0).map((p) => p.id));
+  const awayBanned = new Set((awayClub.players || []).filter((p) => (p.suspendedMatches || 0) > 0).map((p) => p.id));
+
+  let homeXi = resolveXi(homeClub).slice();
+  let awayXi = resolveXi(awayClub).slice();
+  let homeBench = resolveBench(homeClub, homeXi.map((p) => p.id));
+  let awayBench = resolveBench(awayClub, awayXi.map((p) => p.id));
+
   const homePow = teamMatchPower(homeClub, homeXi, { home: true });
   const awayPow = teamMatchPower(awayClub, awayXi, { home: false });
-  const hs = homePow.power / Math.max(0.85, awayPow.solidity);
-  const as = awayPow.power / Math.max(0.85, homePow.solidity);
+  // leaders boost
+  homeXi.forEach((p) => { homePow.power *= Math.pow(traitMul(p, 'power', 1), 0.3); });
+  awayXi.forEach((p) => { awayPow.power *= Math.pow(traitMul(p, 'power', 1), 0.3); });
+  let hs = homePow.power / Math.max(0.85, awayPow.solidity);
+  let as = awayPow.power / Math.max(0.85, homePow.solidity);
 
-  let hg = 0;
-  let ag = 0;
-  let hShots = 0;
-  let aShots = 0;
-  let hOn = 0;
-  let aOn = 0;
-  let hCorners = 0;
-  let aCorners = 0;
-  let hPoss = 50;
+  let hg = 0, ag = 0, hShots = 0, aShots = 0, hOn = 0, aOn = 0, hCorners = 0, aCorners = 0, hPoss = 50;
   const events = [];
   const cards = { home: 0, away: 0 };
+  const matchYellows = { home: Object.create(null), away: Object.create(null) };
+  const cardLog = { home: [], away: [] };
+  const ratings = { home: Object.create(null), away: Object.create(null) };
+  const bumpRating = (side, pid, delta) => {
+    if (!pid) return;
+    ratings[side][pid] = (ratings[side][pid] || 6.4) + delta;
+  };
+  homeXi.forEach((p) => { ratings.home[p.id] = 6.5; });
+  awayXi.forEach((p) => { ratings.away[p.id] = 6.5; });
 
   for (let m = 1; m <= 90; m++) {
-    // possession drift
     if (m % 9 === 0) {
       const bias = hs / (hs + as);
       hPoss = Math.max(35, Math.min(65, Math.round(bias * 100 + rnd(-4, 4))));
     }
-    // shot chance
+    // mid-match injury → auto sub
+    if (Math.random() < 0.004) {
+      const homeSide = Math.random() < 0.5;
+      const live = homeSide ? homeXi : awayXi;
+      const bench = homeSide ? homeBench : awayBench;
+      const victim = pick(live.filter((p) => p.pos !== 'Gk').concat(live));
+      if (victim) {
+        const brittle = traitMul(victim, 'injury', 1);
+        if (Math.random() < brittle * 0.7) {
+          victim.injuredHours = Math.max(victim.injuredHours || 0, rnd(8, 30));
+          events.push({ minute: m, type: 'injury', side: homeSide ? 'home' : 'away', player: victim.name, score: [hg, ag] });
+          trySub(live, bench, victim, events, m, homeSide ? 'home' : 'away', [hg, ag], 'травма');
+          if (homeSide) hs *= 0.97; else as *= 0.97;
+        }
+      }
+    }
     if (Math.random() < 0.085) {
       const homeChance = (hs * (hPoss / 50)) / (hs * (hPoss / 50) + as * ((100 - hPoss) / 50));
       const homeAtt = Math.random() < homeChance;
       if (homeAtt) hShots++; else aShots++;
-      const onTarget = Math.random() < 0.42 + (homeAtt ? hs : as) / ((hs + as) * 4);
+      const attXi = homeAtt ? homeXi : awayXi;
+      const defXi = homeAtt ? awayXi : homeXi;
+      const scorerPool = attXi.filter((p) => p.pos !== 'Gk');
+      const shooter = pick(scorerPool.length ? scorerPool : attXi);
+      const shotChance = 0.42 + (homeAtt ? hs : as) / ((hs + as) * 4);
+      const onTarget = Math.random() < shotChance * traitMul(shooter, 'shot', 1);
       if (onTarget) {
         if (homeAtt) hOn++; else aOn++;
-        const saveChance = 0.55 + ((homeAtt ? awayXi : homeXi).find((p) => p.pos === 'Gk')?.skills?.save || 14) / 120;
+        const gk = defXi.find((p) => p.pos === 'Gk');
+        const saveChance = 0.55 + (gk?.skills?.save || 14) / 120;
         const isGoal = Math.random() > saveChance * 0.85;
         if (isGoal) {
-          const scorerPool = (homeAtt ? homeXi : awayXi).filter((p) => p.pos !== 'Gk');
-          const scorer = pick(scorerPool.length ? scorerPool : (homeAtt ? homeXi : awayXi));
-          const assistPool = (homeAtt ? homeXi : awayXi).filter((p) => p.id !== scorer?.id && p.pos !== 'Gk');
-          const assist = Math.random() < 0.65 && assistPool.length ? pick(assistPool) : null;
+          const assistPool = attXi.filter((p) => p.id !== shooter?.id && p.pos !== 'Gk');
+          let assist = null;
+          if (assistPool.length && Math.random() < 0.65) {
+            assist = assistPool.slice().sort((a, b) => traitMul(b, 'assist', 1) - traitMul(a, 'assist', 1))[0];
+            if (Math.random() > traitMul(assist, 'assist', 1) * 0.55) assist = pick(assistPool);
+          }
           if (homeAtt) hg++; else ag++;
+          const side = homeAtt ? 'home' : 'away';
+          bumpRating(side, shooter?.id, 0.9);
+          if (assist) bumpRating(side, assist.id, 0.45);
+          if (gk) bumpRating(homeAtt ? 'away' : 'home', gk.id, -0.25);
           events.push({
-            minute: m,
-            type: 'goal',
-            side: homeAtt ? 'home' : 'away',
-            player: scorer?.name || 'Игрок',
+            minute: m, type: 'goal', side,
+            player: shooter?.name || 'Игрок',
             assist: assist?.name || null,
             score: [hg, ag]
           });
         } else {
-          events.push({
-            minute: m,
-            type: 'shot',
-            side: homeAtt ? 'home' : 'away',
-            player: 'Удар в створ',
-            score: [hg, ag]
-          });
+          events.push({ minute: m, type: 'shot', side: homeAtt ? 'home' : 'away', player: shooter?.name || 'Удар в створ', score: [hg, ag] });
+          bumpRating(homeAtt ? 'home' : 'away', shooter?.id, 0.08);
+          const gk = defXi.find((p) => p.pos === 'Gk');
+          if (gk) bumpRating(homeAtt ? 'away' : 'home', gk.id, 0.15);
         }
       } else if (Math.random() < 0.25) {
         if (homeAtt) hCorners++; else aCorners++;
-        events.push({
-          minute: m,
-          type: 'corner',
-          side: homeAtt ? 'home' : 'away',
-          player: 'Угловой',
-          score: [hg, ag]
-        });
+        events.push({ minute: m, type: 'corner', side: homeAtt ? 'home' : 'away', player: 'Угловой', score: [hg, ag] });
       }
     }
-    // cards
     if (Math.random() < 0.012) {
       const homeSide = Math.random() < 0.5;
-      const pool = homeSide ? homeXi : awayXi;
-      const pl = pick(pool.filter((p) => p.pos !== 'Gk').concat(pool));
-      const red = Math.random() < 0.08;
-      cards[homeSide ? 'home' : 'away']++;
-      events.push({
-        minute: m,
-        type: red ? 'red' : 'yellow',
-        side: homeSide ? 'home' : 'away',
-        player: pl?.name || 'Игрок',
-        score: [hg, ag]
-      });
+      const live = homeSide ? homeXi : awayXi;
+      const bench = homeSide ? homeBench : awayBench;
+      const side = homeSide ? 'home' : 'away';
+      const pl = pick(live.filter((p) => p.pos !== 'Gk').concat(live));
+      if (!pl) continue;
+      const cardChance = traitMul(pl, 'card', 1);
+      let red = Math.random() < 0.08 * cardChance;
+      matchYellows[side][pl.id] = (matchYellows[side][pl.id] || 0) + 1;
+      if (!red && matchYellows[side][pl.id] >= 2) red = true;
+      cards[side]++;
       if (red) {
-        if (homeSide) homePow.power *= 0.92;
-        else awayPow.power *= 0.92;
+        events.push({ minute: m, type: 'red', side, player: pl.name, score: [hg, ag] });
+        cardLog[side].push({ type: 'red', playerId: pl.id });
+        trySub(live, bench, pl, events, m, side, [hg, ag], 'удаление');
+        if (homeSide) hs *= 0.9; else as *= 0.9;
+        bumpRating(side, pl.id, -1.2);
+      } else {
+        events.push({ minute: m, type: 'yellow', side, player: pl.name, score: [hg, ag] });
+        cardLog[side].push({ type: 'yellow', playerId: pl.id });
+        bumpRating(side, pl.id, -0.2);
       }
     }
   }
@@ -410,37 +547,62 @@ function simulateMatch(homeClub, awayClub, meta = {}) {
   if (hg + ag === 0 && Math.random() < 0.75) {
     const homeAtt = Math.random() < hs / (hs + as);
     if (homeAtt) { hg = 1; hShots++; hOn++; } else { ag = 1; aShots++; aOn++; }
-    events.push({
-      minute: rnd(55, 88),
-      type: 'goal',
-      side: homeAtt ? 'home' : 'away',
-      player: 'Стандарт',
-      assist: null,
-      score: [hg, ag]
-    });
+    events.push({ minute: rnd(55, 88), type: 'goal', side: homeAtt ? 'home' : 'away', player: 'Стандарт', assist: null, score: [hg, ag] });
   }
-
   events.sort((a, b) => a.minute - b.minute);
 
   const homeResult = hg > ag ? 3 : hg === ag ? 1 : -2;
   const awayResult = ag > hg ? 3 : hg === ag ? 1 : -2;
-  const homeInj = applyFitnessAfterMatch(homeClub, homeXi.map((p) => p.id), {
-    style: homeClub.style,
-    fitMul: homePow.fitMul,
+  const playedHome = new Set([...homeXi.map((p) => p.id), ...Object.keys(ratings.home)]);
+  const playedAway = new Set([...awayXi.map((p) => p.id), ...Object.keys(ratings.away)]);
+  // fitness uses original starters + those who played via tracking ratings keys
+  const homeInj = applyFitnessAfterMatch(homeClub, [...playedHome], {
+    style: homeClub.style, fitMul: homePow.fitMul * 0.5 + 0.5 * (homeXi.reduce((s, p) => s + traitMul(p, 'fit', 1), 0) / Math.max(1, homeXi.length)),
     resultDelta: homeResult
   });
-  const awayInj = applyFitnessAfterMatch(awayClub, awayXi.map((p) => p.id), {
-    style: awayClub.style,
-    fitMul: awayPow.fitMul,
+  const awayInj = applyFitnessAfterMatch(awayClub, [...playedAway], {
+    style: awayClub.style, fitMul: awayPow.fitMul,
     resultDelta: awayResult
   });
+  // xp trait
+  (homeClub.players || []).forEach((p) => {
+    if (playedHome.has(p.id) && (p.specials || []).includes('prospect')) p.xpPool = (p.xpPool || 0) + 4;
+  });
+  (awayClub.players || []).forEach((p) => {
+    if (playedAway.has(p.id) && (p.specials || []).includes('prospect')) p.xpPool = (p.xpPool || 0) + 4;
+  });
+
+  const homeBans = applyDiscipline(homeClub, cardLog.home);
+  const awayBans = applyDiscipline(awayClub, cardLog.away);
+  serveSuspensions(homeClub, homeBanned);
+  serveSuspensions(awayClub, awayBanned);
+
   homeInj.forEach((inj) => {
-    events.push({ minute: rnd(60, 90), type: 'injury', side: 'home', player: inj.name, score: [hg, ag] });
+    if (!events.some((e) => e.type === 'injury' && e.player === inj.name)) {
+      events.push({ minute: rnd(60, 90), type: 'injury', side: 'home', player: inj.name, score: [hg, ag] });
+    }
   });
   awayInj.forEach((inj) => {
-    events.push({ minute: rnd(60, 90), type: 'injury', side: 'away', player: inj.name, score: [hg, ag] });
+    if (!events.some((e) => e.type === 'injury' && e.player === inj.name)) {
+      events.push({ minute: rnd(60, 90), type: 'injury', side: 'away', player: inj.name, score: [hg, ag] });
+    }
   });
   events.sort((a, b) => a.minute - b.minute);
+
+  const mapXi = (club, side) => {
+    const ids = Object.keys(ratings[side]);
+    const byId = new Map((club.players || []).map((p) => [p.id, p]));
+    return ids.map((id) => {
+      const p = byId.get(id);
+      if (!p) return null;
+      return {
+        id: p.id, name: p.name, pos: p.pos,
+        effective: effectiveMastery(p),
+        rating: Math.max(4, Math.min(9.8, Math.round((ratings[side][id] || 6.5) * 10) / 10)),
+        specials: p.specials || []
+      };
+    }).filter(Boolean).sort((a, b) => b.rating - a.rating);
+  };
 
   const result = {
     id: uid('m'),
@@ -448,22 +610,12 @@ function simulateMatch(homeClub, awayClub, meta = {}) {
     status: 'done',
     competition: meta.competition || 'friendly',
     home: {
-      userId: meta.homeUserId,
-      name: homeClub.name,
-      short: homeClub.short,
-      color: homeClub.color,
-      strength: Math.round(hs),
-      formation: homeClub.formation,
-      style: homeClub.style
+      userId: meta.homeUserId, name: homeClub.name, short: homeClub.short, color: homeClub.color,
+      strength: Math.round(hs), formation: homeClub.formation, style: homeClub.style
     },
     away: {
-      userId: meta.awayUserId,
-      name: awayClub.name,
-      short: awayClub.short,
-      color: awayClub.color,
-      strength: Math.round(as),
-      formation: awayClub.formation,
-      style: awayClub.style
+      userId: meta.awayUserId, name: awayClub.name, short: awayClub.short, color: awayClub.color,
+      strength: Math.round(as), formation: awayClub.formation, style: awayClub.style
     },
     score: [hg, ag],
     events,
@@ -475,19 +627,17 @@ function simulateMatch(homeClub, awayClub, meta = {}) {
       cards: [cards.home, cards.away]
     },
     injuries: { home: homeInj, away: awayInj },
-    homeXi: homeXi.map((p) => ({ id: p.id, name: p.name, pos: p.pos, effective: effectiveMastery(p) })),
-    awayXi: awayXi.map((p) => ({ id: p.id, name: p.name, pos: p.pos, effective: effectiveMastery(p) }))
+    suspensions: { home: homeBans, away: awayBans },
+    homeXi: mapXi(homeClub, 'home'),
+    awayXi: mapXi(awayClub, 'away')
   };
 
   homeClub.history = homeClub.history || [];
   awayClub.history = awayClub.history || [];
-  const hRec = { id: result.id, at: result.createdAt, opp: awayClub.name, score: [hg, ag], home: true, competition: result.competition };
-  const aRec = { id: result.id, at: result.createdAt, opp: homeClub.name, score: [ag, hg], home: false, competition: result.competition };
-  homeClub.history.unshift(hRec);
-  awayClub.history.unshift(aRec);
+  homeClub.history.unshift({ id: result.id, at: result.createdAt, opp: awayClub.name, score: [hg, ag], home: true, competition: result.competition });
+  awayClub.history.unshift({ id: result.id, at: result.createdAt, opp: homeClub.name, score: [ag, hg], home: false, competition: result.competition });
   if (homeClub.history.length > 40) homeClub.history.length = 40;
   if (awayClub.history.length > 40) awayClub.history.length = 40;
-
   return result;
 }
 
@@ -568,9 +718,19 @@ function upgradeStadium(club) {
 function ticketIncome(club, user, won) {
   const fans = Math.max(1000, user?.fans || 10000);
   const cap = club?.capacity || 8000;
-  const attendance = Math.min(cap, Math.round(fans * (won ? 0.85 : 0.55)));
-  const price = 8 + ((club?.stadiumLevel || 1) - 1) * 3;
+  const basePrice = club?.ticketPrice || (8 + ((club?.stadiumLevel || 1) - 1) * 3);
+  const price = Math.max(5, Math.min(40, basePrice));
+  // higher price → slightly lower attendance
+  const priceFactor = Math.max(0.55, 1.15 - price / 50);
+  const attendance = Math.min(cap, Math.round(fans * (won ? 0.85 : 0.55) * priceFactor));
   return Math.round(attendance * price);
+}
+
+function setTicketPrice(club, price) {
+  const p = Math.round(Number(price) || 10);
+  if (p < 5 || p > 40) return { ok: false, error: 'Цена билета 5–40 ¤' };
+  club.ticketPrice = p;
+  return { ok: true, ticketPrice: p };
 }
 
 function weeklyWages(club) {
@@ -791,6 +951,33 @@ function promoteYouth(club) {
   return { ok: true, player: { ...p, mastery: masteryOf(p), effective: effectiveMastery(p) }, cost: q.cost, label: `Академия · ${p.name}` };
 }
 
+function releasePlayer(club, playerId) {
+  if ((club.lineupIds || []).includes(playerId)) {
+    return { ok: false, error: 'Сначала уберите игрока из основы' };
+  }
+  if ((club.players || []).length <= 16) return { ok: false, error: 'Минимум 16 игроков в составе' };
+  const idx = (club.players || []).findIndex((p) => p.id === playerId);
+  if (idx < 0) return { ok: false, error: 'Игрок не найден' };
+  const p = club.players[idx];
+  club.players.splice(idx, 1);
+  club.benchIds = (club.benchIds || []).filter((id) => id !== playerId);
+  return { ok: true, player: p, label: `Отчислен · ${p.name}` };
+}
+
+function renegotiateWage(club, playerId, direction) {
+  const p = (club.players || []).find((x) => x.id === playerId);
+  if (!p) return { ok: false, error: 'Игрок не найден' };
+  const dir = direction === 'cut' ? 'cut' : 'raise';
+  if (dir === 'raise') {
+    p.wage = Math.round((p.wage || 1000) * 1.12);
+    p.morale = Math.min(25, (p.morale || 0) + 6);
+    return { ok: true, player: p, label: `Повышение · ${p.name}`, wage: p.wage };
+  }
+  p.wage = Math.max(400, Math.round((p.wage || 1000) * 0.9));
+  p.morale = Math.max(-20, (p.morale || 0) - 8);
+  return { ok: true, player: p, label: `Снижение · ${p.name}`, wage: p.wage };
+}
+
 function setLineup(club, lineupIds, benchIds) {
   const byId = new Map((club.players || []).map((p) => [p.id, p]));
   const xi = (lineupIds || []).filter((id) => byId.has(id)).slice(0, 11);
@@ -800,6 +987,10 @@ function setLineup(club, lineupIds, benchIds) {
   const injured = players.filter((p) => p.injuredHours > 0);
   if (injured.length) {
     return { ok: false, error: `Травмированы: ${injured.map((p) => p.name).join(', ')}` };
+  }
+  const banned = players.filter((p) => (p.suspendedMatches || 0) > 0);
+  if (banned.length) {
+    return { ok: false, error: `Дисквалифицированы: ${banned.map((p) => p.name).join(', ')}` };
   }
   const bench = (benchIds || []).filter((id) => byId.has(id) && !xi.includes(id)).slice(0, 7);
   club.lineupIds = xi;
@@ -817,6 +1008,7 @@ module.exports = {
   FORMATIONS,
   STYLES,
   INSTRUCTIONS,
+  TRAITS,
   POSITIONS,
   STAFF_ROLES,
   uid,
@@ -851,6 +1043,10 @@ module.exports = {
   listPlayer,
   takeListedPlayer,
   promoteYouth,
-  quoteYouth
+  quoteYouth,
+  releasePlayer,
+  renegotiateWage,
+  setTicketPrice,
+  playerAvailable
 };
 

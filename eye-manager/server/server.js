@@ -283,6 +283,13 @@ function rewardUsers(home, away, match) {
         body: `${inj.name} выбыл примерно на ${inj.hours} ч`
       });
     });
+    (match.suspensions?.[isHome ? 'home' : 'away'] || []).forEach((ban) => {
+      pushUserEvent(user.id, {
+        type: 'suspension',
+        title: 'Дисквалификация',
+        body: `${ban.name}: ${ban.reason || 'карточки'} · пропуск ${ban.matches} матч`
+      });
+    });
   };
   apply(home, hg > ag, hg === ag, match.away?.name || 'соперник', true, match.injuries?.home);
   apply(away, ag > hg, hg === ag, match.home?.name || 'соперник', false, match.injuries?.away);
@@ -675,6 +682,54 @@ const server = http.createServer(async (req, res) => {
     persistUser(auth.user);
     db.setClub(auth.user.id, club);
     return json(res, 200, { ok: true, club: G.publicClub(club, auth.user), user: enrichUser(auth.user) });
+  }
+
+  if (pathname === '/api/club/tickets' && req.method === 'POST') {
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    try {
+      const body = JSON.parse((await readBody(req)).toString('utf8') || '{}');
+      const club = ensureClub(auth.user);
+      const r = G.setTicketPrice(club, body.price);
+      if (!r.ok) return json(res, 400, r);
+      db.setClub(auth.user.id, club);
+      return json(res, 200, { ok: true, club: G.publicClub(club, auth.user) });
+    } catch (e) {
+      return json(res, 500, { error: String(e.message || e) });
+    }
+  }
+
+  if (pathname === '/api/players/release' && req.method === 'POST') {
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    try {
+      const body = JSON.parse((await readBody(req)).toString('utf8'));
+      const club = ensureClub(auth.user);
+      const r = G.releasePlayer(club, body.playerId);
+      if (!r.ok) return json(res, 400, r);
+      G.pushLedger(club, 0, r.label);
+      db.setClub(auth.user.id, club);
+      pushUserEvent(auth.user.id, { type: 'release', title: 'Отчисление', body: r.player.name });
+      return json(res, 200, { ok: true, club: G.publicClub(club, auth.user) });
+    } catch (e) {
+      return json(res, 500, { error: String(e.message || e) });
+    }
+  }
+
+  if (pathname === '/api/players/wage' && req.method === 'POST') {
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    try {
+      const body = JSON.parse((await readBody(req)).toString('utf8'));
+      const club = ensureClub(auth.user);
+      const r = G.renegotiateWage(club, body.playerId, body.direction);
+      if (!r.ok) return json(res, 400, r);
+      G.pushLedger(club, 0, r.label);
+      db.setClub(auth.user.id, club);
+      return json(res, 200, { ok: true, club: G.publicClub(club, auth.user), player: r.player });
+    } catch (e) {
+      return json(res, 500, { error: String(e.message || e) });
+    }
   }
 
   if (pathname === '/api/club/lineup' && req.method === 'POST') {
