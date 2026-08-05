@@ -40,6 +40,7 @@
     league_promote: 'Повышение',
     league_relegate: 'Вылет',
     finance: 'Финансы',
+    motm: 'Игрок матча',
     contract_ask: 'Контракт',
     contract_left: 'Свободный агент',
     suspension: 'Дисквалификация',
@@ -93,6 +94,8 @@
     ],
     rating: [
       ['board', 'Очки'],
+      ['scorers', 'Бомбардиры'],
+      ['motm', 'Игрок матча'],
       ['cups', 'Кубки']
     ],
     admin: [
@@ -137,6 +140,7 @@
         <div class="pm-cols">
           <div>
             <div class="pm-str"><span>Основа · ${esc(board.formation)}</span><b>${board.xiStrength}</b></div>
+            ${board.chemistry != null ? `<p class="hint" style="margin:0 0 6px">Химия ${board.chemistry}</p>` : ''}
             <div class="pm-list">${(board.xi || []).map(row).join('')}</div>
           </div>
           <div>
@@ -498,18 +502,35 @@
     const club = state.club;
     const players = [...(club.players || [])].sort((a, b) => (b.effective || 0) - (a.effective || 0));
     if (state.tab === 'recover') {
+      let med = { injured: [], suspended: [], tired: [], medic: 0 };
+      try { med = await A().request('api/medical'); } catch {}
       $('#view').innerHTML = `
         <section class="panel">
-          <h3>Восстановление</h3>
-          <p class="hint">15 000 ¤ или 1 бустер. Врач ускоряет восстановление в матчах.</p>
+          <h3>Медблок</h3>
+          <p class="hint">Врач ур. ${med.medic || 0} ускоряет лечение. 15 000 ¤ или 1 бустер — массовое восстановление.</p>
           <div style="display:flex;gap:8px;flex-wrap:wrap">
             <button class="btn btn-primary" id="btn-recover">За 15 000 ¤</button>
             <button class="btn" id="btn-recover-boost">За бустер (${state.me?.user?.boosters || 0})</button>
           </div>
         </section>
         <section class="panel">
-          <div class="table-wrap"><table class="sheet"><thead><tr><th>Игрок</th><th>Физа</th><th>Травма</th></tr></thead>
-          <tbody>${players.map((p) => `<tr><td>${esc(p.name)}</td><td>${p.fitness}%</td><td>${p.injuredHours ? p.injuredHours + 'ч' : '—'}</td></tr>`).join('')}</tbody></table></div>
+          <h3>Травмы</h3>
+          <div class="list">${med.injured?.length ? med.injured.map((p) => `
+            <div class="list-row">
+              <div><strong>${esc(p.name)} · ${esc(p.pos)}</strong><small>~${p.etaHours} ч до возврата (осталось ${p.hours}ч)</small></div>
+              <b>${p.mastery}</b>
+            </div>`).join('') : '<p class="hint">Лазарет пуст</p>'}</div>
+        </section>
+        ${med.suspended?.length ? `<section class="panel"><h3>Дисквалификации</h3>
+          <div class="list">${med.suspended.map((p) => `
+            <div class="list-row"><div><strong>${esc(p.name)}</strong><small>пропуск ${p.matches} матч</small></div></div>
+          `).join('')}</div></section>` : ''}
+        <section class="panel">
+          <h3>Усталость</h3>
+          <div class="table-wrap"><table class="sheet"><thead><tr><th>Игрок</th><th>Физа</th></tr></thead>
+          <tbody>${(med.tired || []).map((p) =>
+            `<tr><td>${esc(p.name)}</td><td>${p.fitness}%</td></tr>`
+          ).join('') || '<tr><td colspan="2">Все свежие</td></tr>'}</tbody></table></div>
         </section>`;
       return;
     }
@@ -590,19 +611,32 @@
       return;
     }
     if (state.tab === 'academy') {
-      const lvl = club.stadiumLevel || 1;
-      const cost = 20000 + Math.max(0, lvl - 2) * 5000;
+      let ac = { youth: [], stadiumLevel: club.stadiumLevel || 1, squadSize: (club.players || []).length, canPromote: false, promoteCost: 0, promoteError: null };
+      try { ac = await A().request('api/academy'); } catch {}
       $('#view').innerHTML = `
         <section class="panel">
           <h3>Молодёжная академия</h3>
-          <p class="hint">Раз в сутки выпускает игрока 16–19 лет. Нужен стадион ур. 2+. Выше уровень стадиона — сильнее выпускники.</p>
+          <p class="hint">Пул воспитанников растёт со стадионом. Раз в сутки можно выпустить одного в основу. Нужен стадион ур. 2+.</p>
           <div class="grid-3">
-            <div class="stat-card"><span>Стадион</span><b>${lvl} / 8</b></div>
-            <div class="stat-card"><span>Состав</span><b>${(club.players || []).length}/25</b></div>
-            <div class="stat-card"><span>Выпуск</span><b>${money(cost)}</b></div>
+            <div class="stat-card"><span>Стадион</span><b>${ac.stadiumLevel || 1} / 8</b></div>
+            <div class="stat-card"><span>Состав</span><b>${ac.squadSize || 0}/25</b></div>
+            <div class="stat-card"><span>Выпуск</span><b>${ac.promoteCost ? money(ac.promoteCost) : '—'}</b></div>
           </div>
-          <button class="btn btn-primary" id="btn-youth" style="margin-top:14px" ${lvl < 2 ? 'disabled' : ''}>Выпустить воспитанника</button>
-          ${lvl < 2 ? '<p class="hint" style="margin-top:10px">Сначала улучшите стадион во вкладке «Команда».</p>' : ''}
+          ${ac.promoteError ? `<p class="hint" style="margin-top:10px">${esc(ac.promoteError)}</p>` : ''}
+        </section>
+        <section class="panel">
+          <div class="panel-head"><h3>Пул академии</h3><span class="badge">${(ac.youth || []).length}</span></div>
+          <div class="list">${(ac.youth || []).length ? ac.youth.map((p) => `
+            <div class="list-row">
+              <div>
+                <strong>${esc(p.name)} · ${esc(p.pos)}</strong>
+                <small>${p.age} лет · талант ${p.talent} · маст. ${p.mastery} · пот. ${p.pot}${(p.specials||[]).length ? ' · ' + (p.specials||[]).map((s)=>TRAIT_LABELS[s]||s).join(', ') : ''}</small>
+              </div>
+              <div style="display:flex;gap:6px">
+                <button class="btn btn-primary btn-tiny" data-youth-promote="${esc(p.id)}" ${ac.canPromote ? '' : 'disabled'}>В основу</button>
+                <button class="btn btn-tiny" data-youth-release="${esc(p.id)}">Отпустить</button>
+              </div>
+            </div>`).join('') : '<p class="hint">Пул пуст — улучшите стадион</p>'}</div>
         </section>`;
       return;
     }
@@ -902,6 +936,7 @@
       <div class="grid-2">
         <section class="panel">
           <h3>Тактика на матч</h3>
+          <p class="hint">Химия схемы: <strong>${club.chemistry != null ? club.chemistry : '—'}</strong> — совпадение позиций в основе.</p>
           <form class="form-grid" id="form-tactics">
             <label>Стиль
               <select name="style">
@@ -1051,6 +1086,49 @@
       return;
     }
     const data = await A().request('api/rating');
+    if (state.tab === 'scorers') {
+      const scorers = data.scorers || [];
+      const assists = data.assists || [];
+      $('#view').innerHTML = `
+        <div class="grid-2">
+          <section class="panel">
+            <h3>Бомбардиры</h3>
+            <div class="table-wrap"><table class="sheet">
+              <thead><tr><th>#</th><th>Игрок</th><th>Клуб</th><th>Г</th><th>П</th></tr></thead>
+              <tbody>${scorers.map((p, i) => `
+                <tr><td>${i + 1}</td><td><strong>${esc(p.name)}</strong> <small>${esc(p.pos)}</small></td>
+                <td>${esc(p.clubName)}</td><td><b>${p.goals}</b></td><td>${p.assists}</td></tr>
+              `).join('') || '<tr><td colspan="5">Пока пусто — сыграйте матчи</td></tr>'}</tbody>
+            </table></div>
+          </section>
+          <section class="panel">
+            <h3>Ассистенты</h3>
+            <div class="table-wrap"><table class="sheet">
+              <thead><tr><th>#</th><th>Игрок</th><th>Клуб</th><th>П</th><th>Г</th></tr></thead>
+              <tbody>${assists.map((p, i) => `
+                <tr><td>${i + 1}</td><td><strong>${esc(p.name)}</strong></td>
+                <td>${esc(p.clubName)}</td><td><b>${p.assists}</b></td><td>${p.goals}</td></tr>
+              `).join('') || '<tr><td colspan="5">Пока пусто</td></tr>'}</tbody>
+            </table></div>
+          </section>
+        </div>`;
+      return;
+    }
+    if (state.tab === 'motm') {
+      const list = data.motm || [];
+      $('#view').innerHTML = `
+        <section class="panel">
+          <h3>Игрок матча (сезон)</h3>
+          <div class="table-wrap"><table class="sheet">
+            <thead><tr><th>#</th><th>Игрок</th><th>Клуб</th><th>MOTM</th><th>Голы</th></tr></thead>
+            <tbody>${list.map((p, i) => `
+              <tr><td>${i + 1}</td><td><strong>${esc(p.name)}</strong></td>
+              <td>${esc(p.clubName)}</td><td><b>${p.motm}</b></td><td>${p.goals}</td></tr>
+            `).join('') || '<tr><td colspan="5">Пока пусто</td></tr>'}</tbody>
+          </table></div>
+        </section>`;
+      return;
+    }
     const leaders = data.leaders || [];
     $('#view').innerHTML = `
       <section class="panel">
@@ -1119,10 +1197,11 @@
         <button class="btn btn-tiny" id="modal-close">Закрыть</button>
       </div>
       <div class="match-score">
-        <div class="team"><strong>${esc(match.home?.name)}</strong><div class="hint">${esc(match.home?.formation || '')} · ${esc(match.home?.style || '')} · сила ${match.home?.strength}</div></div>
+        <div class="team"><strong>${esc(match.home?.name)}</strong><div class="hint">${esc(match.home?.formation || '')} · ${esc(match.home?.style || '')} · сила ${match.home?.strength}${match.home?.chemistry != null || match.chemistry?.home != null ? ' · хим. ' + (match.home?.chemistry ?? match.chemistry?.home) : ''}</div></div>
         <div class="score" id="match-live-score">${match.score?.[0]}:${match.score?.[1]}</div>
-        <div class="team"><strong>${esc(match.away?.name)}</strong><div class="hint">${esc(match.away?.formation || '')} · ${esc(match.away?.style || '')} · сила ${match.away?.strength}</div></div>
+        <div class="team"><strong>${esc(match.away?.name)}</strong><div class="hint">${esc(match.away?.formation || '')} · ${esc(match.away?.style || '')} · сила ${match.away?.strength}${match.away?.chemistry != null || match.chemistry?.away != null ? ' · хим. ' + (match.away?.chemistry ?? match.chemistry?.away) : ''}</div></div>
       </div>
+      ${match.motm ? `<div class="motm-banner"><span>Игрок матча</span><strong>${esc(match.motm.name)}</strong><small>${esc(match.motm.clubName || '')} · ${match.motm.rating}</small></div>` : ''}
       ${st.shots ? `<div class="grid-3" style="margin:12px 0">
         <div class="stat-card"><span>Владение</span><b>${(st.possession||[])[0]||'—'}% : ${(st.possession||[])[1]||'—'}%</b></div>
         <div class="stat-card"><span>Удары (в створ)</span><b>${(st.shots||[])[0]||0}(${(st.shotsOn||[])[0]||0}) : ${(st.shots||[])[1]||0}(${(st.shotsOn||[])[1]||0})</b></div>
@@ -1485,6 +1564,35 @@
           A().setUser(data.user);
           paintSidebar();
           toast('Воспитанник: ' + (data.player?.name || ''));
+          render();
+        } catch (err) { toast(err.message); }
+      }
+      const youthPromote = e.target.closest('[data-youth-promote]');
+      if (youthPromote) {
+        try {
+          const data = await A().request('api/academy/promote', {
+            method: 'POST',
+            body: { youthId: youthPromote.dataset.youthPromote }
+          });
+          state.club = data.club;
+          if (data.user) {
+            state.me.user = data.user;
+            A().setUser(data.user);
+            paintSidebar();
+          }
+          toast('В основу: ' + (data.player?.name || ''));
+          render();
+        } catch (err) { toast(err.message); }
+      }
+      const youthRelease = e.target.closest('[data-youth-release]');
+      if (youthRelease) {
+        try {
+          const data = await A().request('api/academy/release', {
+            method: 'POST',
+            body: { youthId: youthRelease.dataset.youthRelease }
+          });
+          state.club = data.club;
+          toast('Отпущен из академии');
           render();
         } catch (err) { toast(err.message); }
       }

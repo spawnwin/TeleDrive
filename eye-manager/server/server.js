@@ -280,6 +280,14 @@ function rewardUsers(home, away, match) {
       if (tickets) G.pushLedger(club, tickets, 'Билеты (дома)');
       db.setClub(user.id, club);
     }
+    if (match.motm && match.motm.side === (isHome ? 'home' : 'away')) {
+      pushUserEvent(user.id, {
+        type: 'motm',
+        title: 'Игрок матча',
+        body: `${match.motm.name} · оценка ${match.motm.rating}`,
+        matchId: match.id
+      });
+    }
     (sideInjuries || []).forEach((inj) => {
       pushUserEvent(user.id, {
         type: 'injury',
@@ -1472,31 +1480,72 @@ const server = http.createServer(async (req, res) => {
   if (pathname === '/api/academy/promote' && req.method === 'POST') {
     const auth = requireAuth(req, res);
     if (!auth) return;
-    const club = ensureClub(auth.user);
-    const quote = G.quoteYouth(club);
-    if (!quote.ok) return json(res, 400, quote);
-    if (!spendMoney(auth.user, quote.cost)) return json(res, 400, { error: `Нужно ${quote.cost} ¤` });
-    const r = G.promoteYouth(club);
-    if (!r.ok) {
-      auth.user.money = (auth.user.money || 0) + quote.cost; // refund
+    try {
+      const body = JSON.parse((await readBody(req)).toString('utf8') || '{}');
+      const club = ensureClub(auth.user);
+      const quote = G.quoteYouth(club);
+      if (!quote.ok) return json(res, 400, quote);
+      const gate = assertCanSpend(auth.user, club, quote.cost, 'Академия');
+      if (!gate.ok) return json(res, 400, gate);
+      if (!spendMoney(auth.user, quote.cost, club)) return json(res, 400, { error: `Нужно ${quote.cost} ¤` });
+      const r = G.promoteYouth(club, body.youthId || null);
+      if (!r.ok) {
+        auth.user.money = (auth.user.money || 0) + quote.cost;
+        persistUser(auth.user);
+        return json(res, 400, r);
+      }
+      G.pushLedger(club, -r.cost, r.label);
       persistUser(auth.user);
-      return json(res, 400, r);
+      db.setClub(auth.user.id, club);
+      pushUserEvent(auth.user.id, {
+        type: 'youth',
+        title: 'Выпуск академии',
+        body: `${r.player.name} · ${r.player.pos} · талант ${r.player.talent}`
+      });
+      return json(res, 200, {
+        ok: true,
+        player: r.player,
+        club: G.publicClub(club, auth.user),
+        academy: G.academyStatus(club),
+        user: enrichUser(auth.user),
+        cost: r.cost
+      });
+    } catch (e) {
+      return json(res, 500, { error: String(e.message || e) });
     }
-    G.pushLedger(club, -r.cost, r.label);
-    persistUser(auth.user);
+  }
+
+  if (pathname === '/api/academy' && req.method === 'GET') {
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    const club = ensureClub(auth.user);
+    G.ensureYouthPool(club, { refill: url.searchParams.get('refill') === '1' });
     db.setClub(auth.user.id, club);
-    pushUserEvent(auth.user.id, {
-      type: 'youth',
-      title: 'Выпуск академии',
-      body: `${r.player.name} · ${r.player.pos} · талант ${r.player.talent}`
-    });
-    return json(res, 200, {
-      ok: true,
-      player: r.player,
-      club: G.publicClub(club, auth.user),
-      user: enrichUser(auth.user),
-      cost: r.cost
-    });
+    return json(res, 200, { ok: true, ...G.academyStatus(club) });
+  }
+
+  if (pathname === '/api/academy/release' && req.method === 'POST') {
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    try {
+      const body = JSON.parse((await readBody(req)).toString('utf8') || '{}');
+      const club = ensureClub(auth.user);
+      const r = G.releaseYouth(club, body.youthId);
+      if (!r.ok) return json(res, 400, r);
+      db.setClub(auth.user.id, club);
+      return json(res, 200, { ok: true, academy: G.academyStatus(club), club: G.publicClub(club, auth.user) });
+    } catch (e) {
+      return json(res, 500, { error: String(e.message || e) });
+    }
+  }
+
+  if (pathname === '/api/medical' && req.method === 'GET') {
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+    const club = ensureClub(auth.user);
+    G.tickClubClock(club);
+    db.setClub(auth.user.id, club);
+    return json(res, 200, { ok: true, ...G.medicalBay(club) });
   }
 
   if (pathname === '/api/rating' && req.method === 'GET') {
@@ -1505,7 +1554,38 @@ const server = http.createServer(async (req, res) => {
       .map((u) => enrichUser(u))
       .sort((a, b) => (b.points - a.points) || (b.xp - a.xp))
       .slice(0, 50);
-    return json(res, 200, { ok: true, leaders: list });
+    const scorers = [];
+    const assists = [];
+    const motms = [];
+    Object.values(usersDb().users).forEach((u) => {
+      if (u.isBot) return;
+      const club = db.getClub(u.id);
+      if (!club) return;
+      (club.players || []).forEach((p) => {
+        const row = {
+          name: p.name,
+          pos: p.pos,
+          clubName: club.name,
+          login: u.login,
+          goals: p.seasonGoals || 0,
+          assists: p.seasonAssists || 0,
+          motm: p.seasonMotm || 0
+        };
+        if (row.goals) scorers.push(row);
+        if (row.assists) assists.push(row);
+        if (row.motm) motms.push(row);
+      });
+    });
+    scorers.sort((a, b) => b.goals - a.goals || b.assists - a.assists);
+    assists.sort((a, b) => b.assists - a.assists || b.goals - a.goals);
+    motms.sort((a, b) => b.motm - a.motm || b.goals - a.goals);
+    return json(res, 200, {
+      ok: true,
+      leaders: list,
+      scorers: scorers.slice(0, 30),
+      assists: assists.slice(0, 30),
+      motm: motms.slice(0, 30)
+    });
   }
 
   // ——— league ———

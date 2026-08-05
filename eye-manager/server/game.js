@@ -40,6 +40,13 @@ const FORMATION_BIAS = {
   '4-2-3-1': { att: 1.04, def: 1.02 }
 };
 
+const POS_GROUP = {
+  Gk: 'GK',
+  Ld: 'DEF', Cd: 'DEF', Rd: 'DEF',
+  Lm: 'MID', Cm: 'MID', Rm: 'MID', Dm: 'MID', Am: 'MID',
+  Lf: 'ATT', Cf: 'ATT', Rf: 'ATT'
+};
+
 const TRAITS = {
   finisher: { label: 'Снайпер', shot: 1.12 },
   engine: { label: 'Мотор', fit: 0.9, power: 1.03 },
@@ -303,6 +310,8 @@ function publicClub(club, user) {
     understrength: healthyXi < 11,
     lastPressAt: club.lastPressAt || null,
     pressBuff: club.pressBuff && club.pressBuff.until > Date.now() ? club.pressBuff : null,
+    chemistry: formationChemistry(club, resolveXi(club)),
+    youthCount: Array.isArray(club.youth) ? club.youth.length : 0,
     manager: user ? { id: user.id, login: user.login, name: user.name, level: user.level } : null
   };
 }
@@ -328,6 +337,20 @@ function instructionMods(instructions) {
   return { att, def, fit };
 }
 
+function formationChemistry(club, xi) {
+  const slots = FORMATIONS[club?.formation] || FORMATIONS['4-4-2'];
+  const list = xi || [];
+  if (!list.length) return 50;
+  let pts = 0;
+  list.forEach((p, i) => {
+    const slot = slots[i] || p.pos;
+    if (p.pos === slot) pts += 10;
+    else if (POS_GROUP[p.pos] === POS_GROUP[slot]) pts += 6;
+    else pts += 2;
+  });
+  return Math.round((pts / list.length) * 10); // ~20–100
+}
+
 function teamMatchPower(club, xi, { home = false } = {}) {
   const base = Math.max(40, clubStrength({ ...club, players: club.players }));
   const styleMul = { attack: 1.08, press: 1.05, balance: 1, counter: 0.98, defend: 0.9 };
@@ -346,7 +369,15 @@ function teamMatchPower(club, xi, { home = false } = {}) {
     const avg = xiStr / Math.max(1, xi.length);
     power = power * 0.55 + avg * 11 * 0.45;
   }
-  return { power: Math.max(35, power), solidity, fitMul: styleFitnessMul(club.style) * ins.fit };
+  const chemistry = formationChemistry(club, xi);
+  const chemMod = 0.92 + Math.min(0.12, (chemistry / 100) * 0.12);
+  power *= chemMod;
+  return {
+    power: Math.max(35, power),
+    solidity,
+    fitMul: styleFitnessMul(club.style) * ins.fit,
+    chemistry
+  };
 }
 
 function applyFitnessAfterMatch(club, playedIds, opts = {}) {
@@ -430,6 +461,7 @@ function prematchBoard(club) {
     bench: bench.map(playerBoardRow),
     xiStrength: groupStrength(xi),
     benchStrength: groupStrength(bench),
+    chemistry: formationChemistry(club, xi),
     understrength: xi.length < 11,
     unavailable: (club.players || []).filter((p) => !playerAvailable(p)).map(playerBoardRow)
   };
@@ -658,7 +690,9 @@ function simulateMatch(homeClub, awayClub, meta = {}) {
           events.push({
             minute: m, type: 'goal', side,
             player: shooter?.name || 'Игрок',
+            playerId: shooter?.id || null,
             assist: assist?.name || null,
+            assistId: assist?.id || null,
             score: [hg, ag]
           });
         } else {
@@ -746,17 +780,32 @@ function simulateMatch(homeClub, awayClub, meta = {}) {
   const mapXi = (club, side) => {
     const ids = Object.keys(ratings[side]);
     const byId = new Map((club.players || []).map((p) => [p.id, p]));
+    const slots = FORMATIONS[club.formation] || FORMATIONS['4-4-2'];
+    const live = side === 'home' ? homeXi : awayXi;
     return ids.map((id) => {
       const p = byId.get(id);
       if (!p) return null;
+      const slotIdx = live.findIndex((x) => x.id === id);
       return {
         id: p.id, name: p.name, pos: p.pos,
+        slot: slotIdx >= 0 ? slots[slotIdx] : p.pos,
         effective: effectiveMastery(p),
         rating: Math.max(4, Math.min(9.8, Math.round((ratings[side][id] || 6.5) * 10) / 10)),
         specials: p.specials || []
       };
     }).filter(Boolean).sort((a, b) => b.rating - a.rating);
   };
+
+  const homeMapped = mapXi(homeClub, 'home');
+  const awayMapped = mapXi(awayClub, 'away');
+  const motmRow = [...homeMapped, ...awayMapped].sort((a, b) => b.rating - a.rating)[0] || null;
+  const motm = motmRow
+    ? {
+        ...motmRow,
+        side: homeMapped.some((p) => p.id === motmRow.id) ? 'home' : 'away',
+        clubName: homeMapped.some((p) => p.id === motmRow.id) ? homeClub.name : awayClub.name
+      }
+    : null;
 
   const result = {
     id: uid('m'),
@@ -765,11 +814,13 @@ function simulateMatch(homeClub, awayClub, meta = {}) {
     competition: meta.competition || 'friendly',
     home: {
       userId: meta.homeUserId, name: homeClub.name, short: homeClub.short, color: homeClub.color,
-      strength: Math.round(hs), formation: homeClub.formation, style: homeClub.style
+      strength: Math.round(hs), formation: homeClub.formation, style: homeClub.style,
+      chemistry: homePow.chemistry || formationChemistry(homeClub, homeXi)
     },
     away: {
       userId: meta.awayUserId, name: awayClub.name, short: awayClub.short, color: awayClub.color,
-      strength: Math.round(as), formation: awayClub.formation, style: awayClub.style
+      strength: Math.round(as), formation: awayClub.formation, style: awayClub.style,
+      chemistry: awayPow.chemistry || formationChemistry(awayClub, awayXi)
     },
     score: [hg, ag],
     events,
@@ -782,9 +833,17 @@ function simulateMatch(homeClub, awayClub, meta = {}) {
     },
     injuries: { home: homeInj, away: awayInj },
     suspensions: { home: homeBans, away: awayBans },
-    homeXi: mapXi(homeClub, 'home'),
-    awayXi: mapXi(awayClub, 'away')
+    homeXi: homeMapped,
+    awayXi: awayMapped,
+    motm,
+    chemistry: {
+      home: homePow.chemistry || formationChemistry(homeClub, homeXi),
+      away: awayPow.chemistry || formationChemistry(awayClub, awayXi)
+    }
   };
+
+  applyMatchAwards(homeClub, result, true);
+  applyMatchAwards(awayClub, result, false);
 
   homeClub.history = homeClub.history || [];
   awayClub.history = awayClub.history || [];
@@ -793,6 +852,30 @@ function simulateMatch(homeClub, awayClub, meta = {}) {
   if (homeClub.history.length > 40) homeClub.history.length = 40;
   if (awayClub.history.length > 40) awayClub.history.length = 40;
   return result;
+}
+
+function applyMatchAwards(club, match, isHome) {
+  if (!club || !match) return;
+  const side = isHome ? 'home' : 'away';
+  (match.events || []).forEach((e) => {
+    if (e.type !== 'goal' || e.side !== side) return;
+    if (e.playerId) {
+      const scorer = (club.players || []).find((p) => p.id === e.playerId);
+      if (scorer) scorer.seasonGoals = (scorer.seasonGoals || 0) + 1;
+    }
+    if (e.assistId) {
+      const a = (club.players || []).find((p) => p.id === e.assistId);
+      if (a) a.seasonAssists = (a.seasonAssists || 0) + 1;
+    }
+  });
+  if (match.motm && match.motm.side === side && match.motm.id) {
+    const p = (club.players || []).find((x) => x.id === match.motm.id);
+    if (p) {
+      p.seasonMotm = (p.seasonMotm || 0) + 1;
+      p.morale = Math.min(25, (p.morale || 0) + 3);
+      p.xpPool = (p.xpPool || 0) + 6;
+    }
+  }
 }
 
 function trainPlayer(club, playerId, skillKey, amount = 1) {
@@ -978,6 +1061,7 @@ function settleWageDay(user, club, now = Date.now()) {
     club.contractDayAcc -= ticks * 5;
     contracts = tickContracts(club, ticks);
   }
+  tickYouthGrowth(club);
   const finance = financeSnapshot(user, club);
   return { wages, grant, delta, weekBill, days, at: now, contracts, interest, finance };
 }
@@ -1044,6 +1128,7 @@ function tickClubClock(club) {
     club.lastAgeTick = now;
     changed = true;
   }
+  if (tickYouthGrowth(club)) changed = true;
   return changed;
 }
 
@@ -1158,19 +1243,144 @@ function quoteYouth(club) {
   return { ok: true, cost, stadiumLevel: lvl };
 }
 
-function promoteYouth(club) {
-  const q = quoteYouth(club);
-  if (!q.ok) return q;
+function makeYouthProspect(club) {
   const lvl = club.stadiumLevel || 1;
   const pos = pick(POSITIONS.filter((p) => p !== 'Dm' && p !== 'Am').concat(['Cm', 'Cf', 'Cd']));
-  const quality = 10 + Math.min(6, lvl) + rnd(-1, 2);
+  const quality = 9 + Math.min(6, lvl) + rnd(-1, 2);
   const p = makePlayer(pos, quality);
-  p.age = rnd(16, 19);
+  p.age = rnd(15, 18);
   p.talent = Math.min(10, (p.talent || 5) + rnd(1, 3));
+  p.wage = Math.round(playerValue(p) / 120);
+  p.contractYears = rnd(2, 4);
+  p.pot = Math.min(99, masteryOf(p) + p.talent * 3 + rnd(2, 8));
+  p.youth = true;
+  return p;
+}
+
+function ensureYouthPool(club, { refill = false } = {}) {
+  if (!club) return [];
+  club.youth = Array.isArray(club.youth) ? club.youth : [];
+  const max = Math.min(6, 3 + Math.max(0, (club.stadiumLevel || 1) - 1));
+  const now = Date.now();
+  const stale = !club.lastYouthRefill || (now - club.lastYouthRefill > 12 * 3600e3);
+  if (refill || stale || club.youth.length === 0) {
+    while (club.youth.length < max) club.youth.push(makeYouthProspect(club));
+    club.lastYouthRefill = now;
+  }
+  return club.youth;
+}
+
+function publicYouth(p) {
+  if (!p) return null;
+  return {
+    ...p,
+    mastery: masteryOf(p),
+    effective: effectiveMastery(p),
+    pot: p.pot || (masteryOf(p) + (p.talent || 5) * 2)
+  };
+}
+
+function academyStatus(club) {
+  ensureYouthPool(club);
+  const q = quoteYouth(club);
+  return {
+    stadiumLevel: club.stadiumLevel || 1,
+    squadSize: (club.players || []).length,
+    youth: (club.youth || []).map(publicYouth),
+    canPromote: q.ok,
+    promoteCost: q.ok ? q.cost : null,
+    promoteError: q.ok ? null : q.error,
+    waitMs: q.waitMs || 0,
+    lastYouthAt: club.lastYouthAt || null
+  };
+}
+
+function promoteYouth(club, youthId = null) {
+  const q = quoteYouth(club);
+  if (!q.ok) return q;
+  ensureYouthPool(club);
+  let idx = -1;
+  if (youthId) idx = (club.youth || []).findIndex((p) => p.id === youthId);
+  if (idx < 0) idx = 0;
+  if (!(club.youth || []).length) {
+    club.youth.push(makeYouthProspect(club));
+    idx = 0;
+  }
+  const p = club.youth[idx];
+  club.youth.splice(idx, 1);
+  delete p.youth;
   p.wage = Math.round(playerValue(p) / 100);
   club.players.push(p);
   club.lastYouthAt = Date.now();
-  return { ok: true, player: { ...p, mastery: masteryOf(p), effective: effectiveMastery(p) }, cost: q.cost, label: `Академия · ${p.name}` };
+  return {
+    ok: true,
+    player: { ...p, mastery: masteryOf(p), effective: effectiveMastery(p) },
+    cost: q.cost,
+    label: `Академия · ${p.name}`
+  };
+}
+
+function releaseYouth(club, youthId) {
+  ensureYouthPool(club);
+  const idx = (club.youth || []).findIndex((p) => p.id === youthId);
+  if (idx < 0) return { ok: false, error: 'Воспитанник не найден' };
+  const p = club.youth[idx];
+  club.youth.splice(idx, 1);
+  return { ok: true, player: p, label: `Отпущен из академии · ${p.name}` };
+}
+
+function tickYouthGrowth(club) {
+  if (!club?.youth?.length) return false;
+  let changed = false;
+  club.youth.forEach((p) => {
+    if (!p.skills) return;
+    if (Math.random() < 0.35 + (p.talent || 5) * 0.04) {
+      const keys = Object.keys(p.skills);
+      const k = pick(keys);
+      const cap = Math.min(28, (p.pot || 40) / 2);
+      if ((p.skills[k] || 10) < cap) {
+        p.skills[k] = Math.min(cap, (p.skills[k] || 10) + 1);
+        changed = true;
+      }
+    }
+  });
+  return changed;
+}
+
+function medicalBay(club) {
+  const medic = (club.staff && club.staff.medic) || 0;
+  const injured = (club.players || [])
+    .filter((p) => (p.injuredHours || 0) > 0)
+    .map((p) => ({
+      id: p.id,
+      name: p.name,
+      pos: p.pos,
+      hours: p.injuredHours,
+      etaHours: Math.max(1, Math.ceil(p.injuredHours / (1 + medic * 0.5))),
+      mastery: masteryOf(p)
+    }))
+    .sort((a, b) => b.hours - a.hours);
+  const suspended = (club.players || [])
+    .filter((p) => (p.suspendedMatches || 0) > 0)
+    .map((p) => ({
+      id: p.id,
+      name: p.name,
+      pos: p.pos,
+      matches: p.suspendedMatches,
+      mastery: masteryOf(p)
+    }));
+  const tired = (club.players || [])
+    .filter((p) => (p.fitness || 100) < 70 && !(p.injuredHours > 0))
+    .map((p) => ({
+      id: p.id,
+      name: p.name,
+      pos: p.pos,
+      fitness: p.fitness,
+      mastery: masteryOf(p)
+    }))
+    .sort((a, b) => a.fitness - b.fitness)
+    .slice(0, 8);
+  return { medic, injured, suspended, tired };
 }
 
 function releasePlayer(club, playerId) {
@@ -1353,8 +1563,16 @@ module.exports = {
   sellPlayer,
   listPlayer,
   takeListedPlayer,
+  formationChemistry,
+  applyMatchAwards,
   promoteYouth,
   quoteYouth,
+  ensureYouthPool,
+  academyStatus,
+  releaseYouth,
+  tickYouthGrowth,
+  medicalBay,
+  POS_GROUP,
   releasePlayer,
   renegotiateWage,
   quoteRenew,

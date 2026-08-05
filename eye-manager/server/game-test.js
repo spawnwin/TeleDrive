@@ -137,4 +137,26 @@ describe('game lineup guards', () => {
     assert.equal(insol.status, 'insolvent');
     assert.equal(insol.embargo, true);
   });
+
+  it('motm chemistry and youth academy pool', () => {
+    const home = G.defaultClub({ id: 'h9', login: 'h9', name: 'H9', clubName: 'H9' });
+    const away = G.defaultClub({ id: 'a9', login: 'a9', name: 'A9', clubName: 'A9' });
+    G.ensureLineup(home, true);
+    G.ensureLineup(away, true);
+    const chem = G.formationChemistry(home, G.resolveXi(home));
+    assert.ok(chem >= 20 && chem <= 100);
+    const m = G.simulateMatch(home, away, { competition: 'friendly', homeUserId: 'h9', awayUserId: 'a9' });
+    assert.ok(m.motm);
+    assert.ok(m.motm.rating >= 4);
+    assert.ok(m.chemistry);
+    home.stadiumLevel = 3;
+    const ac = G.academyStatus(home);
+    assert.ok(ac.youth.length >= 3);
+    const id = ac.youth[0].id;
+    const promoted = G.promoteYouth(home, id);
+    assert.equal(promoted.ok, true);
+    assert.ok(home.players.some((p) => p.id === id));
+    const bay = G.medicalBay(home);
+    assert.ok(Array.isArray(bay.injured));
+  });
 });
