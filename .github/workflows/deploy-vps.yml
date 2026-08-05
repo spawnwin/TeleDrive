@@ -1,0 +1,29 @@
+name: Deploy to VPS
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    name: Deploy via self-hosted runner
+    runs-on: self-hosted
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          clean: false
+
+      - name: Deploy with Docker Compose
+        working-directory: docker
+        run: |
+          set -e
+          if [ ! -f .env ]; then
+            echo "docker/.env not found on this runner. Create it once (see docker/.env.example) before the first deploy." >&2
+            exit 1
+          fi
+          docker compose down
+          docker compose up --build --force-recreate -d
+          docker image prune -f
